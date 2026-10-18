@@ -1,12 +1,12 @@
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createCoulisses } from "../src/index.ts";
+import { importPanoplie } from "../src/node.ts";
 
 const port = Number(process.env.PORT ?? 8790);
-const handler = createCoulisses({
-  root: fileURLToPath(new URL("./site/", import.meta.url)),
-  cors: "http://localhost:5175",
-});
+// 起動時に一度だけ読む。site/ を変えたら再起動する
+const panoplie = await importPanoplie(fileURLToPath(new URL("./site/", import.meta.url)));
+const handler = createCoulisses({ panoplie, cors: "http://localhost:5175" });
 
 createServer(async (incoming, outgoing) => {
   try {

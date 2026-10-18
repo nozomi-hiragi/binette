@@ -1,11 +1,16 @@
 /**
  * ビネットと asset を配信する Coulisses。
  *
+ * 配るものは {@link BinettePanoplie} にまとめて渡す。この入口は `node:fs` を使わないので、Node 以外（Cloudflare Workers など）でも動く。
+ * フォルダから作るときは `@binette/coulisses/node` の `importPanoplie` を使う。
+ *
  * @packageDocumentation
  */
-import { readFile, realpath, stat } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve } from "node:path";
 import { parseBinette, type Binette } from "@binette/core";
+import type { BinettePanoplie } from "./panoplie.ts";
+
+export { contentTypeOf, createPanoplie, parsePanoplie } from "./panoplie.ts";
+export type { BinettePanoplie, PanoplieFile, PanoplieFileInput } from "./panoplie.ts";
 
 /**
  * ビネットを書くときの補助。形式を検査して、そのまま返す。
@@ -18,41 +23,26 @@ export function defineBinette(value: unknown): Binette {
 
 /** {@link createCoulisses} の設定 */
 export interface CoulissesOptions {
-  /** 配信するディレクトリ。この外のファイルは返さない */
-  root: string;
+  /** 配るものの一式 */
+  panoplie: BinettePanoplie;
   /** CORS で許可する origin。指定すると CORS ヘッダーと OPTIONS の応答を返す */
   cors?: string;
 }
 
-const contentTypes: Record<string, string> = {
-  ".bina": "application/json; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-};
-
-function isInside(root: string, path: string): boolean {
-  const child = relative(root, path);
-  return child !== ".." && !child.startsWith("../") && !child.startsWith("..\\") && !isAbsolute(child);
-}
-
 /**
- * `root` のファイルを配信する、標準の Fetch API の形のハンドラーを作る。
+ * パノプリの中身を配信する、標準の Fetch API の形のハンドラーを作る。
  *
- * GET と HEAD に応える。`.bina` は返す前に形式を検査し、正しくなければ 500 を返す。
- * `settings` は `/index.bina` にだけ書ける。
+ * GET と HEAD に応える。`/<名前>.bina` はパノプリのビネットを、ほかのパスはファイルを返す。無いものは 404。
  *
  * @example
  * ```ts
- * const handler = createCoulisses({ root: "/srv/site" });
+ * const handler = createCoulisses({ panoplie });
  * const response = await handler(new Request("http://localhost/index.bina"));
  * ```
  */
 export function createCoulisses(options: CoulissesOptions): (request: Request) => Promise<Response> {
-  const root = resolve(options.root);
+  const { binettes, files } = options.panoplie;
+  const encoder = new TextEncoder();
   return async request => {
     const headers = new Headers();
     if (options.cors !== undefined) headers.set("Access-Control-Allow-Origin", options.cors);
@@ -66,39 +56,25 @@ export function createCoulisses(options: CoulissesOptions): (request: Request) =
       headers.set("Allow", options.cors === undefined ? "GET, HEAD" : "GET, HEAD, OPTIONS");
       return respond(405, "許可されていないメソッドです。");
     }
-    let path: string;
-    let pathname: string;
+    let key: string;
     try {
-      pathname = decodeURIComponent(new URL(request.url).pathname);
-      if (pathname.includes("\\") || pathname.includes("\0")) return respond(403);
-      path = resolve(root, `.${pathname}`);
-      if (!isInside(root, path)) return respond(403);
+      key = decodeURIComponent(new URL(request.url).pathname).slice(1);
     } catch {
-      return respond(403);
+      return respond(404);
     }
-    try {
-      // シンボリックリンク経由でも公開ディレクトリの外へ出さない。
-      const [actualRoot, actualPath] = await Promise.all([realpath(root), realpath(path)]);
-      if (!isInside(actualRoot, actualPath)) return respond(403);
-      if (!(await stat(actualPath)).isFile()) return respond(404);
-      const body = await readFile(actualPath);
-      const extension = extname(path).toLowerCase();
-      if (extension === ".bina") {
-        try {
-          const value = parseBinette(body.toString("utf8"));
-          if (value.settings !== undefined && pathname !== "/index.bina") throw new Error("settings は入口 /index.bina にだけ書けます。");
-        } catch (error) {
-          headers.set("Content-Type", "text/plain; charset=utf-8");
-          return respond(500, `Binette の形式が不正です: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-      headers.set("Content-Type", contentTypes[extension] ?? "application/octet-stream");
-      headers.set("Content-Length", String(body.byteLength));
-      return respond(200, body);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "ENOTDIR") return respond(404);
-      return respond(500, "ファイルを読み込めませんでした。");
+    let body: Uint8Array;
+    if (key.endsWith(".bina")) {
+      const binette = Object.hasOwn(binettes, key.slice(0, -".bina".length)) ? binettes[key.slice(0, -".bina".length)] : undefined;
+      if (!binette) return respond(404);
+      body = encoder.encode(JSON.stringify(binette));
+      headers.set("Content-Type", "application/json; charset=utf-8");
+    } else {
+      const file = Object.hasOwn(files, key) ? files[key] : undefined;
+      if (!file) return respond(404);
+      body = file.body;
+      headers.set("Content-Type", file.type);
     }
+    headers.set("Content-Length", String(body.byteLength));
+    return respond(200, body);
   };
 }
