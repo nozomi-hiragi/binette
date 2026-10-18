@@ -3,5 +3,9 @@
  *
  * @packageDocumentation
  */
-export type { Binette, BinetteAsset, BinetteSettingsRow, BinetteSettingsSection } from "./types.ts";
+export type {
+  Binette, BinetteAsset, BinetteBase, BinettePage, BinetteRedirect,
+  BinetteSettingsComponentElement, BinetteSettingsElement, BinetteSettingsEntryElement, BinetteSettingsList,
+  BinetteSettingsRow, BinetteSettingsSection, BinetteSettingsSectionBase,
+} from "./types.ts";
 export { BinetteError, parseBinette } from "./parse.ts";

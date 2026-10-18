@@ -42,30 +42,44 @@ export interface BinetteSettingsRow {
   sections?: BinetteSettingsSection[];
 }
 
-/** 設定画面のセクション */
-export type BinetteSettingsSection = {
+/** 設定画面のセクション。行の一覧（list）か任意の表示（element）のどちらか */
+export type BinetteSettingsSection = BinetteSettingsList | BinetteSettingsElement;
+
+/** 設定画面のセクションに共通の欄 */
+export interface BinetteSettingsSectionBase {
   /** 並び順。General が `0` で、小さいほど上。省略すると `0`。一番上の階層だけで効く */
   order?: number;
   /** セクションの見出し */
   label?: string;
-} & (
-  | {
-    /** 行の一覧 */
-    type: "list";
-    /** 並べる行 */
-    contents: BinetteSettingsRow[];
-  }
-  | {
-    /** 任意の表示。`entry` と `component` のどちらか一方を書く */
-    type: "element";
-    /** 入口の `assets` にある js の名前。`mount(element, sh)` を呼ぶ */
-    entry?: string;
-    /** クライアントが `components` で登録した部品の名前 */
-    component?: string;
-  }
-);
+}
 
-const settingsRowSchema: v.GenericSchema<BinetteSettingsRow> = v.object({
+/** 行の一覧のセクション */
+export interface BinetteSettingsList extends BinetteSettingsSectionBase {
+  type: "list";
+  /** 並べる行 */
+  contents: BinetteSettingsRow[];
+}
+
+/** 任意の表示のセクション。`entry` と `component` のどちらか一方を持つ */
+export type BinetteSettingsElement = BinetteSettingsEntryElement | BinetteSettingsComponentElement;
+
+/** 入口の js asset を表示するセクション */
+export interface BinetteSettingsEntryElement extends BinetteSettingsSectionBase {
+  type: "element";
+  /** 入口の `assets` にある js の名前。`mount(element, sh)` を呼ぶ */
+  entry: string;
+  component?: undefined;
+}
+
+/** クライアントが登録した部品を表示するセクション */
+export interface BinetteSettingsComponentElement extends BinetteSettingsSectionBase {
+  type: "element";
+  /** クライアントが `components` で登録した部品の名前 */
+  component: string;
+  entry?: undefined;
+}
+
+const settingsRowSchema: v.GenericSchema<unknown, BinetteSettingsRow> = v.object({
   id: nonempty("設定の行の id を指定してください。"),
   start: v.optional(v.string("設定の行の start は文字列で指定してください。")),
   label: v.string("設定の行の label は文字列で指定してください。"),
@@ -77,13 +91,16 @@ const sectionCommon = {
   label: v.optional(v.string("セクションの label は文字列で指定してください。")),
 };
 // element は入口の js asset（entry）か、クライアントが登録した部品（component）のどちらか一方を表示する。
-const settingsSectionSchema: v.GenericSchema<BinetteSettingsSection> = v.variant("type", [
-  v.object({ ...sectionCommon, type: v.literal("list"), contents: v.array(settingsRowSchema, "list の contents は配列で指定してください。") }),
-  v.pipe(
-    v.object({ ...sectionCommon, type: v.literal("element"), entry: v.optional(nonempty("element の entry は asset の名前で指定してください。")), component: v.optional(nonempty("element の component は部品の名前で指定してください。")) }),
-    v.check((section) => (section.entry === undefined) !== (section.component === undefined), "element には entry と component のどちらか一方を指定してください。"),
-  ),
-], "セクションの type は list か element で指定してください。");
+const settingsSectionSchema: v.GenericSchema<unknown, BinetteSettingsSection> = v.pipe(
+  objectValue("セクションはオブジェクトで指定してください。"),
+  v.check((section) => section.type === "list" || section.type === "element", "セクションの type は list か element で指定してください。"),
+  v.check((section) => section.type !== "element" || Object.hasOwn(section, "entry") !== Object.hasOwn(section, "component"), "element には entry と component のどちらか一方を指定してください。"),
+  v.lazy((section) => (section as Record<string, unknown>).type === "list"
+    ? v.object({ ...sectionCommon, type: v.literal("list"), contents: v.array(settingsRowSchema, "list の contents は配列で指定してください。") })
+    : Object.hasOwn(section as object, "entry")
+      ? v.object({ ...sectionCommon, type: v.literal("element"), entry: nonempty("element の entry は asset の名前で指定してください。"), component: absent })
+      : v.object({ ...sectionCommon, type: v.literal("element"), component: nonempty("element の component は部品の名前で指定してください。"), entry: absent })),
+);
 
 function settingsEntries(sections: BinetteSettingsSection[]): string[] {
   return sections.flatMap((section) => section.type === "element"
@@ -96,17 +113,19 @@ const redirectPath = v.pipe(
   v.check(path => path.startsWith("/") && !path.startsWith("//") && !path.includes("\\") && !/[\u0000-\u0020]/.test(path), "redirect は Scene 内のパスで指定してください。"),
 );
 
+const binetteCommon = {
+  binette: versionString,
+  title: v.optional(v.string("title は文字列で指定してください。")),
+  assets: v.optional(assetsSchema, () => Object.create(null) as v.InferOutput<typeof assetsSchema>),
+  settings: v.optional(v.array(settingsSectionSchema, "settings は配列で指定してください。")),
+};
+
 const binetteBodySchema = v.pipe(
   objectValue("Binette はオブジェクトで指定してください。"),
   v.check((value) => Object.hasOwn(value, "entry") !== Object.hasOwn(value, "redirect"), "entry と redirect のどちらか一方を指定してください。"),
-  v.object({
-    binette: versionString,
-    title: v.optional(v.string("title は文字列で指定してください。")),
-    entry: v.optional(nonempty("entry は asset の名前で指定してください。")),
-    redirect: v.optional(redirectPath),
-    assets: v.optional(assetsSchema, () => Object.create(null) as v.InferOutput<typeof assetsSchema>),
-    settings: v.optional(v.array(settingsSectionSchema, "settings は配列で指定してください。")),
-  }),
+  v.lazy((value) => Object.hasOwn(value as object, "entry")
+    ? v.object({ ...binetteCommon, entry: nonempty("entry は asset の名前で指定してください。"), redirect: absent })
+    : v.object({ ...binetteCommon, redirect: redirectPath, entry: absent })),
 );
 
 export const binetteSchema = v.pipe(
