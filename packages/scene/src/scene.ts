@@ -116,7 +116,7 @@ export class Scene {
     const response = await this.#fetch(url);
     if (response.status === 404) return undefined;
     if (!response.ok) throw response;
-    return parseBinette(await response.json());
+    return parseBinette(await response.text());
   };
   #path = (url: URL): string | undefined => {
     if (url.origin !== location.origin) return undefined;

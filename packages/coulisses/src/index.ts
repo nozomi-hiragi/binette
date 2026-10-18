@@ -13,7 +13,7 @@ import { parseBinette, type Binette } from "@binette/core";
  * @throws {BinetteError} 形式が正しくないとき
  */
 export function defineBinette(value: unknown): Binette {
-  return parseBinette(value);
+  return parseBinette(JSON.stringify(value));
 }
 
 /** {@link createCoulisses} の設定 */
@@ -85,7 +85,7 @@ export function createCoulisses(options: CoulissesOptions): (request: Request) =
       const extension = extname(path).toLowerCase();
       if (extension === ".bina") {
         try {
-          const value = parseBinette(JSON.parse(body.toString("utf8")));
+          const value = parseBinette(body.toString("utf8"));
           if (value.settings !== undefined && pathname !== "/index.bina") throw new Error("settings は入口 /index.bina にだけ書けます。");
         } catch (error) {
           headers.set("Content-Type", "text/plain; charset=utf-8");

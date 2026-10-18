@@ -4,7 +4,7 @@ Binette の型、スキーマ、形式検証（`parseBinette` / `BinetteError`�
 
 ```ts
 import { parseBinette, type Binette } from "@binette/core";
-const binette: Binette = parseBinette({ binette: "0.1", redirect: "/home" });
+const binette: Binette = parseBinette('{"binette": "0.1", "redirect": "/home"}');
 ```
 
 ルートで `npm install` 後、`npm run typecheck -w @binette/core` で型検査します。
