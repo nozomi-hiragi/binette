@@ -1,15 +1,15 @@
 /**
  * ビネットと asset を配信する Coulisses。
  *
- * 配るものは {@link BinettePanoplie} にまとめて渡す。この入口は `node:fs` を使わないので、Node 以外（Cloudflare Workers など）でも動く。
- * フォルダから作るときは `@binette/coulisses/node` の `importPanoplie` を使う。
+ * 配るものは {@link BinettePanoplie} にまとめて渡し、あとから足すこともできる。
+ * 配る部分はファイルシステムを使わない。`node:fs` が要るのはフォルダから作る {@link importPanoplie} だけ。
  *
  * @packageDocumentation
  */
 import { parseBinette, type Binette } from "@binette/core";
-import type { BinettePanoplie } from "./panoplie.ts";
+import { addBinette, addFile, createPanoplie, type BinettePanoplie, type PanoplieFileInput } from "./panoplie.ts";
 
-export { contentTypeOf, createPanoplie, parsePanoplie } from "./panoplie.ts";
+export { addBinette, addFile, contentTypeOf, createPanoplie, importPanoplie, parsePanoplie } from "./panoplie.ts";
 export type { BinettePanoplie, PanoplieFile, PanoplieFileInput } from "./panoplie.ts";
 
 /**
@@ -23,27 +23,42 @@ export function defineBinette(value: unknown): Binette {
 
 /** {@link createCoulisses} の設定 */
 export interface CoulissesOptions {
-  /** 配るものの一式 */
-  panoplie: BinettePanoplie;
+  /** 最初に配るものの一式。省略すると空から始める */
+  panoplie?: BinettePanoplie;
   /** CORS で許可する origin。指定すると CORS ヘッダーと OPTIONS の応答を返す */
   cors?: string;
 }
 
+/** パノプリの中身を配る Coulisses */
+export interface Coulisses {
+  /** リクエストに応える。標準の Fetch API の形なので、そのままサーバーにつなげる */
+  fetch(request: Request): Promise<Response>;
+  /** あとからビネットを足す。同じ名前があれば置き換える。検査は {@link addBinette} と同じ */
+  addBinette(name: string, value: unknown): void;
+  /** あとからファイルを足す。同じパスがあれば置き換える */
+  addFile(path: string, file: PanoplieFileInput): void;
+}
+
 /**
- * パノプリの中身を配信する、標準の Fetch API の形のハンドラーを作る。
+ * パノプリの中身を配る Coulisses を作る。
  *
  * GET と HEAD に応える。`/<名前>.bina` はパノプリのビネットを、ほかのパスはファイルを返す。無いものは 404。
  *
  * @example
  * ```ts
- * const handler = createCoulisses({ panoplie });
- * const response = await handler(new Request("http://localhost/index.bina"));
+ * const coulisses = createCoulisses({ panoplie: await importPanoplie("/srv/site") });
+ * coulisses.addBinette("hello", { binette: "0.1", redirect: "/home" });
+ * const response = await coulisses.fetch(new Request("http://localhost/index.bina"));
  * ```
  */
-export function createCoulisses(options: CoulissesOptions): (request: Request) => Promise<Response> {
-  const { binettes, files } = options.panoplie;
+export function createCoulisses(options: CoulissesOptions = {}): Coulisses {
+  // 渡されたパノプリを書き換えないよう写しを持つ
+  const panoplie = createPanoplie();
+  Object.assign(panoplie.binettes, options.panoplie?.binettes);
+  Object.assign(panoplie.files, options.panoplie?.files);
+  const { binettes, files } = panoplie;
   const encoder = new TextEncoder();
-  return async request => {
+  const fetch = async (request: Request): Promise<Response> => {
     const headers = new Headers();
     if (options.cors !== undefined) headers.set("Access-Control-Allow-Origin", options.cors);
     const respond = (status: number, body: string | Uint8Array = "") =>
@@ -76,5 +91,10 @@ export function createCoulisses(options: CoulissesOptions): (request: Request) =
     }
     headers.set("Content-Length", String(body.byteLength));
     return respond(200, body);
+  };
+  return {
+    fetch,
+    addBinette: (name, value) => addBinette(panoplie, name, value),
+    addFile: (path, file) => addFile(panoplie, path, file),
   };
 }

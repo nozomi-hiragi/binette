@@ -50,11 +50,46 @@ function checkKey(key: string, kind: string): void {
 }
 
 /**
+ * パノプリにビネットを足す。同じ名前があれば置き換える。
+ *
+ * @param name `.bina` を除いたパス（`index`・`home`・`notes/123`）
+ * @param value ビネットのオブジェクト
+ * @throws {Error} ビネットの形式が正しくないとき、`settings` が `index` 以外にあるとき、名前が正しくないとき
+ */
+export function addBinette(panoplie: BinettePanoplie, name: string, value: unknown): void {
+  checkKey(name, "ビネット");
+  let binette: Binette;
+  try {
+    binette = parseBinette(JSON.stringify(value));
+  } catch (error) {
+    throw new Error(`/${name}.bina: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (binette.settings !== undefined && name !== "index") throw new Error(`/${name}.bina: settings は入口 /index.bina にだけ書けます。`);
+  panoplie.binettes[name] = binette;
+}
+
+/**
+ * パノプリにビネット以外のファイルを足す。同じパスがあれば置き換える。
+ *
+ * @param path 先頭の `/` を付けないパス（`files/notes/main.js` など）
+ * @throws {Error} パスが正しくないとき、`.bina` を渡したとき
+ */
+export function addFile(panoplie: BinettePanoplie, path: string, file: PanoplieFileInput): void {
+  checkKey(path, "ファイル");
+  if (path.endsWith(".bina")) throw new Error(`.bina はビネットとして足してください: ${path}`);
+  const input = typeof file === "string" || file instanceof Uint8Array ? { body: file } : file;
+  panoplie.files[path] = {
+    body: typeof input.body === "string" ? new TextEncoder().encode(input.body) : input.body,
+    type: input.type ?? contentTypeOf(path),
+  };
+}
+
+/**
  * ビネットの辞書（とファイル）からパノプリを作る。ビネットはここで全部検査する。
  *
  * @param binettes キーが `.bina` を除いたパス（`index`・`home`・`notes/123`）、値がビネットのオブジェクト
  * @param files ビネット以外のファイル。キーは先頭の `/` を付けないパス
- * @throws {Error} ビネットの形式が正しくないとき、`settings` が `index` 以外にあるとき、名前が正しくないとき
+ * @throws {Error} {@link addBinette}・{@link addFile} と同じ理由のとき
  *
  * @example
  * ```ts
@@ -64,29 +99,10 @@ function checkKey(key: string, kind: string): void {
  * });
  * ```
  */
-export function createPanoplie(binettes: Record<string, unknown>, files: Record<string, PanoplieFileInput> = {}): BinettePanoplie {
+export function createPanoplie(binettes: Record<string, unknown> = {}, files: Record<string, PanoplieFileInput> = {}): BinettePanoplie {
   const panoplie: BinettePanoplie = { binettes: Object.create(null), files: Object.create(null) };
-  for (const [key, value] of Object.entries(binettes)) {
-    checkKey(key, "ビネット");
-    let binette: Binette;
-    try {
-      binette = parseBinette(JSON.stringify(value));
-    } catch (error) {
-      throw new Error(`/${key}.bina: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (binette.settings !== undefined && key !== "index") throw new Error(`/${key}.bina: settings は入口 /index.bina にだけ書けます。`);
-    panoplie.binettes[key] = binette;
-  }
-  const encoder = new TextEncoder();
-  for (const [key, value] of Object.entries(files)) {
-    checkKey(key, "ファイル");
-    if (key.endsWith(".bina")) throw new Error(`.bina はビネットとして渡してください: ${key}`);
-    const input = typeof value === "string" || value instanceof Uint8Array ? { body: value } : value;
-    panoplie.files[key] = {
-      body: typeof input.body === "string" ? encoder.encode(input.body) : input.body,
-      type: input.type ?? contentTypeOf(key),
-    };
-  }
+  for (const [name, value] of Object.entries(binettes)) addBinette(panoplie, name, value);
+  for (const [path, file] of Object.entries(files)) addFile(panoplie, path, file);
   return panoplie;
 }
 
@@ -105,4 +121,44 @@ export function parsePanoplie(text: string): BinettePanoplie {
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("パノプリはビネットの辞書のオブジェクトで書いてください。");
   return createPanoplie(value as Record<string, unknown>);
+}
+
+/**
+ * フォルダの中身からパノプリを作る。`.bina` はビネットとして検査し、ほかはファイルとして入れる。
+ *
+ * `node:fs` を使うので、それが無い環境（Cloudflare Workers など）では動かない。
+ * 読むのは呼んだときの 1 回だけ。シンボリックリンクと、`.` で始まるファイルやフォルダは入れない。
+ *
+ * @param root 読むフォルダ
+ * @throws {Error} JSON として読めない `.bina` があるときや、{@link createPanoplie} と同じ理由のとき
+ *
+ * @example
+ * ```ts
+ * const panoplie = await importPanoplie("/srv/site");
+ * ```
+ */
+export async function importPanoplie(root: string): Promise<BinettePanoplie> {
+  // ほかの関数は node:fs 無しで使えるように、ここで読み込む
+  const { readdir, readFile } = await import("node:fs/promises");
+  const { join, relative, sep } = await import("node:path");
+  const panoplie = createPanoplie();
+  for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    const key = relative(root, path).split(sep).join("/");
+    if (key.split("/").some(part => part.startsWith("."))) continue;
+    const body = await readFile(path);
+    if (key.endsWith(".bina")) {
+      let value: unknown;
+      try {
+        value = JSON.parse(body.toString("utf8"));
+      } catch {
+        throw new Error(`/${key}: JSON として読めません。`);
+      }
+      addBinette(panoplie, key.slice(0, -".bina".length), value);
+    } else {
+      addFile(panoplie, key, new Uint8Array(body));
+    }
+  }
+  return panoplie;
 }
