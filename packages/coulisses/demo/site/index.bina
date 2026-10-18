@@ -1,0 +1,40 @@
+{
+  "binette": "0.1",
+  "redirect": "/home",
+  "settings": [
+    {
+      "order": -1,
+      "label": "表示",
+      "type": "element",
+      "component": "theme"
+    },
+    {
+      "order": 10,
+      "label": "アプリ",
+      "type": "list",
+      "contents": [
+        {
+          "id": "hello",
+          "start": "👋",
+          "label": "サンプル",
+          "sections": [
+            {
+              "type": "element",
+              "entry": "helloSettings"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "style": {
+      "type": "css",
+      "content": ":host { display:block; color:var(--color-base-content); background:var(--color-base-100); } main { max-width:48rem; margin:auto; padding:1rem; overflow-wrap:anywhere; } a { color:var(--color-primary); display:inline-flex; align-items:center; min-height:44px; } h1 { color:var(--color-primary); }"
+    },
+    "helloSettings": {
+      "type": "js",
+      "content": "export function mount(el, sh) { const p = document.createElement('p'); p.textContent = '入口の settings から差し込んだ設定です。'; const button = document.createElement('button'); button.type = 'button'; button.textContent = 'サンプルを開く'; const open = () => sh.navigate('/hello'); button.addEventListener('click', open); el.append(p, button); return () => button.removeEventListener('click', open); }"
+    }
+  }
+}

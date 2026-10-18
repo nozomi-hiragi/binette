@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Binette デモ</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --color-base-100: #ffffff;
+      --color-base-200: #f3f5f8;
+      --color-base-300: #d5dae1;
+      --color-base-content: #16181d;
+      --color-primary: #3273b9;
+      --color-primary-content: #ffffff;
+      --radius-box: 16px;
+      --radius-field: 10px;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --color-base-100: #0b0c0e;
+      --color-base-200: #1a1c21;
+      --color-base-300: #2e323a;
+      --color-base-content: #f5f6f8;
+      --color-primary: #3273b9;
+      --color-primary-content: #ffffff;
+      --radius-box: 16px;
+      --radius-field: 10px;
+    }
+    html, body { margin: 0; min-height: 100%; }
+    body { font-family: "IBM Plex Sans JP", system-ui, sans-serif; background: var(--color-base-100); color: var(--color-base-content); }
+    .demo-controls { padding: 12px 16px; background: var(--color-base-200); border-bottom: 1px solid var(--color-base-300); }
+    .demo-modes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .demo-modes button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--color-base-300); border-radius: var(--radius-field); background: var(--color-base-100); color: var(--color-base-content); font: inherit; cursor: pointer; }
+    .demo-modes button[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); }
+    .demo-modes button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    #fetch-status { margin: 8px 0 0; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <header class="demo-controls" aria-label="デモの通信設定">
+    <div class="demo-modes" role="group" aria-label="fetch の選択">
+      <button type="button" data-fetch-mode="default">標準 fetch</button>
+      <button type="button" data-fetch-mode="custom">カスタム fetch</button>
+    </div>
+    <p id="fetch-status" role="status"></p>
+  </header>
+  <div id="app"></div>
+  <script type="module" src="/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "binette",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "demo:coulisses": "npm run demo -w @binette/coulisses",
+    "demo:scene": "npm run demo -w @binette/scene"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

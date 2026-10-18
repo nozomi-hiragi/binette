@@ -1,0 +1,16 @@
+{
+  "name": "@binette/scene",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "demo": "vite demo --port 5175"
+  },
+  "dependencies": {
+    "@binette/core": "*"
+  }
+}
