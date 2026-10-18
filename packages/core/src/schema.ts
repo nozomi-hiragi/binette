@@ -3,6 +3,10 @@ import * as v from "valibot";
 const objectValue = (message: string) => v.custom<Record<string, unknown>>(
   (value) => typeof value === "object" && value !== null && !Array.isArray(value), message,
 );
+/** オブジェクトなら `key` の値を、そうでなければ undefined を返す */
+const field = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null && Object.hasOwn(value, key) ? (value as Record<string, unknown>)[key] : undefined;
+const has = (value: unknown, key: string) => typeof value === "object" && value !== null && Object.hasOwn(value, key);
 const nonempty = (message: string) => v.pipe(v.string(message), v.nonEmpty(message));
 const absent = v.optional(v.never());
 
@@ -13,7 +17,7 @@ export const binetteAssetSchema = v.pipe(
   objectValue("asset の type が正しくありません。"),
   v.check((asset) => Object.hasOwn(asset, "content") !== Object.hasOwn(asset, "src"), "asset には content と src のどちらか一方を指定してください。"),
   v.transform((asset) => ({ type: asset.type, ...(Object.hasOwn(asset, "content") ? { content: asset.content } : { src: asset.src }) })),
-  v.lazy((asset) => Object.hasOwn(asset as object, "content")
+  v.lazy((asset) => has(asset, "content")
     ? v.object({ type: nonempty("asset の type が正しくありません。"), content: v.string("asset の content は文字列で指定してください。"), src: absent })
     : v.object({ type: nonempty("asset の type が正しくありません。"), src: nonempty("asset の src は URL で指定してください。"), content: absent })),
 );
@@ -95,9 +99,9 @@ const settingsSectionSchema: v.GenericSchema<unknown, BinetteSettingsSection> = 
   objectValue("セクションはオブジェクトで指定してください。"),
   v.check((section) => section.type === "list" || section.type === "element", "セクションの type は list か element で指定してください。"),
   v.check((section) => section.type !== "element" || Object.hasOwn(section, "entry") !== Object.hasOwn(section, "component"), "element には entry と component のどちらか一方を指定してください。"),
-  v.lazy((section) => (section as Record<string, unknown>).type === "list"
+  v.lazy((section) => field(section, "type") === "list"
     ? v.object({ ...sectionCommon, type: v.literal("list"), contents: v.array(settingsRowSchema, "list の contents は配列で指定してください。") })
-    : Object.hasOwn(section as object, "entry")
+    : has(section, "entry")
       ? v.object({ ...sectionCommon, type: v.literal("element"), entry: nonempty("element の entry は asset の名前で指定してください。"), component: absent })
       : v.object({ ...sectionCommon, type: v.literal("element"), component: nonempty("element の component は部品の名前で指定してください。"), entry: absent })),
 );
@@ -123,7 +127,7 @@ const binetteCommon = {
 const binetteBodySchema = v.pipe(
   objectValue("Binette はオブジェクトで指定してください。"),
   v.check((value) => Object.hasOwn(value, "entry") !== Object.hasOwn(value, "redirect"), "entry と redirect のどちらか一方を指定してください。"),
-  v.lazy((value) => Object.hasOwn(value as object, "entry")
+  v.lazy((value) => has(value, "entry")
     ? v.object({ ...binetteCommon, entry: nonempty("entry は asset の名前で指定してください。"), redirect: absent })
     : v.object({ ...binetteCommon, redirect: redirectPath, entry: absent })),
 );

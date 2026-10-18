@@ -3,29 +3,9 @@ import { joueur as createJoueur, type BinetteJoueur } from "./joueur";
 import { importModule } from "./module";
 import { createResolver } from "./resolve";
 import { SettingsPage, type SettingsSection } from "./settings";
+import type { SceneAppShell, SceneComponent, SceneMount, SceneShell } from "./shell";
 import { button, element, renderView } from "./view";
 import type { Binette, BinetteSettingsSection } from "@binette/core";
-
-/**
- * シェル（`sh`）。アプリの `mount(el, sh)` と部品に渡す、Scene に頼むための API。
- *
- * ビネットの js から呼ばれるときは、そのビネットの asset を取る `asset(name)` も付く。
- */
-export interface SceneShell {
-  /** シェルの API のバージョン（今は `"0.1"`） */
-  version: string;
-  /** Scene の中のパスへ移る */
-  navigate: (path: string) => void;
-  /** Scene と同じ `fetch` で取る。URL は `serverURL` を基準に解決する */
-  fetch: (url: string, init?: RequestInit) => Promise<Response>;
-}
-
-/**
- * 設定画面の element セクションに出す、クライアントが用意する部品。アプリの `mount` と同じ形。
- *
- * 後始末の関数を返すと、設定画面を離れるときに呼ぶ。
- */
-export type SceneComponent = (element: HTMLElement, sh: SceneShell) => void | (() => void) | Promise<void | (() => void)>;
 
 /** {@link Scene} を作るときの設定 */
 export interface SceneOptions {
@@ -311,8 +291,8 @@ export class Scene {
     return { type: "element", label: section.label, element: host };
   };
   #mountElement = async (host: HTMLElement, section: BinetteSettingsSection & { type: "element" }, binette: Binette, sh: SceneShell, valid: () => boolean) => {
-    let mount: unknown;
-    let shell: object = sh;
+    let mount: SceneComponent | SceneMount | undefined;
+    let shell: SceneShell | SceneAppShell = sh;
     if (section.component !== undefined) {
       mount = this.#options.components && Object.hasOwn(this.#options.components, section.component) ? this.#options.components[section.component] : undefined;
       if (typeof mount !== "function") throw new Error(`部品が登録されていません: ${section.component}`);
@@ -326,15 +306,17 @@ export class Scene {
       if (!response.ok) throw new Error(`asset を読み込めませんでした: ${section.entry} (${response.status})`);
       const code = await response.text();
       if (!valid()) return;
-      mount = (await importModule(code)).mount;
-      if (typeof mount !== "function") throw new Error(`mount 関数がありません: ${section.entry}`);
+      const exported = (await importModule(code)).mount;
+      if (typeof exported !== "function") throw new Error(`mount 関数がありません: ${section.entry}`);
+      mount = exported as SceneMount;
       shell = { ...sh, asset };
     }
     if (!valid()) return;
-    const result: unknown = await (mount as (element: HTMLElement, sh: object) => unknown)(host, shell);
+    // component には asset の無いシェル、entry には asset 付きのシェルを渡している
+    const result = await (mount as SceneMount)(host, shell as SceneAppShell);
     if (typeof result !== "function") return;
-    if (valid()) this.#cleanups.push(result as () => void);
-    else (result as () => void)();
+    if (valid()) this.#cleanups.push(result);
+    else result();
   };
   /** 表示を片付け、URL の監視をやめる。以後は使えない */
   dispose = (): void => {

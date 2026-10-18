@@ -1,10 +1,11 @@
 import type { AssetResolver } from "./resolve";
 import type { Binette } from "@binette/core";
+import type { SceneMount, SceneShell } from "./shell";
 
 /** {@link joueur} の設定 */
 export interface JoueurOptions {
   /** アプリの `mount` に渡すシェル。`asset(name)` は joueur が足す */
-  sh: object;
+  sh: SceneShell;
   /** asset を取る関数 */
   resolver: AssetResolver;
   /** 画面の中のリンクが押されたときに呼ぶ。渡さないとリンクは通常のページ移動になる */
@@ -110,10 +111,10 @@ export async function joueur(container: HTMLElement, binette: Binette, options: 
       }
       if (disposed) return joueur;
       if (typeof module.mount !== "function") throw new Error("Binette に mount 関数がありません。");
-      const result: unknown = await module.mount(host, { ...options.sh, asset });
+      const result = await (module.mount as SceneMount)(host, { ...options.sh, asset });
       if (typeof result === "function") {
         if (disposed) result();
-        else cleanup = result as () => void;
+        else cleanup = result;
       }
     }
     return joueur;
