@@ -54,7 +54,7 @@ function checkKey(key: string, kind: string): void {
  *
  * @param name `.bina` を除いたパス（`index`・`home`・`notes/123`）
  * @param value ビネットのオブジェクト
- * @throws {Error} ビネットの形式が正しくないとき、`settings` が `index` 以外にあるとき、名前が正しくないとき
+ * @throws {Error} ビネットの形式が正しくないとき、名前が正しくないとき
  */
 export function addBinette(panoplie: BinettePanoplie, name: string, value: unknown): void {
   checkKey(name, "ビネット");
@@ -64,7 +64,6 @@ export function addBinette(panoplie: BinettePanoplie, name: string, value: unkno
   } catch (error) {
     throw new Error(`/${name}.bina: ${error instanceof Error ? error.message : String(error)}`);
   }
-  if (binette.settings !== undefined && name !== "index") throw new Error(`/${name}.bina: settings は入口 /index.bina にだけ書けます。`);
   panoplie.binettes[name] = binette;
 }
 

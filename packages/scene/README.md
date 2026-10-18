@@ -18,7 +18,7 @@ await scene.start();
 - 起動時に入口 `/index.bina` を取り、Scene が動いているあいだ覚えておきます。`/` では入口を表示し、入口が `redirect` ならその転送先へ移ります。入口が無い（404）ときは `/settings` へ移ります。
 - ほかの画面パスは `.bina` を付けて取得し、404 なら「見つかりません」を表示します。
 - 入口の `css` の asset は全体の CSS として、どの画面と設定画面にも入れます。
-- `/settings` は Scene の固定画面です。General と入口の `settings` を `order` 順に並べます。テーマやログアウトなどクライアントの操作は、`components` で登録した部品を element セクションから指定して出します。
+- `/settings` は Scene の固定画面です。General と、これまでに読んだビネットの `settings` を `order` 順に並べます。テーマやログアウトなどクライアントの操作は、`components` で登録した部品を element セクションから指定して出します。
 - `serverURL` は必須の取得元 URL です。ビネット・asset の `src`・`sh.fetch` の URL は `new URL(url, serverURL)` で解決してから `fetch` に渡します。`fetch` を省略するとブラウザ標準の `fetch` を使います。`base` は画面の URL にだけ適用します。
 
 ルートで `npm install` 後、別々の端末で次を起動します。

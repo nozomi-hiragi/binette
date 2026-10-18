@@ -35,7 +35,7 @@ export interface SceneOptions {
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
   /** Scene が管理する画面 URL の範囲。省略すると `/`。取得先の URL には付けない */
   base?: string;
-  /** 入口の settings の element セクションから component の名前で指定できる部品 */
+  /** ビネットの settings の element セクションから component の名前で指定できる部品 */
   components?: Record<string, SceneComponent>;
   /** 読み込みや再生で起きたエラーを受け取る */
   onError?: (error: unknown) => void;
@@ -63,6 +63,8 @@ export class Scene {
   #entry: Binette | undefined;
   /** 入口の css asset。全画面と設定画面に入れる全体の CSS */
   #styles: string[] = [];
+  /** これまでに読んだ、settings を持つビネット。キーは取得したパス。同じパスを読み直したら置き換える */
+  #settingsSources = new Map<string, Binette>();
   #disposed = false;
   #generation = 0;
   #joueur: BinetteJoueur | undefined;
@@ -118,6 +120,11 @@ export class Scene {
     if (!response.ok) throw response;
     return parseBinette(await response.text());
   };
+  /** 読んだビネットの settings を設定画面用に覚える */
+  #collectSettings = (url: string, binette: Binette | undefined) => {
+    if (binette?.settings) this.#settingsSources.set(url, binette);
+    else this.#settingsSources.delete(url);
+  };
   #path = (url: URL): string | undefined => {
     if (url.origin !== location.origin) return undefined;
     if (this.#base === "/") return url.pathname;
@@ -155,6 +162,7 @@ export class Scene {
         this.#started = true;
         this.#entry = value;
         this.#styles = styles;
+        this.#collectSettings("/index.bina", value);
       } catch (error) {
         if (this.#disposed) return;
         this.#startupFailed = true;
@@ -230,14 +238,14 @@ export class Scene {
               },
             ],
           };
-          const entry = this.#entry;
           const sh: SceneShell = { version: "0.1", navigate, fetch: this.#fetch };
-          // General の order は 0。小さいほど上に並べ、同じ値なら General、続いて書いた順にする
-          const inserted = entry?.settings ?? [];
-          const sections = [{ order: 0, section: sectionGeneral }, ...inserted.map(section => ({
+          // General の order は 0。小さいほど上に並べる。同じ値どうしの順は仕様では決めていない
+          const inserted = [...this.#settingsSources.values()].flatMap(binette => binette.settings!.map(section => ({
             order: section.order ?? 0,
-            section: this.#settingsSection(section, entry!, sh, valid),
-          }))].sort((a, b) => a.order - b.order).map(item => item.section);
+            section: this.#settingsSection(section, binette, sh, valid),
+          })));
+          const sections = [{ order: 0, section: sectionGeneral }, ...inserted]
+            .sort((a, b) => a.order - b.order).map(item => item.section);
           this.#settings = SettingsPage({
             title: "Settings", sections,
             basePath: this.#url("/settings").pathname,
@@ -250,6 +258,7 @@ export class Scene {
         // / は覚えている入口を出す。入口が無ければ設定画面へ転送する
         const value = path === "/" ? this.#entry : await this.#fetchBinette(`${path}.bina`);
         if (!valid()) return;
+        if (path !== "/") this.#collectSettings(`${path}.bina`, value);
         if (!value) {
           if (path === "/") {
             redirect("/settings");

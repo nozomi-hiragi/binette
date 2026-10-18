@@ -22,7 +22,7 @@ export interface BinetteBase {
   title?: string;
   /** 画面で使う asset。キーは拡張子の無い名前 */
   assets: Record<string, BinetteAsset>;
-  /** 設定画面に差し込むセクション。入口 `/index.bina` だけが持てる */
+  /** 設定画面に差し込むセクション。Scene は読んだビネットの分を足していく */
   settings?: BinetteSettingsSection[];
 }
 
