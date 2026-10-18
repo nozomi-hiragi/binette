@@ -1,13 +1,26 @@
+/**
+ * ビネットと asset を配信する Coulisses。
+ *
+ * @packageDocumentation
+ */
 import { readFile, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { parseBinette, type Binette } from "@binette/core";
 
+/**
+ * ビネットを書くときの補助。形式を検査して、そのまま返す。
+ *
+ * @throws {BinetteError} 形式が正しくないとき
+ */
 export function defineBinette(value: unknown): Binette {
   return parseBinette(value);
 }
 
+/** {@link createCoulisses} の設定 */
 export interface CoulissesOptions {
+  /** 配信するディレクトリ。この外のファイルは返さない */
   root: string;
+  /** CORS で許可する origin。指定すると CORS ヘッダーと OPTIONS の応答を返す */
   cors?: string;
 }
 
@@ -26,6 +39,18 @@ function isInside(root: string, path: string): boolean {
   return child !== ".." && !child.startsWith("../") && !child.startsWith("..\\") && !isAbsolute(child);
 }
 
+/**
+ * `root` のファイルを配信する、標準の Fetch API の形のハンドラーを作る。
+ *
+ * GET と HEAD に応える。`.bina` は返す前に形式を検査し、正しくなければ 500 を返す。
+ * `settings` は `/index.bina` にだけ書ける。
+ *
+ * @example
+ * ```ts
+ * const handler = createCoulisses({ root: "/srv/site" });
+ * const response = await handler(new Request("http://localhost/index.bina"));
+ * ```
+ */
 export function createCoulisses(options: CoulissesOptions): (request: Request) => Promise<Response> {
   const root = resolve(options.root);
   return async request => {

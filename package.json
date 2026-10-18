@@ -8,7 +8,8 @@
   "scripts": {
     "typecheck": "npm run typecheck --workspaces",
     "demo:coulisses": "npm run demo -w @binette/coulisses",
-    "demo:scene": "npm run demo -w @binette/scene"
+    "demo:scene": "npm run demo -w @binette/scene",
+    "docs": "npx -y -p typedoc@0.28.20 -p typescript@6.0 typedoc"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

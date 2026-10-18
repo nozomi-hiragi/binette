@@ -1,20 +1,35 @@
 import type { AssetResolver } from "./resolve";
 import type { Binette } from "@binette/core";
 
+/** {@link joueur} の設定 */
 export interface JoueurOptions {
+  /** アプリの `mount` に渡すシェル。`asset(name)` は joueur が足す */
   sh: object;
+  /** asset を取る関数 */
   resolver: AssetResolver;
+  /** 画面の中のリンクが押されたときに呼ぶ。渡さないとリンクは通常のページ移動になる */
   onNavigate?: (path: string) => void;
+  /** 中止すると再生を片付ける */
   signal?: AbortSignal;
+  /** この範囲のリンクだけを `onNavigate` に渡す。省略すると `/` */
   base?: string;
   /** 画面の css より先に入れる全体の CSS */
   styles?: string[];
 }
 
-export interface BinetteJoueur { dispose(): void }
+/** 再生中のビネット */
+export interface BinetteJoueur {
+  /** 後始末をして表示を消す */
+  dispose(): void;
+}
 
 const active = new WeakMap<HTMLElement, BinetteJoueur>();
 
+/**
+ * 1 つのビネットを `container` の Shadow DOM に再生する。`Scene` を使わずに単体で再生したいときに使う。
+ *
+ * `entry` が html なら中身を置き、js なら読み込んで `mount(el, sh)` を呼ぶ。`redirect` のビネットは何もしない。
+ */
 export async function joueur(container: HTMLElement, binette: Binette, options: JoueurOptions): Promise<BinetteJoueur> {
   active.get(container)?.dispose();
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });

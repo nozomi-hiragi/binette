@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { binetteSchema } from "./schema.ts";
 import type { Binette } from "./types.ts";
 
+/** ビネットの形式が正しくないときのエラー */
 export class BinetteError extends Error {
   readonly code: "invalid_format";
 
@@ -12,6 +13,12 @@ export class BinetteError extends Error {
   }
 }
 
+/**
+ * 値をビネットとして検査し、正しければ {@link Binette} として返す。
+ *
+ * @param value `.bina` を JSON として読んだ値
+ * @throws {BinetteError} 形式が正しくないとき
+ */
 export function parseBinette(value: unknown): Binette {
   const result = v.safeParse(binetteSchema, value, { abortEarly: true });
   if (!result.success) throw new BinetteError("invalid_format", result.issues[0].message);

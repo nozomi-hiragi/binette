@@ -6,23 +6,54 @@ import { SettingsPage, type SettingsSection } from "./settings";
 import { button, element, renderView } from "./view";
 import type { Binette, BinetteSettingsSection } from "@binette/core";
 
+/**
+ * シェル（`sh`）。アプリの `mount(el, sh)` と部品に渡す、Scene に頼むための API。
+ *
+ * ビネットの js から呼ばれるときは、そのビネットの asset を取る `asset(name)` も付く。
+ */
 export interface SceneShell {
+  /** シェルの API のバージョン（今は `"0.1"`） */
   version: string;
+  /** Scene の中のパスへ移る */
   navigate: (path: string) => void;
+  /** Scene と同じ `fetch` で取る。URL は `serverURL` を基準に解決する */
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
-/** 設定画面の element セクションに表示する、クライアントが用意する部品。アプリの mount と同じ形。 */
+/**
+ * 設定画面の element セクションに出す、クライアントが用意する部品。アプリの `mount` と同じ形。
+ *
+ * 後始末の関数を返すと、設定画面を離れるときに呼ぶ。
+ */
 export type SceneComponent = (element: HTMLElement, sh: SceneShell) => void | (() => void) | Promise<void | (() => void)>;
 
+/** {@link Scene} を作るときの設定 */
 export interface SceneOptions {
+  /** ビネットや asset の取得元。取得する URL はすべてこれを基準に解決する */
   serverURL: string;
+  /** ビネットと asset を取る関数。省略するとブラウザ標準の `fetch` を使う */
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** Scene が管理する画面 URL の範囲。省略すると `/`。取得先の URL には付けない */
   base?: string;
   /** 入口の settings の element セクションから component の名前で指定できる部品 */
   components?: Record<string, SceneComponent>;
+  /** 読み込みや再生で起きたエラーを受け取る */
   onError?: (error: unknown) => void;
 }
+
+/**
+ * ビネットを取得して再生する部品。
+ *
+ * `element` をクライアントが好きな場所に置き、`start()` で始める。
+ * 以後の画面遷移、URL の更新、戻る・進むは Scene が受け持つ。
+ *
+ * @example
+ * ```ts
+ * const scene = new Scene({ serverURL: "https://example.com/" });
+ * document.querySelector("#app")!.append(scene.element);
+ * await scene.start();
+ * ```
+ */
 export class Scene {
   /** Scene が描く要素。クライアントが好きな場所に置く */
   readonly element: HTMLElement;
@@ -106,6 +137,7 @@ export class Scene {
     if (this.#starting) await this.#starting;
     else await this.#showCurrent();
   };
+  /** 入口 `/index.bina` を取り、今の URL の画面まで表示する。何度呼んでも 1 回だけ始める */
   start = (): Promise<void> => {
     if (this.#disposed) return Promise.resolve();
     if (this.#starting) return this.#starting;
@@ -146,6 +178,7 @@ export class Scene {
       return response.text();
     }));
   };
+  /** Scene の中のパスへ移り、その画面を表示する */
   show = async (path: string): Promise<void> => {
     await this.#navigate(path);
   };
@@ -294,6 +327,7 @@ export class Scene {
     if (valid()) this.#cleanups.push(result as () => void);
     else (result as () => void)();
   };
+  /** 表示を片付け、URL の監視をやめる。以後は使えない */
   dispose = (): void => {
     if (this.#disposed) return;
     this.#disposed = true;

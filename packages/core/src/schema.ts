@@ -28,16 +28,41 @@ const assetsSchema = v.pipe(
   ])),
   v.transform((entries) => Object.assign(Object.create(null) as Record<string, v.InferOutput<typeof binetteAssetSchema>>, Object.fromEntries(entries))),
 );
+/** 設定画面の list セクションの 1 行。欄は検討中 */
 export interface BinetteSettingsRow {
+  /** 行の名前。`sections` があるとき `/settings/<id>` で開く */
   id: string;
+  /** 行の先頭に出す文字（アイコンなど） */
   start?: string;
+  /** 行の見出し */
   label: string;
+  /** 行の末尾に出す文字 */
   end?: string;
+  /** 押したときに開く中身。入れ子にできる */
   sections?: BinetteSettingsSection[];
 }
-export type BinetteSettingsSection = { order?: number; label?: string } & (
-  { type: "list"; contents: BinetteSettingsRow[] } |
-  { type: "element"; entry?: string; component?: string }
+
+/** 設定画面のセクション */
+export type BinetteSettingsSection = {
+  /** 並び順。General が `0` で、小さいほど上。省略すると `0`。一番上の階層だけで効く */
+  order?: number;
+  /** セクションの見出し */
+  label?: string;
+} & (
+  | {
+    /** 行の一覧 */
+    type: "list";
+    /** 並べる行 */
+    contents: BinetteSettingsRow[];
+  }
+  | {
+    /** 任意の表示。`entry` と `component` のどちらか一方を書く */
+    type: "element";
+    /** 入口の `assets` にある js の名前。`mount(element, sh)` を呼ぶ */
+    entry?: string;
+    /** クライアントが `components` で登録した部品の名前 */
+    component?: string;
+  }
 );
 
 const settingsRowSchema: v.GenericSchema<BinetteSettingsRow> = v.object({
