@@ -3,8 +3,6 @@
  *
  * @packageDocumentation
  */
-export type { Binette, BinetteAsset, BinetteSettingsRow, BinetteSettingsSection } from "@binette/core";
-export { BinetteError, parseBinette } from "@binette/core";
 export { createResolver } from "./resolve";
 export type { AssetResolver, ResolverOptions } from "./resolve";
 export { joueur } from "./joueur";
