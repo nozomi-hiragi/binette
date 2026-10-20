@@ -10,7 +10,13 @@ const has = (value: unknown, key: string) => typeof value === "object" && value 
 const nonempty = (message: string) => v.pipe(v.string(message), v.nonEmpty(message));
 const absent = v.optional(v.never());
 
-const versionString = v.pipe(v.string("Binette のバージョンが正しくありません。"), v.regex(/^\d+\.\d+$/, "Binette のバージョンが正しくありません。"));
+/** この実装が読める Binette のバージョン。`binette` 欄はこの文字列と一致しなければならない */
+export const BINETTE_VERSION = "0.1";
+
+const versionString = v.pipe(
+  v.string("Binette のバージョンが正しくありません。"),
+  v.check(version => version === BINETTE_VERSION, issue => `対応していない Binette のバージョンです: ${String(issue.input)}`),
+);
 
 
 export const binetteAssetSchema = v.pipe(

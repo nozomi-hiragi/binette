@@ -220,7 +220,18 @@ export class Scene {
           };
           const sh: SceneShell = { version: "0.1", navigate, fetch: this.#fetch };
           // General の order は 0。小さいほど上に並べる。同じ値どうしの順は仕様では決めていない
-          const inserted = [...this.#settingsSources.values()].flatMap(binette => binette.settings!.map(section => ({
+          // 開く先の行 id がぶつかったら、先に登録された方を残す（General が最初）
+          const used = new Set(["general"]);
+          const unique = (section: BinetteSettingsSection): BinetteSettingsSection => section.type !== "list" ? section : {
+            ...section,
+            contents: section.contents.filter(row => {
+              if (row.sections === undefined) return true;
+              if (used.has(row.id)) return false;
+              used.add(row.id);
+              return true;
+            }),
+          };
+          const inserted = [...this.#settingsSources.values()].flatMap(binette => binette.settings!.map(unique).map(section => ({
             order: section.order ?? 0,
             section: this.#settingsSection(section, binette, sh, valid),
           })));
@@ -234,6 +245,11 @@ export class Scene {
           renderView(this.#root, "設定", this.#settings, this.#styles);
           this.#settings.dispatchEvent(new Event("scene-location-change"));
           return;
+        }
+        // /index は / と同じ画面なので / へ寄せる
+        if (path === "/index") {
+          redirect("/");
+          continue;
         }
         // / は覚えている入口を出す。入口が無ければ設定画面へ転送する
         const value = path === "/" ? this.#entry : await this.#fetchBinette(`${path}.bina`);

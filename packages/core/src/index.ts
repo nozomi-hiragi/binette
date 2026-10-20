@@ -9,3 +9,4 @@ export type {
   BinetteSettingsRow, BinetteSettingsSection, BinetteSettingsSectionBase,
 } from "./types.ts";
 export { BinetteError, parseBinette } from "./parse.ts";
+export { BINETTE_VERSION } from "./schema.ts";
