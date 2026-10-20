@@ -235,7 +235,7 @@ Scene を始めると、まず `/index.bina` を入口として取り、Scene �
 ```
 
 - `order`: 並び順です。General は `0` で、`-1` は General の上、`1` は General の下に並びます。省略すると `0` です。同じ値どうしの並びは決めません（未定義）。`order` が効くのは一番上の階層だけです。
-- `type: "list"`: 行（`contents`）の一覧です。行に `sections` を書くと、押したときにその中身を `/settings/<id>` で開きます。入れ子にできます。同じ階層で `sections` を持つ行の `id` がぶつかったときは、先に登録された方を使い、あとの行は出しません。General の `general` が最初です。行の欄は検討中で、今の案は `id`・`label` と、任意の `start`・`end`（文字列）です。
+- `type: "list"`: 行（`contents`）の一覧です。行に `sections` を書くと、押したときにその中身を `/settings/<id>` で開きます。入れ子にできます。同じ階層で `sections` を持つ行の `id` がぶつかったときは、1 つの行にまとめます。行の表示（`label`・`start`・`end`）と位置は先に登録された方を使い、中身は先の `sections` のあとに、あとの行の `sections` をつなげます。入れ子の中も同じようにまとめます。General の `general` が最初なので、`id: "general"` の行を書くと General の中に足せます。行が無くなった list は出しません。行の欄は検討中で、今の案は `id`・`label` と、任意の `start`・`end`（文字列）です。
 - `type: "element"`: 任意の表示です。`entry`（その `settings` を書いたビネットの `assets` の js）か `component`（クライアントが登録した部品の名前）のどちらか一方を書きます。どちらも `mount(element, sh)` の形で呼ばれ、後始末の関数を返せます。`entry` の `sh` には `asset(name)` も付きます。
 - 部品はクライアントが `components` で登録します。テーマやログアウトなど、クライアントにしかできない操作をここで出します。登録されていない名前を指定すると、そのセクションは空のままエラーとして知らせます。
 - `settings` はどのビネットにも書けます。Scene はビネットを読むたびに、その `settings` を覚えて足していきます。入口 `/index.bina` は始めたときに読むので、最初から入ります。

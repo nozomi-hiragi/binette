@@ -2,10 +2,32 @@ import { parseBinette } from "@binette/core";
 import { joueur as createJoueur, type BinetteJoueur } from "./joueur";
 import { importModule } from "./module";
 import { createResolver } from "./resolve";
-import { SettingsPage, type SettingsSection } from "./settings";
+import { SettingsPage, type SettingListItem, type SettingsSection } from "./settings";
 import type { SceneAppShell, SceneComponent, SceneMount, SceneShell } from "./shell";
 import { button, element, renderView } from "./view";
 import type { Binette, BinetteSettingsSection } from "@binette/core";
+
+/**
+ * 同じ階層で開く先の行 id がぶつかったら、先に並べた行にあとの行の sections をつなげ、あとの行を消す。
+ * 入れ子の中も同じようにまとめる。`sections` は書き換える。
+ */
+function mergeRows(sections: SettingsSection[]): void {
+  const rows = new Map<string, SettingListItem>();
+  for (const section of sections) {
+    if (section.type !== "list") continue;
+    section.contents = section.contents.filter(row => {
+      if (row.sections === undefined) return true;
+      const first = rows.get(row.id);
+      if (!first) {
+        rows.set(row.id, row);
+        return true;
+      }
+      first.sections!.push(...row.sections);
+      return false;
+    });
+  }
+  for (const row of rows.values()) mergeRows(row.sections!);
+}
 
 /** {@link Scene} を作るときの設定 */
 export interface SceneOptions {
@@ -220,22 +242,12 @@ export class Scene {
           };
           const sh: SceneShell = { version: "0.1", navigate, fetch: this.#fetch };
           // General の order は 0。小さいほど上に並べる。同じ値どうしの順は仕様では決めていない
-          // 開く先の行 id がぶつかったら、先に登録された方を残す（General が最初）
-          const used = new Set(["general"]);
-          const unique = (section: BinetteSettingsSection): BinetteSettingsSection => section.type !== "list" ? section : {
-            ...section,
-            contents: section.contents.filter(row => {
-              if (row.sections === undefined) return true;
-              if (used.has(row.id)) return false;
-              used.add(row.id);
-              return true;
-            }),
-          };
-          const inserted = [...this.#settingsSources.values()].flatMap(binette => binette.settings!.map(unique).map(section => ({
+          const inserted = [...this.#settingsSources.values()].flatMap(binette => binette.settings!.map(section => ({
             order: section.order ?? 0,
             section: this.#settingsSection(section, binette, sh, valid),
           })));
-          const sections = [{ order: 0, section: sectionGeneral }, ...inserted]
+          mergeRows([sectionGeneral, ...inserted.map(item => item.section)]);
+          const sections = [{ order: 0, section: sectionGeneral }, ...inserted.filter(item => item.section.type !== "list" || item.section.contents.length > 0)]
             .sort((a, b) => a.order - b.order).map(item => item.section);
           this.#settings = SettingsPage({
             title: "Settings", sections,
