@@ -1,0 +1,27 @@
+{
+  "binette": "0.1",
+  "title": "サンプル",
+  "entry": "main",
+  "assets": {
+    "main": {
+      "type": "js",
+      "src": "/files/hello/main.js"
+    },
+    "style": {
+      "type": "css",
+      "content": "button { min-height:44px; padding:.5rem 1rem; font:inherit; border:1px solid var(--color-base-300); border-radius:var(--radius-field); color:var(--color-primary-content); background:var(--color-primary); cursor:pointer; }"
+    },
+    "settings": {
+      "type": "js",
+      "content": "export function mount(el) { const p = document.createElement('p'); p.textContent = '/hello.bina の settings から差し込んだ設定です。'; el.append(p); }"
+    }
+  },
+  "settings": [
+    {
+      "order": 20,
+      "label": "サンプルから",
+      "type": "element",
+      "entry": "settings"
+    }
+  ]
+}

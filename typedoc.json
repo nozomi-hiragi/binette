@@ -1,0 +1,11 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "Binette",
+  "entryPointStrategy": "packages",
+  "entryPoints": ["packages/core", "packages/scene", "packages/coulisses"],
+  "packageOptions": {
+    "entryPoints": ["src/index.ts"]
+  },
+  "readme": "README.md",
+  "out": "site"
+}

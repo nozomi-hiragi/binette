@@ -1,0 +1,11 @@
+{
+  "binette": "0.1",
+  "title": "Binette デモ",
+  "entry": "main",
+  "assets": {
+    "main": {
+      "type": "html",
+      "content": "<main><h1>Binette デモ</h1><p>静的なファイルを fetch して、Binette だけで画面を表示します。見出しの色は入口の全体の CSS で付けています。</p><nav aria-label=\"デモのメニュー\"><p><a href=\"/hello\">サンプルを開く</a></p><p><a href=\"/settings\">設定を開く</a></p><p><a href=\"/redirect\">転送を試す</a></p><p><a href=\"/missing\">無いページを開く</a></p></nav></main>"
+    }
+  }
+}

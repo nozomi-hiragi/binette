@@ -1,0 +1,27 @@
+{
+  "name": "binette",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "node scripts/check-version.ts && npm test -w @binette/core -w @binette/coulisses",
+    "build": "npm run prepack -w @binette/core && npm run prepack -w @binette/scene && npm run prepack -w @binette/coulisses",
+    "check-version": "node scripts/check-version.ts",
+    "check-pack": "node scripts/check-pack.ts",
+    "demo:coulisses": "npm run demo -w @binette/coulisses",
+    "demo:scene": "npm run demo -w @binette/scene",
+    "docs": "npx -y -p typedoc@0.28.20 -p typescript@6.0 typedoc"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,78 @@
+# main と v で始まるブランチの API ドキュメントを TypeDoc で作り、GitHub Pages にまとめて出す。
+# どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
+name: Docs
+
+on:
+  push:
+    branches: [main, "v*"]
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build docs for each branch
+        run: |
+          mkdir -p "$RUNNER_TEMP/site"
+          links=""
+          for branch in $(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -E '^(main|v.*)$' | sort -r); do
+            dir="$RUNNER_TEMP/src/$branch"
+            git worktree add --detach "$dir" "origin/$branch"
+            if [ -f "$dir/typedoc.json" ]; then
+              (cd "$dir" && npm ci && npm run docs -- --out "$RUNNER_TEMP/site/$branch")
+              label="$branch"
+              [ "$branch" = main ] && label="main（現行）"
+              links="$links<li><a href=\"./$branch/\">$label</a></li>"
+            fi
+          done
+          cat > "$RUNNER_TEMP/site/index.html" <<HTML
+          <!doctype html>
+          <html lang="ja">
+          <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Binette API ドキュメント</title>
+          <style>
+          :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+          body { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.6; }
+          li { margin: .5rem 0; }
+          a { display: inline-block; min-height: 44px; line-height: 44px; }
+          </style>
+          </head>
+          <body>
+          <h1>Binette API ドキュメント</h1>
+          <p>ブランチごとのドキュメントです。</p>
+          <ul>$links</ul>
+          <p><a href="https://github.com/nozomi-hiragi/binette">GitHub</a></p>
+          </body>
+          </html>
+          HTML
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
