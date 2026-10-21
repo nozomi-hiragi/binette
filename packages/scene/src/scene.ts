@@ -1,10 +1,10 @@
 import { parseBinette } from "@binette/core";
-import { joueur as createJoueur, type BinetteJoueur } from "./joueur";
-import { importModule } from "./module";
-import { createResolver } from "./resolve";
-import { SettingsPage, type SettingListItem, type SettingsSection } from "./settings";
-import type { SceneAppShell, SceneComponent, SceneMount, SceneShell } from "./shell";
-import { button, element, renderView } from "./view";
+import { joueur as createJoueur, type BinetteJoueur } from "./joueur.ts";
+import { importModule } from "./module.ts";
+import { createResolver } from "./resolve.ts";
+import { SettingsPage, type SettingListItem, type SettingsSection } from "./settings.ts";
+import type { SceneAppShell, SceneComponent, SceneMount, SceneShell } from "./shell.ts";
+import { button, element, renderView } from "./view.ts";
 import type { Binette, BinetteSettingsSection } from "@binette/core";
 
 /**

@@ -8,13 +8,15 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
     "types": [],
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "customConditions": [
+      "@binette/source"
+    ]
   },
   "include": [
     "src",

@@ -1,6 +1,6 @@
-import type { AssetResolver } from "./resolve";
+import type { AssetResolver } from "./resolve.ts";
 import type { Binette } from "@binette/core";
-import type { SceneMount, SceneShell } from "./shell";
+import type { SceneMount, SceneShell } from "./shell.ts";
 
 /** {@link joueur} の設定 */
 export interface JoueurOptions {

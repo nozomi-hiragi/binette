@@ -13,7 +13,7 @@ await scene.start();
 // 使い終わったら scene.dispose() を呼ぶ。
 ```
 
-動き方の決まりは [仕様](../../docs/spec.md) にあります。要点は次のとおりです。
+動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec.md) にあります。要点は次のとおりです。
 
 - 起動時に入口 `/index.bina` を取り、Scene が動いているあいだ覚えておきます。`/` では入口を表示し、入口が `redirect` ならその転送先へ移ります。入口が無い（404）ときは `/settings` へ移ります。
 - ほかの画面パスは `.bina` を付けて取得し、404 なら「見つかりません」を表示します。

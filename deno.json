@@ -1,0 +1,10 @@
+{
+  "workspace": [
+    "./packages/core",
+    "./packages/scene",
+    "./packages/coulisses"
+  ],
+  "compilerOptions": {
+    "lib": ["esnext", "dom", "dom.iterable", "deno.ns"]
+  }
+}

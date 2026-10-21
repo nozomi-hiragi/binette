@@ -3,7 +3,7 @@ import { parseBinette, type Binette } from "@binette/core";
 /** パノプリに入れる、ビネット以外のファイル */
 export interface PanoplieFile {
   /** 中身 */
-  body: Uint8Array;
+  body: Uint8Array<ArrayBuffer>;
   /** Content-Type */
   type: string;
 }
@@ -78,7 +78,8 @@ export function addFile(panoplie: BinettePanoplie, path: string, file: PanoplieF
   if (path.endsWith(".bina")) throw new Error(`.bina はビネットとして足してください: ${path}`);
   const input = typeof file === "string" || file instanceof Uint8Array ? { body: file } : file;
   panoplie.files[path] = {
-    body: typeof input.body === "string" ? new TextEncoder().encode(input.body) : input.body,
+    // 渡された配列はあとで書き換えられても影響しないよう写す
+    body: typeof input.body === "string" ? new TextEncoder().encode(input.body) : new Uint8Array(input.body),
     type: input.type ?? contentTypeOf(path),
   };
 }
@@ -156,7 +157,7 @@ export async function importPanoplie(root: string): Promise<BinettePanoplie> {
       }
       addBinette(panoplie, key.slice(0, -".bina".length), value);
     } else {
-      addFile(panoplie, key, new Uint8Array(body));
+      addFile(panoplie, key, body);
     }
   }
   return panoplie;

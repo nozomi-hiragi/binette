@@ -1,6 +1,4 @@
-/** @jsxImportSource ./dom */
-/** @jsxRuntime automatic */
-import type { Child } from "./dom/jsx-runtime";
+import { fragment, h, type Child } from "./dom.ts";
 
 export interface SettingsPageProps {
   title: string;
@@ -30,56 +28,59 @@ interface SettingsListProps {
   navigate: (path: string[]) => void;
 }
 
-function SettingsList(props: SettingsListProps) {
-  return <div class={props.path.length > 0 ? "settings-page settings-detail" : "settings-page settings-overview"}>
-    <div class="settings-heading-row">
-      {props.path.length > 0 && <button class={`settings-back${props.path.length === 1 ? " settings-back-top" : ""}`} type="button" aria-label="戻る" onClick={() => props.navigate(props.path.slice(0, -1))} />}
-      <h1>{props.title}</h1>
-    </div>
-    {props.sections.map((section) => {
-      if (section.type === "element") return <section>
-        {section.label && <h2>{section.label}</h2>}
-        {section.element}
-      </section>;
+function SettingsList(props: SettingsListProps): HTMLElement {
+  return h("div", { class: props.path.length > 0 ? "settings-page settings-detail" : "settings-page settings-overview" },
+    h("div", { class: "settings-heading-row" },
+      props.path.length > 0 && h("button", {
+        class: `settings-back${props.path.length === 1 ? " settings-back-top" : ""}`,
+        type: "button",
+        "aria-label": "戻る",
+        onClick: () => props.navigate(props.path.slice(0, -1)),
+      }),
+      h("h1", null, props.title),
+    ),
+    props.sections.map((section) => {
+      if (section.type === "element") return h("section", null,
+        section.label && h("h2", null, section.label),
+        section.element,
+      );
       if (section.contents.length === 0) return null;
-      return <section>
-        {section.label && <h2>{section.label}</h2>}
-        <ul class="settings-list">
-          {section.contents.map((row) => {
-            const rowContent = <>
-              <span class="settings-row-start">{row.start}</span>
-              <span class="settings-row-label">{row.label}</span>
-              <span class="settings-row-end">{row.end ?? (row.sections ? "›" : undefined)}</span>
-            </>;
+      return h("section", null,
+        section.label && h("h2", null, section.label),
+        h("ul", { class: "settings-list" },
+          section.contents.map((row) => {
+            const rowContent = fragment(
+              h("span", { class: "settings-row-start" }, row.start),
+              h("span", { class: "settings-row-label" }, row.label),
+              h("span", { class: "settings-row-end" }, row.end ?? (row.sections ? "›" : undefined)),
+            );
             if (row.sections === undefined) {
-              return <li><div class="settings-row">{rowContent}</div></li>;
+              return h("li", null, h("div", { class: "settings-row" }, rowContent));
             }
-            const button = <button class="settings-row" type="button" onClick={() => {
-              if (row.sections !== undefined) props.navigate([...props.path, row.id]);
-            }}>{rowContent}</button> as HTMLElement;
-            if (row.sections !== undefined) button.dataset.settingsPath = JSON.stringify([...props.path, row.id]);
-            return <li>{button}</li>;
-          })}
-        </ul>
-      </section>;
-    })}
-  </div> as HTMLElement;
+            const button = h("button", { class: "settings-row", type: "button", onClick: () => props.navigate([...props.path, row.id]) }, rowContent);
+            button.dataset.settingsPath = JSON.stringify([...props.path, row.id]);
+            return h("li", null, button);
+          }),
+        ),
+      );
+    }),
+  );
 }
 
-export function SettingsPage(props: SettingsPageProps) {
-  const details = <div class="settings-details" /> as HTMLElement;
+export function SettingsPage(props: SettingsPageProps): HTMLElement {
+  const details = h("div", { class: "settings-details" });
   const navigate = (path: string[]) => {
     const suffix = path.map(encodeURIComponent).join("/");
     props.navigate(`/settings${suffix ? `/${suffix}` : ""}${location.search}${location.hash}`);
   };
-  const overview = SettingsList({ title: props.title, sections: props.sections, path: [], navigate }) as HTMLElement;
-  const root = <main class="settings-layout">{overview}{details}</main> as HTMLElement;
+  const overview = SettingsList({ title: props.title, sections: props.sections, path: [], navigate });
+  const root = h("main", { class: "settings-layout" }, overview, details);
   // URL ごとに DOM だけを保持し、選択経路は常に現在の URL から求める。
   const elements = new Map<string, HTMLElement>();
-  const missing = <div class="settings-page settings-detail">
-    <h1>見つかりません</h1>
-    <button type="button" onClick={() => navigate([])}>設定一覧へ</button>
-  </div> as HTMLElement;
+  const missing = h("div", { class: "settings-page settings-detail" },
+    h("h1", null, "見つかりません"),
+    h("button", { type: "button", onClick: () => navigate([]) }, "設定一覧へ"),
+  );
   details.append(missing);
   const showCurrent = () => {
     const relative = location.pathname.slice(props.basePath.length);
@@ -104,7 +105,7 @@ export function SettingsPage(props: SettingsPageProps) {
       const key = JSON.stringify(path);
       current = elements.get(key);
       if (!current) {
-        current = SettingsList({ title, sections, path, navigate }) as HTMLElement;
+        current = SettingsList({ title, sections, path, navigate });
         elements.set(key, current);
         details.append(current);
       }

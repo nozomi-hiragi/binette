@@ -61,7 +61,7 @@ export function createCoulisses(options: CoulissesOptions = {}): Coulisses {
   const fetch = async (request: Request): Promise<Response> => {
     const headers = new Headers();
     if (options.cors !== undefined) headers.set("Access-Control-Allow-Origin", options.cors);
-    const respond = (status: number, body: string | Uint8Array = "") =>
+    const respond = (status: number, body: string | Uint8Array<ArrayBuffer> = "") =>
       new Response(request.method === "HEAD" || status === 204 ? null : body, { status, headers });
     if (request.method === "OPTIONS" && options.cors !== undefined) {
       headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
@@ -77,7 +77,7 @@ export function createCoulisses(options: CoulissesOptions = {}): Coulisses {
     } catch {
       return respond(404);
     }
-    let body: Uint8Array;
+    let body: Uint8Array<ArrayBuffer>;
     if (key.endsWith(".bina")) {
       const binette = Object.hasOwn(binettes, key.slice(0, -".bina".length)) ? binettes[key.slice(0, -".bina".length)] : undefined;
       if (!binette) return respond(404);

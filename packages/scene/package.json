@@ -1,16 +1,48 @@
 {
   "name": "@binette/scene",
-  "private": true,
-  "type": "module",
   "version": "0.1.0",
+  "description": "Binette をブラウザで再生する Scene",
+  "keywords": [
+    "binette",
+    "bina"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "@binette/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "scripts": {
+    "prepack": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p .",
     "demo": "vite demo --port 5175"
   },
   "dependencies": {
-    "@binette/core": "*"
+    "@binette/core": "0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nozomi-hiragi/binette.git",
+    "directory": "packages/scene"
+  },
+  "homepage": "https://github.com/nozomi-hiragi/binette/tree/main/packages/scene#readme",
+  "bugs": {
+    "url": "https://github.com/nozomi-hiragi/binette/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

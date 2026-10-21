@@ -33,7 +33,9 @@ npm run demo:coulisses  # 配信（http://localhost:8790）
 npm run demo:scene      # 再生（http://localhost:5175/）
 ```
 
-2 つを別々の端末で起動し、http://localhost:5175/ を開きます。`npm run typecheck` で全パッケージを型検査します。
+2 つを別々の端末で起動し、http://localhost:5175/ を開きます。
+
+確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 
 ## ライセンス
 

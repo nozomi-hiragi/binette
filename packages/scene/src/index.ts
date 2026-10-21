@@ -3,10 +3,10 @@
  *
  * @packageDocumentation
  */
-export { createResolver } from "./resolve";
-export type { AssetResolver, ResolverOptions } from "./resolve";
-export { joueur } from "./joueur";
-export type { BinetteJoueur, JoueurOptions } from "./joueur";
-export { Scene } from "./scene";
-export type { SceneOptions } from "./scene";
-export type { SceneAppShell, SceneCleanup, SceneComponent, SceneMount, SceneShell } from "./shell";
+export { createResolver } from "./resolve.ts";
+export type { AssetResolver, ResolverOptions } from "./resolve.ts";
+export { joueur } from "./joueur.ts";
+export type { BinetteJoueur, JoueurOptions } from "./joueur.ts";
+export { Scene } from "./scene.ts";
+export type { SceneOptions } from "./scene.ts";
+export type { SceneAppShell, SceneCleanup, SceneComponent, SceneMount, SceneShell } from "./shell.ts";

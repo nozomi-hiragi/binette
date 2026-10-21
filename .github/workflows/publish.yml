@@ -1,0 +1,130 @@
+# main への push で、まだタグの無いバージョンなら npm と JSR に公開し、タグと GitHub Release を作る。
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Plan release
+        id: plan
+        run: |
+          version="$(node scripts/check-version.ts --print-version)"
+          tag="v$version"
+          release=true
+          if [[ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]]; then
+            release=false
+            echo "Skipping $tag (tag already exists on origin)"
+          fi
+          {
+            echo "release=$release"
+            echo "version=$version"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    environment: npm-jsr
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - name: Verify npm supports trusted publishing
+        run: |
+          npm --version
+          if ! node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            process.exit(major > 11 || major === 11 && (minor > 5 || minor === 5 && patch >= 1) ? 0 : 1);
+          ' "$(npm --version)"; then
+            npm install --global npm@11.5.1
+          fi
+          npm --version
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run check-pack
+      - run: npx --yes jsr@0.14.3 publish --dry-run
+      - name: Verify release tag
+        run: node scripts/check-version.ts "$RELEASE_TAG"
+      - name: Prepare release notes
+        run: node scripts/changelog.ts "$RELEASE_VERSION" "$RUNNER_TEMP/release-notes.md"
+      - name: Publish to npm
+        env:
+          # trusted publishing（OIDC）を先に試し、未設定のパッケージ（初回）はこのトークンで公開する
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bash scripts/publish-npm.sh
+      - name: Publish to JSR
+        run: npx --yes jsr@0.14.3 publish
+
+  release:
+    needs: [plan, publish]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    # リポジトリに書き込むのはこのジョブだけ。依存は入れない
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Prepare release notes
+        run: node scripts/changelog.ts "$RELEASE_VERSION" "$RUNNER_TEMP/release-notes.md"
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          remote_tags="$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" "refs/tags/$RELEASE_TAG^{}")"
+          if [[ -n "$remote_tags" ]]; then
+            tag_commit="$(awk 'NR == 1 { commit = $1 } /\^\{\}$/ { commit = $1 } END { print commit }' <<< "$remote_tags")"
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "Tag $RELEASE_TAG points to $tag_commit, expected $GITHUB_SHA" >&2
+              exit 1
+            fi
+          fi
+          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')"
+          if grep -Fxq -- "$RELEASE_TAG" <<< "$releases"; then
+            echo "Skipping $RELEASE_TAG (GitHub Release already exists)"
+            exit 0
+          fi
+          args=("$RELEASE_TAG" --target "$GITHUB_SHA" --title "v$RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md")
+          if [[ "${RELEASE_VERSION%%.*}" == 0 ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"
