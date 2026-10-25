@@ -1,270 +1,207 @@
-# Binette 仕様（v0.1 下書き）
+# Binette 仕様（v0.2 下書き）
 
-Binette（ビネット）は、サーバーがクライアントに渡す画面の定義と、それを再生する部品とシェルの約束事です。ファイルの拡張子は `.bina` です。
+Binette（ビネット）は、ブラウザだけで動く、スマホの OS のようなアプリの土台です。アプリを GitHub などから取ってきて、ブラウザの中でビルドし、検証してからインストールして動かします。サーバーの処理やデータが要るアプリは、自分のサーバーサイドとだけ通信します。
 
 > [!WARNING]
-> 下書きです。「未決のこと」に挙げた点は、まだ決まっていません。
+> 書き始めたばかりの下書きです。各節の見出しに **決定** と付いたものはのぞみが決めたこと、**案** と付いたものは提案で、まだ決まっていません。v0.1（画面の定義 `.bina` を同じページで再生する形）からは大きく変わります。v0.1 の仕様はタグ `v0.1.0` を見てください。
 
-## 呼び名
+## 方針（決定）
+
+- スマホの OS のようなもの。ブラウザのアプリ（フロント）だけで動く
+- アプリはブラウザの中でビルドし、単体でインストールできる。クライアントでビルドするのは、そこでコードを検証できるから
+- アプリの入手元は GET で取れればどこでもよい。基本は GitHub
+- サーバーの処理やデータが要るアプリは、WAKE などで通信する。通信はアプリごとに分け、アプリは自分のサーバーサイドとしか通信できない
+- アプリは HTML ＋ AssemblyScript（AS）で書く方向で試す。TSX のような書き方（ASX）は後で考える
+- データのバックアップはサーバー側（Coulisses）に任せる
+
+## 呼び名と層（決定）
 
 | 名前 | 役割 | パッケージ |
 | --- | --- | --- |
-| Binette | `.bina` の形式。Scene と Coulisses が共有する | `@binette/core` |
-| Scene（シーン、舞台） | `.bina` を受け取り、ブラウザで再生するクライアント側の部品 | `@binette/scene` |
-| Coulisses（クーリス、舞台裏） | `.bina` と asset を用意して返すサーバー側 | `@binette/coulisses` |
-| Panoplie（パノプリ、一式） | Coulisses が配るビネットとファイルの一式 | `@binette/coulisses` |
+| Binette | 形式の定義。どの層も共有する | `@binette/core` |
+| Régie（レジ、操作室） | カーネル。アプリの実行、権限、ストレージなど、土台の仕事をする | `@binette/regie` |
+| Scene（シーン、舞台） | アプリの解釈層。アプリを読み、画面にする | `@binette/scene` |
+| Coulisses（クーリス、舞台裏） | サーバー側。処理の逃がし先とバックアップ | `@binette/coulisses` |
+| Réplique（レプリク、セリフ） | アプリが Régie を呼ぶためのライブラリ（AS） | `@binette/replique` |
 
-## 責任範囲
+- カーネル（Régie）は形式の定義（core）とは別のパッケージにする
 
-Binette が扱うのは、クライアントが Scene を始めてからの画面だけです。
+### EbinaStation での呼び名（決定）
+
+| Binette | EbinaStation |
+| --- | --- |
+| フロントの実装（Régie と Scene を載せ、ホームや設定の見た目を持つ） | ebina-front |
+| Coulisses を WAKE と合わせて実装したもの | ebina-station（Station） |
+
+## 層の分担（案）
 
 | 層 | 担当 |
 | --- | --- |
-| 形式（`.bina` に何を書くか） | Binette |
-| 再生（html を置く、js を動かす、転送、後始末） | Scene |
-| シェル（`sh` の API、設定画面） | Scene |
-| URL の更新、戻る・進む、パスからの画面取得、起動時の行き先 | Scene |
-| ビネットや asset の取得 | 標準の `fetch`、またはクライアントが渡す `fetch` |
-| ログイン、セッション、通信の仕組み、テーマの保存 | クライアント |
+| core | アプリの説明ファイル（manifest）や形式の型と読み込み、検査 |
+| Régie | アプリの実行（Worker ＋ WASM）、権限の判断、アプリごとのストレージ、インストール済みアプリの記録、アプリからの呼び出しの受け口、データの書き出し。画面は持たない |
+| Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ |
+| Coulisses | アプリのサーバーサイド処理、バックアップの受け取り |
+| フロントの実装 | ホーム、設定、ダイアログ、インストール確認などの見た目。Régie と Coulisses の間の通信路を差し込む |
 
-Scene が始まる前（たとえば未ログインのとき）は、Binette は動きません。ログイン画面や、Scene を始めるかどうかの判断はクライアントの実装次第で、この仕様の範囲外です。
+- 依存の向き: `core` ← `regie` ← `scene`（フロント側）、`core` ← `coulisses`（サーバー側）。`replique` は AS 用で、Régie とは「呼び出しの一覧」という約束だけを共有する
+- Binette は WAKE に依存しない。Régie と Coulisses の間の通信路はフロントの実装が渡す。EbinaStation ではそこに WAKE が入る
+- ビルドと検証は Scene が行い、何を許すかの最終判断は Régie が持つ
 
-## クライアントからの使い方
+## アプリのパッケージ（案）
 
-Scene はクライアントの通信の仕組みに依存しません。必要なものは、Scene を作るときにクライアントから受け取ります。
+アプリは、リポジトリなどに置いたファイルの一式です。
+
+```
+manifest.json     説明ファイル（ID・版・権限・入口）
+icon.svg
+src/
+  index.html      見た目。スクリプトは書かない
+  style.css       見た目。フロントのテーマの CSS 変数を使える
+  main.ts         動き。AS で書き、WASM にビルドする
+```
+
+### manifest.json
+
+```json
+{
+  "id": "io.github.nozomi-hiragi.memo",
+  "version": "0.1.0",
+  "binette": "0.2",
+  "name": "メモ",
+  "description": "端末に保存できるメモ帳",
+  "icon": "icon.svg",
+  "entry": {
+    "html": "src/index.html",
+    "css": "src/style.css",
+    "as": "src/main.ts"
+  },
+  "permissions": {
+    "storage": { "reason": "メモを端末に保存するため" },
+    "server": { "reason": "メモをサーバーに送るため" }
+  },
+  "server": { "required": false },
+  "build": { "compiler": "assemblyscript@0.28.0" }
+}
+```
+
+| 欄 | 説明 |
+| --- | --- |
+| `id` | アプリの ID。誰でも名乗れるので、Régie は「入手元 ＋ ID」で区別する |
+| `version` | アプリの版（semver）。表示と、更新の比較の両方に使う |
+| `binette` | 使う Binette（Réplique の呼び出し）の版。Android の `minSdk` にあたる |
+| `name` / `description` / `icon` | 表示用。アイコンは SVG 1 枚 |
+| `entry` | 入口の HTML・CSS・AS |
+| `permissions` | 使う権限と、その用途の説明。説明はインストール画面に出す |
+| `server` | サーバーサイドを使うか。`required: false` なら、サーバーが無くても動く |
+| `build` | ビルドに使うコンパイラの版。同じ入手元からは同じ結果になるようにする |
+
+- 説明ファイルの名前と、`.bina`（v0.1 の画面の定義）との関係は未決
+- 依存ライブラリの固定（lock）の形は未決
+
+### Régie が記録するもの
+
+作者が書く manifest とは別に、Régie はインストールのときに次を記録します。
+
+- 入手元の URL と、固定したコミット（タグは動かせるので SHA で固定する）
+- ソースとビルド結果のハッシュ
+- ユーザーが許可した権限
+- 使用量、インストール日時
+
+## インストール（案）
+
+1. 入手元から manifest とソースを GET する
+2. Scene が AS を WASM にビルドする。Réplique は、manifest の `binette` の版に合うものを Scene が差し込む（アプリが自分で持ち込まない）
+3. 検証する
+   - WASM が import している呼び出しを一覧にし、`permissions` と照合する。宣言にない権限を使っていたら止める
+   - HTML に `<script>`・`on*` 属性・外部 URL が無いことを確かめる
+   - HTML の `data-on-*` に書いた名前が、WASM の export にあることを確かめる
+4. 権限と用途を見せて、ユーザーが許可する
+5. Régie がビルド結果と記録を保存する
+
+- 更新は同じ入手元からだけ受け付ける。権限が増えていたら、もう一度許可を求める
+
+## 実行（案）
+
+- アプリの WASM は Worker の中で動かす。重い処理で画面が固まらず、いつでも止められる
+- アプリは Régie が渡した呼び出ししか使えない。ネットワークや DOM に直接は触れない
+- HTML は Scene がフロントの画面の中に描く。アプリの領域は `contain: paint` などで枠の外に出られないようにする
+- 起動すると Scene がアプリの `start()` を呼ぶ
+
+### HTML とアプリのつなぎ方
+
+| HTML | 意味 | アプリ側（Réplique） |
+| --- | --- | --- |
+| `data-text="name"` | 文字を差し込む | `ui.text("name", "…")` |
+| `data-show="name"` | 表示・非表示 | `ui.show("name", true)` |
+| `data-enabled="name"` | 有効・無効 | `ui.enabled("name", false)` |
+| `data-value="name"` | 入力欄の値 | `ui.value("name", "")` |
+| `data-each="list"` ＋ `<template>` | 一覧の繰り返し | `ui.listClear` / `ui.listAdd` / `ui.itemText` |
+| `data-on-click="fn"` | クリックで `fn()` | `export function fn(): void` |
+| `data-on-input="fn"` | 入力で `fn(値)` | `export function fn(value: string): void` |
+| `data-on-submit="fn"` | 送信で `fn()`（ページ移動はしない） | `export function fn(): void` |
+
+- 一覧の中のイベントは、その行のキーを引数で渡す
+
+## Réplique（案）
+
+アプリが import する AS のライブラリです。中身は Régie への呼び出し（WASM の import）です。
 
 ```ts
-const scene = new Scene({
-  serverURL: "https://example.com/",            // ビネットや asset の取得元（必須）
-  base: "/",                                    // 画面の URL の範囲。省略時は /
-  fetch: (url, init) => clientFetch(url, init), // ビネットと asset を取る関数。省略時は標準の fetch
-  components: { logout: (element, sh) => { /* … */ } }, // 設定画面に出す部品
-});
-document.querySelector("#app")!.append(scene.element);
-await scene.start();
+import { ui, storage, server } from "jsr:@binette/replique";
+export * from "jsr:@binette/replique/glue";
+
+export function start(): void {
+  storage.get("memos", onLoaded);
+}
+
+function onLoaded(value: string | null): void {
+  ui.text("status", value === null ? "まだありません" : value);
+}
 ```
 
-Scene は自分で描く要素 `scene.element` を作ります。クライアントはそれを好きな場所に置くだけです。操作は `start()`・`show(path)`・`dispose()` で行います。
+- AS には async が無いので、結果は「終わったら呼ぶ関数」を渡して受け取る。渡せるのはトップレベルの関数だけ
+- Régie は結果を返すとき、`glue` の export を要求番号付きで呼ぶ。そのためアプリの入口で `glue` を export する
+- `jsr:` の import は、Scene のビルダーが JSR から取って解決する。npm や Node は使わない
 
-## 形式
+### 呼び出しの一覧（最初の案）
 
-中身は JSON です。
-
-### 欄
-
-| 欄 | 型 | 説明 |
+| 名前空間 | 権限 | 内容 |
 | --- | --- | --- |
-| `binette` | 文字列 | 形式のバージョン（今は `"0.1"`）。Scene が知っているバージョンの文字列と一致しなければ読みません |
-| `title` | 文字列（任意） | 画面のタイトル。`document.title` などに使う |
-| `entry` | 文字列 | 最初に再生する asset の名前（`assets` のキー）。`redirect` と排他 |
-| `redirect` | 文字列 | 転送先のパス。`entry` と排他 |
-| `assets` | オブジェクト（任意） | 画面で使う asset |
-| `settings` | 配列（任意） | 設定画面に差し込むセクション。どのビネットにも書ける |
+| `ui` | なし | 画面の書き換え（上の表） |
+| `storage` | `storage` | アプリごとのキーと値の保存 |
+| `server` | `server` | 自分のサーバーサイド（Coulisses）への要求。`available()` でつながっているかを見る |
 
-- `entry` と `redirect` のどちらか一方を必ず書きます。
-- 再生のしかたは、`entry` が指す asset の `type`（`html` か `js`）で決まります。ビネット自体に `type` は書きません。
+## Régie（案）
 
-### asset
+- アプリごとのストレージ。ほかのアプリからは読めない。容量の上限を持つ
+- 権限の判断。フロントの設定画面から、アプリごとに権限を取り消せる
+- アプリのデータは、アプリごとにまとめて書き出せる形で持つ。バックアップのときは、それを Coulisses に送る
+- 動いているアプリの数に上限を持ち、裏に回ったアプリは止められる。状態はストレージから戻す前提にする
 
-- `assets` のキーは拡張子の無いただの名前です。種類は各 asset の `type` だけで判断します。
-- asset は `type` と、`content`（文字列）か `src`（URL）のどちらか一方を持ちます。
+## Coulisses（案）
 
-### html の画面
+- アプリごとに分けた入口を持つ。アプリの要求は、そのアプリのサーバーサイドにだけ届く
+- アプリのサーバーサイドのコードをどこに置き、どう動かすかは未決
+- バックアップを受け取り、戻せるようにする
 
-```json
-{
-  "binette": "0.1",
-  "title": "ホーム",
-  "entry": "main",
-  "assets": {
-    "main": { "type": "html", "content": "<p>こんにちは</p><a href=\"/notes\">ノート</a>" }
-  }
-}
-```
+## v0.1 から変わること（案）
 
-### js の画面
-
-```json
-{
-  "binette": "0.1",
-  "title": "ノート",
-  "entry": "main",
-  "assets": {
-    "main":  { "type": "js",  "src": "/files/notes/main.js" },
-    "style": { "type": "css", "content": ".note { color: var(--color-primary); }" },
-    "logo":  { "type": "svg", "src": "https://cdn.example.com/notes/logo.svg" }
-  }
-}
-```
-
-### 転送
-
-```json
-{
-  "binette": "0.1",
-  "redirect": "/home"
-}
-```
-
-転送先は `/` 始まりの Scene 内のパスです。外部 URL や `//` 始まりは指定しません。
-
-## パノプリ
-
-パノプリは、Coulisses が配るものの一式です。ビネットの辞書と、ビネット以外のファイル（`src` で取る js や画像など）の辞書を持ちます。Coulisses は、パノプリの中身だけを返します。
-
-### ビネットの辞書
-
-キーは画面パスに対応する名前で、先頭の `/` と `.bina` を付けません。値はビネットです。JSON で書くとこうなります。
-
-```json
-{
-  "index": { "binette": "0.1", "redirect": "/home" },
-  "home": { "binette": "0.1", "entry": "main", "assets": { "main": { "type": "html", "content": "<p>こんにちは</p>" } } },
-  "notes/123": { "binette": "0.1", "redirect": "/notes" }
-}
-```
-
-- `index` は入口 `/index.bina` です。
-- 名前は `/` で区切れます。空の区切り、`.`、`..`、`\` は使えません。
-- パノプリを作るときに、ビネットを全部検査します。形式が正しくないビネットがあると、パノプリは作れません。
-
-### ファイル
-
-ビネット以外のファイルは、先頭の `/` を付けないパス（`files/notes/main.js` など）をキーにして入れます。各ファイルは中身と Content-Type を持ちます。Content-Type を指定しないときは拡張子から決めます。`.bina` はファイルとしては入れず、ビネットとして入れます。
-
-### 作り方
-
-パノプリは次のどれからでも作れます。
-
-- ビネットの辞書（と、ファイルの辞書）のオブジェクト
-- ビネットの辞書を書いた JSON の文字列
-- フォルダ。ファイルシステムを読むので、`node:fs` が使える環境（Node など）でだけ動きます。`.bina` はその名前でビネットに、ほかはファイルになります。`a/b.bina` は `a/b` です。シンボリックリンクと、`.` で始まるファイルやフォルダは入れません。読むのは作るときの 1 回だけです。
-
-### 配り方
-
-Coulisses は GET と HEAD に応え、パスで返すものを決めます。
-
-| リクエストのパス | 返すもの |
+| v0.1 | v0.2 |
 | --- | --- |
-| `/<名前>.bina` | ビネットの辞書の `<名前>`（JSON） |
-| それ以外 | ファイルの辞書の、先頭の `/` を除いたパス |
+| サーバーが配る `.bina` を Scene が再生する | アプリをインストールして、Régie が動かす |
+| アプリの js は同じページで動く（信頼できるアプリだけの前提） | アプリは Worker の WASM で隔離して動かす |
+| シェル `sh` の API | Réplique |
+| Coulisses は `.bina` と asset を配る | Coulisses はサーバーサイドの処理とバックアップを受け持つ |
 
-どちらにも無ければ 404 です。配るときにファイルシステムは使わないので、Coulisses は Node 以外でも動きます。
-
-### あとから足す
-
-Coulisses を作ったあとでも、ビネットとファイルを足せます。検査はパノプリを作るときと同じです。同じ名前やパスがすでにあれば置き換えます。足したものは次のリクエストから返します。
-
-## 取得
-
-Scene は、ビネットも asset も、クライアントが渡した `fetch`（無ければ標準の `fetch`）で取ります。入口 `/index.bina`、画面パスから決めたビネット、asset の `src`、`sh.fetch` の URL は、`new URL(url, serverURL).href` で解決してから `fetch` に渡します。絶対 URL はそのまま、`/` 始まりは取得元のオリジン、相対 URL は取得元のディレクトリを基準にします。スキームごとの通信方法は `fetch` の実装が決めます。`content` を持つ asset は、その文字列をそのまま使います。
-
-制約:
-
-- `css` の asset は文字列として `<style>` に入れるため、CSS の中の相対 `url(...)` はページを基準に解決されます。画像やフォントは絶対 URL で書くか、`sh.asset(name)` で取ります。
-- `js` は Blob URL から読み込むため、相対 `import` は使えません。エントリーの JavaScript は 1 つのファイルにまとめ、ほかのファイルは `sh.asset(name)` で取ります。
-
-## 再生
-
-- `entry` が `html` の asset: 中身を Shadow DOM の中に置きます。中の `<script>` 要素は実行しません。ただし `onclick` などの属性に書いたイベントは動きます。
-- `entry` が `js` の asset: ES モジュールとして読み込み、`mount(el, sh)` を呼びます。`el` は Shadow DOM の中の本文の要素です。`mount` は後始末の関数を返してよく、Scene は画面を離れるときにそれを呼びます。
-- `redirect`: 転送先へ `base` を付けた画面 URL で、履歴を置き換えて移ります。転送先で指定されていないクエリとハッシュは引き継ぎます。転送が循環するとエラーを表示します。asset は再生しません。
-- `css` の asset は、自動でその画面の Shadow DOM に適用します。
-- 入口 `/index.bina` の `css` の asset は全体の CSS です。Scene はどの画面にも設定画面にも差し込みます。各画面の `css` は全体の CSS のあとに適用するので、画面ごとに上書きできます。
-- Shadow DOM の中の、同じオリジンかつ `base` 配下へのリンクを押すと、Scene がページを読み直さずに画面を移します。リンクの URL はページを基準に解決し、`base` の外や別オリジンへのリンクは通常のページ移動になります。
-
-アプリはクライアントと同じページで動きます。信頼できる Coulisses のアプリだけを動かす前提です。
-
-## ルーティング
-
-### URL の管理
-
-Scene は `start()` で入口を取り、初期画面まで表示します。以後の画面遷移ではブラウザの URL を更新し、戻る・進むにも追従します。クライアントが遷移を処理したり、URL を監視して表示を指示したりする必要はありません。`dispose()` で URL の監視も終えます。
-
-`base` は Scene が管理する画面 URL の範囲で、省略時は `/` です。たとえば `base: "/app/"` なら、Scene 内の `/notes` はブラウザでは `/app/notes` になります。`sh.navigate` と `redirect` のパスは Scene 内のパスです。`base` は取得先の URL には付けません。
-
-### パスとビネットの対応
-
-画面パスから取るビネットは、次の規則だけで決まります。対応表は書きません。
-
-| 画面パス | 取得するビネット |
-| --- | --- |
-| `/` | `/index.bina` |
-| `/notes` | `/notes.bina` |
-| `/notes/123` | `/notes/123.bina` |
-
-クエリとハッシュは画面 URL には残し、取得先には含めません。取得先が 404 なら「見つかりません」を表示します（`/index.bina` だけは例外で、下の「入口」を参照）。
-
-`/index` は `/` と同じ画面なので、`/` へ転送します。
-
-### 読めなかったとき
-
-ビネットの取得が 404 以外で失敗したとき（通信エラー、404 以外のエラーの応答、形式が正しくないビネット）は、「読み込めませんでした」と再試行のボタンを表示し、エラーをクライアントに知らせます。入口 `/index.bina` も同じです。
-
-### 入口
-
-Scene を始めると、まず `/index.bina` を入口として取り、Scene が動いているあいだ覚えておきます。全体の CSS はここから使います。
-
-入口は `/` の画面そのものでもあります。直接開いたパスはそのまま維持し、そのパスの画面を出します。`/` の扱いは、始めたときも、あとで移ったときも同じです。
-
-- `/` は入口の中身を表示します。入口が `redirect` なら、その転送先へ移ります。
-- `/index.bina` が無い（404）場合、`/` は `/settings` へ転送します。このとき設定画面は General だけになります。
-
-### 固定の URL
-
-`/settings` だけです。ビネットでは上書きできません。`/settings` はビネットを取りません。
-
-## 設定画面（`/settings`）
-
-スマホの設定アプリのような画面です。タグの構成とレイアウトは Binette が決め打ちで用意し、見た目は全体の CSS でカスタマイズします。Scene は読んだビネットの `settings` を、Scene 自身の General セクションと一緒に並べます。
-
-```json
-{
-  "binette": "0.1",
-  "redirect": "/home",
-  "settings": [
-    { "order": 10, "label": "アカウント", "type": "element", "component": "logout" },
-    { "order": -1, "label": "アプリ", "type": "list", "contents": [
-      { "id": "notes", "start": "📝", "label": "ノート", "sections": [
-        { "type": "element", "entry": "notes" }
-      ] }
-    ] }
-  ],
-  "assets": { "notes": { "type": "js", "src": "/files/notes/settings.js" } }
-}
-```
-
-- `order`: 並び順です。General は `0` で、`-1` は General の上、`1` は General の下に並びます。省略すると `0` です。同じ値どうしの並びは決めません（未定義）。`order` が効くのは一番上の階層だけです。
-- `type: "list"`: 行（`contents`）の一覧です。行に `sections` を書くと、押したときにその中身を `/settings/<id>` で開きます。入れ子にできます。同じ階層で `sections` を持つ行の `id` がぶつかったときは、1 つの行にまとめます。行の表示（`label`・`start`・`end`）と位置は先に登録された方を使い、中身は先の `sections` のあとに、あとの行の `sections` をつなげます。入れ子の中も同じようにまとめます。General の `general` が最初なので、`id: "general"` の行を書くと General の中に足せます。行が無くなった list は出しません。行の欄は検討中で、今の案は `id`・`label` と、任意の `start`・`end`（文字列）です。
-- `type: "element"`: 任意の表示です。`entry`（その `settings` を書いたビネットの `assets` の js）か `component`（クライアントが登録した部品の名前）のどちらか一方を書きます。どちらも `mount(element, sh)` の形で呼ばれ、後始末の関数を返せます。`entry` の `sh` には `asset(name)` も付きます。
-- 部品はクライアントが `components` で登録します。テーマやログアウトなど、クライアントにしかできない操作をここで出します。登録されていない名前を指定すると、そのセクションは空のままエラーとして知らせます。
-- `settings` はどのビネットにも書けます。Scene はビネットを読むたびに、その `settings` を覚えて足していきます。入口 `/index.bina` は始めたときに読むので、最初から入ります。
-- 同じビネットを読み直したときは、前に覚えたその `settings` を新しいものに置き換えます。読み直したビネットに `settings` が無ければ、そのビネットの分は消えます。
-- 覚えた `settings` は Scene が動いているあいだだけ持ちます。
-- そのため、設定画面の中身はそれまでに見た画面で変わります。たとえば `/settings` を直接開くと入口の分だけですが、`/notes` を見たあとに開くと `/notes.bina` の分も並びます。
-- どのビネットにも `settings` が無ければ General だけを表示します。
-
-`/settings.bina` は、のちに設定画面の見た目を変えられるようにするための場所として入れる予定です。中身はまだ決めません。
-
-## シェル（`sh`）
-
-`mount` の第 2 引数で、アプリが Scene（とクライアント）に頼むための API です。
-
-- `version`: シェルの API のバージョン（`"0.1"`）
-- `asset(name)`: そのビネットの asset を `Promise<Response>` で取る
-- `navigate(path)`: Scene の中のパスへ移る
-- `fetch(url, init?)`: Scene と同じ `fetch` で取る
-- `storage`（予定）: アプリごとに区切ったクライアント側の保存場所
-
-## ストレージ
-
-- クライアント側: シェルはアプリに `sh.storage` を渡し、保存場所をアプリごとに分けます。設定画面はアプリごとの使用量を出し、削除できます。アプリはクライアントと同じページで動くので、`sh.storage` を使わずに直接保存することもできてしまいます。その分は設定画面から見えません。
-- サーバー側: 仕様では決めません。Coulisses がアプリの設定項目として用意します。
+- `.bina`、パノプリ、ルーティング、設定画面（`/settings`）をどう引き継ぐかは未決
 
 ## 未決のこと
 
-- ビネットがどのアプリのものかをどう決めるか（パス `/notes/…` で決めるなど）
-- `sh.storage` の API
-- 設定画面で CSS から触れるタグやクラスの名前
-- `/settings.bina` の中身
-- `type: "list"` の行（`contents`）の欄
+- 説明ファイルの名前（`manifest.json`）と、`.bina` との関係
+- v0.1 の `.bina`・パノプリ・ルーティング・設定画面の扱い
+- 依存ライブラリの固定（lock）の形
+- 権限の種類
+- アプリのサーバーサイドの置き場所と動かし方
+- Réplique の呼び出しの形（終わったら呼ぶ関数を渡す形でよいか）
+- エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（試して確かめる）
+- 配布先（JSR だけにするか）
