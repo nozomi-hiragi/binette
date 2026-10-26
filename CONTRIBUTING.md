@@ -13,7 +13,7 @@ deno publish --dry-run   # JSR への公開の予行
 
 ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。デモの Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
 
-Deno のコードでは `node:` のモジュールを使いません。ファイルは `Deno.readTextFile` などの Deno の API と `@std/fs`・`@std/path` で扱います。例外は、coulisses（v0.1 のまま。作り直すときに替える）と、Vite の設定（`packages/scene/demo/vite.config.ts`。Vite の流儀に合わせる）です。
+Deno のコードでは `node:` のモジュールを使いません。ファイルは `Deno.readTextFile` などの Deno の API と `@std/fs`・`@std/path` で扱います。例外は coulisses だけです（v0.1 のまま。作り直すときに替える）。
 
 ## バージョンの決め方
 
