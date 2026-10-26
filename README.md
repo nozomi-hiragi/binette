@@ -31,11 +31,10 @@
 
 ## デモ
 
-Node.js 22.18 以上が必要です。
+Deno 2.9 以上が必要です。
 
 ```sh
-npm install
-npm run demo:scene  # http://localhost:5175/
+deno task demo:scene  # http://localhost:5175/
 ```
 
 http://localhost:5175/ を開くと、カウンターのアプリをブラウザの中でビルドして動かします。

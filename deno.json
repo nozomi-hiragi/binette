@@ -6,7 +6,25 @@
     "./packages/coulisses",
     "./packages/replique"
   ],
+  "nodeModulesDir": "auto",
   "compilerOptions": {
     "lib": ["esnext", "dom", "dom.iterable", "deno.ns"]
+  },
+  "tasks": {
+    "check": "deno check packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno run -A npm:assemblyscript@0.28.20/bin/asc.js packages/replique/src/index.ts --noEmit",
+    "test": "deno run --allow-read scripts/check-version.ts && deno test -A",
+    "check-version": "deno run --allow-read scripts/check-version.ts",
+    "check-pack": "deno run -A scripts/check-pack.ts",
+    "demo:scene": "deno run -A --node-modules-dir=auto npm:vite@8.3.4 packages/scene/demo --port 5175",
+    "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",
+    "docs": "deno doc --html --name=Binette --output=site packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.11",
+    "assemblyscript": "npm:assemblyscript@0.28.20",
+    "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
+    "happy-dom": "npm:happy-dom@21.0.4",
+    "valibot": "npm:valibot@1.5.0",
+    "vite": "npm:vite@8.3.4"
   }
 }

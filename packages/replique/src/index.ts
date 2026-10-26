@@ -16,7 +16,7 @@ export class Elem {
 
   /** このアプリが最後に書いた文字。まだ書いていなければ空文字列 */
   get text(): string {
-    return texts.has(this.name) ? texts.get(this.name) : "";
+    return texts.has(this.name) ? texts.get(this.name)! : "";
   }
 
   /** 要素の文字を書き換える */
