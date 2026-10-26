@@ -31,7 +31,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 | `stringifyPrebuiltApp` / `parsePrebuiltApp` | `.binapp` の書き出しと読み込み |
 | `parseBindings` / `generateBindingsSource` | HTML の名前の収集と AS の生成 |
 
-`HomeApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（最初から入れるアプリは `binette:preinstalled` など）。
+`HomeApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system` など）。
 
 ## 単独フロント
 
@@ -41,13 +41,13 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 deno task start
 ```
 
-`deno task build:examples` だけでも `standalone/apps/{counter,hello}.binapp` を生成できます。生成物はコミットしません。任意のアプリは次で書き出せます。
+`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを見つけ、`.binapp/<フォルダ名>.binapp` を生成します。フォルダを足すだけでシステムアプリが増えます。生成物はコミットしません。任意のアプリは次で書き出せます。
 
 ```sh
 deno run -A packages/scene/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス>
 ```
 
-単独フロントはルートの `standalone/` にあります。`deno task build` は `standalone/dist/` に、サブパスでも動く静的ファイルを書き出します。保存は IndexedDB を使います。
+Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` です。`deno task build` は `dist/` に、サブパスでも動く静的ファイルを書き出します。保存は IndexedDB を使います。
 
 テストと型検査は、ルートの `deno task test` と `deno task check` で行います。
 

@@ -83,9 +83,9 @@ Deno.test("CLI は HTML と同じソースを書き出す", async () => {
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
 
-Deno.test("アプリの例の生成ファイルが HTML と一致する", async () => {
+Deno.test("システムアプリの生成ファイルが HTML と一致する", async () => {
   for (const name of ["counter", "hello"]) {
-    const root = new URL(`../../../examples/${name}/`, import.meta.url);
+    const root = new URL(`../../../apps/${name}/`, import.meta.url);
     const html = await Deno.readTextFile(new URL("src/index.html", root));
     assertEquals(await Deno.readTextFile(new URL("src/bina.ts", root)), generateBindingsSource(parseBindings(html, parser)));
   }

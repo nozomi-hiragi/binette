@@ -6,7 +6,7 @@ import { Window } from "happy-dom";
 import { buildApp, type HtmlParser, mountApp } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const counter = new URL("examples/counter/", root);
+const counter = new URL("apps/counter/", root);
 const replique = await Deno.readTextFile(new URL("packages/replique/src/index.ts", root));
 const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": replique };

@@ -7,7 +7,7 @@ import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
 import type { PrebuiltApp } from "./prebuilt.ts";
 
-/** ホームに最初から入れるアプリ。read は開発用 */
+/** ホームに並べるアプリ。read は開発用 */
 export type HomeApp = { source: string } & (
   | { read: (path: string) => Promise<string>; prebuilt?: never }
   | { prebuilt: PrebuiltApp; read?: never }

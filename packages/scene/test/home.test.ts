@@ -9,7 +9,7 @@ const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
 const apps = ["counter", "hello"].map((name) => ({
   source: `https://example.com/${name}/`,
-  read: (path: string) => Deno.readTextFile(new URL(`examples/${name}/${path}`, root)),
+  read: (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root)),
 }));
 const fixtures: InstalledApp[] = [];
 for (const app of apps) {

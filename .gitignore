@@ -3,5 +3,5 @@ node_modules
 .env*.local
 site
 
-standalone/apps/
-standalone/dist/
+.binapp/
+dist/

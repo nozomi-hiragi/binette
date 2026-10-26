@@ -1,23 +1,22 @@
 /// <reference path="./env.d.ts" />
 import { createIndexedDbAppStore } from "@binette/regie";
 import { mountHome, parsePrebuiltApp } from "@binette/scene";
-// @deno-types="./asset.d.ts"
-import counterUrl from "./apps/counter.binapp?url";
-// @deno-types="./asset.d.ts"
-import helloUrl from "./apps/hello.binapp?url";
-
-/** 最初から入れるアプリの入手元。OS を更新しても変えない */
-const PREINSTALLED = "binette:preinstalled";
+/** システムアプリの入手元。OS を更新しても変えない */
+const SYSTEM = "binette:system";
+const appUrls = import.meta.glob<string>("../.binapp/*.binapp", { query: "?url", import: "default", eager: true });
+// スクリプトと同じ UTF-16 コード単位の辞書順。共通の接頭辞・拡張子を除いて比べる
+const appName = (key: string) => key.slice("../.binapp/".length, -".binapp".length);
+const urls = Object.keys(appUrls).sort((a, b) => appName(a) < appName(b) ? -1 : appName(a) > appName(b) ? 1 : 0).map((key) => appUrls[key]!);
 
 const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
 
 try {
-  const apps = await Promise.all([counterUrl, helloUrl].map(async (url) => {
+  const apps = await Promise.all(urls.map(async (url) => {
     const response = await fetch(new URL(url, location.href));
     if (!response.ok) throw new Error(`アプリを取得できません（${response.status}）。`);
     // 配信の URL は中身のハッシュで変わるので、source には使わない
-    return { source: PREINSTALLED, prebuilt: parsePrebuiltApp(await response.text()) };
+    return { source: SYSTEM, prebuilt: parsePrebuiltApp(await response.text()) };
   }));
   const home = await mountHome(container, {
     apps,
