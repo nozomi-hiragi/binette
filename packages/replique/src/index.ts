@@ -50,7 +50,7 @@ declare function setItemIcon(list: string, row: i32, app: i32): void;
 /** 一覧の行の中の要素 */
 export class ItemElem {
   // @ts-ignore: AssemblyScript の整数型
-  constructor(readonly list: string, readonly row: i32, readonly name: string) {}
+  constructor(private readonly list: string, private readonly row: i32, private readonly name: string) {}
 
   /** 行の中の要素の文字を書き換える */
   set text(value: string) {
@@ -61,7 +61,7 @@ export class ItemElem {
 /** 一覧の行。番号は 0 から */
 export class Item {
   // @ts-ignore: AssemblyScript の整数型
-  constructor(readonly list: string, readonly row: i32) {}
+  constructor(private readonly list: string, private readonly row: i32) {}
 
   elem(name: string): ItemElem { return new ItemElem(this.list, this.row, name); }
   // @ts-ignore: AssemblyScript の整数型
