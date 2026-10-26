@@ -4,8 +4,10 @@ set -euo pipefail
 
 PACKAGES=(
   "packages/core:@binette/core"
+  "packages/regie:@binette/regie"
   "packages/scene:@binette/scene"
   "packages/coulisses:@binette/coulisses"
+  "packages/replique:@binette/replique"
 )
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

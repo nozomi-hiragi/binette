@@ -1,6 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { defaultClientConditions, defineConfig } from "vite";
 
-// ワークスペースの @binette/core をビルドせずにソースから読む
+// ワークスペースのパッケージをビルドせずにソースから読む。アプリの例（examples/）はそのまま GET で取れるようにする
 export default defineConfig({
+  publicDir: fileURLToPath(new URL("../../../examples", import.meta.url)),
   resolve: { conditions: ["@binette/source", ...defaultClientConditions] },
 });

@@ -1,12 +1,14 @@
-// 公開する 3 パッケージのバージョンと設定がそろっているかを、テストや公開の前に確かめる。
+// 公開するパッケージのバージョンと設定がそろっているかを、テストや公開の前に確かめる。
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const PUBLISHED: Record<string, string> = {
   "packages/core": "@binette/core",
+  "packages/regie": "@binette/regie",
   "packages/scene": "@binette/scene",
   "packages/coulisses": "@binette/coulisses",
+  "packages/replique": "@binette/replique",
 };
 const DEPENDENCY_SECTIONS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
 export const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;

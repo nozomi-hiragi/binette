@@ -7,8 +7,8 @@
   ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces",
-    "test": "node scripts/check-version.ts && npm test -w @binette/core -w @binette/coulisses",
-    "build": "npm run prepack -w @binette/core && npm run prepack -w @binette/scene && npm run prepack -w @binette/coulisses",
+    "test": "node scripts/check-version.ts && npm test -w @binette/core -w @binette/regie -w @binette/scene -w @binette/coulisses",
+    "build": "npm run prepack -w @binette/core && npm run prepack -w @binette/regie && npm run prepack -w @binette/scene && npm run prepack -w @binette/coulisses",
     "check-version": "node scripts/check-version.ts",
     "check-pack": "node scripts/check-pack.ts",
     "demo:coulisses": "npm run demo -w @binette/coulisses",

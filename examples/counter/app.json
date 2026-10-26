@@ -1,0 +1,10 @@
+{
+  "id": "io.github.nozomi-hiragi.counter",
+  "version": "0.1.0",
+  "binette": "0.2",
+  "name": "カウンター",
+  "entry": {
+    "html": "src/index.html",
+    "as": "src/main.ts"
+  }
+}

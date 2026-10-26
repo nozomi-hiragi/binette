@@ -12,14 +12,18 @@
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "types": [],
+    "types": [
+      "node"
+    ],
     "allowImportingTsExtensions": true,
     "customConditions": [
       "@binette/source"
-    ]
+    ],
+    "erasableSyntaxOnly": true
   },
   "include": [
     "src",
-    "demo"
+    "demo",
+    "test"
   ]
 }

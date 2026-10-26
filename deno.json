@@ -1,8 +1,10 @@
 {
   "workspace": [
     "./packages/core",
+    "./packages/regie",
     "./packages/scene",
-    "./packages/coulisses"
+    "./packages/coulisses",
+    "./packages/replique"
   ],
   "compilerOptions": {
     "lib": ["esnext", "dom", "dom.iterable", "deno.ns"]

@@ -24,11 +24,13 @@ try {
     if (packed.length !== 1 || !packed[0]?.filename) throw new Error(`${name}: expected one tarball`);
     const tarball = resolve(temp, packed[0].filename);
     const files = output("tar", ["-tzf", tarball], temp).trim().split("\n");
-    for (const required of ["dist/index.js", "dist/index.d.ts", "README.md", "LICENSE", "package.json"]) {
+    // replique は AS のソースをそのまま配るので、dist が無く src がある
+    const source = name === "@binette/replique";
+    for (const required of [...source ? ["src/index.ts"] : ["dist/index.js", "dist/index.d.ts"], "README.md", "LICENSE", "package.json"]) {
       if (!files.includes(`package/${required}`)) throw new Error(`${name}: missing ${required}`);
     }
     for (const file of files) {
-      if (/(^|\/)(src|demo|tests?)\//.test(file) || /\.(test|spec)\./.test(file)) throw new Error(`${name}: forbidden path ${file}`);
+      if ((!source && /(^|\/)src\//.test(file)) || /(^|\/)(demo|tests?)\//.test(file) || /\.(test|spec)\./.test(file)) throw new Error(`${name}: forbidden path ${file}`);
     }
     console.log(`${name}: tarball verified (${files.length} files)`);
     dependencies[name] = `file:${tarball}`;
@@ -46,30 +48,60 @@ try {
   // Node 22 で TypeScript の型除去に頼らないよう、実行の確認は JavaScript で書く
   writeFileSync(join(consumer, "consumer.js"), `
 import assert from "node:assert/strict";
-import { BINETTE_VERSION, BinetteError, parseBinette } from "@binette/core";
-import { Scene, joueur } from "@binette/scene";
+import { readFileSync } from "node:fs";
+import { BINETTE_VERSION, BinetteError, parseAppManifest, parseBinette } from "@binette/core";
+import { launchApp, serveApp } from "@binette/regie";
+import { buildApp } from "@binette/scene";
 import { createCoulisses, createPanoplie } from "@binette/coulisses";
 assert.equal(parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" })).redirect, "/home");
 assert.throws(() => parseBinette("{"), BinetteError);
-assert.equal(typeof Scene, "function");
-assert.equal(typeof joueur, "function");
+assert.throws(() => parseAppManifest("{"), BinetteError);
+
+// 入れた tarball だけで、AS をビルドして Worker 相当（MessageChannel）で動かす
+const files = {
+  "app.json": JSON.stringify({ id: "example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
+  "src/index.html": '<p bina="count">0</p>',
+  "src/main.ts": 'import { elem } from "jsr:@binette/replique";\\nexport function start(): void { elem("count").text = "0"; }\\n',
+};
+const replique = readFileSync(new URL(import.meta.resolve("@binette/replique")), "utf8");
+const built = await buildApp(async (path) => files[path], { libraries: { "jsr:@binette/replique": replique } });
+assert.equal(built.manifest.id, "example.counter");
+const { port1, port2 } = new MessageChannel();
+serveApp(port1);
+const texts = [];
+const app = await launchApp(built.wasm, {
+  onText: (name, value) => texts.push([name, value]),
+  createWorker: () => ({
+    postMessage: (message, transfer) => port2.postMessage(message, transfer),
+    addEventListener: (type, listener) => port2.addEventListener(type, listener),
+    terminate: () => { port1.close(); port2.close(); },
+  }),
+});
+assert.deepEqual(app.exports, ["start"]);
+await app.call("start");
+assert.deepEqual(texts, [["count", "0"]]);
+app.stop();
+
 const coulisses = createCoulisses({ panoplie: createPanoplie({ index: { binette: BINETTE_VERSION, redirect: "/home" } }) });
 const response = await coulisses.fetch(new Request("http://localhost/index.bina"));
 assert.equal(response.status, 200);
 assert.equal(parseBinette(await response.text()).redirect, "/home");
-console.log("Plain Node consumer passed (3 packages)");
+console.log("Plain Node consumer passed (core, regie, scene, coulisses, replique)");
 `);
   run(process.execPath, ["consumer.js"], consumer);
   writeFileSync(join(consumer, "consumer.ts"), `
-import { BINETTE_VERSION, parseBinette, type Binette } from "@binette/core";
-import { Scene, type SceneComponent, type SceneMount } from "@binette/scene";
+import { BINETTE_VERSION, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
+import { launchApp, serveApp, type LaunchOptions, type RegieApp } from "@binette/regie";
+import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
 import { createCoulisses, type Coulisses } from "@binette/coulisses";
 const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
-const scene: Scene = new Scene({ serverURL: "https://example.com/" });
-const component: SceneComponent = (element, sh) => { element.textContent = sh.version; };
-const mount: SceneMount = async (element, sh) => { element.textContent = await (await sh.asset("main")).text(); return () => {}; };
+const manifest: AppManifest = parseAppManifest("{}");
+const options: LaunchOptions = { onText: (name: string, value: string) => void [name, value] };
+const launch: (wasm: Uint8Array) => Promise<RegieApp> = (wasm) => launchApp(wasm, options);
+const build: (read: (path: string) => Promise<string>) => Promise<BuiltApp> = (read) => buildApp(read);
+const mount: (element: HTMLElement, built: BuiltApp) => Promise<MountedApp> = mountApp;
 const coulisses: Coulisses = createCoulisses();
-void [binette, scene, component, mount, coulisses];
+void [binette, manifest, launch, build, mount, serveApp, coulisses];
 `);
   writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: {
     target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, lib: ["ES2022", "DOM"],
