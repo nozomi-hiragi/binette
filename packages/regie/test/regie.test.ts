@@ -79,3 +79,27 @@ export function start(): void {}
     app.stop();
   }
 });
+
+test("Buffer で渡した WASM でも起動できる", async () => {
+  const wasm = await build(source);
+  // 前後に別のバイトがある大きなバッファの一部を見る Buffer。Buffer の slice は写しを作らない
+  const view = Buffer.from(new ArrayBuffer(wasm.length + 16), 8, wasm.length);
+  view.set(wasm);
+  const app = await launchApp(view, { createWorker });
+  try {
+    assert.deepEqual([...app.exports].sort(), ["boom", "hello"]);
+  } finally {
+    app.stop();
+  }
+});
+
+test("init を送れなければ Worker を止めて reject する", async () => {
+  let terminated = false;
+  const failing = (): RegieWorker => ({
+    postMessage: () => { throw new Error("送れない"); },
+    addEventListener: () => {},
+    terminate: () => { terminated = true; },
+  });
+  await assert.rejects(launchApp(await build(source), { createWorker: failing }), /送れない/);
+  assert.ok(terminated);
+});
