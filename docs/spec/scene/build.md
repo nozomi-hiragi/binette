@@ -61,7 +61,7 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 4. HTML と AS を並べて読む
 5. HTML を `parseBindings` で読み（名前の誤りは `Error`）、`generateBindingsSource` で `bina.ts` のソースを作る（詳しくは [bindings.md](bindings.md)）
 6. asc で AS を WASM にビルドする（下の「asc の呼び方」と「ファイルの解決」）
-7. WASM を `WebAssembly.compile` し、`bindings.clicks` の関数名がすべて export された関数にあるか確かめる。無ければ `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>` の `Error`
+7. WASM を `WebAssembly.compile` し、`bindings.clicks` と各 `bindings.lists` の `clicks` の関数名がすべて export された関数にあるか確かめる。無ければ `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>` の `Error`
 8. `{ manifest, html, wasm, bindings }` を返す
 
 - `read` が reject したら、そのまま reject します
@@ -72,13 +72,14 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 ### asc の呼び方
 
 ```ts
-await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
+await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
   readFile, writeFile, listFiles: () => [], stdout, stderr,
 });
 ```
 
 - 入口には、整えた `entry.as` のパス（例 `src/main.ts`）をそのまま渡します。asc の誤りの出力にも、そのパスが出ます
 - `--exportStart _start` は、トップレベルの初期化を Régie が instance を作ったあとに走らせるためです（[regie.md](../regie.md#ビルドのしかた)）
+- `--exportRuntime` は、Régie が `__new` で AS の文字列を確保して返すためです
 - ランタイムは asc の既定（`incremental`）です
 - `writeFile` は `main.wasm` の中身（`Uint8Array`）だけを受け取り、ほかは捨てます
 - 標準ライブラリは asc に入っているので、`readFile` で返す必要はありません

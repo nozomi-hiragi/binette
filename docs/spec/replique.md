@@ -33,7 +33,7 @@ export function increment(): void {
 
 ## 呼び出しの一覧
 
-### 実装済み
+### 実装済み（形は案）
 
 | AS の API | WASM の import（モジュール.名前） | 権限 | 内容 |
 | --- | --- | --- | --- |
@@ -42,7 +42,23 @@ export function increment(): void {
 | `Elem.text = value`（`set text(value: string)`） | `binette`.`elem.text`（`name`, `value`） | なし | 要素の文字を `value` にする。値を Réplique の手元にも覚える |
 | `Elem.text`（`get text(): string`） | なし | なし | このアプリがその名前に最後に書いた文字。まだ書いていなければ `""`。画面には聞かない |
 
-ソース（`packages/replique/src/index.ts`）:
+一覧は `<template bina="tiles">` を使います。行の中の名前は行の外と分けます。行のクリックは `export function openApp(row: i32): void` の形です。
+
+| AS の API | WASM の import（`binette`） | 内容 |
+| --- | --- | --- |
+| `list(name: string): List` | なし | 一覧を返す |
+| `List.add(): Item` | `list.add(name): i32` | 行を足し、0 からの番号を持つ Item を返す |
+| `List.clear(): void` | `list.clear(name)` | 全行を消し、次の番号を 0 に戻す |
+| `Item.elem(name: string)` の `.text = value` | `item.text(list, row, name, value)` | その行の中だけの文字を書き換える |
+| `Item.icon(app: i32): void` | `item.icon(list, row, app)` | 行の `img[bina-icon]` に OS のアイコンを入れる |
+| `apps.count(): i32` | `apps.count()` | ホーム以外のアプリ数 |
+| `apps.name(i: i32): string` | `apps.name(i): i32` | 表示名。返り値は AS の文字列ポインタ |
+| `apps.id(i: i32): string` | `apps.id(i): i32` | アプリ ID。同じく文字列ポインタ |
+| `apps.open(i: i32): void` | `apps.open(i)` | アプリを開く |
+
+`apps.*` はホームだけが使えます。Régie に `apps` を渡していなければ `この呼び出しはホームのアプリだけが使えます。` の例外です。アプリ番号と行番号の範囲外も例外になります。任意の URL や SVG の文字列をアプリから渡す操作はありません。
+
+ソース（`packages/replique/src/index.ts`、文字操作の部分）:
 
 ```ts
 // @ts-ignore: decorator
@@ -73,7 +89,6 @@ export function elem(name: string): Elem { return new Elem(name); }
 | 対象 | 権限 | 内容 |
 | --- | --- | --- |
 | `elem` | なし | `show`・`enabled`・`value` のプロパティ。`value` は入力のたびに Scene が送る値を覚えて返す（[scene/mount.md](scene/mount.md#読める値案)） |
-| `list` | なし | 一覧（`bina="list"` ＋ `<template>`）の行を足す・消す。行の中は `item.elem("…")` で触る |
 | `storage` | `storage` | アプリごとのキーと値の保存 |
 | `server` | `server` | 自分のサーバーサイド（Coulisses）への要求。`available()` でつながっているかを見る |
 

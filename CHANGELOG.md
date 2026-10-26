@@ -8,7 +8,9 @@
 - Régie にメモリと IndexedDB の AppStore を追加。同じ版のビルド結果を使い回す
 - app.json の icon の型を検査し、SVG を画像として表示する
 - 設定をシステムアプリ `apps/settings` に置き、Binette の版と説明を表示する。設定の項目と読み書きの呼び出しは未決
-- ホームを将来 `apps/home` にする方針を記載。今は Scene の `mountHome` が持つ
+- ホームを HTML ＋ AS のシステムアプリ `apps/home` にする。Scene は `mountShell` で枠と「戻る」の帯を持つ
+- app.json の role、template の一覧と行の文字・アイコン、ホーム用の apps.* を追加
+- Régie から AS へ文字列を返し、call に i32 の引数を渡せるようにする
 - 単独起動の入口をリポジトリ直下に追加
 
 ## v0.1.0 (2026-10-21)
