@@ -115,3 +115,44 @@ Deno.test("ビルドに失敗する AS は Error になる", async () => {
   );
   assert(error.message.includes("TS2322"));
 });
+
+Deno.test("行は template の後ろに増え、文字・アイコン・クリックが行だけに届き clear で消える", async () => {
+  const files = {
+    "app.json": JSON.stringify({ id: "list", name: "一覧", entry: { html: "i.html", as: "m.ts" } }),
+    "i.html": '<p bina="name">外</p><div><template bina="tiles"><button bina-on-click="openApp"><img bina-icon alt=""><span bina="name"></span></button><i bina="name"></i></template><b>末尾</b></div>',
+    "m.ts": `import { tiles } from "./bina"; import { apps, elem } from "jsr:@binette/replique";
+export function start(): void { for (let i = 0; i < apps.count(); i++) { const item = tiles.add(); item.elem("name").text = apps.name(i); item.icon(i); } elem("name").text = "外だけ"; }
+export function openApp(row: i32): void { apps.open(row); }
+export function clear(): void { tiles.clear(); }
+export function again(): void { const item = tiles.add(); item.elem("name").text = "再開"; item.icon(1); }
+`,
+  };
+  const built = await buildApp(async (path) => files[path as keyof typeof files], { libraries, parser });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(element as never); const opened: number[] = [];
+  const icon = '<svg xmlns="http://www.w3.org/2000/svg"><script>bad()</script></svg>';
+  let init: Record<string, unknown> | undefined;
+  const mounted = await mountApp(element, built, { createWorker() {
+    const worker = createWorker();
+    return { ...worker, postMessage(message, transfer) {
+      if ((message as { type: string }).type === "init") init = message as Record<string, unknown>;
+      worker.postMessage(message, transfer);
+    } };
+  }, apps: [{ id: "a", name: "一", icon }, { id: "b", name: "二" }], onOpen: (i) => opened.push(i) });
+  try {
+    assertEquals(init!.apps, [{ id: "a", name: "一" }, { id: "b", name: "二" }]);
+    assertEquals(element.querySelector("p")!.textContent, "外だけ");
+    assertEquals([...element.querySelectorAll("span")].map((e) => e.textContent), ["一", "二"]);
+    assertEquals([...element.querySelectorAll("i")].map((e) => e.textContent), ["一", "二"]);
+    assertEquals([...element.querySelector("div")!.children].map((e) => e.tagName.toLowerCase()), ["template", "button", "i", "button", "i", "b"]);
+    assertEquals(element.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`);
+    assertEquals(element.querySelectorAll("img")[1]!.getAttribute("src"), null);
+    assertEquals(element.querySelector("script"), null);
+    element.querySelectorAll<HTMLButtonElement>("button")[1]!.querySelector("span")!.click();
+    await waitFor(() => opened.length === 1); assertEquals(opened, [1]);
+    await mounted.app.call("clear"); assertEquals(element.querySelectorAll("button").length, 0);
+    assertEquals(element.querySelector("template")!.content.querySelector("span")!.textContent, "");
+    await mounted.app.call("again"); assertEquals(element.querySelector("span")!.textContent, "再開");
+    element.querySelector<HTMLButtonElement>("button")!.click(); await waitFor(() => opened.length === 2); assertEquals(opened, [1, 0]);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});

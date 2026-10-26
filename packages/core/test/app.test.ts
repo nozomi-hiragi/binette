@@ -44,3 +44,15 @@ Deno.test("形式が正しくない app.json は BinetteError になる", () => 
     assertEquals(error.message, message, text);
   }
 });
+
+Deno.test("role は任意の文字列で、ほかの型は BinetteError になる", () => {
+  assertEquals(parseAppManifest(JSON.stringify(manifest)).role, undefined);
+  for (const role of ["home", "", "unknown"]) {
+    assertEquals(parseAppManifest(JSON.stringify({ ...manifest, role })).role, role);
+  }
+  for (const role of [null, 1, true, [], {}]) {
+    const error = assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, role })), BinetteError);
+    assertEquals(error.code, "invalid_format");
+    assertEquals(error.message, "role は文字列で指定してください。");
+  }
+});

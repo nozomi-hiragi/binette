@@ -1,6 +1,6 @@
 /// <reference path="./env.d.ts" />
 import { createIndexedDbAppStore } from "@binette/regie";
-import { mountHome, parsePrebuiltApp } from "@binette/scene";
+import { mountShell, parsePrebuiltApp } from "@binette/scene";
 /** システムアプリの入手元。OS を更新しても変えない */
 const SYSTEM = "binette:system";
 const appUrls = import.meta.glob<string>("../.binapp/*.binapp", { query: "?url", import: "default", eager: true });
@@ -18,12 +18,12 @@ try {
     // 配信の URL は中身のハッシュで変わるので、source には使わない
     return { source: SYSTEM, prebuilt: parsePrebuiltApp(await response.text()) };
   }));
-  const home = await mountHome(container, {
+  const shell = await mountShell(container, {
     apps,
     store: createIndexedDbAppStore(),
     onError(error) { console.error(error); },
   });
-  import.meta.hot?.dispose(() => home.stop());
+  import.meta.hot?.dispose(() => shell.stop());
 } catch (error) {
   console.error(error);
   const message = document.createElement("p");

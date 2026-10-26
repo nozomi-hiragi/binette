@@ -1,0 +1,9 @@
+{
+  "id": "io.github.nozomi-hiragi.binette.home",
+  "version": "0.1.0",
+  "binette": "0.2",
+  "name": "ホーム",
+  "role": "home",
+  "icon": "icon.svg",
+  "entry": { "html": "src/index.html", "as": "src/main.ts" }
+}

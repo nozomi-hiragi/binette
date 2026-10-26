@@ -1,3 +1,4 @@
+import { Window } from "happy-dom";
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { DOMParser } from "@b-fuze/deno-dom";
 import { buildApp, generateBindingsSource, type HtmlParser, parseBindings } from "../src/index.ts";
@@ -7,7 +8,7 @@ import { appPath } from "../src/paths.ts";
 const parser = new DOMParser() as unknown as HtmlParser;
 const replique = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
 const libraries = { "jsr:@binette/replique": replique };
-const header = '// bina.ts（HTML から自動生成。手で書き換えない）\nimport { elem } from "jsr:@binette/replique";\n';
+const header = '// bina.ts（HTML から自動生成。手で書き換えない）\nimport { elem, list } from "jsr:@binette/replique";\n';
 
 Deno.test("HTML の名前・数・種類・クリックを出現順で集める", () => {
   const bindings = parseBindings('<p bina="x"></p><input bina="x"><input bina="x" type="NUMBER"><input bina="x" type="number"><span bina="toString" bina-on-click="elem"></span><button bina-on-click="run"></button><i bina-on-click="elem"></i>', parser);
@@ -84,7 +85,7 @@ Deno.test("CLI は HTML と同じソースを書き出す", async () => {
 });
 
 Deno.test("システムアプリの生成ファイルが HTML と一致する", async () => {
-  for (const name of ["settings"]) {
+  for (const name of ["settings", "home"]) {
     const root = new URL(`../../../apps/${name}/`, import.meta.url);
     const html = await Deno.readTextFile(new URL("src/index.html", root));
     assertEquals(await Deno.readTextFile(new URL("src/bina.ts", root)), generateBindingsSource(parseBindings(html, parser)));
@@ -112,4 +113,37 @@ Deno.test("entry.as が bina.ts だと、ビルドも書き出しも止まり、
     await assertRejects(() => writeBindings(dir), Error, "bina.ts という名前は使えません");
     assertEquals(await Deno.readTextFile(`${dir}/src/bina.ts`), app["src/bina.ts"]);
   } finally { await Deno.remove(dir, { recursive: true }); }
+});
+
+Deno.test("deno-dom と happy-dom の template.content から行の名前を分けて集める", async () => {
+  const window = new Window();
+  const html = '<p bina="name"></p><template bina="tiles"><button bina-on-click="openApp"><span bina="name"></span></button></template>';
+  try {
+    const happy = new window.DOMParser() as unknown as HtmlParser;
+    const bindings = parseBindings(html, parser);
+    assertEquals(parseBindings(html, happy), bindings);
+    assertEquals(Object.keys(bindings.elements), ["name"]);
+    assertEquals(bindings.clicks, []);
+    assertEquals(Object.keys(bindings.lists.tiles!.elements), ["name"]);
+    assertEquals(bindings.lists.tiles!.clicks, ["openApp"]);
+    assertEquals(generateBindingsSource(bindings), '// bina.ts（HTML から自動生成。手で書き換えない）\nimport { elem, list } from "jsr:@binette/replique";\n\nexport const name = elem("name");\nexport const tiles = list("tiles");\n');
+  } finally { await window.happyDOM.close(); }
+});
+
+Deno.test("行クリックも export を検査する。行の名前はトップレベルから import できない", async () => {
+  const html = '<template bina="tiles"><button bina-on-click="openApp"><span bina="name"></span></button></template>';
+  for (const [source, message] of [
+    ['export function start(): void {}', "openApp"],
+    ['import { name } from "./bina"; export function openApp(row: i32): void { name.text = "x"; }', "アプリをビルドできません"],
+  ]) {
+    const app = files(html, source!);
+    await assertRejects(() => buildApp(async (path) => app[path]!, { libraries, parser }), Error, message);
+  }
+});
+
+Deno.test("一覧の重複・要素との衝突・入れ子は理由を付けて拒む", () => {
+  for (const html of ['<template bina="tiles"></template><template bina="tiles"></template>', '<p bina="tiles"></p><template bina="tiles"></template>', '<template bina="tiles"><template bina="nested"></template></template>']) {
+    assertThrows(() => parseBindings(html, parser), Error);
+  }
+  assertThrows(() => parseBindings('<p bina="list"></p>', parser), Error, "import");
 });

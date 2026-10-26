@@ -1,0 +1,20 @@
+<style>
+  .home-grid {
+    box-sizing: border-box; flex: 1; min-height: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-home-tile-size, 112px)), 1fr));
+    align-content: start; gap: var(--bina-home-gap, 16px);
+    padding: var(--bina-home-padding, 16px);
+    background: var(--bina-home-background, #f3f5f8); color: var(--bina-home-color, #16181d);
+  }
+  .home-tile {
+    display: flex; flex-direction: column; align-items: center; gap: var(--bina-home-gap, 16px);
+    font: inherit; color: inherit; cursor: pointer; overflow-wrap: anywhere;
+    border: 1px solid var(--bina-home-border, #d5dae1); background: var(--bina-home-surface, #fff);
+    border-radius: var(--bina-home-radius, 12px); padding: var(--bina-home-button-padding, 12px);
+  }
+  .home-icon { width: var(--bina-home-icon-size, 56px); height: var(--bina-home-icon-size, 56px); object-fit: contain; }
+  .home-tile:focus-visible { outline: 2px solid var(--bina-home-focus, #3273b9); outline-offset: 2px; }
+</style>
+<div class="home-grid" aria-label="アプリ">
+  <template bina="tiles"><button type="button" class="home-tile" bina-on-click="openApp"><img class="home-icon" bina-icon alt=""><span bina="name"></span></button></template>
+</div>
