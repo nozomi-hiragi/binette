@@ -65,7 +65,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | パッケージ | 依存 |
 | --- | --- |
-| `@binette/core` | `@valibot/valibot@1.5.0`（JSR） |
+| `@binette/core` | `valibot@1.5.0`（npm） |
 | `@binette/regie` | なし（core も使っていない） |
 | `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`（npm）、`@b-fuze/deno-dom@0.1.56`（書き出しコマンドだけ） |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |

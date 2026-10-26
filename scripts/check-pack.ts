@@ -62,7 +62,7 @@ try {
           "@binette/coulisses": "../packages/coulisses/src/index.ts",
           "@binette/replique": "../packages/replique/src/index.ts",
           "@std/assert": "jsr:@std/assert@1",
-          valibot: "jsr:@valibot/valibot@1.5.0",
+          valibot: "npm:valibot@1.5.0",
           "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
         },
       },

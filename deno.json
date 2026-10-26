@@ -33,7 +33,7 @@
     "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
     "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@0.1.56",
     "happy-dom": "npm:happy-dom@21.0.4",
-    "valibot": "jsr:@valibot/valibot@1.5.0",
+    "valibot": "npm:valibot@1.5.0",
     "vite": "npm:vite@8.3.4"
   }
 }
