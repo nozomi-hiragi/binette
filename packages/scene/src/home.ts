@@ -2,6 +2,7 @@ import { parseAppManifest } from "@binette/core";
 import { type AppStore, type InstalledApp, installedAppKey } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
 import { parseBindings } from "./bindings.ts";
+import { appPath } from "./paths.ts";
 import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
 /** ホームに最初から入れるアプリ */
@@ -143,9 +144,12 @@ export async function mountHome(element: HTMLElement, options: HomeOptions): Pro
       if (seen.has(key)) continue;
       let installed = await options.store.get(key);
       if (!installed || installed.manifest.version !== manifest.version) {
+        // アイコンも入口と同じく app.json のフォルダの外は読まない
+        const iconPath = manifest.icon === undefined ? undefined : appPath(manifest.icon);
+        if (iconPath === null || iconPath === "") throw new Error("アプリのアイコンは app.json のフォルダ内の相対パスにしてください。");
         // app.json は最初に読んだものを使う
         const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text) : app.read(path), { ...options, parser });
-        const icon = manifest.icon === undefined ? undefined : await app.read(manifest.icon);
+        const icon = iconPath === undefined ? undefined : await app.read(iconPath);
         installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
       }

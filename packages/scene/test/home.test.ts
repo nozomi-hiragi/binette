@@ -176,6 +176,24 @@ Deno.test("アプリごとの読み込み・保存の失敗があっても残り
   } finally { home.stop(); await window.happyDOM.close(); }
 });
 
+Deno.test("フォルダの外を指す icon は読まずに誤りにする", async () => {
+  const window = new Window();
+  const element = elementIn(window);
+  const errors: unknown[] = [];
+  const read: string[] = [];
+  const app = apps[0]!;
+  const home = await mountHome(element, { apps: [{ source: app.source, async read(path) {
+    read.push(path);
+    const text = await app.read(path);
+    return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
+  } }], store: createMemoryAppStore(), parser, libraries, onError: (error) => errors.push(error) });
+  try {
+    assertEquals(read, ["app.json"]);
+    assertEquals(errors.map((error) => (error as Error).message), ["アプリのアイコンは app.json のフォルダ内の相対パスにしてください。"]);
+    assertEquals(element.querySelectorAll(".bina-home-tile").length, 0);
+  } finally { home.stop(); await window.happyDOM.close(); }
+});
+
 Deno.test("名前や SVG をホームの HTML として差し込まない", async () => {
   const window = new Window();
   const element = elementIn(window);

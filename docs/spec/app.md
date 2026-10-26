@@ -138,4 +138,4 @@ examples/counter/
 
 ## ホームのアイコン（実装済み）
 
-`icon` があれば `read(manifest.icon)` で SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。
+`icon` があれば、`entry` と同じくパスを整えて（`app.json` のフォルダの外は読まない。[scene/home.md](scene/home.md#保存と描画)）SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。
