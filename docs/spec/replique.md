@@ -22,7 +22,7 @@ export function increment(): void {
 ```
 
 - HTML の `bina="count"` の要素を `elem("count")` で操作します。同じ名前の要素はまとめて変わります（決定 2026-10-26。[scene.md](scene.md#html-とアプリのつなぎ方)）
-- import の指定子は `jsr:@binette/replique` です（案。npm の `@binette/replique` では書かない）
+- import の指定子は `jsr:@binette/replique` です（配布は JSR だけ。決定 2026-10-26）
 - アプリは Réplique を自分では持ち込みません。ビルドする Scene が差し込みます（[scene.md](scene.md#ファイルの解決)）
 - アプリの関数は、`export function 名前(): void` で書きます。HTML の `bina-on-click="名前"` から呼ばれます
 - `start()` は、Scene が HTML を描いて起動したあとに 1 回呼びます。無くてもかまいません
@@ -64,7 +64,7 @@ export function elem(name: string): Elem { return new Elem(name); }
 
 - 呼び出しを足すときは、`@external("binette", "<対象>.<操作>")`（例: `elem.text`）の形で宣言し、Régie の import（[regie.md](regie.md#import)）に同じ名前で足します。Réplique と Régie が共有するのは、この表だけです
 - `// @ts-ignore: decorator` は、AS の標準ライブラリと同じ書き方です。TypeScript として読む道具（エディタ、JSR の検査）がデコレーターの位置で誤りを出さないようにします
-- 型検査は `npm run typecheck -w @binette/replique`（`asc src/index.ts --noEmit`）で AS として行います。`export class` が WASM の export にならないという警告（AS235）が出ますが、害はありません
+- 型検査は、ルートの `deno task check` で `deno check`（TypeScript として）と `asc src/index.ts --noEmit`（AS として）の両方を行います。TypeScript としても通すため、`Map.get` の結果には `!` を付けています。`export class` が WASM の export にならないという警告（AS235）が出ますが、害はありません
 
 ### 案
 
@@ -93,7 +93,7 @@ function onLoaded(value: string | null): void {
 ```
 
 - Régie は結果を返すとき、`glue` の export を要求番号付きで呼ぶ。そのためアプリの入口で `glue` を export する
-- `jsr:` の import は、Scene のビルダーが JSR から取って解決する。npm や Node は使わない
+- `jsr:` の import は、Scene のビルダーが JSR から取って解決する
 - この形でよいかは未決
 
 ## AS で書くときの制約
@@ -106,5 +106,5 @@ function onLoaded(value: string | null): void {
 ## 配布（実装済み）
 
 - `dist` は持たず、AS のソース `src/index.ts` をそのまま配る
-- npm（`@binette/replique`）と JSR（`jsr:@binette/replique`）の両方に出す設定です。JSR だけにするかは未決
+- JSR（`jsr:@binette/replique`）だけに出します（決定 2026-10-26）
 - エディタで `jsr:@binette/replique` の補完が効くかは未確認

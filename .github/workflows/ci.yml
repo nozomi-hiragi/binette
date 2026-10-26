@@ -13,12 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          node-version: '22'
-          package-manager-cache: false
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run check-pack
-      - run: npx --yes jsr@0.14.3 publish --dry-run
+          deno-version: 2.9.7
+      - run: deno task check
+      - run: deno task test
+      - run: deno task check-pack
+      - run: deno publish --dry-run

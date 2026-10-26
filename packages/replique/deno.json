@@ -1,10 +1,10 @@
 {
-  "name": "@binette/coulisses",
+  "name": "@binette/replique",
   "version": "0.1.0",
-  "imports": {
-    "@binette/core": "jsr:@binette/core@0.1.0"
-  },
   "exports": "./src/index.ts",
+  "tasks": {
+    "check": "deno run -A npm:assemblyscript@0.28.20/bin/asc.js src/index.ts --noEmit"
+  },
   "publish": {
     "include": [
       "src",

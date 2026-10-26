@@ -23,10 +23,10 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 
 ## デモ
 
-ルートで `npm install` 後、次を起動して http://localhost:5175/ を開きます。`examples/counter` を取ってきて、ビルドして動かします。asc の読み込みとビルドにかかった時間も出ます。
+ルートで次を起動して http://localhost:5175/ を開きます。`examples/counter` を取ってきて、ビルドして動かします。asc の読み込みとビルドにかかった時間も出ます。
 
 ```sh
-npm run demo:scene
+deno task demo:scene
 ```
 
-`npm test -w @binette/scene` でテストし、`npm run typecheck -w @binette/scene` でデモを含めて型検査します。
+テストと型検査は、ルートの `deno task test` と `deno task check` で行います。

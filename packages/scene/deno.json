@@ -1,12 +1,12 @@
 {
   "name": "@binette/scene",
   "version": "0.1.0",
+  "exports": "./src/index.ts",
   "imports": {
     "@binette/core": "jsr:@binette/core@0.1.0",
     "@binette/regie": "jsr:@binette/regie@0.1.0",
     "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc"
   },
-  "exports": "./src/index.ts",
   "publish": {
     "include": [
       "src",

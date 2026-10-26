@@ -14,6 +14,6 @@ app.stop();
 - `app.call(name)` は関数を呼び、終わったら解決します。呼び出し中の文字の書き換えは、解決より先に `onText` に届きます。無い関数やアプリの中の例外は reject し、`onError` にも渡します
 - Worker は、`serveApp` の `toString()` から作る Blob URL の Worker です。テストでは `createWorker` に同じスレッドの `MessageChannel` と `serveApp` をつないだものを渡せます
 
-ルートで `npm install` 後、`npm test -w @binette/regie` でテストします。
+テストは、ルートの `deno task test` で行います。
 
 仕様は [docs/spec/regie.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/regie.md) にあります。

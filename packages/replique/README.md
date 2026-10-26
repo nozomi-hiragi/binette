@@ -14,6 +14,6 @@ export function start(): void {
 
 アプリはこのパッケージを自分では持ち込みません。ビルドする Scene が `jsr:@binette/replique` として差し込みます。
 
-`npm run typecheck -w @binette/replique` で AssemblyScript として型検査します。
+ルートの `deno task check` で、AssemblyScript としても型検査します（asc の `--noEmit`）。
 
 仕様は [docs/spec/replique.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/replique.md) にあります。

@@ -207,8 +207,9 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 ## デモ（実装済み）
 
-`npm run demo:scene` で、Vite の dev サーバーを http://localhost:5175/ に起動します。
+`deno task demo:scene` で、Vite の dev サーバーを Deno から http://localhost:5175/ に起動します。
 
+- ワークスペースのパッケージ（`@binette/core`・`@binette/regie`・`@binette/scene`）は、Vite の `resolve.alias` でソースに向けています
 - Vite の `publicDir` をリポジトリの `examples/` にしてあり、`/counter/app.json` などを GET で取ります
 - Réplique のソースは `packages/replique/src/index.ts?raw` で読み、`libraries` に渡します
 - `loadCompiler()` と `buildApp()` の時間を別々に測って出します

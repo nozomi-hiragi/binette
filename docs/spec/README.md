@@ -72,7 +72,8 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | `@binette/replique` | なし（AS のソースだけ） |
 
 - 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。今はすべて `0.1.0` で、v0.2 として公開するときに `0.2.0` にする
-- 配布先は npm と JSR の両方。replique は `dist` を持たず、AS のソース `src/index.ts` をそのまま配る
+- 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。どのパッケージも `src/` の TypeScript（replique は AS）をそのまま配る
+- 開発は Deno だけで行う（決定 2026-10-26）。npm と Node は使わない
 
 ## v0.2 の最小限の土台（実装済み）
 
@@ -105,7 +106,6 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 - 権限の種類
 - アプリのサーバーサイドの置き場所と動かし方
 - Réplique の呼び出しの形（終わったら呼ぶ関数を渡す形でよいか）
-- エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（`jsr publish --dry-run` は通る。実際の公開と補完は未確認）
-- 配布先（JSR だけにするか）。今は npm と JSR の両方
+- エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（`deno publish --dry-run` は通る。実際の公開と補完は未確認）
 - Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie.md](regie.md)）
 - asc の読み込みの重さ（約 13.6 MB、gzip で約 2.9 MB）をどうするか

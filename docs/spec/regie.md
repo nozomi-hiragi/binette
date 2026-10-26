@@ -46,7 +46,7 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 アプリの WASM を Worker で起動します。
 
 1. `options.createWorker` で Worker を作る。省略すると、下の「Blob URL の Worker」を作る
-2. Worker の `message` を受け始めてから、`{ type: "init", wasm }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（Node の `Buffer` を含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
+2. Worker の `message` を受け始めてから、`{ type: "init", wasm }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（大きなバッファの一部を見るもの、Node の `Buffer` を含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
 3. `ready` が来たら `RegieApp` で解決する
 4. `failed` が来たら Worker を止め（`stop()` と同じ）、`failed` の `message` を持つ `Error` で reject する
 
@@ -126,7 +126,7 @@ const worker = new Worker(url); // classic Worker
 URL.revokeObjectURL(url);
 ```
 
-- ワーカーのファイルの置き場所に頼らないので、npm の `dist`（.js）でも JSR（.ts）でも、バンドラーの設定なしで動きます
+- ワーカーのファイルの置き場所に頼らないので、JSR から読んだ .ts をそのまま使う場合でも、バンドラーでまとめた場合でも、設定なしで動きます
 - そのかわり、Content Security Policy を使うページでは `worker-src blob:` を許す必要があります
 - Worker の作り方をこのままにするかは未決です
 

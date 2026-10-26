@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import { launchApp, serveApp, type RegieWorker } from "../src/index.ts";
 
@@ -27,6 +26,8 @@ async function build(code: string): Promise<Uint8Array> {
 /** 同じスレッドの MessageChannel に serveApp をつないだ Worker */
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();
+  port1.start();
+  port2.start();
   serveApp(port1 as never);
   return {
     postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
@@ -35,35 +36,35 @@ function createWorker(): RegieWorker {
   };
 }
 
-test("export の一覧を受け取り、呼び出し中の elem.text が完了より先に届く", async () => {
+Deno.test("export の一覧を受け取り、呼び出し中の elem.text が完了より先に届く", async () => {
   const texts: [string, string][] = [];
   const app = await launchApp(await build(source), { createWorker, onText: (name, value) => texts.push([name, value]) });
   try {
-    assert.deepEqual([...app.exports].sort(), ["boom", "hello"]);
+    assertEquals([...app.exports].sort(), ["boom", "hello"]);
     await app.call("hello");
-    assert.deepEqual(texts, [["名前", "値"]]);
+    assertEquals(texts, [["名前", "値"]]);
   } finally {
     app.stop();
   }
 });
 
-test("無い関数やアプリの中の例外は reject し、onError にも渡す", async () => {
+Deno.test("無い関数やアプリの中の例外は reject し、onError にも渡す", async () => {
   const errors: Error[] = [];
   const app = await launchApp(await build(source), { createWorker, onError: (error) => errors.push(error) });
   try {
-    await assert.rejects(app.call("nothing"), /nothing/);
-    await assert.rejects(app.call("boom"), /こわれた/);
-    assert.equal(errors.length, 2);
+    await assertRejects(() => app.call("nothing"), Error, "nothing");
+    await assertRejects(() => app.call("boom"), Error, "こわれた");
+    assertEquals(errors.length, 2);
   } finally {
     app.stop();
   }
 });
 
-test("WASM でないものは起動できない", async () => {
-  await assert.rejects(launchApp(new Uint8Array([1, 2, 3]), { createWorker }), /起動できません/);
+Deno.test("WASM でないものは起動できない", async () => {
+  await assertRejects(() => launchApp(new Uint8Array([1, 2, 3]), { createWorker }), Error, "起動できません");
 });
 
-test("トップレベルの初期化で呼んだ elem.text も届く", async () => {
+Deno.test("トップレベルの初期化で呼んだ elem.text も届く", async () => {
   const texts: [string, string][] = [];
   const code = `
 @external("binette", "elem.text")
@@ -73,33 +74,35 @@ export function start(): void {}
 `;
   const app = await launchApp(await build(code), { createWorker, onText: (name, value) => texts.push([name, value]) });
   try {
-    assert.deepEqual(app.exports, ["start"]);
-    assert.deepEqual(texts, [["初期化", "済み"]]);
+    assertEquals(app.exports, ["start"]);
+    assertEquals(texts, [["初期化", "済み"]]);
   } finally {
     app.stop();
   }
 });
 
-test("Buffer で渡した WASM でも起動できる", async () => {
+Deno.test("大きな ArrayBuffer の一部を見る Uint8Array（subarray）でも起動できる", async () => {
   const wasm = await build(source);
-  // 前後に別のバイトがある大きなバッファの一部を見る Buffer。Buffer の slice は写しを作らない
-  const view = Buffer.from(new ArrayBuffer(wasm.length + 16), 8, wasm.length);
+  // 前後に別のバイトがある大きなバッファの一部を見る Uint8Array
+  const buffer = new ArrayBuffer(wasm.length + 16);
+  const view = new Uint8Array(buffer, 8, wasm.length);
   view.set(wasm);
   const app = await launchApp(view, { createWorker });
   try {
-    assert.deepEqual([...app.exports].sort(), ["boom", "hello"]);
+    assertEquals([...app.exports].sort(), ["boom", "hello"]);
   } finally {
     app.stop();
   }
 });
 
-test("init を送れなければ Worker を止めて reject する", async () => {
+Deno.test("init を送れなければ Worker を止めて reject する", async () => {
   let terminated = false;
   const failing = (): RegieWorker => ({
     postMessage: () => { throw new Error("送れない"); },
     addEventListener: () => {},
     terminate: () => { terminated = true; },
   });
-  await assert.rejects(launchApp(await build(source), { createWorker: failing }), /送れない/);
-  assert.ok(terminated);
+  const wasm = await build(source);
+  await assertRejects(() => launchApp(wasm, { createWorker: failing }), Error, "送れない");
+  assert(terminated);
 });

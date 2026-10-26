@@ -1,4 +1,4 @@
-# main と v で始まるブランチの API ドキュメントを TypeDoc で作り、GitHub Pages にまとめて出す。
+# main と v で始まるブランチの API ドキュメントを作り、GitHub Pages にまとめて出す。
 # どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
 name: Docs
 
@@ -27,6 +27,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.7
       - name: Build docs for each branch
         run: |
           mkdir -p "$RUNNER_TEMP/site"
@@ -36,6 +39,11 @@ jobs:
             git worktree add --detach "$dir" "origin/$branch"
             if [ -f "$dir/typedoc.json" ]; then
               (cd "$dir" && npm ci && npm run docs -- --out "$RUNNER_TEMP/site/$branch")
+              label="$branch"
+              [ "$branch" = main ] && label="main（現行）"
+              links="$links<li><a href=\"./$branch/\">$label</a></li>"
+            elif [ -f "$dir/deno.json" ]; then
+              (cd "$dir" && deno doc --html --name=Binette --output="$RUNNER_TEMP/site/$branch" packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
               label="$branch"
               [ "$branch" = main ] && label="main（現行）"
               links="$links<li><a href=\"./$branch/\">$label</a></li>"

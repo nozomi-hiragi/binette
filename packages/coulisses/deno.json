@@ -1,10 +1,10 @@
 {
-  "name": "@binette/core",
+  "name": "@binette/coulisses",
   "version": "0.1.0",
-  "imports": {
-    "valibot": "npm:valibot@1.5.0"
-  },
   "exports": "./src/index.ts",
+  "imports": {
+    "@binette/core": "jsr:@binette/core@0.1.0"
+  },
   "publish": {
     "include": [
       "src",
