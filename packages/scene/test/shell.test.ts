@@ -56,8 +56,8 @@ function workers() {
       return {
         postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
         addEventListener: (type, listener) => port2.addEventListener(type, ((event: MessageEvent) => {
-          if (event.data.type === "ready") ready++;
-          listener(event);
+          if (type === "message" && event.data.type === "ready") ready++;
+          (listener as (event: MessageEvent) => void)(event);
         }) as never),
         terminate() {
           if (stopped) return;
@@ -77,7 +77,7 @@ function heldWorker() {
     emit(data: unknown) { listener?.({ data } as MessageEvent); },
     createWorker: (): RegieWorker => ({
       postMessage: (message) => { messages.push(message); },
-      addEventListener: (_type, callback) => { listener = callback; },
+      addEventListener: (type, callback) => { if (type === "message") listener = callback as (event: MessageEvent) => void; },
       terminate: () => { terminated++; },
     }),
   };
@@ -214,5 +214,45 @@ Deno.test("起動失敗でホームを開き直して知らせる", async () => 
     await waitFor(() => errors.length === 1 && element.querySelectorAll(".home-tile").length === 1);
     assertEquals(bad.terminated, 1); assertEquals(good.maximum, 1);
     assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+for (const phase of ["resolved", "start", "mounted"] as const) {
+  Deno.test(phase + " のアプリ終了でホームへ戻り一度だけ知らせる", async () => {
+    const window = new Window(); const element = elementIn(window); const good = workers(); const bad = heldWorker();
+    const errors: unknown[] = []; let count = 0;
+    const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store: await savedStore(),
+      createWorker() { return ++count === 2 ? bad.createWorker() : good.createWorker(); }, onError: e => errors.push(e) });
+    try {
+      element.querySelector<HTMLButtonElement>(".home-tile")!.click(); await waitFor(() => count === 2);
+      bad.emit({ type: "ready", exports: phase === "start" ? ["start"] : ["showDetails"] });
+      if (phase === "start") await waitFor(() => bad.messages.length === 2);
+      if (phase === "mounted") {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
+        await waitFor(() => bad.messages.length === 2);
+      }
+      bad.emit({ type: "fail", id: 1, message: "実行の失敗", exit: true });
+      await waitFor(() => errors.length === 1 && element.querySelectorAll(".home-tile").length === 1);
+      assertEquals((errors[0] as Error).message, "実行の失敗");
+      assertEquals(element.querySelector("[role=status]")!.textContent, "実行の失敗");
+      assertEquals(bad.terminated, 1); assertEquals(count, 3);
+    } finally { shell.stop(); await window.happyDOM.close(); }
+  });
+}
+
+Deno.test("ホーム自身の終了では開き直さない", async () => {
+  const window = new Window(); const element = elementIn(window); const bad = heldWorker(); const errors: unknown[] = []; let count = 0;
+  const mounting = mountShell(element, { apps: [homeApp], store: createMemoryAppStore(),
+    createWorker() { count++; return bad.createWorker(); }, onError: e => errors.push(e) });
+  await waitFor(() => count === 1);
+  bad.emit({ type: "ready", exports: [] });
+  const shell = await mounting;
+  try {
+    bad.emit({ type: "fail", id: 1, message: "ホームの失敗", exit: true });
+    await waitFor(() => errors.length === 1);
+    assertEquals(count, 1); assertEquals(bad.terminated, 1);
+    assertEquals(element.querySelector(".bina-shell-app"), null);
+    assertEquals(element.querySelector("[role=status]")!.textContent, "ホームの失敗");
   } finally { shell.stop(); await window.happyDOM.close(); }
 });

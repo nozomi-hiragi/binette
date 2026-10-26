@@ -156,3 +156,48 @@ export function again(): void { const item = tiles.add(); item.elem("name").text
     element.querySelector<HTMLButtonElement>("button")!.click(); await waitFor(() => opened.length === 2); assertEquals(opened, [1, 0]);
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
+
+for (const phase of ["ready", "start", "mounted"] as const) {
+  Deno.test(phase + " の終了は元のエラーを保ち、クリックと重複通知を止める", async () => {
+    const window = new Window();
+    const element = window.document.createElement("div") as unknown as HTMLElement;
+    const errors: unknown[] = []; const exits: Error[] = []; const messages: unknown[] = [];
+    const listeners = new Map<string, (event: never) => void>();
+    const emit = (type: string, event: unknown) => listeners.get(type)?.(event as never);
+    let terminated = 0;
+    const built = await buildApp(read, { libraries, parser });
+    const mounting = mountApp(element, built, {
+      createWorker: () => ({
+        postMessage(message) { messages.push(message); },
+        addEventListener(type, listener) { listeners.set(type, listener as (event: never) => void); },
+        terminate() { terminated++; },
+      }),
+      onError: e => errors.push(e), onExit: e => exits.push(e),
+    });
+    emit("message", { data: { type: "ready", exports: ["start", "increment"] } });
+    if (phase !== "ready") await waitFor(() => messages.length === 2);
+    let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
+    try {
+      if (phase === "mounted") {
+        emit("message", { data: { type: "done", id: 1 } });
+        mounted = await mounting;
+        element.querySelector<HTMLButtonElement>("button")!.click();
+        element.querySelector<HTMLButtonElement>("button")!.click();
+        assertEquals(messages.length, 4);
+      }
+      emit("error", { message: "元のエラー", preventDefault() {} });
+      if (phase !== "mounted") await assertRejects(() => mounting, Error, "アプリが落ちました: 元のエラー");
+      else {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assertEquals(exits.length, 1);
+        assertEquals(exits[0]!.message, "アプリが落ちました: 元のエラー");
+      }
+      const count = messages.length;
+      element.querySelector<HTMLButtonElement>("button")!.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assertEquals(messages.length, count);
+      assertEquals(errors, []); assertEquals(exits.length, phase === "mounted" ? 1 : 0);
+      assertEquals(terminated, 1);
+    } finally { mounted?.stop(); await window.happyDOM.close(); }
+  });
+}

@@ -3,8 +3,10 @@ import type { BuiltApp } from "./build.ts";
 
 /** {@link mountApp} の設定 */
 export interface MountOptions {
-  /** アプリの中で起きたエラーや、呼び出しの失敗 */
+  /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
+  /** mountApp の完了後にアプリが終了したとき */
+  onExit?: (error: Error) => void;
   /** Worker を作る関数。省略すると Régie の Blob URL の Worker */
   createWorker?: LaunchOptions["createWorker"];
   /** 起動中でもアプリを止める */
@@ -54,10 +56,19 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     }
     return false;
   };
+  let mounting = true;
+  let exitError: Error | undefined;
+  let cleanup = () => {};
   const app = await launchApp(built.wasm, {
     createWorker: options.createWorker,
     signal: options.signal,
     onError: report,
+    onExit(error) {
+      exitError = error;
+      reported.add(error);
+      cleanup();
+      if (!mounting) options.onExit?.(error);
+    },
     ...(options.apps === undefined ? {} : { apps: options.apps.map(({ id, name }) => ({ id, name })) }),
     onOpen: options.onOpen,
     onListAdd(name, row) {
@@ -97,6 +108,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     },
   });
 
+  if (exitError) { app.stop(); throw exitError; }
+
   const onClick = (event: Event) => {
     const target = event.target;
     if (typeof (target as Element | null)?.closest !== "function") return;
@@ -117,6 +130,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     element.removeEventListener("click", onClick);
     app.stop();
   };
+  cleanup = stop;
   options.signal?.addEventListener("abort", stop, { once: true });
   if (options.signal?.aborted) {
     stop();
@@ -131,5 +145,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
       throw error;
     }
   }
+  if (exitError) { stop(); throw exitError; }
+  mounting = false;
   return { app, stop };
 }
