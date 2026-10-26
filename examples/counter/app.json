@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "binette": "0.2",
   "name": "カウンター",
+  "icon": "icon.svg",
   "entry": {
     "html": "src/index.html",
     "as": "src/main.ts"

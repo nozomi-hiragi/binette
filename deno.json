@@ -22,6 +22,7 @@
     "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",
     "demo:scene": "deno run -A --node-modules-dir=auto npm:vite@8.3.4 packages/scene/demo --port 5175",
     "gen:counter": "deno run -A packages/scene/src/cli.ts examples/counter",
+    "gen:hello": "deno run -A packages/scene/src/cli.ts examples/hello",
     "docs": "deno doc --html --name=Binette --output=site packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts",
     "test": "deno run --allow-read scripts/check-version.ts && deno test -A"
   },
