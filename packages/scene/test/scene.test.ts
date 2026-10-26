@@ -1,13 +1,14 @@
 import { assert, assertEquals, assertMatch, assertRejects } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
+import { DOMParser } from "@b-fuze/deno-dom";
+// 描画とクリックは happy-dom で試す。deno-dom には style が無く、click のイベントも届かないため
 import { Window } from "happy-dom";
 import { buildApp, type HtmlParser, mountApp } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const counter = new URL("examples/counter/", root);
 const replique = await Deno.readTextFile(new URL("packages/replique/src/index.ts", root));
-const parserWindow = new Window();
-const parser = new parserWindow.DOMParser() as unknown as HtmlParser;
+const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": replique };
 const read = (path: string) => Deno.readTextFile(new URL(path, counter));
 

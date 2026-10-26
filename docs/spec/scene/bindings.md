@@ -37,7 +37,7 @@ index.html ──parseBindings──▶ Bindings ──generateBindingsSource─
 ## HtmlParser（実装済み）
 
 ```ts
-/** DOMParser の形。本番はブラウザ、テストと CLI は happy-dom を使う */
+/** DOMParser の形。本番はブラウザ、テストと CLI は deno-dom を使う */
 interface HtmlParser {
   parseFromString(html: string, type: "text/html"): Document;
 }
@@ -48,11 +48,13 @@ HTML の解析は、自前では書かず DOMParser に任せます。DOMParser 
 | 動く場所 | 渡すもの |
 | --- | --- |
 | 本番（ブラウザの中の `buildApp`） | 何も渡さない。`buildApp` が `new globalThis.DOMParser()` を作る |
-| テスト | happy-dom の `new window.DOMParser()` を `buildApp` の `parser` や `parseBindings` に渡す |
-| 書き出しコマンド | コマンドの中で happy-dom の `Window` を作り、その `DOMParser` を使う。終わったら `window.happyDOM.close()` |
+| テスト | deno-dom の `new DOMParser()` を `buildApp` の `parser` や `parseBindings` に渡す |
+| 書き出しコマンド | deno-dom の `new DOMParser()` を使う |
 
 - `buildApp` で `parser` を省略し、`globalThis.DOMParser` も無いときは `HTML を読む DOMParser がありません。parser を指定してください。` の `Error` です
-- happy-dom は scene の依存（`npm:happy-dom@21.0.4`、MIT）ですが、読み込むのは書き出しコマンド（`./cli`）だけです。ブラウザで使う Scene 本体には入りません
+- deno-dom（`jsr:@b-fuze/deno-dom@0.1.56`、MIT）は scene の依存ですが、読み込むのは書き出しコマンド（`./cli`）だけです。ブラウザで使う Scene 本体には入りません
+- deno-dom の解析器は、ブラウザと同じ HTML の解析の決まりで作られた html5ever（Rust）です。ブラウザの中のビルドと、書き出しコマンドとで、同じ HTML が同じ木になるようにするためです
+- deno-dom には WASM 版（`jsr:@b-fuze/deno-dom`）とネイティブ版（`/native`）があります。WASM 版を使います。ネイティブ版は FFI の権限（`--allow-ffi`）と、OS ごとのライブラリの取得が要るためです
 
 ## Bindings（実装済み）
 
@@ -213,7 +215,7 @@ deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
 
 1. `<アプリのフォルダ>/app.json` を読む（`parseAppManifest`）
 2. 入口のパスを整える（上の 1 と同じ。`entry.as` が `bina.ts` なら誤り）
-3. HTML を読み、happy-dom の DOMParser で `parseBindings` する
+3. HTML を読み、deno-dom の DOMParser で `parseBindings` する
 4. `generateBindingsSource` のソースを、`entry.as` と同じフォルダの `bina.ts` に書く（あれば上書き）
 5. 書いたファイルの絶対パスを標準出力に出す
 

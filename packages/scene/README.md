@@ -39,4 +39,4 @@ deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
 
 HTML を変えたら再実行すると、エディタの名前補完も更新されます。ビルド時は Scene が最新の HTML から生成するので、存在しない名前の import はビルドエラーになります。
 
-`parseBindings(html, parser)` は要素の数・種類とクリック関数を集め、`generateBindingsSource(bindings)` は AS のソースを返します。`buildApp` は HTML の名前を検査し、`bina-on-click` の関数が export に無ければビルドの誤りにします。結果にも `bindings` が含まれます。ブラウザ以外では、happy-dom の DOMParser を `buildApp` の `parser` に渡してください。AS の相対 import もアプリのフォルダ内で解決します。
+`parseBindings(html, parser)` は要素の数・種類とクリック関数を集め、`generateBindingsSource(bindings)` は AS のソースを返します。`buildApp` は HTML の名前を検査し、`bina-on-click` の関数が export に無ければビルドの誤りにします。結果にも `bindings` が含まれます。ブラウザ以外では、deno-dom（`jsr:@b-fuze/deno-dom`）の DOMParser を `buildApp` の `parser` に渡してください。AS の相対 import もアプリのフォルダ内で解決します。

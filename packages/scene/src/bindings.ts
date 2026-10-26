@@ -1,4 +1,4 @@
-/** DOMParser の形。本番はブラウザ、テストと CLI は happy-dom を使う */
+/** DOMParser の形。本番はブラウザ、テストと CLI は deno-dom を使う */
 export interface HtmlParser {
   parseFromString(html: string, type: "text/html"): Document;
 }

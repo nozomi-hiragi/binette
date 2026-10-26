@@ -1,11 +1,10 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { Window } from "happy-dom";
+import { DOMParser } from "@b-fuze/deno-dom";
 import { buildApp, generateBindingsSource, type HtmlParser, parseBindings } from "../src/index.ts";
 import { writeBindings } from "../src/cli.ts";
 import { appPath } from "../src/paths.ts";
 
-const window = new Window();
-const parser = new window.DOMParser() as unknown as HtmlParser;
+const parser = new DOMParser() as unknown as HtmlParser;
 const replique = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
 const libraries = { "jsr:@binette/replique": replique };
 const header = '// bina.ts（HTML から自動生成。手で書き換えない）\nimport { elem } from "jsr:@binette/replique";\n';

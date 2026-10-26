@@ -2,7 +2,7 @@
 
 [仕様の目次](../README.md)
 
-Scene（シーン、舞台）はアプリの解釈層です。アプリのパッケージを読み、AS をビルドし、HTML を描いてアプリとつなぎます。依存は `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20` です。
+Scene（シーン、舞台）はアプリの解釈層です。アプリのパッケージを読み、AS をビルドし、HTML を描いてアプリとつなぎます。依存は `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20` と、書き出しコマンドだけが使う `@b-fuze/deno-dom@0.1.56`（MIT）です。
 
 ## 役割（案）
 

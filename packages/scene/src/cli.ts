@@ -1,5 +1,6 @@
 import { parseAppManifest } from "@binette/core";
-import { Window } from "happy-dom";
+// deno-dom の WASM 版。FFI もネイティブのライブラリも要らない
+import { DOMParser } from "@b-fuze/deno-dom";
 import { resolve } from "node:path";
 import { generateBindingsSource, type HtmlParser, parseBindings } from "./bindings.ts";
 import { entryPaths } from "./paths.ts";
@@ -9,16 +10,11 @@ export async function writeBindings(dir: string): Promise<string> {
   const root = resolve(dir);
   const manifest = parseAppManifest(await Deno.readTextFile(resolve(root, "app.json")));
   const { html: htmlPath, bindings: bindingsFile } = entryPaths(manifest.entry);
-  const window = new Window();
-  try {
-    const html = await Deno.readTextFile(resolve(root, htmlPath));
-    const bindings = parseBindings(html, new window.DOMParser() as unknown as HtmlParser);
-    const path = resolve(root, bindingsFile);
-    await Deno.writeTextFile(path, generateBindingsSource(bindings));
-    return path;
-  } finally {
-    await window.happyDOM.close();
-  }
+  const html = await Deno.readTextFile(resolve(root, htmlPath));
+  const bindings = parseBindings(html, new DOMParser() as unknown as HtmlParser);
+  const path = resolve(root, bindingsFile);
+  await Deno.writeTextFile(path, generateBindingsSource(bindings));
+  return path;
 }
 
 if (import.meta.main) {
