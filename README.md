@@ -1,9 +1,9 @@
 # Binette
 
-サーバーが画面の定義を JSON で渡し、ブラウザがそれを再生するための仕組みです。ファイルの拡張子は `.bina` です。
+ブラウザだけで動く、スマホの OS のようなアプリの土台です。アプリ（HTML ＋ AssemblyScript）を取ってきて、ブラウザの中でビルドして動かします。
 
 > [!WARNING]
-> **設計中です。** 仕様はまだ固まっていません。
+> **設計中です。** 仕様はまだ固まっていません。v0.2 は、カウンターのアプリ 1 つを動かすところまでの最小限の土台です。
 
 仕様は [docs/spec.md](docs/spec.md) にあります。
 
@@ -11,17 +11,23 @@
 
 | 名前 | 役割 |
 |---|---|
-| Binette | `.bina` の形式。Scene と Coulisses が共有する |
-| Scene（シーン、舞台） | `.bina` を受け取り、ブラウザで再生する側 |
-| Coulisses（クーリス、舞台裏） | `.bina` と、そこから使うファイルを用意して返す側 |
+| Binette | 形式の定義（`app.json` など）。どの層も共有する |
+| Régie（レジ、操作室） | カーネル。アプリの WASM を Worker で動かし、アプリからの呼び出しを受ける |
+| Scene（シーン、舞台） | アプリの解釈層。アプリを読み、AS をビルドし、HTML を描いてアプリとつなぐ |
+| Coulisses（クーリス、舞台裏） | サーバー側。今は v0.1 の `.bina` を配るだけ |
+| Réplique（レプリク、セリフ） | アプリが Régie を呼ぶためのライブラリ（AS） |
 
 ## パッケージ
 
 | パッケージ | 内容 |
 |---|---|
-| [`@binette/core`](packages/core) | 形式の型と検査 |
-| [`@binette/scene`](packages/scene) | ブラウザでの再生 |
-| [`@binette/coulisses`](packages/coulisses) | `.bina` の配信 |
+| [`@binette/core`](packages/core) | `app.json` の型と検査（v0.1 の `.bina` の型も残している） |
+| [`@binette/regie`](packages/regie) | アプリの実行（Worker ＋ WASM） |
+| [`@binette/scene`](packages/scene) | アプリのビルドと画面への描画 |
+| [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
+| [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
+
+アプリの例は [examples/counter](examples/counter) にあります。
 
 ## デモ
 
@@ -29,11 +35,10 @@ Node.js 22.18 以上が必要です。
 
 ```sh
 npm install
-npm run demo:coulisses  # 配信（http://localhost:8790）
-npm run demo:scene      # 再生（http://localhost:5175/）
+npm run demo:scene  # http://localhost:5175/
 ```
 
-2 つを別々の端末で起動し、http://localhost:5175/ を開きます。
+http://localhost:5175/ を開くと、カウンターのアプリをブラウザの中でビルドして動かします。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 
