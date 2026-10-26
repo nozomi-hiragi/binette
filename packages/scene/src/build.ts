@@ -75,7 +75,8 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
   let wasm: Uint8Array | undefined;
-  const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2"], {
+  // 初期化を instantiate の中で走らせず、Régie が _start で呼ぶ
+  const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
     readFile: (name) => name === "main.ts" ? source : findLibrary(libraries, name),
     writeFile: (name, contents) => { if (name === "main.wasm" && typeof contents !== "string") wasm = contents; },
     listFiles: () => [],

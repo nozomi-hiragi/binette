@@ -14,7 +14,7 @@ export function boom(): void { throw new Error("こわれた"); }
 async function build(code: string): Promise<Uint8Array> {
   let wasm: Uint8Array | undefined;
   let stderr = "";
-  const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2"], {
+  const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
     readFile: (name) => name === "main.ts" ? code : null,
     writeFile: (name, contents) => { if (name === "main.wasm") wasm = contents as Uint8Array; },
     listFiles: () => [],
@@ -61,4 +61,21 @@ test("無い関数やアプリの中の例外は reject し、onError にも渡�
 
 test("WASM でないものは起動できない", async () => {
   await assert.rejects(launchApp(new Uint8Array([1, 2, 3]), { createWorker }), /起動できません/);
+});
+
+test("トップレベルの初期化で呼んだ ui.text も届く", async () => {
+  const texts: [string, string][] = [];
+  const code = `
+@external("binette", "ui.text")
+declare function text(name: string, value: string): void;
+text("初期化", "済み");
+export function start(): void {}
+`;
+  const app = await launchApp(await build(code), { createWorker, onText: (name, value) => texts.push([name, value]) });
+  try {
+    assert.deepEqual(app.exports, ["start"]);
+    assert.deepEqual(texts, [["初期化", "済み"]]);
+  } finally {
+    app.stop();
+  }
 });

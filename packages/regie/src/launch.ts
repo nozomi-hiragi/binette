@@ -39,6 +39,7 @@ function createBlobWorker(): RegieWorker {
 /**
  * アプリの WASM を Worker で起動する。export された関数名の一覧を受け取ったら解決する。
  * `start()` はここでは呼ばない。呼び出し側が画面を用意してから `call("start")` する。
+ * WASM は `--exportStart _start` でビルドしておく。トップレベルの初期化は、起動のときに `_start` で走らせる。
  *
  * @param wasm ビルドしたアプリの WASM
  * @throws {Error} WASM を起動できないとき

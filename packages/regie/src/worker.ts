@@ -44,7 +44,10 @@ export function serveApp(scope: WorkerScope): void {
       try {
         const result = await WebAssembly.instantiate(data.wasm!, imports);
         instance = result.instance;
-        const names = Object.keys(instance.exports).filter((key) => typeof instance!.exports[key] === "function");
+        // トップレベルの初期化は instance を代入してから走らせる。初期化中の ui.text が文字列を読めるように
+        const init = instance.exports._start;
+        if (typeof init === "function") init();
+        const names = Object.keys(instance.exports).filter((key) => key !== "_start" && typeof instance!.exports[key] === "function");
         scope.postMessage({ type: "ready", exports: names });
       } catch (error) {
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
