@@ -2,14 +2,14 @@ import { assert, assertEquals } from "@std/assert";
 import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, serveApp } from "@binette/regie";
 import { DOMParser } from "@b-fuze/deno-dom";
 import { Window } from "happy-dom";
-import { buildApp, type Compiler, type HomeApp, type HtmlParser, loadCompiler, mountHome } from "../src/index.ts";
+import { buildApp, type Compiler, type HtmlParser, loadCompiler, mountHome } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps: HomeApp[] = ["counter", "hello"].map((name) => ({
+const apps = ["counter", "hello"].map((name) => ({
   source: `https://example.com/${name}/`,
-  read: (path) => Deno.readTextFile(new URL(`examples/${name}/${path}`, root)),
+  read: (path: string) => Deno.readTextFile(new URL(`examples/${name}/${path}`, root)),
 }));
 const fixtures: InstalledApp[] = [];
 for (const app of apps) {
@@ -269,5 +269,38 @@ Deno.test("起動に失敗したらホームへ戻り、ほかのアプリを開
     element.querySelector<HTMLButtonElement>("[bina-on-click=greet]")!.click();
     await waitFor(() => element.querySelector("[bina=greeting]")?.textContent === "ハロー、Binette！");
     assertEquals(errors.length, 1);
+  } finally { home.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("プリビルドは compiler を呼ばず保存し、開いて動く。同じ版は保存結果を使い、違う版は置き換える", async () => {
+  const window = new Window();
+  const element = elementIn(window);
+  const store = createMemoryAppStore();
+  const worker = workers();
+  const errors: unknown[] = [];
+  const compiler: Compiler = {
+    main() { throw new Error("compiler を呼んではいけません"); },
+    createMemoryStream() { throw new Error("compiler を呼んではいけません"); },
+  };
+  const prebuiltApps = fixtures.map((app) => ({ source: app.source, prebuilt: app }));
+  let home = await mountHome(element, { apps: prebuiltApps, store, compiler, createWorker: worker.createWorker, onError: (error) => errors.push(error) });
+  try {
+    assertEquals(element.querySelectorAll(".bina-home-tile").length, 2);
+    assertEquals((await store.list()).length, 2);
+    element.querySelector<HTMLButtonElement>(".bina-home-tile")!.click();
+    await waitFor(() => worker.ready === 1 && element.querySelector("[bina=count]")?.textContent === "0");
+    element.querySelector<HTMLButtonElement>("[bina-on-click=increment]")!.click();
+    await waitFor(() => element.querySelector("[bina=count]")?.textContent === "1");
+    home.stop();
+    const saved = (await store.get(fixtures[0]!.key))!;
+    await store.put({ ...saved, html: "保存結果" });
+    home = await mountHome(element, { apps: prebuiltApps, store, compiler });
+    assertEquals((await store.get(saved.key))!.html, "保存結果");
+    home.stop();
+    const changed = { ...fixtures[0]!, manifest: { ...fixtures[0]!.manifest, version: "0.3.0" } };
+    home = await mountHome(element, { apps: [{ source: changed.source, prebuilt: changed }], store, compiler });
+    assertEquals((await store.get(saved.key))!.manifest.version, "0.3.0");
+    assertEquals((await store.get(saved.key))!.html, changed.html);
+    assertEquals(errors, []);
   } finally { home.stop(); await window.happyDOM.close(); }
 });

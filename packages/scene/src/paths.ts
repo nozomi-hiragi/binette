@@ -30,3 +30,11 @@ export function entryPaths(entry: { html: string; as: string }): { html: string;
   if (bindings === as) throw new Error("entry.as に bina.ts という名前は使えません。bina.ts は HTML から自動生成するファイルです。");
   return { html, as, bindings };
 }
+
+/** アイコンのパスを整える。指定が無ければ読まない */
+export function iconPath(icon?: string): string | undefined {
+  if (icon === undefined) return undefined;
+  const path = appPath(icon);
+  if (!path) throw new Error("アプリのアイコンは app.json のフォルダ内の相対パスにしてください。");
+  return path;
+}

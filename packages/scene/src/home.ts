@@ -2,15 +2,16 @@ import { parseAppManifest } from "@binette/core";
 import { type AppStore, type InstalledApp, installedAppKey } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
 import { parseBindings } from "./bindings.ts";
-import { appPath } from "./paths.ts";
+import { iconPath } from "./paths.ts";
 import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
-/** ホームに最初から入れるアプリ */
-export interface HomeApp {
-  source: string;
-  /** app.json からの相対パスを読む */
-  read: (path: string) => Promise<string>;
-}
+import type { PrebuiltApp } from "./prebuilt.ts";
+
+/** ホームに最初から入れるアプリ。read は開発用 */
+export type HomeApp = { source: string } & (
+  | { read: (path: string) => Promise<string>; prebuilt?: never }
+  | { prebuilt: PrebuiltApp; read?: never }
+);
 
 /** ホームの設定 */
 export interface HomeOptions extends BuildOptions, Pick<MountOptions, "onError" | "createWorker"> {
@@ -138,19 +139,21 @@ export async function mountHome(element: HTMLElement, options: HomeOptions): Pro
   const seen = new Set<string>();
   for (const app of options.apps) {
     try {
-      const text = await app.read("app.json");
-      const manifest = parseAppManifest(text);
+      const text = app.prebuilt === undefined ? await app.read("app.json") : undefined;
+      const manifest = app.prebuilt?.manifest ?? parseAppManifest(text!);
       const key = installedAppKey(app.source, manifest.id);
       if (seen.has(key)) continue;
       let installed = await options.store.get(key);
       if (!installed || installed.manifest.version !== manifest.version) {
-        // アイコンも入口と同じく app.json のフォルダの外は読まない
-        const iconPath = manifest.icon === undefined ? undefined : appPath(manifest.icon);
-        if (iconPath === null || iconPath === "") throw new Error("アプリのアイコンは app.json のフォルダ内の相対パスにしてください。");
-        // app.json は最初に読んだものを使う
-        const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text) : app.read(path), { ...options, parser });
-        const icon = iconPath === undefined ? undefined : await app.read(iconPath);
-        installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
+        if (app.prebuilt !== undefined) {
+          installed = { ...app.prebuilt, icon: app.prebuilt.icon, key, source: app.source, installedAt: Date.now() };
+        } else {
+          const path = iconPath(manifest.icon);
+          // app.json は最初に読んだものを使う
+          const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), { ...options, parser });
+          const icon = path === undefined ? undefined : await app.read(path);
+          installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
+        }
         await options.store.put(installed);
       }
       const saved = installed;

@@ -11,3 +11,5 @@ export type { HomeApp, HomeOptions, MountedHome } from "./home.ts";
 export { mountHome } from "./home.ts";
 export type { BindingKind, Bindings, HtmlParser } from "./bindings.ts";
 export { generateBindingsSource, parseBindings } from "./bindings.ts";
+export type { PrebuiltApp } from "./prebuilt.ts";
+export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";
