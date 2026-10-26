@@ -47,6 +47,12 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | フロントの実装（Régie と Scene を載せる。ホームは Binette が持ち、設定画面の持ち主は未決） | ebina-front |
 | Coulisses を WAKE と合わせて実装したもの | ebina-station（Station） |
 
+## 単独で起動できるフロント（決定）
+
+Binette は単独でも起動できる素のフロント（standalone）を持ちます。Scene のデモではなく、Régie と Scene を載せる参照の実装です。正式な名前と置き場所は未決で、今はリポジトリ直下の `standalone/` に置きます。
+
+`deno task start` で開発用に起動し、`deno task build` で `standalone/dist/` に静的ファイルを書き出します。最初から入れる counter と hello はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
+
 ## 層の分担（案）
 
 | 層 | 担当 |
@@ -81,7 +87,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 ホームは Binette が持ちます（決定）。今は、最初から渡したカウンターとハローを並べ、1 つずつ開いて戻れます（[scene/home.md](scene/home.md)）。設定画面の持ち主は未決です。
 
-ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。初回の流れは次のとおりです。
+ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。standalone は最初から入れるアプリのプリビルド結果を保存して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 
 1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する

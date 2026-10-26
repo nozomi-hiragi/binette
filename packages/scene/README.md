@@ -21,13 +21,33 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 
 動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene/README.md) にあります。
 
-## デモ
+## 公開するもの
 
-ルートで次を起動して http://localhost:5175/ を開きます。`examples/counter` を取ってきて、ビルドして動かします。asc の読み込みとビルドにかかった時間も出ます。
+| 名前 | 用途 |
+| --- | --- |
+| `buildApp` / `loadCompiler` | 開発用のブラウザ内ビルド |
+| `mountApp` / `mountHome` | アプリとホームの描画 |
+| `PrebuiltApp` | manifest・HTML・任意の SVG・WASM |
+| `stringifyPrebuiltApp` / `parsePrebuiltApp` | `.binapp` の書き出しと読み込み |
+| `parseBindings` / `generateBindingsSource` | HTML の名前の収集と AS の生成 |
+
+`HomeApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は同じ入手元・ID・版の保存結果があれば使い回し、無ければ保存します。コンパイラは呼びません。
+
+## 単独フロント
+
+ルートで次を起動して http://localhost:5175/ を開きます。先に counter と hello をビルドし、ホームから開きます。ブラウザは `.binapp` を読み、初回も asc を読みません。
 
 ```sh
-deno task demo:scene
+deno task start
 ```
+
+`deno task build:examples` だけでも `standalone/apps/{counter,hello}.binapp` を生成できます。生成物はコミットしません。任意のアプリは次で書き出せます。
+
+```sh
+deno run -A packages/scene/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス>
+```
+
+単独フロントはルートの `standalone/` にあります。`deno task build` は `standalone/dist/` に、サブパスでも動く静的ファイルを書き出します。保存は IndexedDB を使います。
 
 テストと型検査は、ルートの `deno task test` と `deno task check` で行います。
 

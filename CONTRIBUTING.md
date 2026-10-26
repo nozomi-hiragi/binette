@@ -6,14 +6,19 @@ Deno 2.9 以上で、ルートから実行します。npm と Node は使いま�
 
 ```sh
 deno task check          # 全パッケージの型検査（replique は asc で AS として検査）
+deno task build          # standalone/dist に静的フロントを書き出す
 deno task test           # バージョンの検査とテスト
 deno task check-pack     # JSR に出すファイルだけを写し、別の利用者として動かして試す
 deno publish --dry-run   # JSR への公開の予行
 ```
 
-ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。デモの Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
+ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。standalone の Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
 
 Deno のコードでは `node:` のモジュールを使いません。ファイルは `Deno.readTextFile` などの Deno の API と `@std/fs`・`@std/path` で、サーバーは `Deno.serve` で扱います。
+
+## 単独フロントの開発
+
+`deno task start` で counter と hello の `.binapp` を生成してから Vite を http://localhost:5175/ に起動します。`deno task build:examples` は `standalone/apps/` にアプリだけを書き出します。`.binapp` と `standalone/dist/` はソースから再生成できる生成物なのでコミットしません。`deno task build` は相対 URL で動く静的ファイルを生成し、GitHub Pages のサブパスにも配置できます。standalone は IndexedDB を使い、asc を配布しません。
 
 ## バージョンの決め方
 

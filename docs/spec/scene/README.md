@@ -42,11 +42,11 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | [home.md](home.md) | `mountHome`。保存、一覧、起動と戻る、CSS 変数 |
 | [mount.md](mount.md) | `mountApp`。HTML とアプリのつなぎ方、読める値、止める操作 |
 
-## デモ（実装済み）
+## 単独フロント（実装済み）
 
-`deno task demo:scene` で、Vite の dev サーバーを Deno から http://localhost:5175/ に起動します。
+Scene を載せる素のフロントはルートの `standalone/` にあります（[全体の方針](../README.md#単独で起動できるフロント決定)）。`deno task start` で http://localhost:5175/ に起動し、`deno task build` で静的ファイルを書き出します。
 
-- ワークスペースのパッケージ（`@binette/core`・`@binette/regie`・`@binette/scene`）は、Vite の `resolve.alias` でソースに向けています
-- Vite の `publicDir` をリポジトリの `examples/` にしてあり、`/counter/app.json` などを GET で取ります
-- Réplique のソースは `packages/replique/src/index.ts?raw` で読み、`libraries` に渡します
-- `mountHome` に counter と hello、IndexedDB のストアを渡します。同じ版は再読み込みしてもビルドしません
+- ワークスペースのパッケージは Vite の `resolve.alias` でソースを読みます
+- counter と hello のプリビルドした `.binapp` を asset URL import で同梱し、`mountHome` に `prebuilt` として渡します
+- 保存は IndexedDB を使い、ブラウザでは asc を読みません
+- Vite の `base: "./"` でサブパス配信に対応します

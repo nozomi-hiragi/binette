@@ -7,10 +7,10 @@
 ホームは Binette が持ちます（決定）。最初から渡したアプリを並べ、1 つずつ開いて戻れます。
 
 ```ts
-interface HomeApp {
-  source: string;
-  read: (path: string) => Promise<string>;
-}
+type HomeApp = { source: string } & (
+  | { read: (path: string) => Promise<string>; prebuilt?: never }
+  | { prebuilt: PrebuiltApp; read?: never }
+);
 interface HomeOptions extends BuildOptions {
   apps: HomeApp[];
   store: AppStore;
@@ -29,15 +29,17 @@ function mountHome(element: HTMLElement, options: HomeOptions): Promise<MountedH
 
 ### 保存と描画
 
-1. 各アプリの `app.json` を読んで検査する
+1. `prebuilt` ならその manifest を使う。開発用の `read` なら `app.json` を読んで検査する
 2. `installedAppKey(source, manifest.id)` で保存先を引く。同じ `manifest.version` なら保存済みの結果を使う（版が両方無い場合も同じとみなす）
-3. 無いか版が違う場合だけ `buildApp` する。`icon` があれば SVG を読み、HTML・WASM・manifest・日時と一緒に `store.put` する
+3. 無いか版が違う場合、`prebuilt` なら manifest・HTML・SVG・WASM から日時を付けた InstalledApp を作り、`store.put` する。compiler も `loadCompiler` も呼ばない。`read` なら `buildApp` する。`icon` があれば SVG を読み、HTML・WASM・manifest・日時と一緒に `store.put` する
    - `icon` のパスは `entry` と同じく整える（[build.md](build.md) の手順 2）。空文字列か、`app.json` のフォルダの外を指すなどで受け付けないパスなら、読まずに `アプリのアイコンは app.json のフォルダ内の相対パスにしてください。` の `Error` にする。そのアプリは並べない
 4. アイコンと名前のボタンを、渡された順に並べる。同じ key は重ねて並べない
 
-一覧は `store.list()` の全件ではなく、`apps` で渡されたものだけです。保存済みなら AS・HTML・SVG を読み直さず、compiler も呼びません。入手元の `app.json` は毎回読みます。1 つ失敗しても残りを並べ、エラーを状態表示と `onError` で知らせます。
+一覧は `store.list()` の全件ではなく、`apps` で渡されたものだけです。保存済みなら AS・HTML・SVG を読み直さず、compiler も呼びません。`read` の場合だけ入手元の `app.json` を毎回読みます。1 つ失敗しても残りを並べ、エラーを状態表示と `onError` で知らせます。
 
 SVG は `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した文字列を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。
+
+最初から入れるアプリは OS（Binette とフロント）と一緒に配ります。Binette のビルド時に前もってビルドし、ブラウザでは HTML・権限の検証やクリック関数の export の確認をしません。起動時に bindings を読むのは、描画とクリックをつなぐためです。`.binapp` の形式と manifest の型は `parsePrebuiltApp` で確かめます（[build.md](build.md#書き出し実装済み)）。
 
 ### 開く・戻る・停止
 

@@ -33,6 +33,6 @@ coulisses.addFile("files/logo.svg", { body: svgText });
 
 ビネットは足すたびに検査します。`createCoulisses` と `fetch` 自体はファイルシステムを使わないので、Deno 以外（Cloudflare Workers など、標準の Fetch API がある環境）でも動きます。`cors` に許可する origin を渡すと、CORS ヘッダーと OPTIONS の応答が有効になります。
 
-ルートで `deno task demo:coulisses` を実行すると http://localhost:8790 に起動します（`PORT` で変更可能）。デモは起動時に `demo/site/` を読むので、中身を変えたら再起動してください。別の端末で `deno task demo:scene` を起動すると再生を試せます。デモは http://localhost:5175 からのアクセスを許可します。
+ルートで `deno task demo:coulisses` を実行すると http://localhost:8790 に起動します（`PORT` で変更可能）。デモは起動時に `demo/site/` を読むので、中身を変えたら再起動してください。単独フロントは `deno task start` で起動しますが、同梱の `.binapp` を使い、この v0.1 の配信サーバーには接続しません。デモは http://localhost:5175 からのアクセスを許可します。
 
 型検査とテストは、ルートの `deno task check` と `deno task test` で行います。Deno 2.9 以上が必要です。

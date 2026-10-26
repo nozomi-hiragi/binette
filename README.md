@@ -3,7 +3,7 @@
 ブラウザだけで動く、スマホの OS のようなアプリの土台です。アプリ（HTML ＋ AssemblyScript）を取ってきて、ブラウザの中でビルドして動かします。
 
 > [!WARNING]
-> **設計中です。** 仕様はまだ固まっていません。v0.2 は、カウンターのアプリ 1 つを動かすところまでの最小限の土台です。
+> **設計中です。** 仕様はまだ固まっていません。v0.2 は、ホームからカウンターとハローの 2 つのアプリを開いて戻れるところまでの最小限の土台です。
 
 仕様は [docs/spec/](docs/spec/README.md) にあります。
 
@@ -33,15 +33,17 @@
 deno task gen:counter  # HTML を変えたら生成し直す（エディタの補完用）
 ```
 
-## デモ
+## 単独で起動する
 
 Deno 2.9 以上が必要です。
 
 ```sh
-deno task demo:scene  # http://localhost:5175/
+deno task start  # http://localhost:5175/
 ```
 
-http://localhost:5175/ を開くと、カウンターのアプリをブラウザの中でビルドして動かします。
+http://localhost:5175/ を開くと、カウンターとハローがホームに並び、開いて戻れます。最初から入れるアプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
+
+`deno task build` はアプリをビルドしてから `standalone/dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。`standalone/` は単独で起動できる素のフロントの仮の置き場所で、正式な名前と置き場所は未決です。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 

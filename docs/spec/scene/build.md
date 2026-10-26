@@ -106,3 +106,25 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 - `libraries` に無い指定子は解決できず、ビルドの誤りになります
 - Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Scene が JSR から取って差し込む（案。[app.md](../app.md#インストール案)）
 
+## 書き出し（実装済み）
+
+最初から入れるアプリは、1 アプリ 1 ファイルの `.binapp`（JSON）にします。
+
+| 欄 | 内容 |
+| --- | --- |
+| `format` | `"binette-app"` |
+| `version` | 形式の版 `"0.2"` |
+| `manifest` | app.json のオブジェクト |
+| `html` | HTML の文字列 |
+| `icon` | SVG の文字列。無ければ欄なし |
+| `wasm` | WASM のバイト列を base64 にした文字列 |
+
+公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; icon?: string; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
+
+```sh
+deno run -A packages/scene/src/cli.ts build examples/counter --out standalone/apps/counter.binapp --replique packages/replique/src/index.ts
+```
+
+CLI は deno-dom の parser で `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはホームと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の `cli.ts <アプリのフォルダ>` による bina.ts の生成も残ります。
+
+`deno task build:examples` は counter と hello を `standalone/apps/` に書き出します。このフォルダは gitignore に入れ、生成物はコミットしません。`deno task start` と `deno task build` は先にこのタスクを実行します。standalone は Vite の asset URL import で同梱した `.binapp` を fetch し、ブラウザでは asc を読みません。
