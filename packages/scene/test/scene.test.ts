@@ -1,11 +1,13 @@
 import { assert, assertEquals, assertMatch, assertRejects } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
-import { buildApp, mountApp } from "../src/index.ts";
+import { buildApp, type HtmlParser, mountApp } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const counter = new URL("examples/counter/", root);
 const replique = await Deno.readTextFile(new URL("packages/replique/src/index.ts", root));
+const parserWindow = new Window();
+const parser = new parserWindow.DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": replique };
 const read = (path: string) => Deno.readTextFile(new URL(path, counter));
 
@@ -29,9 +31,11 @@ async function waitFor(condition: () => boolean): Promise<void> {
 }
 
 Deno.test("カウンターをビルドして動かせる", async () => {
-  const built = await buildApp(read, { libraries });
+  const built = await buildApp(read, { libraries, parser });
   assertEquals(built.manifest.id, "io.github.nozomi-hiragi.counter");
   assertMatch(built.html, /bina-on-click="increment"/);
+  assertEquals(built.bindings.elements.count, { count: 1, kinds: [{ tag: "p" }] });
+  assertEquals(built.bindings.clicks, ["increment"]);
 
   const window = new Window();
   try {
@@ -65,7 +69,7 @@ export function start(): void { elem("name").text = "あ"; }
 export function copy(): void { elem("echo").text = elem("name").text + "[" + elem("unset").text + "]"; }
 `,
   };
-  const built = await buildApp(async (path) => files[path]!, { libraries });
+  const built = await buildApp(async (path) => files[path]!, { libraries, parser });
   const window = new Window();
   try {
     // アプリの領域の外にある同じ名前の要素は変えない
@@ -96,7 +100,7 @@ Deno.test("ビルドに失敗する AS は Error になる", async () => {
     "m.ts": 'export function start(): void { const n: i32 = "文字"; }',
   };
   const error = await assertRejects(
-    () => buildApp(async (path) => files[path]!, { libraries }),
+    () => buildApp(async (path) => files[path]!, { libraries, parser }),
     Error,
     "アプリをビルドできません。",
   );

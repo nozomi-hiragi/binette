@@ -8,7 +8,12 @@
   ],
   "nodeModulesDir": "auto",
   "compilerOptions": {
-    "lib": ["esnext", "dom", "dom.iterable", "deno.ns"]
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable",
+      "deno.ns"
+    ]
   },
   "tasks": {
     "check": "deno check packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno run -A npm:assemblyscript@0.28.20/bin/asc.js packages/replique/src/index.ts --noEmit",
@@ -17,7 +22,8 @@
     "check-pack": "deno run -A scripts/check-pack.ts",
     "demo:scene": "deno run -A --node-modules-dir=auto npm:vite@8.3.4 packages/scene/demo --port 5175",
     "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",
-    "docs": "deno doc --html --name=Binette --output=site packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts"
+    "docs": "deno doc --html --name=Binette --output=site packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts",
+    "gen:counter": "deno run -A packages/scene/src/cli.ts examples/counter"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.11",

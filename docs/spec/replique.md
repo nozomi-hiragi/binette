@@ -7,19 +7,21 @@ Réplique（レプリク、セリフ）は、アプリが Régie を呼ぶため
 ## 使い方（実装済み）
 
 ```ts
-import { elem } from "jsr:@binette/replique";
+import { count } from "./bina";
 
-let count = 0;
+let value = 0;
 
 export function start(): void {
-  elem("count").text = "0";
+  count.text = "0";
 }
 
 export function increment(): void {
-  count++;
-  elem("count").text = count.toString();
+  value++;
+  count.text = value.toString();
 }
 ```
+
+`./bina` は、Scene が HTML の名前から作る `bina.ts` です（[scene.md](scene.md#binats実装済み)）。中身は `export const count = elem("count");` のような行で、`elem` を直接使って `import { elem } from "jsr:@binette/replique";`・`elem("count").text = "0";` と書いても同じです。
 
 - HTML の `bina="count"` の要素を `elem("count")` で操作します。同じ名前の要素はまとめて変わります（決定 2026-10-26。[scene.md](scene.md#html-とアプリのつなぎ方)）
 - import の指定子は `jsr:@binette/replique` です（配布は JSR だけ。決定 2026-10-26）

@@ -19,10 +19,15 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | --- | --- | --- |
 | `loadCompiler` | 関数 | asc を読み込む |
 | `buildApp` | 関数 | アプリを読んで WASM にビルドする |
+| `parseBindings` | 関数 | HTML から `bina` の名前と `bina-on-click` の関数名を集める |
+| `generateBindingsSource` | 関数 | 名前から `bina.ts`（AS のソース）を作る |
 | `mountApp` | 関数 | HTML を描き、アプリを起動してつなぐ |
 | `Compiler`・`CompilerStream` | 型 | asc のうち、Scene が使う分 |
 | `BuildOptions`・`BuiltApp` | 型 | `buildApp` の設定と結果 |
+| `HtmlParser`・`Bindings`・`BindingKind` | 型 | `parseBindings` の入力と結果 |
 | `MountOptions`・`MountedApp` | 型 | `mountApp` の設定と結果 |
+
+ほかに、書き出しコマンド `jsr:@binette/scene/cli`（`writeBindings`）があります（[下](#書き出しコマンド)）。
 
 ## loadCompiler
 
@@ -42,7 +47,7 @@ interface CompilerStream {
 }
 interface Compiler {
   main(argv: string[], options: {
-    readFile: (name: string, baseDir: string) => string | null;
+    readFile: (name: string, baseDir: string) => string | null | Promise<string | null>;
     writeFile: (name: string, contents: string | Uint8Array, baseDir: string) => void;
     listFiles: (dirname: string, baseDir: string) => string[] | null;
     stdout?: CompilerStream;
@@ -58,12 +63,16 @@ interface Compiler {
 
 ```ts
 interface BuildOptions {
+  /** HTML を読む DOMParser。省略するとブラウザの globalThis.DOMParser */
+  parser?: HtmlParser;
   /** 指定子 → AS のソース。例: { "jsr:@binette/replique": source } */
   libraries?: Record<string, string>;
   /** 使う asc。省略すると loadCompiler() */
   compiler?: Compiler;
 }
 interface BuiltApp {
+  /** HTML から集めた名前（parseBindings の結果） */
+  bindings: Bindings;
   manifest: AppManifest;
   html: string;
   wasm: Uint8Array;
@@ -74,9 +83,13 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 `read` は、`app.json` を置いた場所からの相対パスを受けて、そのファイルの中身を返す関数です。取り方（`fetch`、`node:fs` など）は呼ぶ側が決めます。
 
 1. `read("app.json")` を `parseAppManifest` で読む（誤りは `BinetteError`）
-2. `read(manifest.entry.html)` と `read(manifest.entry.as)` を並べて読む
-3. asc で AS を WASM にビルドする（下の「asc の呼び方」）
-4. `{ manifest, html, wasm }` を返す
+2. `entry.html` と `entry.as` のパスを整える（`./` と途中の `../` を畳む）。`/` で始まる、`\` を含む、`https:` のようなスキームで始まる、`app.json` のフォルダの外に出る、のどれかなら `アプリの入口は app.json のフォルダ内の相対パスにしてください。` の `Error`
+3. `parser` を決める。省略されていて `globalThis.DOMParser` も無ければ `HTML を読む DOMParser がありません。parser を指定してください。` の `Error`
+4. HTML と AS を並べて読む
+5. HTML を `parseBindings` で読み（名前の誤りは `Error`）、`generateBindingsSource` で `bina.ts` のソースを作る
+6. asc で AS を WASM にビルドする（下の「asc の呼び方」と「ファイルの解決」）
+7. WASM を `WebAssembly.compile` し、`bindings.clicks` の関数名がすべて export された関数にあるか確かめる。無ければ `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>` の `Error`
+8. `{ manifest, html, wasm, bindings }` を返す
 
 - `read` が reject したら、そのまま reject します
 - `entry.css` は読みません
@@ -86,12 +99,12 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 ### asc の呼び方
 
 ```ts
-await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
+await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
   readFile, writeFile, listFiles: () => [], stdout, stderr,
 });
 ```
 
-- `entry.as` のパスにかかわらず、AS のソースは `main.ts` という名前で渡します。asc の誤りの出力に出るファイル名も `main.ts` です
+- 入口には、整えた `entry.as` のパス（例 `src/main.ts`）をそのまま渡します。asc の誤りの出力にも、そのパスが出ます
 - `--exportStart _start` は、トップレベルの初期化を Régie が instance を作ったあとに走らせるためです（[regie.md](regie.md#ビルドのしかた)）
 - ランタイムは asc の既定（`incremental`）です
 - `writeFile` は `main.wasm` の中身（`Uint8Array`）だけを受け取り、ほかは捨てます
@@ -103,15 +116,103 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 
 | `name` | 返すもの |
 | --- | --- |
-| `main.ts` | アプリの AS のソース |
+| `app.json` のフォルダの外に出るパス、`/` で始まるパスなど | `null`（読まない） |
+| `entry.as` と同じパス | アプリの AS のソース（読み済みのもの） |
+| `entry.as` と同じフォルダの `bina.ts` | 生成した `bina.ts`。アプリのフォルダに `bina.ts` があっても、生成したものを使う |
 | `node_modules/<指定子>.ts` | `libraries[<指定子>]`（あれば） |
 | `node_modules/<指定子>/index.ts` | `libraries[<指定子>]`（あれば） |
+| そのほかの `.ts` で終わるパス | `read(パス)` の結果。reject したら `null` |
 | それ以外（`asconfig.json` など） | `null`（無い） |
+
+- `name` は 2 と同じやり方で整えてから比べます
+- 読めないファイルに `null` を返すと、asc が「見つからない」（`TS6054`）誤りを出し、ビルドの誤りになります
 
 - AS で `import { elem } from "jsr:@binette/replique"` と書くと、asc はこれをパッケージの import とみなし、`node_modules/jsr:@binette/replique.ts`、次に `node_modules/jsr:@binette/replique/index.ts` を読みに来ます。そこで `libraries["jsr:@binette/replique"]` を返すと解決します
 - サブパス（`jsr:@binette/replique/glue` など）も、指定子をそのままキーにして引けます
-- `libraries` に無い指定子や、AS のファイルどうしの相対 import（`./util`）は解決できず、ビルドの誤りになります
+- AS のファイルどうしの相対 import（`import { x } from "./util"`）は `read` で読むので使えます
+- `libraries` に無い指定子は解決できず、ビルドの誤りになります
 - Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Scene が JSR から取って差し込む（案。[app.md](app.md#インストール案)）
+
+## HTML の名前の木
+
+次のことを決めました（決定 2026-10-26、のぞみ）。
+
+- HTML は、ビルドの前に解析して「名前の木」にする
+- 名前と要素の種類から AS の型（`bina.ts`）を作り、エディタの補完と、ビルドでの名前の検査を効かせる
+
+今の木は平らな一覧（名前 → 数と種類）です。一覧の行（`bina-each` にあたるもの）を入れるときに、入れ子を持たせます（案）。
+
+### parseBindings（実装済み）
+
+```ts
+/** DOMParser の形。本番はブラウザ、テストと CLI は happy-dom を使う */
+interface HtmlParser { parseFromString(html: string, type: "text/html"): Document }
+interface BindingKind { tag: string; type?: string }
+interface Bindings {
+  /** 名前ごとの要素数と、出てきた順の種類（重複なし） */
+  elements: Record<string, { count: number; kinds: BindingKind[] }>;
+  /** bina-on-click に書いた関数名（重複なし、出てきた順） */
+  clicks: string[];
+}
+function parseBindings(html: string, parser: HtmlParser): Bindings
+```
+
+- `parser.parseFromString(html, "text/html")` で読み、`[bina], [bina-on-click]` の要素を文書の順に見ます
+- `kinds` の `tag` は小文字のタグ名です。`input` のときだけ `type`（小文字。属性が無ければ `"text"`）を持ちます
+- 同じ名前に種類の違う要素があっても誤りにしません（`kinds` に並べるだけ）。今の操作は `text` だけで、どの要素にも使えるためです
+- `elements` はプロトタイプの無いオブジェクトです（`toString` のような名前も入れられるように）
+
+名前の検査（`bina` と `bina-on-click` の両方）。使えない名前は、`bina の名前「x」は使えません。<理由>。`（`bina-on-click` なら `bina-on-click の名前…`）の `Error` です。
+
+| 条件 | 理由 |
+| --- | --- |
+| `/^[A-Za-z_$][A-Za-z0-9_$]*$/` に合わない（空、数字始まり、`-` を含む など） | `AS の識別子の形ではありません` |
+| JS・TS の予約語と文脈キーワード、AS の型名（`i32`・`string` など） | `予約語または型名です` |
+| `__` で始まる | `__ で始まる名前は自動生成用です` |
+| `bina` の名前が `elem` | `elem は自動生成ファイルの import に使います` |
+| `bina-on-click` の名前が `_start` | `_start はビルドの初期化に使います` |
+
+予約語の一覧は `packages/scene/src/bindings.ts` にあります。
+
+### bina.ts（実装済み）
+
+`generateBindingsSource(bindings)` は、名前を辞書順に並べた次の AS のソースを作ります。末尾の改行は 1 つです。名前が無ければ、コメントと import だけです。
+
+```ts
+// bina.ts（HTML から自動生成。手で書き換えない）
+import { elem } from "jsr:@binette/replique";
+
+export const count = elem("count");
+```
+
+アプリは次のように書けます。`elem("count")` も今までどおり使えます。
+
+```ts
+import { count } from "./bina";
+count.text = "1";
+```
+
+- HTML に無い名前を `./bina` から import すると、ビルドの誤りになります（名前の打ち間違いが分かる）
+- 種類ごとの型（入力欄の `value`、チェックボックスの `checked` など）は、それらの操作を足すときに作ります（案）。そのときは、`kinds` に合わせて `elem()` ではなく種類ごとのクラスを返し、合わない操作をビルドの誤りにします
+
+### 書き出しコマンド
+
+エディタで補完を効かせるには、`bina.ts` がアプリのフォルダに要ります。そのためのコマンドです（実装済み）。
+
+```sh
+deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
+```
+
+- `app.json` を読み、HTML を happy-dom の DOMParser で `parseBindings` し、`entry.as` と同じフォルダに `bina.ts` を書きます。書いたパスを表示します
+- 誤りは標準エラーに `bina.ts を書き出せません。<理由>` と出し、終了コード 1 で終わります
+- 関数としては `writeBindings(dir: string): Promise<string>`（書いたパスを返す）です
+- ワークスペースでは `deno task gen:counter` で `examples/counter` に書き出します
+
+運用（案）:
+
+- ファイル名は `bina.ts`。生成したものはアプリのリポジトリにコミットする（エディタで補完が効くように）
+- ビルドはいつも HTML から作り直すので、コミットした `bina.ts` が古くても、ビルドの結果には影響しない。古いと補完がずれるだけ
+- `examples/counter/src/bina.ts` が HTML と一致しているかは、テストで確かめている
 
 ## mountApp
 
