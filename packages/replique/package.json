@@ -1,0 +1,38 @@
+{
+  "name": "@binette/replique",
+  "version": "0.1.0",
+  "description": "Binette のアプリが Régie を呼ぶための AssemblyScript ライブラリ",
+  "keywords": [
+    "binette",
+    "assemblyscript"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "asc src/index.ts --noEmit"
+  },
+  "devDependencies": {
+    "assemblyscript": "0.28.20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nozomi-hiragi/binette.git",
+    "directory": "packages/replique"
+  },
+  "homepage": "https://github.com/nozomi-hiragi/binette/tree/main/packages/replique#readme",
+  "bugs": {
+    "url": "https://github.com/nozomi-hiragi/binette/issues"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

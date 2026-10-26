@@ -2,7 +2,7 @@
   "$schema": "https://typedoc.org/schema.json",
   "name": "Binette",
   "entryPointStrategy": "packages",
-  "entryPoints": ["packages/core", "packages/scene", "packages/coulisses"],
+  "entryPoints": ["packages/core", "packages/regie", "packages/scene", "packages/coulisses"],
   "packageOptions": {
     "entryPoints": ["src/index.ts"]
   },
