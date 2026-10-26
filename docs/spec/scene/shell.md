@@ -2,7 +2,7 @@
 
 [Scene の目次](README.md)
 
-ホームは Binette のシステムアプリ `apps/home` です（決定）。タイルの並びと見た目はホームの HTML ＋ AS が持ちます。OS は `mountShell` でアプリを開く枠と「戻る」の帯を持ちます。以下は実装済み（形は案）です。
+ホームは Binette のシステムアプリ `apps/home` です（決定。[apps/home.md](../apps/home.md)）。タイルの並びと見た目はホームの HTML ＋ AS が持ちます。OS は `mountShell` でアプリを開く枠と「戻る」の帯を持ちます。以下は実装済み（形は案）です。
 
 ```ts
 type ShellApp = { source: string } & (
@@ -57,4 +57,4 @@ function mountShell(element: HTMLElement, options: ShellOptions): Promise<Mounte
 | `--bina-shell-focus` | `#3273b9` | フォーカスの枠 |
 | `--bina-shell-error` | `#b3261e` | 状態表示の文字 |
 
-ホームのタイルには `--bina-home-background`・`--bina-home-color`・`--bina-home-padding`・`--bina-home-tile-size`・`--bina-home-gap`・`--bina-home-border`・`--bina-home-surface`・`--bina-home-radius`・`--bina-home-button-padding`・`--bina-home-icon-size`・`--bina-home-focus` を使います。アイコンの既定の大きさは 56px です。クラス名は `home-` で始めます。
+ホームのタイルの変数（`--bina-home-*`）は [apps/home.md](../apps/home.md#見た目) にあります。

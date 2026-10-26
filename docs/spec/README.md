@@ -16,6 +16,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | [regie.md](regie.md) | `@binette/regie`。アプリの実行（Worker ＋ WASM） |
 | [scene/](scene/README.md) | `@binette/scene`。アプリのビルド（[build.md](scene/build.md)）、HTML の名前の木（[bindings.md](scene/bindings.md)）、画面への描画（[mount.md](scene/mount.md)） |
 | [replique.md](replique.md) | `@binette/replique`。アプリが Régie を呼ぶためのライブラリ（AS） |
+| [apps/](apps/README.md) | システムアプリ（OS と一緒に配るアプリ）。ホーム（[home.md](apps/home.md)）、設定（[settings.md](apps/settings.md)） |
 | [coulisses.md](coulisses.md) | `@binette/coulisses`。サーバー側（今は v0.1 のまま） |
 
 ## 方針（決定）
@@ -53,15 +54,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 `deno task start` で開発用に起動し、`deno task build` で `dist/` に静的ファイルを書き出します。システムアプリの設定はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
 
-システムアプリ（OS と一緒に配るアプリ）は直下の `apps/<アプリ>/` に置きます。`app.json` を持つフォルダを足すだけで、ビルドとホームに含まれます。書き出し先は `.binapp/` で、一覧の index.json は作りません。
-
-今はフォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。書き出し側もホーム側も同じ比較で、ホームは glob のキーから接頭辞と `.binapp` を除いて比べます。並び順と並べ替えの仕様は未決です。システムアプリに特別な権限を持たせるか、ユーザーが消せるかは未決です。
-
-リポジトリの `apps/` にあるアプリはどれも OS と一緒に配るシステムアプリです。OS と一緒に配らない見本を置くときは別のフォルダにします。
-
-設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。
-
-ホームは Binette のシステムアプリ `apps/home` です（決定）。HTML と AS がタイルの並びと見た目を持ち、Scene の `mountShell` がアプリを開く枠と「戻る」の帯を持ちます。一覧・アイコン・`apps.*` は実装済み（形は案）です。ホームの差し替え、権限の仕組み、アプリの CSS の分離は未決です。今は入手元 `binette:system` と `role: "home"` だけでホームを判断します。
+ホームと設定は、OS と一緒に配るシステムアプリとして Binette が持ちます（決定）。置き場所はリポジトリ直下の `apps/` で、フォルダを足すだけで増えます。配り方と未決のことは [apps/](apps/README.md)、それぞれの仕様は [apps/home.md](apps/home.md) と [apps/settings.md](apps/settings.md) にあります。
 
 ## 層の分担（案）
 
