@@ -23,9 +23,15 @@ interface MountedHome {
 function mountHome(element: HTMLElement, options: HomeOptions): Promise<MountedHome>
 ```
 
-- `apps` は表示する順の配列。`source` は入手元を表す、変わらない名前。配信の URL ではない（ハッシュ付きのファイル名などで変わると、保存先の key が別のアプリになる）。最初から入れるアプリは `binette:preinstalled` などの決まった文字列にする（standalone はこれを使う）。`read` は `buildApp` と同じく、`app.json` からの相対パスを読む
+- `apps` は表示する順の配列。`source` は入手元を表す、変わらない名前。配信の URL ではない（ハッシュ付きのファイル名などで変わると、保存先の key が別のアプリになる）。システムアプリは `binette:system` などの決まった文字列にする（Binette はこれを使う）。`read` は `buildApp` と同じく、`app.json` からの相対パスを読む
 - `compiler`・`libraries`・`parser` は `buildApp` に渡す。parser を省略すると、`element.ownerDocument` から作った文書で HTML を読む。グローバルの `document` は使わない
 - `createWorker` と `onError` はアプリの起動にも使う
+
+Binette は `apps/` の直下にあるシステムアプリを自動で含めます。今はフォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べ、glob のキーから接頭辞と拡張子を除いた名前で並べます。書き出し側も同じ比較です。並び順と並べ替えの仕様は未決です。システムアプリに特別な権限を持たせるか、ユーザーが消せるかは未決です。
+
+リポジトリの `apps/` にあるアプリはどれも OS と一緒に配るシステムアプリです。OS と一緒に配らない見本を置くときは別のフォルダにします。
+
+ホームと設定を、Android のようにシステムアプリ（`apps/` の中のアプリ）にするかは未決です。その場合は、入っているアプリの一覧・起動などの特権の呼び出しと権限の仕組みが要ります。今は Scene の `mountHome` がホームを持ちます。
 
 ### 保存と描画
 
@@ -40,7 +46,7 @@ function mountHome(element: HTMLElement, options: HomeOptions): Promise<MountedH
 
 SVG は `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した文字列を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。
 
-最初から入れるアプリは OS（Binette とフロント）と一緒に配ります。Binette のビルド時に前もってビルドし、ブラウザでは HTML・権限の検証やクリック関数の export の確認をしません。起動時に bindings を読むのは、描画とクリックをつなぐためです。`.binapp` の形式と manifest の型は `parsePrebuiltApp` で確かめます（[build.md](build.md#書き出し実装済み)）。
+システムアプリは OS（Binette とフロント）と一緒に配ります。Binette のビルド時に前もってビルドし、ブラウザでは HTML・権限の検証やクリック関数の export の確認をしません。起動時に bindings を読むのは、描画とクリックをつなぐためです。`.binapp` の形式と manifest の型は `parsePrebuiltApp` で確かめます（[build.md](build.md#書き出し実装済み)）。
 
 ### 開く・戻る・停止
 

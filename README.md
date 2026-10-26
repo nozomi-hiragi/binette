@@ -27,10 +27,10 @@
 | [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
 | [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-アプリの例は [examples/counter](examples/counter) にあります。HTML の `bina="count"` から `bina.ts` を生成し、AS では `import { count } from "./bina";` と `count.text` で操作します。
+システムアプリは [apps/counter](apps/counter) にあります。HTML の `bina="count"` から `bina.ts` を生成し、AS では `import { count } from "./bina";` と `count.text` で操作します。
 
 ```sh
-deno task gen:counter  # HTML を変えたら生成し直す（エディタの補完用）
+deno task gen:bindings  # HTML を変えたら生成し直す（エディタの補完用）
 ```
 
 ## 単独で起動する
@@ -41,9 +41,9 @@ Deno 2.9 以上が必要です。
 deno task start  # http://localhost:5175/
 ```
 
-http://localhost:5175/ を開くと、カウンターとハローがホームに並び、開いて戻れます。最初から入れるアプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
+http://localhost:5175/ を開くと、カウンターとハローがホームに並び、開いて戻れます。システムアプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
 
-`deno task build` はアプリをビルドしてから `standalone/dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。`standalone/` は単独で起動できる素のフロントの仮の置き場所で、正式な名前と置き場所は未決です。
+`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。入口はリポジトリ直下の `index.html` と `src/main.ts` です。`apps/` の直下に `app.json` を持つフォルダを足すだけで、システムアプリが増えます。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 

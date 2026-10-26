@@ -49,9 +49,17 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 ## 単独で起動できるフロント（決定）
 
-Binette は単独でも起動できる素のフロント（standalone）を持ちます。Scene のデモではなく、Régie と Scene を載せる参照の実装です。正式な名前と置き場所は未決で、今はリポジトリ直下の `standalone/` に置きます。
+Binette は単独で起動できます。入口はリポジトリ直下の `index.html`・`vite.config.ts` と `src/main.ts` です。Régie と Scene を載せます。
 
-`deno task start` で開発用に起動し、`deno task build` で `standalone/dist/` に静的ファイルを書き出します。最初から入れる counter と hello はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
+`deno task start` で開発用に起動し、`deno task build` で `dist/` に静的ファイルを書き出します。システムアプリの counter と hello はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
+
+システムアプリ（OS と一緒に配るアプリ）は直下の `apps/<アプリ>/` に置きます。`app.json` を持つフォルダを足すだけで、ビルドとホームに含まれます。書き出し先は `.binapp/` で、一覧の index.json は作りません。
+
+今はフォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。書き出し側もホーム側も同じ比較で、ホームは glob のキーから接頭辞と `.binapp` を除いて比べます。並び順と並べ替えの仕様は未決です。システムアプリに特別な権限を持たせるか、ユーザーが消せるかは未決です。
+
+リポジトリの `apps/` にあるアプリはどれも OS と一緒に配るシステムアプリです。OS と一緒に配らない見本を置くときは別のフォルダにします。
+
+ホームと設定を、Android のようにシステムアプリ（`apps/` の中のアプリ）にするかは未決です。その場合は、入っているアプリの一覧・起動などの特権の呼び出しと権限の仕組みが要ります。今は Scene の `mountHome` がホームを持ちます。
 
 ## 層の分担（案）
 
@@ -87,7 +95,7 @@ Binette は単独でも起動できる素のフロント（standalone）を持�
 
 ホームは Binette が持ちます（決定）。今は、最初から渡したカウンターとハローを並べ、1 つずつ開いて戻れます（[scene/home.md](scene/home.md)）。設定画面の持ち主は未決です。
 
-ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。standalone は最初から入れるアプリのプリビルド結果を、入手元 `binette:preinstalled` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
+ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。Binette はシステムアプリのプリビルド結果を、入手元 `binette:system` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 
 1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する

@@ -19,10 +19,10 @@ src/
 - ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[scene/build.md](scene/build.md#ファイルの解決)）
 
-例: [examples/counter](../../examples/counter)
+例: [apps/counter](../../apps/counter)
 
 ```
-examples/counter/
+apps/counter/
   app.json
   src/index.html
   src/main.ts
@@ -120,9 +120,13 @@ examples/counter/
 
 今は `AppStore` に入手元・manifest・SVG・HTML・WASM・インストール日時を保存します（[regie.md](regie.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
 
+## システムアプリ（実装済み）
+
+システムアプリは OS と一緒に配るアプリです。`apps/` の直下に `app.json` を持つフォルダを足すだけで増えます。入手元は `binette:system` です。特別な権限を持たせるか、ユーザーが消せるかは未決です。
+
 ## インストール（案）
 
-最初から入れるアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証、クリック関数の export の確認もしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[scene/build.md](scene/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
+システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証、クリック関数の export の確認もしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[scene/build.md](scene/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
 
 追加するアプリのインストールは、次の流れを予定しています。
 

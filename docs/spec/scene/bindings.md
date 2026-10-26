@@ -223,7 +223,7 @@ deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
 - 引数が 1 つでなければ `bina.ts を書き出せません。アプリのフォルダを 1 つ指定してください。`
 - 関数としても使えます: `writeBindings(dir: string): Promise<string>`（書いたパスを返す。誤りは `Error`）。`import { writeBindings } from "jsr:@binette/scene/cli"`
 - scene の `deno.json` の `exports` に `"./cli": "./src/cli.ts"` があります
-- このリポジトリでは `deno task gen:counter` で `examples/counter/src/bina.ts` を書き出します
+- このリポジトリでは `deno task gen:bindings` で全システムアプリの `bina.ts` を書き出します
 
 ### 運用（案）
 
@@ -231,7 +231,7 @@ deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
 - 書き出した `bina.ts` は、アプリのリポジトリにコミットする。エディタで補完が効くように
 - HTML を変えたら、書き出しコマンドを実行し直す
 - ビルドはいつも HTML から作り直すので、コミットした `bina.ts` が古くても、ビルドの結果は変わらない。古いと補完がずれるだけ
-- このリポジトリでは、`examples/counter/src/bina.ts` が HTML から作ったものと一致するかを、テストで確かめている
+- このリポジトリでは、`apps/counter/src/bina.ts` が HTML から作ったものと一致するかを、テストで確かめている
 
 ## これから（案）
 
