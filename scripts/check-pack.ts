@@ -57,6 +57,8 @@ try {
           "@binette/core": "../packages/core/src/index.ts",
           "@binette/regie": "../packages/regie/src/index.ts",
           "@binette/scene": "../packages/scene/src/index.ts",
+          "@binette/scene/cli": "../packages/scene/src/cli.ts",
+          "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@0.1.56",
           "@binette/coulisses": "../packages/coulisses/src/index.ts",
           "@binette/replique": "../packages/replique/src/index.ts",
           "@std/assert": "jsr:@std/assert@1",
@@ -75,6 +77,8 @@ try {
 import { BINETTE_VERSION, BinetteError, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
 import { launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
 import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
+import { DOMParser } from "@b-fuze/deno-dom";
+import { writeBindings } from "@binette/scene/cli";
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
 const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
@@ -89,8 +93,9 @@ const files: Record<string, string> = {
   "src/main.ts": 'import { elem } from "jsr:@binette/replique";\\nexport function start(): void { elem("count").text = "0"; }\\n',
 };
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
-const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique } });
+const built = await buildApp(async (path) => files[path]!, { parser: new DOMParser() as unknown as import("@binette/scene").HtmlParser, libraries: { "jsr:@binette/replique": replique } });
 assertEquals(built.manifest.id, "example.counter");
+void writeBindings;
 
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();

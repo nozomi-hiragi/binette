@@ -1,12 +1,12 @@
-import { elem } from "jsr:@binette/replique";
+import { count } from "./bina";
 
-let count = 0;
+let value = 0;
 
 export function start(): void {
-  elem("count").text = "0";
+  count.text = "0";
 }
 
 export function increment(): void {
-  count++;
-  elem("count").text = count.toString();
+  value++;
+  count.text = value.toString();
 }

@@ -27,7 +27,11 @@
 | [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
 | [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-アプリの例は [examples/counter](examples/counter) にあります。
+アプリの例は [examples/counter](examples/counter) にあります。HTML の `bina="count"` から `bina.ts` を生成し、AS では `import { count } from "./bina";` と `count.text` で操作します。
+
+```sh
+deno task gen:counter  # HTML を変えたら生成し直す（エディタの補完用）
+```
 
 ## デモ
 

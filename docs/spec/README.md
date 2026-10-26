@@ -14,7 +14,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
 | [core.md](core.md) | `@binette/core`。形式の型と読み込み |
 | [regie.md](regie.md) | `@binette/regie`。アプリの実行（Worker ＋ WASM） |
-| [scene.md](scene.md) | `@binette/scene`。アプリのビルドと画面への描画 |
+| [scene/](scene/README.md) | `@binette/scene`。アプリのビルド（[build.md](scene/build.md)）、HTML の名前の木（[bindings.md](scene/bindings.md)）、画面への描画（[mount.md](scene/mount.md)） |
 | [replique.md](replique.md) | `@binette/replique`。アプリが Régie を呼ぶためのライブラリ（AS） |
 | [coulisses.md](coulisses.md) | `@binette/coulisses`。サーバー側（今は v0.1 のまま） |
 
@@ -67,9 +67,11 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0` |
 | `@binette/regie` | なし（core も使っていない） |
-| `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20` |
+| `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`、`@b-fuze/deno-dom@0.1.56`（書き出しコマンドだけ） |
 | `@binette/coulisses` | `@binette/core` |
 | `@binette/replique` | なし（AS のソースだけ） |
+
+テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト。deno-dom には `style` とイベントが無いため）。どれも MIT です。
 
 - 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。今はすべて `0.1.0` で、v0.2 として公開するときに `0.2.0` にする
 - 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。どのパッケージも `src/` の TypeScript（replique は AS）をそのまま配る
@@ -79,7 +81,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 今のコードでできるのは、カウンターのアプリ 1 つ（[examples/counter](../../examples/counter)）をブラウザの中でビルドして動かすところまでです。
 
-1. Scene が `app.json`・HTML・AS を読む（[scene.md](scene.md) の `buildApp`）
+1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
 3. Scene が HTML を描き、Régie が WASM を Worker で起動する（[regie.md](regie.md)）
 4. Scene がアプリの `start()` を呼ぶ。アプリが `elem("名前").text` に書くと、Régie を通って Scene に届き、`bina="名前"` の要素をまとめて書き換える。`bina-on-click` の要素を押すと、Scene が Régie を通してアプリの関数を呼ぶ

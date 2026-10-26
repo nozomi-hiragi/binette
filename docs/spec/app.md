@@ -13,10 +13,11 @@ src/
   index.html      見た目。スクリプトは書かない
   style.css       見た目。フロントのテーマの CSS 変数を使える
   main.ts         動き。AS で書き、WASM にビルドする
+  bina.ts         HTML の名前から自動生成する（案。補完のためにコミットする）
 ```
 
-- ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスをそのまま `read` に渡す）
-- AS のファイルは今は 1 つだけ。AS のファイルどうしの相対 import（`import { x } from "./util"`）はまだ解決できない（[scene.md](scene.md#ファイルの解決)）
+- ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
+- AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[scene/build.md](scene/build.md#ファイルの解決)）
 
 例: [examples/counter](../../examples/counter)
 
@@ -25,6 +26,7 @@ examples/counter/
   app.json
   src/index.html
   src/main.ts
+  src/bina.ts
 ```
 
 ## app.json

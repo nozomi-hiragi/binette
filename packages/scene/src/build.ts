@@ -1,4 +1,6 @@
 import { parseAppManifest, type AppManifest } from "@binette/core";
+import { type Bindings, generateBindingsSource, type HtmlParser, parseBindings } from "./bindings.ts";
+import { appPath, entryPaths } from "./paths.ts";
 
 /** asc の標準出力・標準エラーの受け皿 */
 export interface CompilerStream {
@@ -9,7 +11,7 @@ export interface CompilerStream {
 /** asc（AssemblyScript のコンパイラ）のうち、ここで使う分 */
 export interface Compiler {
   main(argv: string[], options: {
-    readFile: (name: string, baseDir: string) => string | null;
+    readFile: (name: string, baseDir: string) => string | null | Promise<string | null>;
     writeFile: (name: string, contents: string | Uint8Array, baseDir: string) => void;
     listFiles: (dirname: string, baseDir: string) => string[] | null;
     stdout?: CompilerStream;
@@ -30,6 +32,8 @@ export function loadCompiler(): Promise<Compiler> {
 
 /** {@link buildApp} の設定 */
 export interface BuildOptions {
+  /** HTML を読む DOMParser。省略時はブラウザのもの */
+  parser?: HtmlParser;
   /** `jsr:@binette/replique` などの指定子 → AS のソース。Réplique は未公開なので、今は呼ぶ側がワークスペースのファイルを渡す */
   libraries?: Record<string, string>;
   /** 使う asc。省略すると {@link loadCompiler} で読み込む */
@@ -38,6 +42,8 @@ export interface BuildOptions {
 
 /** ビルドしたアプリ */
 export interface BuiltApp {
+  /** HTML から集めた名前 */
+  bindings: Bindings;
   /** `app.json` の中身 */
   manifest: AppManifest;
   /** 入口の HTML */
@@ -69,15 +75,28 @@ function findLibrary(libraries: Record<string, string>, name: string): string | 
  */
 export async function buildApp(read: (path: string) => Promise<string>, options: BuildOptions = {}): Promise<BuiltApp> {
   const manifest = parseAppManifest(await read("app.json"));
-  const [html, source] = await Promise.all([read(manifest.entry.html), read(manifest.entry.as)]);
+  const { as: entry, html: htmlPath, bindings: generatedPath } = entryPaths(manifest.entry);
+  const parser = options.parser ?? (typeof globalThis.DOMParser === "function" ? new globalThis.DOMParser() : undefined);
+  if (!parser) throw new Error("HTML を読む DOMParser がありません。parser を指定してください。");
+  const [html, source] = await Promise.all([read(htmlPath), read(entry)]);
+  const bindings = parseBindings(html, parser);
+  const generated = generateBindingsSource(bindings);
   const asc = options.compiler ?? await loadCompiler();
   const libraries = options.libraries ?? {};
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
   let wasm: Uint8Array | undefined;
   // 初期化を instantiate の中で走らせず、Régie が _start で呼ぶ
-  const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
-    readFile: (name) => name === "main.ts" ? source : findLibrary(libraries, name),
+  const { error } = await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
+    readFile: async (name) => {
+      const path = appPath(name);
+      if (path === null) return null;
+      if (path === entry) return source;
+      if (path === generatedPath) return generated;
+      if (path.startsWith(NODE_MODULES)) return findLibrary(libraries, path);
+      if (!path.endsWith(".ts")) return null;
+      try { return await read(path) ?? null; } catch { return null; }
+    },
     writeFile: (name, contents) => { if (name === "main.wasm" && typeof contents !== "string") wasm = contents; },
     listFiles: () => [],
     stdout,
@@ -87,5 +106,9 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
     const output = (stderr.toString() || stdout.toString() || error?.message || "").trim();
     throw new Error(`アプリをビルドできません。\n${output}`);
   }
-  return { manifest, html, wasm };
+  const module = await WebAssembly.compile(wasm as Uint8Array<ArrayBuffer>);
+  const functions = new Set(WebAssembly.Module.exports(module).filter((item) => item.kind === "function").map((item) => item.name));
+  const missing = bindings.clicks.filter((name) => !functions.has(name));
+  if (missing.length) throw new Error(`アプリをビルドできません。クリックで呼ぶ関数が export にありません: ${missing.join("、")}`);
+  return { manifest, html, wasm, bindings };
 }
