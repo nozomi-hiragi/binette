@@ -1,7 +1,6 @@
 // 公開するパッケージのバージョンと設定がそろっているかを、テストや公開の前に確かめる。
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "@std/fs";
+import { join } from "@std/path";
 
 export const PUBLISHED: Record<string, string> = {
   "packages/core": "@binette/core",
@@ -13,7 +12,7 @@ export const PUBLISHED: Record<string, string> = {
 export const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function readJson(path: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  return JSON.parse(Deno.readTextFileSync(path)) as Record<string, unknown>;
 }
 
 export interface CheckResult {
@@ -60,18 +59,18 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
     }
   }
 
-  const license = readFileSync(join(root, "LICENSE"));
+  const license = Deno.readTextFileSync(join(root, "LICENSE"));
   for (const dir of Object.keys(PUBLISHED)) {
     const path = join(root, dir, "LICENSE");
     if (!existsSync(path)) errors.push(`${dir}/LICENSE: missing`);
-    else if (!license.equals(readFileSync(path))) errors.push(`${dir}/LICENSE: differs from root LICENSE`);
+    else if (license !== Deno.readTextFileSync(path)) errors.push(`${dir}/LICENSE: differs from root LICENSE`);
   }
   return { errors, version };
 }
 
 if (import.meta.main) {
   const printVersion = Deno.args[0] === "--print-version";
-  const { errors, version } = checkVersions(fileURLToPath(new URL("..", import.meta.url)), printVersion ? undefined : Deno.args[0]);
+  const { errors, version } = checkVersions(join(import.meta.dirname!, ".."), printVersion ? undefined : Deno.args[0]);
   if (errors.length) {
     console.error(errors.join("\n"));
     Deno.exit(1);

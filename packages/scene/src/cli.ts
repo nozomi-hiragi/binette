@@ -1,7 +1,7 @@
 import { parseAppManifest } from "@binette/core";
 // deno-dom の WASM 版。FFI もネイティブのライブラリも要らない
 import { DOMParser } from "@b-fuze/deno-dom";
-import { resolve } from "node:path";
+import { resolve } from "@std/path";
 import { generateBindingsSource, type HtmlParser, parseBindings } from "./bindings.ts";
 import { entryPaths } from "./paths.ts";
 

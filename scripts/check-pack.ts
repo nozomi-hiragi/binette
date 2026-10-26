@@ -1,10 +1,9 @@
 // JSR の公開物を想定したファイルだけを抽出し、外部の利用者として動かして確かめる。
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { copy, exists } from "@std/fs";
+import { join } from "@std/path";
 import { PUBLISHED } from "./check-version.ts";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = join(import.meta.dirname!, "..");
 
 function run(command: string, args: string[], cwd: string): void {
   const process = new Deno.Command(command, {
@@ -24,18 +23,18 @@ try {
   for (const [dir, name] of Object.entries(PUBLISHED)) {
     const pkgDir = join(ROOT, dir);
     const destDir = join(temp, dir);
-    mkdirSync(destDir, { recursive: true });
+    Deno.mkdirSync(destDir, { recursive: true });
 
     const denoJsonPath = join(pkgDir, "deno.json");
-    const denoJson = JSON.parse(readFileSync(denoJsonPath, "utf8")) as {
+    const denoJson = JSON.parse(Deno.readTextFileSync(denoJsonPath)) as {
       publish?: { include?: string[] };
     };
     const includes = denoJson.publish?.include ?? [];
     for (const item of ["deno.json", ...includes]) {
       const src = join(pkgDir, item);
       const dest = join(destDir, item);
-      if (existsSync(src)) {
-        cpSync(src, dest, { recursive: true });
+      if (await exists(src)) {
+        await copy(src, dest);
       } else {
         throw new Error(`${name}: missing included file or directory ${item}`);
       }
@@ -44,9 +43,9 @@ try {
   }
 
   const consumer = join(temp, "consumer");
-  mkdirSync(consumer, { recursive: true });
+  Deno.mkdirSync(consumer, { recursive: true });
 
-  writeFileSync(
+  Deno.writeTextFileSync(
     join(consumer, "deno.json"),
     JSON.stringify(
       {
@@ -59,6 +58,7 @@ try {
           "@binette/scene": "../packages/scene/src/index.ts",
           "@binette/scene/cli": "../packages/scene/src/cli.ts",
           "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@0.1.56",
+          "@std/path": "jsr:@std/path@^1.1.6",
           "@binette/coulisses": "../packages/coulisses/src/index.ts",
           "@binette/replique": "../packages/replique/src/index.ts",
           "@std/assert": "jsr:@std/assert@1",
@@ -71,7 +71,7 @@ try {
     ),
   );
 
-  writeFileSync(
+  Deno.writeTextFileSync(
     join(consumer, "consumer.ts"),
     `import { assertEquals, assertThrows } from "@std/assert";
 import { BINETTE_VERSION, BinetteError, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
@@ -141,5 +141,5 @@ console.log("Consumer passed (core, regie, scene, coulisses, replique)");
   run(Deno.execPath(), ["run", "-A", "consumer.ts"], consumer);
   console.log("Check-pack consumer check passed");
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  Deno.removeSync(temp, { recursive: true });
 }
