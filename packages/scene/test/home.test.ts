@@ -292,15 +292,18 @@ Deno.test("プリビルドは compiler を呼ばず保存し、開いて動く�
     element.querySelector<HTMLButtonElement>("[bina-on-click=increment]")!.click();
     await waitFor(() => element.querySelector("[bina=count]")?.textContent === "1");
     home.stop();
+    // 同じ版でも、保存結果は prebuilt で入れ直す。入れた日時は保つ
     const saved = (await store.get(fixtures[0]!.key))!;
-    await store.put({ ...saved, html: "保存結果" });
+    await store.put({ ...saved, html: "古い保存結果", installedAt: 123 });
     home = await mountHome(element, { apps: prebuiltApps, store, compiler });
-    assertEquals((await store.get(saved.key))!.html, "保存結果");
+    assertEquals((await store.get(saved.key))!.html, fixtures[0]!.html);
+    assertEquals((await store.get(saved.key))!.installedAt, 123);
     home.stop();
     const changed = { ...fixtures[0]!, manifest: { ...fixtures[0]!.manifest, version: "0.3.0" } };
     home = await mountHome(element, { apps: [{ source: changed.source, prebuilt: changed }], store, compiler });
     assertEquals((await store.get(saved.key))!.manifest.version, "0.3.0");
     assertEquals((await store.get(saved.key))!.html, changed.html);
+    assertEquals((await store.get(saved.key))!.installedAt, 123);
     assertEquals(errors, []);
   } finally { home.stop(); await window.happyDOM.close(); }
 });

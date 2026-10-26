@@ -6,15 +6,18 @@ import counterUrl from "./apps/counter.binapp?url";
 // @deno-types="./asset.d.ts"
 import helloUrl from "./apps/hello.binapp?url";
 
+/** 最初から入れるアプリの入手元。OS を更新しても変えない */
+const PREINSTALLED = "binette:preinstalled";
+
 const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
 
 try {
   const apps = await Promise.all([counterUrl, helloUrl].map(async (url) => {
-    const source = new URL(url, location.href).href;
-    const response = await fetch(source);
+    const response = await fetch(new URL(url, location.href));
     if (!response.ok) throw new Error(`アプリを取得できません（${response.status}）。`);
-    return { source, prebuilt: parsePrebuiltApp(await response.text()) };
+    // 配信の URL は中身のハッシュで変わるので、source には使わない
+    return { source: PREINSTALLED, prebuilt: parsePrebuiltApp(await response.text()) };
   }));
   const home = await mountHome(container, {
     apps,

@@ -144,16 +144,17 @@ export async function mountHome(element: HTMLElement, options: HomeOptions): Pro
       const key = installedAppKey(app.source, manifest.id);
       if (seen.has(key)) continue;
       let installed = await options.store.get(key);
-      if (!installed || installed.manifest.version !== manifest.version) {
-        if (app.prebuilt !== undefined) {
-          installed = { ...app.prebuilt, icon: app.prebuilt.icon, key, source: app.source, installedAt: Date.now() };
-        } else {
-          const path = iconPath(manifest.icon);
-          // app.json は最初に読んだものを使う
-          const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), { ...options, parser });
-          const icon = path === undefined ? undefined : await app.read(path);
-          installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
-        }
+      if (app.prebuilt !== undefined) {
+        // ビルドが要らないので毎回入れ直す。版を上げ忘れた OS の更新でも古いものを残さない。入れた日時は最初のものを保つ
+        const { html, icon, wasm } = app.prebuilt;
+        installed = { key, source: app.source, manifest, icon, html, wasm, installedAt: installed?.installedAt ?? Date.now() };
+        await options.store.put(installed);
+      } else if (!installed || installed.manifest.version !== manifest.version) {
+        const path = iconPath(manifest.icon);
+        // app.json は最初に読んだものを使う
+        const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), { ...options, parser });
+        const icon = path === undefined ? undefined : await app.read(path);
+        installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
       }
       const saved = installed;

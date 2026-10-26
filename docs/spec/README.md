@@ -87,7 +87,7 @@ Binette は単独でも起動できる素のフロント（standalone）を持�
 
 ホームは Binette が持ちます（決定）。今は、最初から渡したカウンターとハローを並べ、1 つずつ開いて戻れます（[scene/home.md](scene/home.md)）。設定画面の持ち主は未決です。
 
-ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。standalone は最初から入れるアプリのプリビルド結果を保存して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
+ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。standalone は最初から入れるアプリのプリビルド結果を、入手元 `binette:preinstalled` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 
 1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する

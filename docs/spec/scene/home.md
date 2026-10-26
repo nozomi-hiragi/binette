@@ -23,19 +23,20 @@ interface MountedHome {
 function mountHome(element: HTMLElement, options: HomeOptions): Promise<MountedHome>
 ```
 
-- `apps` は表示する順の配列。`source` は入手元を区別する文字列。`read` は `buildApp` と同じく、`app.json` からの相対パスを読む
+- `apps` は表示する順の配列。`source` は入手元を表す、変わらない名前。配信の URL ではない（ハッシュ付きのファイル名などで変わると、保存先の key が別のアプリになる）。最初から入れるアプリは `binette:preinstalled` などの決まった文字列にする（standalone はこれを使う）。`read` は `buildApp` と同じく、`app.json` からの相対パスを読む
 - `compiler`・`libraries`・`parser` は `buildApp` に渡す。parser を省略すると、`element.ownerDocument` から作った文書で HTML を読む。グローバルの `document` は使わない
 - `createWorker` と `onError` はアプリの起動にも使う
 
 ### 保存と描画
 
 1. `prebuilt` ならその manifest を使う。開発用の `read` なら `app.json` を読んで検査する
-2. `installedAppKey(source, manifest.id)` で保存先を引く。同じ `manifest.version` なら保存済みの結果を使う（版が両方無い場合も同じとみなす）
-3. 無いか版が違う場合、`prebuilt` なら manifest・HTML・SVG・WASM から日時を付けた InstalledApp を作り、`store.put` する。compiler も `loadCompiler` も呼ばない。`read` なら `buildApp` する。`icon` があれば SVG を読み、HTML・WASM・manifest・日時と一緒に `store.put` する
+2. `installedAppKey(source, manifest.id)` で保存先を引く
+3. `prebuilt` なら、保存済みの版にかかわらず、毎回 manifest・HTML・SVG・WASM で `store.put` し直す（ビルドが要らないので安い。版を上げ忘れた OS の更新でも古いものを残さない）。`installedAt` は保存済みならその値を保ち、無ければ今の時刻にする。compiler も `loadCompiler` も呼ばない
+4. `read` なら、同じ `manifest.version` が保存済みならそれを使う（版が両方無い場合も同じとみなす）。無いか版が違う場合だけ `buildApp` する。`icon` があれば SVG を読み、HTML・WASM・manifest・日時と一緒に `store.put` する
    - `icon` のパスは `entry` と同じく整える（[build.md](build.md) の手順 2）。空文字列か、`app.json` のフォルダの外を指すなどで受け付けないパスなら、読まずに `アプリのアイコンは app.json のフォルダ内の相対パスにしてください。` の `Error` にする。そのアプリは並べない
-4. アイコンと名前のボタンを、渡された順に並べる。同じ key は重ねて並べない
+5. アイコンと名前のボタンを、渡された順に並べる。同じ key は重ねて並べない
 
-一覧は `store.list()` の全件ではなく、`apps` で渡されたものだけです。保存済みなら AS・HTML・SVG を読み直さず、compiler も呼びません。`read` の場合だけ入手元の `app.json` を毎回読みます。1 つ失敗しても残りを並べ、エラーを状態表示と `onError` で知らせます。
+一覧は `store.list()` の全件ではなく、`apps` で渡されたものだけです。`read` で保存済みなら AS・HTML・SVG を読み直さず、compiler も呼びません。`read` の場合だけ入手元の `app.json` を毎回読みます。1 つ失敗しても残りを並べ、エラーを状態表示と `onError` で知らせます。
 
 SVG は `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した文字列を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。
 

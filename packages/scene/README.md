@@ -31,7 +31,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 | `stringifyPrebuiltApp` / `parsePrebuiltApp` | `.binapp` の書き出しと読み込み |
 | `parseBindings` / `generateBindingsSource` | HTML の名前の収集と AS の生成 |
 
-`HomeApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は同じ入手元・ID・版の保存結果があれば使い回し、無ければ保存します。コンパイラは呼びません。
+`HomeApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（最初から入れるアプリは `binette:preinstalled` など）。
 
 ## 単独フロント
 
