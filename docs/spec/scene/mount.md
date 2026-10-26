@@ -33,6 +33,7 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 - 起動（3）に失敗したら、そのエラーで reject します。描いた HTML はそのまま残ります
 - `signal` の中断でもアプリとリスナーを止める。起動中なら reject する
+- クリックのリスナーは起動（3）が済んでから付けます。HTML を描いてから起動が済むまでのクリックは捨てます
 - `stop()` はリスナーを外し、`app.stop()` を呼びます。描いた HTML は消しません
 - DOM はグローバルの `document` を使わず、`element` から辿ります（テストで happy-dom の要素を渡すため）。描画とクリックのテストは happy-dom（MIT、テストだけの依存）で行います。deno-dom には `style` が無く、`click` のイベントも届かないためです
 

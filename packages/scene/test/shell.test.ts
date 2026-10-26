@@ -94,7 +94,9 @@ Deno.test("ホームが一覧を作り、開く・詳しく・戻るで一つず
     assertEquals(tiles[0]!.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fixtures[0]!.icon!)}`);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-toolbar")!.hidden, true);
     tiles[0]!.click(); tiles[1]!.click();
-    await waitFor(() => !!element.querySelector("[bina-on-click=showDetails]"));
+    // 起動中のクリックは捨てられるので、設定の起動（ready）を受けて mountApp が続きを終えてから押す
+    await waitFor(() => worker.ready === 2);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assertEquals(element.querySelector(".home-grid"), null);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-toolbar")!.hidden, false);
     element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
