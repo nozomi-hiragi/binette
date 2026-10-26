@@ -5,7 +5,7 @@
 
 /** 画面の書き換え */
 export namespace ui {
-  /** `data-text="name"` の要素の文字を `value` に書き換える */
+  /** `bina-text="name"` の要素の文字を `value` に書き換える */
   // @ts-ignore: decorator
   @external("binette", "ui.text")
   export declare function text(name: string, value: string): void;

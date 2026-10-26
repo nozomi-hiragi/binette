@@ -17,7 +17,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 
 - `loadCompiler()` は asc を読み込みます。初回だけ dynamic import し、結果を使い回します。`buildApp` が必要なときに呼ぶので、先に呼んで読み込み時間を測ることもできます
 - `buildApp(read, options)` は `app.json`・HTML・AS を読み、AS を WASM にビルドします。ビルドに失敗すると、asc の出力を含む `Error` になります
-- `mountApp(element, built, options)` は `element` に HTML を描き、Régie でアプリを起動します。`data-text="name"` は `ui.text` で、`data-on-click="fn"` はクリックでアプリの `fn()` につながります。export に `start` があれば呼びます。HTML の検証、CSS、保存、権限はまだありません
+- `mountApp(element, built, options)` は `element` に HTML を描き、Régie でアプリを起動します。`bina-text="name"` は `ui.text` で、`bina-on-click="fn"` はクリックでアプリの `fn()` につながります。export に `start` があれば呼びます。HTML の検証、CSS、保存、権限はまだありません
 
 動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene.md) にあります。
 

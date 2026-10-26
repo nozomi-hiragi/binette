@@ -10,7 +10,7 @@ export function start(): void {
 }
 ```
 
-今ある呼び出しは `ui.text(name, value)` だけです。HTML の `data-text="name"` の要素の文字を書き換えます。
+今ある呼び出しは `ui.text(name, value)` だけです。HTML の `bina-text="name"` の要素の文字を書き換えます。
 
 アプリはこのパッケージを自分では持ち込みません。ビルドする Scene が `jsr:@binette/replique` として差し込みます。
 

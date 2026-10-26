@@ -18,7 +18,7 @@ export interface MountedApp {
 }
 
 /**
- * `element` に HTML を描き、Régie でアプリを起動して、`data-text` と `data-on-click` をつなぐ。
+ * `element` に HTML を描き、Régie でアプリを起動して、`bina-text` と `bina-on-click` をつなぐ。
  * export に `start` があれば呼ぶ。HTML の検証はまだしない。
  *
  * @throws {Error} アプリを起動できないとき、または `start()` が失敗したとき
@@ -39,8 +39,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     createWorker: options.createWorker,
     onError: report,
     onText(name, value) {
-      for (const target of element.querySelectorAll("[data-text]")) {
-        if (target.getAttribute("data-text") === name) target.textContent = value;
+      for (const target of element.querySelectorAll("[bina-text]")) {
+        if (target.getAttribute("bina-text") === name) target.textContent = value;
       }
     },
   });
@@ -48,8 +48,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
   const onClick = (event: Event) => {
     const target = event.target;
     if (typeof (target as Element | null)?.closest !== "function") return;
-    const trigger = (target as Element).closest("[data-on-click]");
-    const name = trigger?.getAttribute("data-on-click");
+    const trigger = (target as Element).closest("[bina-on-click]");
+    const name = trigger?.getAttribute("bina-on-click");
     if (!trigger || !name || !element.contains(trigger)) return;
     app.call(name).catch((error: unknown) => {
       if (typeof error !== "object" || error === null || !reported.has(error)) report(error);

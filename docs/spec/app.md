@@ -124,7 +124,7 @@ examples/counter/
 3. 検証する
    - WASM が import している呼び出しを一覧にし、`permissions` と照合する。宣言にない権限を使っていたら止める
    - HTML に `<script>`・`on*` 属性・外部 URL が無いことを確かめる
-   - HTML の `data-on-*` に書いた名前が、WASM の export にあることを確かめる
+   - HTML の `bina-on-*` に書いた名前が、WASM の export にあることを確かめる
 4. 権限と用途を見せて、ユーザーが許可する
 5. Régie がビルド結果と記録を保存する
 

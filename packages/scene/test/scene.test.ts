@@ -32,7 +32,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
 test("カウンターをビルドして動かせる", async () => {
   const built = await buildApp(read, { libraries });
   assert.equal(built.manifest.id, "io.github.nozomi-hiragi.counter");
-  assert.match(built.html, /data-on-click="increment"/);
+  assert.match(built.html, /bina-on-click="increment"/);
 
   const window = new Window();
   try {
@@ -41,7 +41,7 @@ test("カウンターをビルドして動かせる", async () => {
     const errors: unknown[] = [];
     const mounted = await mountApp(element, built, { createWorker, onError: (error) => errors.push(error) });
     try {
-      const text = element.querySelector("[data-text=count]")!;
+      const text = element.querySelector("[bina-text=count]")!;
       const button = element.querySelector("button")!;
       assert.equal(text.textContent, "0");
       button.click();

@@ -133,8 +133,8 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 1. `element.style.contain = "paint"` にする（アプリの描画が `element` の外に出ないように）
 2. `element.innerHTML = built.html` で HTML を描く
-3. Régie の `launchApp(built.wasm, …)` でアプリを起動する。`onText` を下の `data-text` につなぐ
-4. `element` に `click` のリスナーを 1 つ付ける（下の `data-on-click`）
+3. Régie の `launchApp(built.wasm, …)` でアプリを起動する。`onText` を下の `bina-text` につなぐ
+4. `element` に `click` のリスナーを 1 つ付ける（下の `bina-on-click`）
 5. `app.exports` に `start` があれば `app.call("start")` を待つ。失敗したら `stop()` してから同じエラーで reject する
 6. `{ app, stop }` で解決する
 
@@ -144,33 +144,35 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 ### HTML とアプリのつなぎ方
 
+属性の接頭辞は `bina-` にする（決定 2026-10-26）。`data-*` はアプリが自由に使える。
+
 | HTML | 意味 | アプリ側（Réplique） | 状態 |
 | --- | --- | --- | --- |
-| `data-text="name"` | 文字を差し込む | `ui.text("name", "…")` | 実装済み |
-| `data-on-click="fn"` | クリックで `fn()` | `export function fn(): void` | 実装済み |
-| `data-show="name"` | 表示・非表示 | `ui.show("name", true)` | 案 |
-| `data-enabled="name"` | 有効・無効 | `ui.enabled("name", false)` | 案 |
-| `data-value="name"` | 入力欄の値 | `ui.value("name", "")` | 案 |
-| `data-each="list"` ＋ `<template>` | 一覧の繰り返し | `ui.listClear` / `ui.listAdd` / `ui.itemText` | 案 |
-| `data-on-input="fn"` | 入力で `fn(値)` | `export function fn(value: string): void` | 案 |
-| `data-on-submit="fn"` | 送信で `fn()`（ページ移動はしない） | `export function fn(): void` | 案 |
+| `bina-text="name"` | 文字を差し込む | `ui.text("name", "…")` | 実装済み |
+| `bina-on-click="fn"` | クリックで `fn()` | `export function fn(): void` | 実装済み |
+| `bina-show="name"` | 表示・非表示 | `ui.show("name", true)` | 案 |
+| `bina-enabled="name"` | 有効・無効 | `ui.enabled("name", false)` | 案 |
+| `bina-value="name"` | 入力欄の値 | `ui.value("name", "")` | 案 |
+| `bina-each="list"` ＋ `<template>` | 一覧の繰り返し | `ui.listClear` / `ui.listAdd` / `ui.itemText` | 案 |
+| `bina-on-input="fn"` | 入力で `fn(値)` | `export function fn(value: string): void` | 案 |
+| `bina-on-submit="fn"` | 送信で `fn()`（ページ移動はしない） | `export function fn(): void` | 案 |
 
 - 一覧の中のイベントは、その行のキーを引数で渡す（案）
 
-`data-text`（実装済み）:
+`bina-text`（実装済み）:
 
-- `ui.text(name, value)` が届くたびに、`element` の中の `data-text` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
+- `ui.text(name, value)` が届くたびに、`element` の中の `bina-text` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
 - 一致する要素が無ければ何もしません。HTML に最初から書いた文字（カウンターの `0` など）は、`ui.text` が来るまでそのまま出ます
 
-`data-on-click`（実装済み）:
+`bina-on-click`（実装済み）:
 
-- `element` で受けたクリックの `event.target` から `closest("[data-on-click]")` で要素を探します。要素が `element` の中にあり、属性の値が空でなければ、その値の名前で `app.call(name)` を呼びます
+- `element` で受けたクリックの `event.target` から `closest("[bina-on-click]")` で要素を探します。要素が `element` の中にあり、属性の値が空でなければ、その値の名前で `app.call(name)` を呼びます
 - 既定の動作（リンクの移動、フォームの送信など）は止めません
 - 呼び出しが失敗したら `onError` に渡します。Régie が `onError` で知らせたエラーと同じものは、二度は渡しません
 
 ### まだしていないこと
 
-- HTML の検証（`<script>`・`on*` 属性・外部 URL が無いこと、`data-on-*` の名前が export にあること）。今は `innerHTML` にそのまま入れます。`<script>` は `innerHTML` では実行されませんが、`on*` 属性は動きます
+- HTML の検証（`<script>`・`on*` 属性・外部 URL が無いこと、`bina-on-*` の名前が export にあること）。今は `innerHTML` にそのまま入れます。`<script>` は `innerHTML` では実行されませんが、`on*` 属性は動きます
 - `entry.css` の読み込みと、テーマの CSS 変数
 - Shadow DOM などでの、フロントの CSS とアプリの CSS の分離
 

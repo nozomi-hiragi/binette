@@ -23,7 +23,7 @@ export function increment(): void {
 
 - import の指定子は `jsr:@binette/replique` です（案。npm の `@binette/replique` では書かない）
 - アプリは Réplique を自分では持ち込みません。ビルドする Scene が差し込みます（[scene.md](scene.md#ファイルの解決)）
-- アプリの関数は、`export function 名前(): void` で書きます。HTML の `data-on-click="名前"` から呼ばれます
+- アプリの関数は、`export function 名前(): void` で書きます。HTML の `bina-on-click="名前"` から呼ばれます
 - `start()` は、Scene が HTML を描いて起動したあとに 1 回呼びます。無くてもかまいません
 - トップレベルの文やグローバル変数の初期値は、`start()` より前に走ります。そこで `ui.text` を呼んでもかまいません
 - `_start` という名前は、ビルドがトップレベルの初期化に使うので、アプリの関数には使えません
@@ -34,7 +34,7 @@ export function increment(): void {
 
 | AS の API | WASM の import（モジュール.名前） | 権限 | 内容 |
 | --- | --- | --- | --- |
-| `ui.text(name: string, value: string): void` | `binette`.`ui.text` | なし | `data-text="name"` の要素の文字を `value` にする |
+| `ui.text(name: string, value: string): void` | `binette`.`ui.text` | なし | `bina-text="name"` の要素の文字を `value` にする |
 
 ソース（`packages/replique/src/index.ts`）:
 

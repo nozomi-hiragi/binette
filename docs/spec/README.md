@@ -81,7 +81,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 1. Scene が `app.json`・HTML・AS を読む（[scene.md](scene.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
 3. Scene が HTML を描き、Régie が WASM を Worker で起動する（[regie.md](regie.md)）
-4. Scene がアプリの `start()` を呼ぶ。アプリの `ui.text` は Régie を通って Scene に届き、`data-text` の要素を書き換える。`data-on-click` の要素を押すと、Scene が Régie を通してアプリの関数を呼ぶ
+4. Scene がアプリの `start()` を呼ぶ。アプリの `ui.text` は Régie を通って Scene に届き、`bina-text` の要素を書き換える。`bina-on-click` の要素を押すと、Scene が Régie を通してアプリの関数を呼ぶ
 
 保存・権限・インストール・サーバー通信・HTML の検証はまだありません。
 
