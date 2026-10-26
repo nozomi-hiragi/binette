@@ -51,7 +51,9 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 4. `failed` が来たら Worker を止め（`stop()` と同じ）、`failed` の `message` を持つ `Error` で reject する
 
 - WASM の作り方は [WASM の約束](#wasm-の約束実装済み) に合わせます
-- Worker のスクリプト自体が落ちたとき（`error` イベント）は、まだ扱っていません。そのときは解決も reject もしません
+- Worker の `error`・`messageerror`、アプリの中の例外では、アプリが終了したものとして Worker を止めます。ready 前なら起動を reject し、ready 後なら待っている call をすべて同じ Error で reject して `onExit` を 1 回呼びます。以後の call は `アプリは止まっています。` で reject します
+- `error` の文は `アプリが落ちました: <message>`。message が無ければ `アプリが落ちました。` です。`messageerror` は `アプリとのやりとりに失敗しました。` です
+- 無限ループの時間切れは未決です
 
 ### LaunchOptions
 
@@ -65,8 +67,10 @@ interface LaunchOptions {
   onItemText?: (list: string, row: number, name: string, value: string) => void;
   onItemIcon?: (list: string, row: number, app: number) => void;
   onOpen?: (i: number) => void;
-  /** アプリの中で起きたエラー（abort や、呼び出しの失敗） */
+  /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
+  /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
+  onExit?: (error: Error) => void;
   /** Worker を作る関数。省略すると Blob URL の Worker */
   createWorker?: () => RegieWorker;
   /** 起動中でも Worker を止める */
@@ -76,14 +80,15 @@ interface LaunchOptions {
 
 - `signal` が中断されたら Worker を止め、起動や呼び出しの待ちを reject する。中断済みなら Worker は作らない
 - `onText` は `text` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
-- `onError` は `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
+- `onExit` は起動後にアプリが終了したときだけ呼びます。`stop()` や `signal` では呼びません
+- `onError` は終了しない `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
 
 ### RegieWorker
 
 ```ts
 interface RegieWorker {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
+  addEventListener<K extends "message" | "error" | "messageerror">(type: K, listener: (event: K extends "error" ? ErrorEvent : MessageEvent) => void): void;
   terminate(): void;
 }
 ```
@@ -161,20 +166,20 @@ Worker → メインスレッド:
 | `item.icon` | `list: string`, `row: number`, `app: number` | 行のアイコン |
 | `apps.open` | `i: number` | アプリを開く |
 | `done` | `id: number` | `call` を呼び終えた |
-| `fail` | `id: number`, `message: string` | `call` が失敗した |
+| `fail` | `id: number`, `message: string`, `exit?: boolean` | `call` が失敗した。`exit: true` ならアプリを終了する |
 
 `fail` の `message`:
 
-| 場合 | `message` |
-| --- | --- |
-| `init` より前に `call` が来た | `アプリがまだ起動していません。` |
-| export に `name` が無いか、関数でない | `アプリに関数 <name> がありません。` |
-| アプリが `abort` した（AS の `throw` を含む） | `アプリが中断しました: <メッセージ> (<ファイル>:<行>:<列>)`。ファイル名が無ければ括弧の部分を付けない |
-| そのほかの例外（WASM の trap など） | 例外の `message` |
+| 場合 | `message` | `exit` |
+| --- | --- | --- |
+| `init` より前に `call` が来た | `アプリがまだ起動していません。` | 無し |
+| export に `name` が無いか、関数でない | `アプリに関数 <name> がありません。` | 無し |
+| アプリが `abort` した（AS の `throw` を含む） | `アプリが中断しました: <メッセージ> (<ファイル>:<行>:<列>)`。ファイル名が無ければ括弧の部分を付けない | `true` |
+| そのほかの例外（WASM の trap など） | 例外の `message` | `true` |
 
 - export に `name` があるかは `Object.hasOwn(instance.exports, name)` で確かめます
 - 起動の失敗（`failed`）になるのは、WASM のコンパイル・リンクの失敗（下の import 以外を求める WASM など）と、`_start` の中の例外です
-- `abort` のあと、アプリの状態（メモリ）はそのまま残り、次の `call` も受け付けます。続けて動かしてよいかは、まだ決めていません
+- export 関数の実行中の例外（AS の abort/throw、WASM の trap、import の例外）は `exit: true` の fail を送り、以後の call を実行しません。メイン側は Worker を止め、onError は呼ばず onExit で知らせます。未起動と関数が無い場合の fail は終了せず、onError に知らせます
 
 ## WASM の約束（実装済み）
 

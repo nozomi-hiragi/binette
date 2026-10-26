@@ -118,7 +118,7 @@ function onLoaded(value: string | null): void {
 - async / await、Promise は無い
 - クロージャ（外の変数を使う無名関数）は使えない。コールバックにはトップレベルの関数を渡す
 - アプリから DOM、ネットワーク、`console` などには直接触れない。使えるのは Réplique の呼び出しだけ（Régie がほかの import を渡さないので、使うと起動できない）
-- 例外（`throw`）は、その呼び出しを止める。Régie はそれを呼び出しの失敗として Scene に知らせる（[regie.md](regie.md#メッセージ実装済み)）
+- 例外（`throw`）は、その呼び出しを止め、アプリを終了する。Régie はそれを `onExit` で Scene に知らせる（[regie.md](regie.md#メッセージ実装済み)）
 
 ## 配布（実装済み）
 

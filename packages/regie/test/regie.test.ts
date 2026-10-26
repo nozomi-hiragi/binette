@@ -48,13 +48,13 @@ Deno.test("export の一覧を受け取り、呼び出し中の elem.text が完
   }
 });
 
-Deno.test("無い関数やアプリの中の例外は reject し、onError にも渡す", async () => {
+Deno.test("無い関数は onError に渡し、次の呼び出しを続ける", async () => {
   const errors: Error[] = [];
   const app = await launchApp(await build(source), { createWorker, onError: (error) => errors.push(error) });
   try {
     await assertRejects(() => app.call("nothing"), Error, "nothing");
-    await assertRejects(() => app.call("boom"), Error, "こわれた");
-    assertEquals(errors.length, 2);
+    await app.call("hello");
+    assertEquals(errors.length, 1);
   } finally {
     app.stop();
   }
@@ -163,41 +163,48 @@ Deno.test("Réplique の一覧、文字列返却、行の引数と起動が Work
   } finally { app.stop(); }
 });
 
-Deno.test("apps を渡さないと apps.* はすべて失敗する", async () => {
-  const app = await launchApp(await build(homeSource, true), { createWorker });
-  try {
-    for (const fn of ["count", "name", "id", "openApp"]) {
-      await assertRejects(() => app.call(fn, 0), Error, "この呼び出しはホームのアプリだけが使えます。");
-    }
-  } finally { app.stop(); }
+Deno.test("apps を渡さないと apps.* はすべてアプリを終了する", async () => {
+  const wasm = await build(homeSource, true);
+  for (const fn of ["count", "name", "id", "openApp"]) {
+    const app = await launchApp(wasm, { createWorker });
+    try { await assertRejects(() => app.call(fn, 0), Error, "この呼び出しはホームのアプリだけが使えます。"); }
+    finally { app.stop(); }
+  }
 });
 
-Deno.test("空の apps は count が 0 で、範囲外の番号は失敗する", async () => {
+Deno.test("空の apps は count が 0 で、範囲外の番号は終了する", async () => {
+  const wasm = await build(homeSource, true);
   const texts: string[] = [];
-  const app = await launchApp(await build(homeSource, true), { createWorker, apps: [], onText: (_, value) => texts.push(value) });
-  try {
-    await app.call("count");
-    assertEquals(texts, ["0"]);
-    for (const fn of ["name", "id", "openApp"]) {
-      for (const i of [-1, 0, 1]) await assertRejects(() => app.call(fn, i), Error, "アプリの番号が範囲外です。");
+  const app = await launchApp(wasm, { createWorker, apps: [], onText: (_, value) => texts.push(value) });
+  try { await app.call("count"); assertEquals(texts, ["0"]); } finally { app.stop(); }
+  for (const fn of ["name", "id", "openApp"]) {
+    for (const i of [-1, 0, 1]) {
+      const app = await launchApp(wasm, { createWorker, apps: [] });
+      try { await assertRejects(() => app.call(fn, i), Error, "アプリの番号が範囲外です。"); }
+      finally { app.stop(); }
     }
-  } finally { app.stop(); }
+  }
 });
 
-Deno.test("行とアプリの範囲外の番号は通知せず失敗する。clear 後の行も使えない", async () => {
-  const app = await launchApp(await build(homeSource, true), { createWorker, apps: [{ id: "settings", name: "設定" }] });
-  try {
-    for (const fn of ["invalidText", "invalidIcon"]) await assertRejects(() => app.call(fn, 0), Error, "行の番号が範囲外です。");
-    await app.call("start");
-    for (const fn of ["invalidText", "invalidIcon"]) {
-      for (const row of [-1, 1]) await assertRejects(() => app.call(fn, row), Error, "行の番号が範囲外です。");
-    }
-    for (const fn of ["name", "id", "openApp", "invalidIconApp"]) {
-      for (const i of [-1, 1]) await assertRejects(() => app.call(fn, i), Error, "アプリの番号が範囲外です。");
-    }
-    await app.call("clear");
-    await assertRejects(() => app.call("invalidText", 0), Error, "行の番号が範囲外です。");
-  } finally { app.stop(); }
+Deno.test("行とアプリの範囲外の番号は終了する。clear 後の行も使えない", async () => {
+  const wasm = await build(homeSource, true);
+  const cases: [string, number, boolean, boolean, string][] = [];
+  for (const fn of ["invalidText", "invalidIcon"]) {
+    cases.push([fn, 0, false, false, "行"]);
+    for (const row of [-1, 1]) cases.push([fn, row, true, false, "行"]);
+  }
+  for (const fn of ["name", "id", "openApp", "invalidIconApp"]) {
+    for (const i of [-1, 1]) cases.push([fn, i, true, false, "アプリ"]);
+  }
+  cases.push(["invalidText", 0, true, true, "行"]);
+  for (const [fn, arg, start, clear, kind] of cases) {
+    const app = await launchApp(wasm, { createWorker, apps: [{ id: "settings", name: "設定" }] });
+    try {
+      if (start) await app.call("start");
+      if (clear) await app.call("clear");
+      await assertRejects(() => app.call(fn, arg), Error, kind + "の番号が範囲外です。");
+    } finally { app.stop(); }
+  }
 });
 
 Deno.test("文字列を返す import は runtime export が無ければ失敗する", async () => {
@@ -236,4 +243,71 @@ export function start(): void {
     await app.call("start");
     assertEquals(rows, [["a", 0], ["b", 0], ["a", 1], ["a", 0], ["b", 1]]);
   } finally { app.stop(); }
+});
+
+Deno.test("アプリの例外は待つ call を終了し、onExit だけを一度呼ぶ", async () => {
+  const errors: Error[] = []; const exits: Error[] = [];
+  const app = await launchApp(await build(source), { createWorker, onError: e => errors.push(e), onExit: e => exits.push(e) });
+  const results = await Promise.allSettled([app.call("boom"), app.call("hello")]);
+  assertEquals(results.map(r => r.status), ["rejected", "rejected"]);
+  for (const result of results) {
+    assert(result.status === "rejected");
+    assertEquals(result.reason, exits[0]);
+    assert(result.reason.message.includes("こわれた"));
+  }
+  await assertRejects(() => app.call("hello"), Error, "アプリは止まっています。");
+  app.stop();
+  assertEquals(exits.length, 1); assertEquals(errors.length, 0);
+});
+
+function eventWorker() {
+  const listeners = new Map<string, (event: never) => void>();
+  let terminated = 0;
+  return {
+    get terminated() { return terminated; },
+    emit(type: string, event: unknown) { listeners.get(type)?.(event as never); },
+    createWorker: (): RegieWorker => ({
+      postMessage() {},
+      addEventListener(type, listener) { listeners.set(type, listener as (event: never) => void); },
+      terminate() { terminated++; },
+    }),
+  };
+}
+
+for (const [type, event, message] of [
+  ["error", { message: "壊れた", preventDefault() {} }, "アプリが落ちました: 壊れた"],
+  ["error", {}, "アプリが落ちました。"],
+  ["messageerror", {}, "アプリとのやりとりに失敗しました。"],
+] as const) {
+  Deno.test(type + " は起動前なら reject、起動後なら待つ call とアプリを終了する: " + message, async () => {
+    const exits: Error[] = [];
+    const early = eventWorker();
+    const launch = launchApp(new Uint8Array(), { createWorker: early.createWorker, onExit: e => exits.push(e) });
+    early.emit(type, event);
+    await assertRejects(() => launch, Error, message);
+    assertEquals(early.terminated, 1); assertEquals(exits.length, 0);
+    const worker = eventWorker();
+    const ready = launchApp(new Uint8Array(), { createWorker: worker.createWorker, onExit: e => exits.push(e) });
+    worker.emit("message", { data: { type: "ready", exports: ["hello"] } });
+    const app = await ready;
+    const calls = Promise.allSettled([app.call("hello"), app.call("hello")]);
+    worker.emit(type, event); worker.emit(type, event);
+    for (const result of await calls) {
+      assert(result.status === "rejected"); assertEquals(result.reason, exits[0]);
+    }
+    assertEquals(exits[0]!.message, message); assertEquals(exits.length, 1); assertEquals(worker.terminated, 1);
+    await assertRejects(() => app.call("hello"), Error, "アプリは止まっています。");
+  });
+}
+
+Deno.test("stop と signal は onExit を呼ばない", async () => {
+  for (const abort of [false, true]) {
+    const worker = eventWorker(); const controller = new AbortController(); const exits: Error[] = [];
+    const ready = launchApp(new Uint8Array(), { createWorker: worker.createWorker, signal: controller.signal, onExit: e => exits.push(e) });
+    worker.emit("message", { data: { type: "ready", exports: [] } });
+    const app = await ready;
+    if (abort) controller.abort(); else app.stop();
+    worker.emit("error", { message: "遅いエラー" });
+    assertEquals(exits, []); assertEquals(worker.terminated, 1);
+  }
 });

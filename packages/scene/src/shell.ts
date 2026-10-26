@@ -128,6 +128,12 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
         createWorker: options.createWorker,
         signal: session.controller.signal,
         onError: (error) => { if (active === session) report(error); },
+        async onExit(error) {
+          if (active !== session) return;
+          leave();
+          if (!atHome && home) await show(home, true);
+          report(error);
+        },
         ...(atHome ? {
           apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })),
           onOpen(i: number) {
