@@ -19,7 +19,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 - `buildApp(read, options)` は `app.json`・HTML・AS を読み、AS を WASM にビルドします。ビルドに失敗すると、asc の出力を含む `Error` になります
 - `mountApp(element, built, options)` は `element` に HTML を描き、Régie でアプリを起動します。`bina="name"` の要素はアプリの `elem("name")` で、`bina-on-click="fn"` はクリックでアプリの `fn()` につながります。export に `start` があれば呼びます。HTML の安全性の検証、CSS、保存、権限はまだありません
 
-動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene.md) にあります。
+動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene/README.md) にあります。
 
 ## デモ
 

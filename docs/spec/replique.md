@@ -21,11 +21,11 @@ export function increment(): void {
 }
 ```
 
-`./bina` は、Scene が HTML の名前から作る `bina.ts` です（[scene.md](scene.md#binats実装済み)）。中身は `export const count = elem("count");` のような行で、`elem` を直接使って `import { elem } from "jsr:@binette/replique";`・`elem("count").text = "0";` と書いても同じです。
+`./bina` は、Scene が HTML の名前から作る `bina.ts` です（[scene/bindings.md](scene/bindings.md#binats-の生成実装済み)）。中身は `export const count = elem("count");` のような行で、`elem` を直接使って `import { elem } from "jsr:@binette/replique";`・`elem("count").text = "0";` と書いても同じです。
 
-- HTML の `bina="count"` の要素を `elem("count")` で操作します。同じ名前の要素はまとめて変わります（決定 2026-10-26。[scene.md](scene.md#html-とアプリのつなぎ方)）
+- HTML の `bina="count"` の要素を `elem("count")` で操作します。同じ名前の要素はまとめて変わります（決定 2026-10-26。[scene/mount.md](scene/mount.md#html-とアプリのつなぎ方)）
 - import の指定子は `jsr:@binette/replique` です（配布は JSR だけ。決定 2026-10-26）
-- アプリは Réplique を自分では持ち込みません。ビルドする Scene が差し込みます（[scene.md](scene.md#ファイルの解決)）
+- アプリは Réplique を自分では持ち込みません。ビルドする Scene が差し込みます（[scene/build.md](scene/build.md#ファイルの解決)）
 - アプリの関数は、`export function 名前(): void` で書きます。HTML の `bina-on-click="名前"` から呼ばれます
 - `start()` は、Scene が HTML を描いて起動したあとに 1 回呼びます。無くてもかまいません
 - トップレベルの文やグローバル変数の初期値は、`start()` より前に走ります。そこで `elem(…).text` に書いてもかまいません
@@ -72,7 +72,7 @@ export function elem(name: string): Elem { return new Elem(name); }
 
 | 対象 | 権限 | 内容 |
 | --- | --- | --- |
-| `elem` | なし | `show`・`enabled`・`value` のプロパティ。`value` は入力のたびに Scene が送る値を覚えて返す（[scene.md](scene.md#読める値案)） |
+| `elem` | なし | `show`・`enabled`・`value` のプロパティ。`value` は入力のたびに Scene が送る値を覚えて返す（[scene/mount.md](scene/mount.md#読める値案)） |
 | `list` | なし | 一覧（`bina="list"` ＋ `<template>`）の行を足す・消す。行の中は `item.elem("…")` で触る |
 | `storage` | `storage` | アプリごとのキーと値の保存 |
 | `server` | `server` | 自分のサーバーサイド（Coulisses）への要求。`available()` でつながっているかを見る |

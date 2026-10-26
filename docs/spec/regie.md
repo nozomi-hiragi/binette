@@ -32,7 +32,7 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 ```
 
 - 1 つの Worker で 1 つのアプリを動かします
-- `start()` は Régie からは呼びません。呼ぶのは Scene です（[scene.md](scene.md#mountapp)）。Scene が HTML を描き終えてから呼ぶためです
+- `start()` は Régie からは呼びません。呼ぶのは Scene です（[scene/mount.md](scene/mount.md#mountapp)）。Scene が HTML を描き終えてから呼ぶためです
 - メッセージは届いた順に処理されます。呼び出し中の `text` は、その呼び出しの `done` より先に届きます
 
 ## API（実装済み）
@@ -166,7 +166,7 @@ Worker → メインスレッド:
 
 ### ビルドのしかた
 
-- AssemblyScript を `--exportStart _start` でビルドします（Scene の `buildApp` がそうする。[scene.md](scene.md#buildapp)）
+- AssemblyScript を `--exportStart _start` でビルドします（Scene の `buildApp` がそうする。[scene/build.md](scene/build.md#buildapp)）
 - `--exportStart` を付けると、トップレベルの初期化（グローバル変数の初期値、トップレベルの文）は WASM の start 節ではなく、export `_start` になります。Régie は instance を作り終えてから `_start` を呼びます。初期化の中で `elem(…).text` に書いても文字列を読めるようにするためです
 - `_start` が無い WASM も起動できます（その場合は呼ばない）
 - メモリは `memory` という名前で export されている必要があります（AS の既定）
