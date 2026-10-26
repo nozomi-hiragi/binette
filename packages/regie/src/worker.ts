@@ -12,6 +12,7 @@ export interface WorkerScope {
  * @param scope Worker の `self`、または同じスレッドで試すための `MessagePort`
  */
 export function serveApp(scope: WorkerScope): void {
+  let exited = false;
   let instance: WebAssembly.Instance | undefined;
   let apps: { id: string; name: string }[] | undefined;
   const rows = new Map<string, number>();
@@ -94,6 +95,7 @@ export function serveApp(scope: WorkerScope): void {
   const messageOf = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
   scope.addEventListener("message", async (event) => {
+    if (exited) return;
     const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; arg?: number; apps?: { id: string; name: string }[] };
     if (data.type === "init") {
       try {
@@ -110,15 +112,22 @@ export function serveApp(scope: WorkerScope): void {
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
       }
     } else if (data.type === "call") {
+      if (!instance) {
+        scope.postMessage({ type: "fail", id: data.id, message: "アプリがまだ起動していません。" });
+        return;
+      }
+      const fn = Object.hasOwn(instance.exports, data.name!) ? instance.exports[data.name!] : undefined;
+      if (typeof fn !== "function") {
+        scope.postMessage({ type: "fail", id: data.id, message: `アプリに関数 ${data.name} がありません。` });
+        return;
+      }
       try {
-        if (!instance) throw new Error("アプリがまだ起動していません。");
-        const fn = Object.hasOwn(instance.exports, data.name!) ? instance.exports[data.name!] : undefined;
-        if (typeof fn !== "function") throw new Error(`アプリに関数 ${data.name} がありません。`);
         if (data.arg === undefined) fn();
         else fn(data.arg);
         scope.postMessage({ type: "done", id: data.id });
       } catch (error) {
-        scope.postMessage({ type: "fail", id: data.id, message: messageOf(error) });
+        exited = true;
+        scope.postMessage({ type: "fail", id: data.id, message: messageOf(error), exit: true });
       }
     }
   });

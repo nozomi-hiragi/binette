@@ -3,7 +3,7 @@ import { serveApp } from "./worker.ts";
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
+  addEventListener<K extends "message" | "error" | "messageerror">(type: K, listener: (event: K extends "error" ? ErrorEvent : MessageEvent) => void): void;
   terminate(): void;
 }
 
@@ -18,8 +18,10 @@ export interface LaunchOptions {
   onItemText?: (list: string, row: number, name: string, value: string) => void;
   onItemIcon?: (list: string, row: number, app: number) => void;
   onOpen?: (i: number) => void;
-  /** アプリの中で起きたエラー（abort や、呼び出しの失敗） */
+  /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
+  /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
+  onExit?: (error: Error) => void;
   /** Worker を作る関数。省略すると Blob URL の Worker。テストでは同じスレッドの `MessageChannel` を渡す */
   createWorker?: () => RegieWorker;
   /** 起動中でも Worker を止める */
@@ -61,24 +63,33 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   let stopped = false;
   let rejectLaunch: ((error: Error) => void) | undefined;
 
-  const stop = () => {
+  const finish = (error: Error, notify: boolean) => {
     if (stopped) return;
     stopped = true;
     options.signal?.removeEventListener("abort", stop);
     worker.terminate();
-    rejectLaunch?.(new Error("アプリを止めました。"));
+    const launching = rejectLaunch;
     rejectLaunch = undefined;
-    for (const { reject } of pending.values()) reject(new Error("アプリを止めました。"));
+    launching?.(error);
+    for (const { reject } of pending.values()) reject(error);
     pending.clear();
+    if (!launching && notify) options.onExit?.(error);
   };
+  const stop = () => finish(new Error("アプリを止めました。"), false);
+  const exit = (error: Error) => finish(error, true);
 
   return new Promise<RegieApp>((resolve, reject) => {
     rejectLaunch = reject;
     options.signal?.addEventListener("abort", stop, { once: true });
     if (options.signal?.aborted) { stop(); return; }
+    worker.addEventListener("error", (event) => {
+      event.preventDefault?.();
+      exit(new Error(event.message ? `アプリが落ちました: ${event.message}` : "アプリが落ちました。"));
+    });
+    worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; id?: number; name?: string; value?: string; message?: string; exports?: string[]; list?: string; row?: number; app?: number; i?: number };
+      const data = event.data as { type: string; exit?: boolean; id?: number; name?: string; value?: string; message?: string; exports?: string[]; list?: string; row?: number; app?: number; i?: number };
       switch (data.type) {
         case "ready": {
           rejectLaunch = undefined;
@@ -99,9 +110,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "failed": {
           const error = new Error(data.message);
-          rejectLaunch = undefined;
-          stop();
-          reject(error);
+          exit(error);
           break;
         }
         case "text":
@@ -119,6 +128,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "fail": {
           const error = new Error(data.message);
+          if (data.exit) { exit(error); break; }
           options.onError?.(error);
           pending.get(data.id!)?.reject(error);
           pending.delete(data.id!);
