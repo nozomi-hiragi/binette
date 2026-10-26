@@ -78,13 +78,13 @@ examples/counter/
 | `css` | 文字列 | 任意 | 見た目の CSS のパス |
 | `as` | 文字列 | 必須 | 動きの AS のパス |
 
-- どの欄を必須にするか、`version`・`binette` を必須にするかは未決。今のコードは上の表の「必須」だけを確かめる
+- どの欄を必須にするか、`version`・`binette` を必須にするかは未決。今のコードは上の表の「必須」と、任意の `icon`・`entry.css` の型を確かめる
 - `.bina`（v0.1 の画面の定義）との関係は未決
 - 依存ライブラリの固定（lock）の形は未決
 
 ### 読み込みと検査（実装済み）
 
-`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` だけで、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
+`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` と、任意の `icon` の型で、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
 
 検査は次の順に行い、最初に見つかった誤りで止めます。誤りは `BinetteError`（`code` は `"invalid_format"`）で、`message` は次のとおりです。
 
@@ -103,8 +103,9 @@ examples/counter/
 | 11 | `entry.html` が文字列でないか、空文字列 | `entry の html にはファイルのパスを指定してください。` |
 | 12 | `entry.css` があって、文字列でない | `entry の css は文字列で指定してください。` |
 | 13 | `entry.as` が文字列でないか、空文字列 | `entry の as にはファイルのパスを指定してください。` |
+| 14 | `icon` があって、文字列でない | `icon は文字列で指定してください。` |
 
-- 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜13）で誤りになる
+- 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜14）で誤りになる
 - パスの形（`..` を含む、絶対 URL など）はまだ確かめない
 - `entry.css` は検査するが、今の Scene は読まない
 
@@ -117,7 +118,7 @@ examples/counter/
 - ユーザーが許可した権限
 - 使用量、インストール日時
 
-今のコードはインストールをしないので、何も記録しません。
+今は `AppStore` に入手元・manifest・SVG・HTML・WASM・インストール日時を保存します（[regie.md](regie.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
 
 ## インストール（案）
 
@@ -131,4 +132,10 @@ examples/counter/
 5. Régie がビルド結果と記録を保存する
 
 - 更新は同じ入手元からだけ受け付ける。権限が増えていたら、もう一度許可を求める
-- 今のコードでできるのは 1 と 2 だけ。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う。3〜5 は無い
+- 今の `mountHome` は、最初から渡されたアプリを読み、同じ入手元・ID・版が保存済みなら使い回す。無ければビルドし、`AppStore` に保存する。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う
+- 3 のクリック関数の export の確認は実装済み。HTML や権限の検証、4 の許可の画面はまだ無い。5 はビルド結果の保存だけ
+- アプリの追加方法は未決。URL からの追加、更新、削除、並べ替えはまだ無い
+
+## ホームのアイコン（実装済み）
+
+`icon` があれば `read(manifest.icon)` で SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。

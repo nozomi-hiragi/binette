@@ -2,19 +2,19 @@
 
 [仕様の目次](README.md)
 
-Régie（レジ、操作室）はカーネルです。アプリの WASM を Worker で動かし、アプリからの呼び出しを受けます。画面は持ちません。依存はありません。
+Régie（レジ、操作室）はカーネルです。アプリの WASM を Worker で動かし、アプリからの呼び出しを受けます。画面は持ちません。`@binette/core` の型を使います。
 
 ## 役割（案）
 
 - アプリの実行（Worker ＋ WASM）
 - 権限の判断。フロントの設定画面から、アプリごとに権限を取り消せる
 - アプリごとのストレージ。ほかのアプリからは読めない。容量の上限を持つ
-- インストール済みアプリの記録（[app.md](app.md#régie-が記録するもの案)）
+- インストール済みアプリの保存（実装済み。下の `AppStore`）。ハッシュや権限の記録はまだ無い
 - アプリのデータは、アプリごとにまとめて書き出せる形で持つ。バックアップのときは、それを Coulisses に送る
 - 動いているアプリの数に上限を持ち、裏に回ったアプリは止められる。状態はストレージから戻す前提にする
 - アプリは Régie が渡した呼び出ししか使えない。ネットワークや DOM に直接は触れない
 
-今のコードにあるのは、アプリの実行と、文字の書き換え（`elem.text`）の受け口だけです。
+今のコードには、アプリの実行、文字の書き換え（`elem.text`）の受け口、インストール済みアプリの保存があります。
 
 ## 実行の流れ（実装済み）
 
@@ -63,9 +63,12 @@ interface LaunchOptions {
   onError?: (error: Error) => void;
   /** Worker を作る関数。省略すると Blob URL の Worker */
   createWorker?: () => RegieWorker;
+  /** 起動中でも Worker を止める */
+  signal?: AbortSignal;
 }
 ```
 
+- `signal` が中断されたら Worker を止め、起動や呼び出しの待ちを reject する。中断済みなら Worker は作らない
 - `onText` は `text` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
 - `onError` は `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
 
@@ -194,3 +197,33 @@ const text = new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, pt
 
 - 文字列は読むだけで、Régie からアプリへ文字列を渡すことはまだありません
 - 読むたびに `memory.buffer` を取り直します（メモリが伸びると `buffer` が変わるため）
+
+## AppStore（実装済み）
+
+ビルド結果を保存します。アプリ自身が使うデータのストレージとは別です。
+
+```ts
+interface InstalledApp {
+  key: string;
+  source: string;
+  manifest: AppManifest;
+  icon: string | undefined;
+  html: string;
+  wasm: Uint8Array;
+  installedAt: number;
+}
+interface AppStore {
+  list(): Promise<InstalledApp[]>;
+  get(key: string): Promise<InstalledApp | undefined>;
+  put(app: InstalledApp): Promise<void>;
+}
+```
+
+- `installedAppKey(source, id)` は `JSON.stringify([source, id])` を返す。`key` はこれを使う。入手元と ID の区切りが衝突しない形にする
+- `icon` は SVG の文字列。無ければ `undefined`
+- `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ
+- `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
+- `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
+- `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
+
+版を比べてビルドするか決めるのは Scene の `mountHome` です。入手元の検証や権限の確認はまだしません。

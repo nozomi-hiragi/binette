@@ -44,7 +44,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | Binette | EbinaStation |
 | --- | --- |
-| フロントの実装（Régie と Scene を載せ、ホームや設定の見た目を持つ） | ebina-front |
+| フロントの実装（Régie と Scene を載せる。ホームは Binette が持ち、設定画面の持ち主は未決） | ebina-front |
 | Coulisses を WAKE と合わせて実装したもの | ebina-station（Station） |
 
 ## 層の分担（案）
@@ -53,9 +53,9 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | --- | --- |
 | core | アプリの説明ファイル（`app.json`）や形式の型と読み込み、検査 |
 | Régie | アプリの実行（Worker ＋ WASM）、権限の判断、アプリごとのストレージ、インストール済みアプリの記録、アプリからの呼び出しの受け口、データの書き出し。画面は持たない |
-| Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ |
+| Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ、ホーム |
 | Coulisses | アプリのサーバーサイド処理、バックアップの受け取り |
-| フロントの実装 | ホーム、設定、ダイアログ、インストール確認などの見た目。Régie と Coulisses の間の通信路を差し込む |
+| フロントの実装 | ダイアログ、インストール確認などの見た目。設定画面の持ち主は未決。Régie と Coulisses の間の通信路を差し込む |
 
 - 依存の向き: `core` ← `regie` ← `scene`（フロント側）、`core` ← `coulisses`（サーバー側）。`replique` は AS 用で、Régie とは「呼び出しの一覧」（[replique.md](replique.md)）という約束だけを共有する
 - Binette は WAKE に依存しない。Régie と Coulisses の間の通信路はフロントの実装が渡す。EbinaStation ではそこに WAKE が入る
@@ -66,7 +66,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | パッケージ | 依存 |
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0`（npm） |
-| `@binette/regie` | なし（core も使っていない） |
+| `@binette/regie` | `@binette/core`（型だけ） |
 | `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`（npm）、`@b-fuze/deno-dom@0.1.56`（書き出しコマンドだけ） |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
@@ -79,14 +79,16 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 ## v0.2 の最小限の土台（実装済み）
 
-今のコードでできるのは、カウンターのアプリ 1 つ（[examples/counter](../../examples/counter)）をブラウザの中でビルドして動かすところまでです。
+ホームは Binette が持ちます（決定）。今は、最初から渡したカウンターとハローを並べ、1 つずつ開いて戻れます（[scene/home.md](scene/home.md)）。設定画面の持ち主は未決です。
+
+ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。初回の流れは次のとおりです。
 
 1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
 3. Scene が HTML を描き、Régie が WASM を Worker で起動する（[regie.md](regie.md)）
 4. Scene がアプリの `start()` を呼ぶ。アプリが `elem("名前").text` に書くと、Régie を通って Scene に届き、`bina="名前"` の要素をまとめて書き換える。`bina-on-click` の要素を押すと、Scene が Régie を通してアプリの関数を呼ぶ
 
-保存・権限・インストール・サーバー通信・HTML の検証はまだありません。
+ビルド結果の保存は実装済みです。権限の確認・サーバー通信・HTML の検証はまだありません。
 
 ## v0.1 から変わること（案）
 
