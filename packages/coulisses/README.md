@@ -1,6 +1,6 @@
 # @binette/coulisses
 
-ビネットとファイルの一式（パノプリ）を、標準の Fetch API の形で配ります。依存は `@binette/core` だけです。決まりは [仕様のパノプリの節](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec.md#パノプリ) にあります。
+ビネットとファイルの一式（パノプリ）を、標準の Fetch API の形で配ります。依存は `@binette/core` だけです。決まりは [仕様のパノプリの節](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/coulisses.md#パノプリv01) にあります。
 
 ```ts
 import { createCoulisses, createPanoplie } from "@binette/coulisses";

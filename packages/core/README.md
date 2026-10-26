@@ -14,3 +14,5 @@ const app = parseAppManifest(await readFile("app.json", "utf8")); // id・name�
 
 ルートで `npm install` 後、`npm run typecheck -w @binette/core` で型検査します。
 アプリのビルドと再生のデモは `npm run demo -w @binette/scene`、v0.1 の配信のデモは `npm run demo -w @binette/coulisses` で起動します。
+
+仕様は [docs/spec/core.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/core.md) にあります。

@@ -15,3 +15,5 @@ app.stop();
 - Worker は、`serveApp` の `toString()` から作る Blob URL の Worker です。テストでは `createWorker` に同じスレッドの `MessageChannel` と `serveApp` をつないだものを渡せます
 
 ルートで `npm install` 後、`npm test -w @binette/regie` でテストします。
+
+仕様は [docs/spec/regie.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/regie.md) にあります。

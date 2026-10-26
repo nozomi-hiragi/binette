@@ -5,7 +5,7 @@
 > [!WARNING]
 > **設計中です。** 仕様はまだ固まっていません。v0.2 は、カウンターのアプリ 1 つを動かすところまでの最小限の土台です。
 
-仕様は [docs/spec.md](docs/spec.md) にあります。
+仕様は [docs/spec/](docs/spec/README.md) にあります。
 
 ## 構成
 
