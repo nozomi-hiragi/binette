@@ -1,5 +1,4 @@
 // CHANGELOG の日付付きの見出しを確かめ、GitHub Release に載せる本文を取り出す。
-import { readFileSync, writeFileSync } from "node:fs";
 
 export function releaseNotes(changelog: string, version: string): string {
   if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
@@ -30,8 +29,8 @@ if (import.meta.main) {
     Deno.exit(1);
   } else {
     try {
-      const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
-      writeFileSync(outFile, releaseNotes(changelog, version));
+      const changelog = Deno.readTextFileSync(new URL("../CHANGELOG.md", import.meta.url));
+      Deno.writeTextFileSync(outFile, releaseNotes(changelog, version));
     } catch (error) {
       console.error(error instanceof Error ? error.message : error);
       Deno.exit(1);

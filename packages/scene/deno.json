@@ -9,7 +9,8 @@
     "@binette/core": "jsr:@binette/core@0.1.0",
     "@binette/regie": "jsr:@binette/regie@0.1.0",
     "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
-    "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@0.1.56"
+    "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@0.1.56",
+    "@std/path": "jsr:@std/path@^1.1.6"
   },
   "publish": {
     "include": [
