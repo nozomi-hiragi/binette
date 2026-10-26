@@ -13,6 +13,6 @@ const app = parseAppManifest(await readFile("app.json", "utf8")); // id・name�
 ```
 
 テストと型検査は、ルートの `deno task test` と `deno task check` で行います。
-アプリのビルドと再生のデモは `deno task demo:scene`、v0.1 の配信のデモは `deno task demo:coulisses` で起動します。
+単独フロントは `deno task start`、v0.1 の配信のデモは `deno task demo:coulisses` で起動します。
 
 仕様は [docs/spec/core.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/core.md) にあります。

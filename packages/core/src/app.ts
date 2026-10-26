@@ -20,7 +20,7 @@ const entrySchema = v.pipe(
   }),
 );
 
-// 検査するのは id・name・entry だけ。ほかの欄は検査せず、そのまま残す
+// ほかの欄は検査せず、そのまま残す
 const appManifestSchema = v.pipe(
   objectValue("app.json はオブジェクトで指定してください。"),
   required("id", "id を指定してください。"),
@@ -30,6 +30,8 @@ const appManifestSchema = v.pipe(
     id: nonempty("id を指定してください。"),
     name: nonempty("name を指定してください。"),
     entry: entrySchema,
+    icon: v.optional(v.string("icon は文字列で指定してください。")),
+    role: v.optional(v.string("role は文字列で指定してください。")),
   }),
 );
 
@@ -49,7 +51,7 @@ export interface AppEntry {
   as: string;
 }
 
-/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry` だけを検査する */
+/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry`・`icon`・`role` を検査する */
 export interface AppManifest {
   /** アプリの ID。Régie は「入手元 ＋ ID」で区別する */
   id: string;
@@ -63,6 +65,8 @@ export interface AppManifest {
   description?: string;
   /** アイコン（SVG のパス） */
   icon?: string;
+  /** システムアプリの役割。ホームは home */
+  role?: string;
   /** 入口の HTML・CSS・AS */
   entry: AppEntry;
   /** 使う権限と、その用途の説明 */
@@ -77,7 +81,7 @@ export interface AppManifest {
 
 /**
  * `app.json` の中身を JSON として読み、検査する。正しければ {@link AppManifest} として返す。
- * 検査するのは `id`・`name`・`entry` だけで、ほかの欄はそのまま残す。
+ * 検査するのは `id`・`name`・`entry`・`icon`・`role` で、ほかの欄はそのまま残す。
  *
  * @param text `app.json` の中身の文字列
  * @throws {BinetteError} JSON として読めないときや、形式が正しくないとき

@@ -6,14 +6,23 @@ Deno 2.9 以上で、ルートから実行します。npm と Node は使いま�
 
 ```sh
 deno task check          # 全パッケージの型検査（replique は asc で AS として検査）
+deno task build          # dist に静的フロントを書き出す
 deno task test           # バージョンの検査とテスト
 deno task check-pack     # JSR に出すファイルだけを写し、別の利用者として動かして試す
 deno publish --dry-run   # JSR への公開の予行
 ```
 
-ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。デモの Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
+ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
 
 Deno のコードでは `node:` のモジュールを使いません。ファイルは `Deno.readTextFile` などの Deno の API と `@std/fs`・`@std/path` で、サーバーは `Deno.serve` で扱います。
+
+## Binette の開発
+
+`deno task start` で設定アプリの `.binapp` を生成してから Vite を http://localhost:5175/ に起動します。`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを自動で見つけ、`.binapp/` に書き出します。フォルダを足すだけで増え、消すと古い `.binapp` も消えます。`deno task gen:bindings` は全システムアプリの `bina.ts` を生成します。`.binapp` と `dist/` はソースから再生成できる生成物なのでコミットしません。`deno task build` は相対 URL で動く静的ファイルを生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、asc を配布しません。
+
+入口は直下の `index.html`・`vite.config.ts` と `src/main.ts` です。書き出しとホームの表示は、フォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。並び順と並べ替えの仕様は未決です。`deno task check` は生成物が無くても通り、`deno task test` は `dist/` と `.binapp/` を除外します。
+
+設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。ホームもシステムアプリ `apps/home`（`"role": "home"`）です。Scene の `mountShell` がホームを開き、ホームが開いたアプリの上に「戻る」の帯を出します。
 
 ## バージョンの決め方
 

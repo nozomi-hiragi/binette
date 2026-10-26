@@ -87,7 +87,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const stderr = asc.createMemoryStream();
   let wasm: Uint8Array | undefined;
   // 初期化を instantiate の中で走らせず、Régie が _start で呼ぶ
-  const { error } = await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
+  const { error } = await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
     readFile: async (name) => {
       const path = appPath(name);
       if (path === null) return null;
@@ -108,7 +108,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   }
   const module = await WebAssembly.compile(wasm as Uint8Array<ArrayBuffer>);
   const functions = new Set(WebAssembly.Module.exports(module).filter((item) => item.kind === "function").map((item) => item.name));
-  const missing = bindings.clicks.filter((name) => !functions.has(name));
+  const missing = [...new Set([...bindings.clicks, ...Object.values(bindings.lists).flatMap((list) => list.clicks)])].filter((name) => !functions.has(name));
   if (missing.length) throw new Error(`アプリをビルドできません。クリックで呼ぶ関数が export にありません: ${missing.join("、")}`);
   return { manifest, html, wasm, bindings };
 }

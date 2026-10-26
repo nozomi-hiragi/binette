@@ -10,8 +10,9 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 - AS のビルドと検証（[app.md のインストール](../app.md#インストール案)の 2 と 3）
 - HTML をフロントの画面の中に描き、アプリとつなぐ。アプリの領域は枠の外に出られないようにする
 - 起動すると、アプリの `start()` を呼ぶ
+- ホームを起動し、アプリを 1 つずつ開いて戻る枠を持つ（実装済み）
 
-今のコードにあるのは、読む・ビルドする・描いてつなぐ・`start()` を呼ぶ、だけです。検証はまだありません。
+読み込み・ビルド・描画・ホームは実装済みです。HTML や権限の検証はまだありません。
 
 ## 公開するもの（実装済み）
 
@@ -22,10 +23,12 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | `parseBindings` | 関数 | HTML から `bina` の名前と `bina-on-click` の関数名を集める |
 | `generateBindingsSource` | 関数 | 名前から `bina.ts`（AS のソース）を作る |
 | `mountApp` | 関数 | HTML を描き、アプリを起動してつなぐ |
+| `mountShell` | 関数 | 保存し、ホームとアプリを開いて戻る枠を描く |
 | `Compiler`・`CompilerStream` | 型 | asc のうち、Scene が使う分 |
 | `BuildOptions`・`BuiltApp` | 型 | `buildApp` の設定と結果 |
 | `HtmlParser`・`Bindings`・`BindingKind` | 型 | `parseBindings` の入力と結果 |
 | `MountOptions`・`MountedApp` | 型 | `mountApp` の設定と結果 |
+| `ShellApp`・`ShellOptions`・`MountedShell` | 型 | `mountShell` の設定と結果 |
 
 ほかに、書き出しコマンド `jsr:@binette/scene/cli`（`writeBindings`）があります（[bindings.md](bindings.md#書き出しコマンド実装済み)）。
 
@@ -36,13 +39,14 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | --- | --- |
 | [build.md](build.md) | `loadCompiler`・`buildApp`。asc の呼び方と、ファイルの解決 |
 | [bindings.md](bindings.md) | HTML の名前の木（`parseBindings`）と、`bina.ts` の生成、書き出しコマンド |
+| [shell.md](shell.md) | `mountShell`。保存、ホームの選択、起動と戻る、CSS 変数 |
 | [mount.md](mount.md) | `mountApp`。HTML とアプリのつなぎ方、読める値、止める操作 |
 
-## デモ（実装済み）
+## 単独フロント（実装済み）
 
-`deno task demo:scene` で、Vite の dev サーバーを Deno から http://localhost:5175/ に起動します。
+Scene を載せる Binette の入口はリポジトリ直下にあります（[全体の方針](../README.md#単独で起動できるフロント決定)）。`deno task start` で http://localhost:5175/ に起動し、`deno task build` で静的ファイルを書き出します。
 
-- ワークスペースのパッケージ（`@binette/core`・`@binette/regie`・`@binette/scene`）は、Vite の `resolve.alias` でソースに向けています
-- Vite の `publicDir` をリポジトリの `examples/` にしてあり、`/counter/app.json` などを GET で取ります
-- Réplique のソースは `packages/replique/src/index.ts?raw` で読み、`libraries` に渡します
-- `loadCompiler()` と `buildApp()` の時間を別々に測って出します
+- ワークスペースのパッケージは Vite の `resolve.alias` でソースを読みます
+- `apps/` のシステムアプリを `.binapp/` に書き出し、`src/main.ts` の `import.meta.glob("../.binapp/*.binapp", { query: "?url", import: "default", eager: true })` で同梱し、`mountShell` に `prebuilt` として渡します
+- 保存は IndexedDB を使い、ブラウザでは asc を読みません
+- Vite の `base: "./"` でサブパス配信に対応します

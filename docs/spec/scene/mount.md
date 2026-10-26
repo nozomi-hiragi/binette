@@ -10,6 +10,10 @@ interface MountOptions {
   onError?: (error: unknown) => void;
   /** Worker を作る関数。省略すると Régie の Blob URL の Worker */
   createWorker?: LaunchOptions["createWorker"];
+  /** 起動中でもアプリを止める */
+  signal?: AbortSignal;
+  apps?: { id: string; name: string; icon?: string }[];
+  onOpen?: (i: number) => void;
 }
 interface MountedApp {
   /** Régie で動いているアプリ */
@@ -28,6 +32,8 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 6. `{ app, stop }` で解決する
 
 - 起動（3）に失敗したら、そのエラーで reject します。描いた HTML はそのまま残ります
+- `signal` の中断でもアプリとリスナーを止める。起動中なら reject する
+- クリックのリスナーは起動（3）が済んでから付けます。HTML を描いてから起動が済むまでのクリックは捨てます
 - `stop()` はリスナーを外し、`app.stop()` を呼びます。描いた HTML は消しません
 - DOM はグローバルの `document` を使わず、`element` から辿ります（テストで happy-dom の要素を渡すため）。描画とクリックのテストは happy-dom（MIT、テストだけの依存）で行います。deno-dom には `style` が無く、`click` のイベントも届かないためです
 
@@ -54,16 +60,23 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 | `bina="name"` | `elem("name").show = true` | 表示・非表示 | 案 |
 | `bina="name"` | `elem("name").enabled = false` | 有効・無効 | 案 |
 | `bina="name"` | `elem("name").value` | 入力欄の値の読み書き | 案 |
-| `bina="list"` ＋ `<template>` | `list("list").add()` などで行を足し、行から `item.elem("…")` | 一覧の繰り返し | 案 |
+| `<template bina="list">` | `list("list").add()`・`clear()`、`item.elem("…").text` | 一覧の繰り返し | 実装済み（形は案） |
+| 行の `img[bina-icon]` | `item.icon(i)` | OS がアイコンを画像に入れる | 実装済み（形は案） |
 | `bina-on-input="fn"` | `export function fn(value: string): void` | 入力で `fn(値)` | 案 |
 | `bina-on-submit="fn"` | `export function fn(): void` | 送信で `fn()`（ページ移動はしない） | 案 |
 
-- 一覧の中のイベントは、その行のキーを引数で渡す（案）
+一覧の行（実装済み、形は案）:
+
+- `list.add` は `template.content` を写し、template の兄弟として最後の行の後ろに足す。行番号は Worker が 0 から数える。`list.clear` で全行を消す
+- `item.text` は指定した一覧・行の中だけで `bina` の名前を探し、`textContent` を変える。行の外や別の行には届かない
+- 行の `bina-on-click` は `app.call(fn, row)` で i32 の行番号を渡す。行の外は引数なし
+- `item.icon(i)` は行の `img[bina-icon]` の src に OS の SVG を `data:image/svg+xml;charset=utf-8,` ＋ `encodeURIComponent` で入れる。SVG を innerHTML に入れず、任意の URL を渡す道も作らない
+- `apps` はホーム用の一覧。Régie へは id と name だけを渡し、icon は Scene に置く。`apps.open(i)` は `onOpen(i)` に知らせる
 
 `bina="name"`（実装済み）:
 
-- アプリが `elem(name).text = value` と書くと、Régie から Scene に届き、`element` の中の `bina` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
-- 一致する要素が無ければ何もしません。HTML に最初から書いた文字（カウンターの `0` など）は、アプリが書くまでそのまま出ます
+- アプリが `elem(name).text = value` と書くと、Régie から Scene に届き、`element` の中の、一覧の行と template を除く `bina` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
+- 一致する要素が無ければ何もしません。HTML に最初から書いた文字（`0` など）は、アプリが書くまでそのまま出ます
 - `element` の外にある、同じ名前の要素は変えません
 
 `bina-on-click`（実装済み）:
@@ -90,7 +103,7 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 ### まだしていないこと
 
-- HTML の検証（`<script>`・`on*` 属性・外部 URL が無いこと、`bina-on-*` の名前が export にあること）。今は `innerHTML` にそのまま入れます。`<script>` は `innerHTML` では実行されませんが、`on*` 属性は動きます
+- HTML の検証（`<script>`・`on*` 属性・外部 URL が無いこと）。今は `innerHTML` にそのまま入れます。`<script>` は `innerHTML` では実行されませんが、`on*` 属性は動きます
 - `entry.css` の読み込みと、テーマの CSS 変数
 - Shadow DOM などでの、フロントの CSS とアプリの CSS の分離
 

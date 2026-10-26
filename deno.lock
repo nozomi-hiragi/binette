@@ -396,6 +396,11 @@
           "jsr:@std/path@^1.1.6"
         ]
       },
+      "packages/regie": {
+        "dependencies": [
+          "jsr:@binette/core@0.1.0"
+        ]
+      },
       "packages/scene": {
         "dependencies": [
           "jsr:@b-fuze/deno-dom@0.1.56",

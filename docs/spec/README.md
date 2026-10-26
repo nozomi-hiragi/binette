@@ -16,6 +16,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | [regie.md](regie.md) | `@binette/regie`。アプリの実行（Worker ＋ WASM） |
 | [scene/](scene/README.md) | `@binette/scene`。アプリのビルド（[build.md](scene/build.md)）、HTML の名前の木（[bindings.md](scene/bindings.md)）、画面への描画（[mount.md](scene/mount.md)） |
 | [replique.md](replique.md) | `@binette/replique`。アプリが Régie を呼ぶためのライブラリ（AS） |
+| [apps/](apps/README.md) | システムアプリ（OS と一緒に配るアプリ）。ホーム（[home.md](apps/home.md)）、設定（[settings.md](apps/settings.md)） |
 | [coulisses.md](coulisses.md) | `@binette/coulisses`。サーバー側（今は v0.1 のまま） |
 
 ## 方針（決定）
@@ -44,8 +45,16 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | Binette | EbinaStation |
 | --- | --- |
-| フロントの実装（Régie と Scene を載せ、ホームや設定の見た目を持つ） | ebina-front |
+| フロントの実装（Régie と Scene を載せる。ホームと設定は Binette が持つ） | ebina-front |
 | Coulisses を WAKE と合わせて実装したもの | ebina-station（Station） |
+
+## 単独で起動できるフロント（決定）
+
+Binette は単独で起動できます。入口はリポジトリ直下の `index.html`・`vite.config.ts` と `src/main.ts` です。Régie と Scene を載せます。
+
+`deno task start` で開発用に起動し、`deno task build` で `dist/` に静的ファイルを書き出します。システムアプリの設定はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
+
+ホームと設定は、OS と一緒に配るシステムアプリとして Binette が持ちます（決定）。置き場所はリポジトリ直下の `apps/` で、フォルダを足すだけで増えます。配り方と未決のことは [apps/](apps/README.md)、それぞれの仕様は [apps/home.md](apps/home.md) と [apps/settings.md](apps/settings.md) にあります。
 
 ## 層の分担（案）
 
@@ -53,9 +62,9 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | --- | --- |
 | core | アプリの説明ファイル（`app.json`）や形式の型と読み込み、検査 |
 | Régie | アプリの実行（Worker ＋ WASM）、権限の判断、アプリごとのストレージ、インストール済みアプリの記録、アプリからの呼び出しの受け口、データの書き出し。画面は持たない |
-| Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ |
+| Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ、アプリを開いて戻る枠 |
 | Coulisses | アプリのサーバーサイド処理、バックアップの受け取り |
-| フロントの実装 | ホーム、設定、ダイアログ、インストール確認などの見た目。Régie と Coulisses の間の通信路を差し込む |
+| フロントの実装 | ダイアログ、インストール確認などの見た目。設定はシステムアプリ `apps/settings` が持つ。Régie と Coulisses の間の通信路を差し込む |
 
 - 依存の向き: `core` ← `regie` ← `scene`（フロント側）、`core` ← `coulisses`（サーバー側）。`replique` は AS 用で、Régie とは「呼び出しの一覧」（[replique.md](replique.md)）という約束だけを共有する
 - Binette は WAKE に依存しない。Régie と Coulisses の間の通信路はフロントの実装が渡す。EbinaStation ではそこに WAKE が入る
@@ -66,7 +75,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | パッケージ | 依存 |
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0`（npm） |
-| `@binette/regie` | なし（core も使っていない） |
+| `@binette/regie` | `@binette/core`（型だけ） |
 | `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`（npm）、`@b-fuze/deno-dom@0.1.56`（書き出しコマンドだけ） |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
@@ -79,14 +88,16 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 ## v0.2 の最小限の土台（実装済み）
 
-今のコードでできるのは、カウンターのアプリ 1 つ（[examples/counter](../../examples/counter)）をブラウザの中でビルドして動かすところまでです。
+ホームは Binette が持ちます（決定）。今は設定アプリを並べ、開いて戻れます（[scene/shell.md](scene/shell.md)）。設定は `apps/settings` が持ち、設定の項目と読み書きの呼び出しは未決です。
+
+シェルは同じ入手元・ID・版のビルド結果を保存して使い回します。Binette はシステムアプリのプリビルド結果を、入手元 `binette:system` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 
 1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
 3. Scene が HTML を描き、Régie が WASM を Worker で起動する（[regie.md](regie.md)）
 4. Scene がアプリの `start()` を呼ぶ。アプリが `elem("名前").text` に書くと、Régie を通って Scene に届き、`bina="名前"` の要素をまとめて書き換える。`bina-on-click` の要素を押すと、Scene が Régie を通してアプリの関数を呼ぶ
 
-保存・権限・インストール・サーバー通信・HTML の検証はまだありません。
+ビルド結果の保存は実装済みです。権限の確認・サーバー通信・HTML の検証はまだありません。
 
 ## v0.1 から変わること（案）
 

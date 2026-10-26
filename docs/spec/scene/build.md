@@ -61,7 +61,7 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 4. HTML と AS を並べて読む
 5. HTML を `parseBindings` で読み（名前の誤りは `Error`）、`generateBindingsSource` で `bina.ts` のソースを作る（詳しくは [bindings.md](bindings.md)）
 6. asc で AS を WASM にビルドする（下の「asc の呼び方」と「ファイルの解決」）
-7. WASM を `WebAssembly.compile` し、`bindings.clicks` の関数名がすべて export された関数にあるか確かめる。無ければ `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>` の `Error`
+7. WASM を `WebAssembly.compile` し、`bindings.clicks` と各 `bindings.lists` の `clicks` の関数名がすべて export された関数にあるか確かめる。無ければ `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>` の `Error`
 8. `{ manifest, html, wasm, bindings }` を返す
 
 - `read` が reject したら、そのまま reject します
@@ -72,13 +72,14 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 ### asc の呼び方
 
 ```ts
-await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start"], {
+await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
   readFile, writeFile, listFiles: () => [], stdout, stderr,
 });
 ```
 
 - 入口には、整えた `entry.as` のパス（例 `src/main.ts`）をそのまま渡します。asc の誤りの出力にも、そのパスが出ます
 - `--exportStart _start` は、トップレベルの初期化を Régie が instance を作ったあとに走らせるためです（[regie.md](../regie.md#ビルドのしかた)）
+- `--exportRuntime` は、Régie が `__new` で AS の文字列を確保して返すためです
 - ランタイムは asc の既定（`incremental`）です
 - `writeFile` は `main.wasm` の中身（`Uint8Array`）だけを受け取り、ほかは捨てます
 - 標準ライブラリは asc に入っているので、`readFile` で返す必要はありません
@@ -106,3 +107,25 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 - `libraries` に無い指定子は解決できず、ビルドの誤りになります
 - Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Scene が JSR から取って差し込む（案。[app.md](../app.md#インストール案)）
 
+## 書き出し（実装済み）
+
+システムアプリは、1 アプリ 1 ファイルの `.binapp`（JSON）にします。
+
+| 欄 | 内容 |
+| --- | --- |
+| `format` | `"binette-app"` |
+| `version` | 形式の版 `"0.2"` |
+| `manifest` | app.json のオブジェクト |
+| `html` | HTML の文字列 |
+| `icon` | SVG の文字列。無ければ欄なし |
+| `wasm` | WASM のバイト列を base64 にした文字列 |
+
+公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; icon?: string; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
+
+```sh
+deno run -A packages/scene/src/cli.ts build apps/settings --out .binapp/settings.binapp --replique packages/replique/src/index.ts
+```
+
+CLI は deno-dom の parser で `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはホームと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の `cli.ts <アプリのフォルダ>` による bina.ts の生成も残ります。
+
+`deno task build:system`（`scripts/build-system.ts`）は `apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/<フォルダ名>.binapp` に書き出します。app.json の無いフォルダは無視します。古い `.binapp` は書き出す前に消し、失敗時はフォルダ名を出して終了コード 1 にします。フォルダ名は UTF-16 コード単位の辞書順（`<`・`>`）で比べます。このフォルダは gitignore に入れ、生成物はコミットしません。`deno task start` と `deno task build` は先にこのタスクを実行します。Binette は Vite の `import.meta.glob` で同梱した `.binapp` を fetch し、ブラウザでは asc を読みません。

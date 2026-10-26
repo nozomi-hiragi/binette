@@ -73,6 +73,7 @@ interface Bindings {
   elements: Record<string, { count: number; kinds: BindingKind[] }>;
   /** クリックで呼ぶ関数名（重複なし、出てきた順） */
   clicks: string[];
+  lists: Record<string, { elements: Bindings["elements"]; clicks: string[] }>;
 }
 
 function parseBindings(html: string, parser: HtmlParser): Bindings
@@ -82,7 +83,7 @@ function parseBindings(html: string, parser: HtmlParser): Bindings
 
 1. `parser.parseFromString(html, "text/html")` で文書にする
 2. `document.querySelectorAll("[bina], [bina-on-click]")` の要素を、文書の順に 1 つずつ見る
-3. 要素が `bina` 属性を持てば（値が空でも「持つ」とみなす）:
+3. template は下の「template の一覧」として扱う。それ以外の要素が `bina` 属性を持てば（値が空でも「持つ」とみなす）:
    1. 名前を検査する（下の「名前の規則」。`bina` の名前として）
    2. 種類を作る。`tag` は `tagName` を小文字にしたもの。`tag` が `input` なら、`type` を `type` 属性の値を小文字にしたもの（属性が無ければ `"text"`）にする。`input` 以外は `type` を持たない
    3. `elements[名前]` が無ければ `{ count: 0, kinds: [] }` を作る。`count` を 1 増やす
@@ -121,6 +122,20 @@ function parseBindings(html: string, parser: HtmlParser): Bindings
 }
 ```
 
+## template の一覧（実装済み、形は案）
+
+`<template bina="tiles">` は `elements` に入れず、`lists.tiles` に入れます。`template.content` の `bina` と `bina-on-click` は、その一覧の行の名前として集めます。トップレベルの名前とは分け、行の名前は bina.ts に export しません。
+
+```html
+<template bina="tiles">
+  <button bina-on-click="openApp"><img bina-icon alt=""><span bina="name"></span></button>
+</template>
+```
+
+生成する行は `export const tiles = list("tiles");` です。import は `elem, list` で、要素名と一覧名を合わせて文字コード順に並べます。同名の一覧、要素と一覧の名前の重複、一覧の入れ子は誤りです。行のクリック関数も WASM の export にあるか名前を確かめます。アプリでは `export function openApp(row: i32): void` と書きます。引数の型や個数は検査しません。
+
+deno-dom・happy-dom・ブラウザでは template の内容は `template.content` から辿ります。文書の querySelectorAll だけでは行の中を集められません。
+
 ## 名前の規則（実装済み）
 
 `bina` の名前は `bina.ts` の `export const 名前` になり、`bina-on-click` の名前はアプリの `export function 名前` を指します。どちらも AS の識別子として使える名前でなければなりません。
@@ -132,7 +147,7 @@ function parseBindings(html: string, parser: HtmlParser): Bindings
 | 1 | `/^[A-Za-z_$][A-Za-z0-9_$]*$/` に合わない（空、数字始まり、`-` や日本語を含む など） | 両方 | `AS の識別子の形ではありません` |
 | 2 | 予約語・文脈キーワード・型名（下） | 両方 | `予約語または型名です` |
 | 3 | `__` で始まる | 両方 | `__ で始まる名前は自動生成用です` |
-| 4 | `elem` | `bina` だけ | `elem は自動生成ファイルの import に使います` |
+| 4 | `elem` または `list` | `bina` だけ | `elem と list は自動生成ファイルの import に使います` |
 | 5 | `_start` | `bina-on-click` だけ | `_start はビルドの初期化に使います` |
 
 誤りの文言は `<対象> の名前「<名前>」は使えません。<理由の文言>。` です。`<対象>` は `bina` か `bina-on-click` です。
@@ -151,8 +166,8 @@ function generateBindingsSource(bindings: Bindings): string
 ```
 
 1. 1 行目: `// bina.ts（HTML から自動生成。手で書き換えない）`
-2. 2 行目: `import { elem } from "jsr:@binette/replique";`
-3. `elements` に名前があれば、空行を 1 つ置き、名前を `Array.prototype.sort()` の順（文字コード順。大文字が小文字より先）に並べて、1 つにつき `export const <名前> = elem("<名前>");` の 1 行
+2. 2 行目: `import { elem, list } from "jsr:@binette/replique";`
+3. `elements` と `lists` の名前を合わせ、空行を 1 つ置き、`Array.prototype.sort()` の順（文字コード順）に並べる。要素は `export const <名前> = elem("<名前>");`、一覧は `export const <名前> = list("<名前>");` の 1 行
 4. 行を `\n` でつなぎ、最後に `\n` を 1 つ足す
 
 - 名前が 0 個なら、1 と 2 の 2 行だけです（import は残します。AS は使っていない import を誤りにしません）
@@ -163,7 +178,7 @@ function generateBindingsSource(bindings: Bindings): string
 
 ```ts
 // bina.ts（HTML から自動生成。手で書き換えない）
-import { elem } from "jsr:@binette/replique";
+import { elem, list } from "jsr:@binette/replique";
 
 export const a = elem("a");
 export const z = elem("z");
@@ -193,7 +208,7 @@ export function start(): void {
    - `entry.as` 自体がそのパスなら `entry.as に bina.ts という名前は使えません。bina.ts は HTML から自動生成するファイルです。`（生成物で入口を上書きしてしまうため）
 2. HTML を `parseBindings` で木にし、`generateBindingsSource` でソースを作る
 3. asc が生成した `bina.ts` のパスを読みに来たら、生成したソースを返す。アプリのフォルダに `bina.ts` があっても、`read` では読まない
-4. ビルドのあと、WASM を `WebAssembly.compile` し、`WebAssembly.Module.exports` のうち関数の名前を集める。`clicks` のうち、そこに無い名前があれば `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>`（`、` 区切り）
+4. 各一覧の `clicks` も合わせて、ビルドのあと、WASM を `WebAssembly.compile` し、`WebAssembly.Module.exports` のうち関数の名前を集める。`clicks` のうち、そこに無い名前があれば `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>`（`、` 区切り）
 5. 結果の `BuiltApp` に `bindings` を入れて返す
 
 ビルドの誤りになる例:
@@ -223,7 +238,7 @@ deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
 - 引数が 1 つでなければ `bina.ts を書き出せません。アプリのフォルダを 1 つ指定してください。`
 - 関数としても使えます: `writeBindings(dir: string): Promise<string>`（書いたパスを返す。誤りは `Error`）。`import { writeBindings } from "jsr:@binette/scene/cli"`
 - scene の `deno.json` の `exports` に `"./cli": "./src/cli.ts"` があります
-- このリポジトリでは `deno task gen:counter` で `examples/counter/src/bina.ts` を書き出します
+- このリポジトリでは `deno task gen:bindings` で全システムアプリの `bina.ts` を書き出します
 
 ### 運用（案）
 
@@ -231,7 +246,7 @@ deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
 - 書き出した `bina.ts` は、アプリのリポジトリにコミットする。エディタで補完が効くように
 - HTML を変えたら、書き出しコマンドを実行し直す
 - ビルドはいつも HTML から作り直すので、コミットした `bina.ts` が古くても、ビルドの結果は変わらない。古いと補完がずれるだけ
-- このリポジトリでは、`examples/counter/src/bina.ts` が HTML から作ったものと一致するかを、テストで確かめている
+- このリポジトリでは、`apps/settings/src/bina.ts` が HTML から作ったものと一致するかを、テストで確かめている
 
 ## これから（案）
 
@@ -261,21 +276,9 @@ export const count = new TextElem("count");  // p、span など
 - 両方に使える操作だけを持つ型にする（上の例なら `text` だけ）
 - ビルドの誤りにする
 
-### 一覧の入れ子
+### 一覧の入れ子（未決）
 
-一覧（`bina-each` にあたるもの）を入れるときに、木に入れ子を持たせます。
-
-```html
-<ul bina="memos">
-  <template>
-    <li><span bina="title"></span><button bina-on-click="remove">消す</button></li>
-  </template>
-</ul>
-```
-
-- 行の中の名前（`title`）は、一覧（`memos`）の下の木にする。行の外の名前とは別の名前空間にする
-- 行の中のクリックは、その行のキーを引数で渡す
-- `bina.ts` には、一覧の型と、行の型を出す
+一覧の中に一覧はまだ置けません。入れ子の形は未決です。
 
 ### 描画で木から引く
 

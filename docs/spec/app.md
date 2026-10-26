@@ -19,11 +19,12 @@ src/
 - ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[scene/build.md](scene/build.md#ファイルの解決)）
 
-例: [examples/counter](../../examples/counter)
+例: [apps/settings](../../apps/settings)
 
 ```
-examples/counter/
+apps/settings/
   app.json
+  icon.svg
   src/index.html
   src/main.ts
   src/bina.ts
@@ -65,6 +66,7 @@ examples/counter/
 | `name` | 文字列 | 必須 | 表示名 |
 | `description` | 文字列 | 任意 | 説明 |
 | `icon` | 文字列 | 任意 | アイコンのパス。SVG 1 枚 |
+| `role` | 文字列 | 任意 | 役割。今は `"home"` だけに意味がある（実装済み、形は案） |
 | `entry` | オブジェクト | 必須 | 入口の HTML・CSS・AS（下の表） |
 | `permissions` | オブジェクト | 任意 | 使う権限の名前 → `{ "reason": 用途の説明 }`。説明はインストール画面に出す |
 | `server` | オブジェクト | 任意 | `{ "required": 真偽値 }`。サーバーサイドを使うか。`required: false` なら、サーバーが無くても動く |
@@ -78,13 +80,13 @@ examples/counter/
 | `css` | 文字列 | 任意 | 見た目の CSS のパス |
 | `as` | 文字列 | 必須 | 動きの AS のパス |
 
-- どの欄を必須にするか、`version`・`binette` を必須にするかは未決。今のコードは上の表の「必須」だけを確かめる
+- どの欄を必須にするか、`version`・`binette` を必須にするかは未決。今のコードは上の表の「必須」と、任意の `icon`・`role`・`entry.css` の型を確かめる
 - `.bina`（v0.1 の画面の定義）との関係は未決
 - 依存ライブラリの固定（lock）の形は未決
 
 ### 読み込みと検査（実装済み）
 
-`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` だけで、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
+`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` と、任意の `icon`・`role` の型で、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
 
 検査は次の順に行い、最初に見つかった誤りで止めます。誤りは `BinetteError`（`code` は `"invalid_format"`）で、`message` は次のとおりです。
 
@@ -103,8 +105,10 @@ examples/counter/
 | 11 | `entry.html` が文字列でないか、空文字列 | `entry の html にはファイルのパスを指定してください。` |
 | 12 | `entry.css` があって、文字列でない | `entry の css は文字列で指定してください。` |
 | 13 | `entry.as` が文字列でないか、空文字列 | `entry の as にはファイルのパスを指定してください。` |
+| 14 | `icon` があって、文字列でない | `icon は文字列で指定してください。` |
+| 15 | `role` があって、文字列でない | `role は文字列で指定してください。` |
 
-- 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜13）で誤りになる
+- 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜15）で誤りになる
 - パスの形（`..` を含む、絶対 URL など）はまだ確かめない
 - `entry.css` は検査するが、今の Scene は読まない
 
@@ -117,9 +121,17 @@ examples/counter/
 - ユーザーが許可した権限
 - 使用量、インストール日時
 
-今のコードはインストールをしないので、何も記録しません。
+今は `AppStore` に入手元・manifest・SVG・HTML・WASM・インストール日時を保存します（[regie.md](regie.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
+
+## システムアプリ（実装済み）
+
+システムアプリ（OS と一緒に配るアプリ）は、インストールの手順を通らず、OS と一緒にビルドして配ります。扱いは [apps/](apps/README.md) にあります。ホーム（`role: "home"`）は [apps/home.md](apps/home.md) です。
 
 ## インストール（案）
+
+システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証、クリック関数の export の確認もしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[scene/build.md](scene/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
+
+追加するアプリのインストールは、次の流れを予定しています。
 
 1. 入手元から `app.json` とソースを GET する
 2. Scene が AS を WASM にビルドする。Réplique は、`app.json` の `binette` の版に合うものを Scene が差し込む（アプリが自分で持ち込まない）
@@ -131,4 +143,10 @@ examples/counter/
 5. Régie がビルド結果と記録を保存する
 
 - 更新は同じ入手元からだけ受け付ける。権限が増えていたら、もう一度許可を求める
-- 今のコードでできるのは 1 と 2 だけ。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う。3〜5 は無い
+- 今の `mountShell` は、最初から渡されたアプリを読む。prebuilt は毎回その内容で `AppStore` に保存し直す（入れた日時は保つ）。開発用の read は、同じ入手元・ID・版が保存済みなら使い回し、無ければビルドして保存する。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う
+- 3 のクリック関数の export の確認は実装済み。HTML や権限の検証、4 の許可の画面はまだ無い。5 はビルド結果の保存だけ
+- アプリの追加方法は未決。URL からの追加、更新、削除、並べ替えはまだ無い
+
+## ホームのアイコン（実装済み）
+
+`icon` があれば、`entry` と同じくパスを整えて（`app.json` のフォルダの外は読まない。[scene/shell.md](scene/shell.md#保存とホームの選び方)）SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。

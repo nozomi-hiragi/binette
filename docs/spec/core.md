@@ -30,7 +30,7 @@ interface AppEntry {
   as: string;
 }
 
-/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry` だけを検査する */
+/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry` と任意の `icon`・`role` の型を検査する */
 interface AppManifest {
   id: string;
   version?: string;
@@ -38,6 +38,7 @@ interface AppManifest {
   name: string;
   description?: string;
   icon?: string;
+  role?: string;
   entry: AppEntry;
   permissions?: Record<string, AppPermission>;
   server?: { required?: boolean };
@@ -48,7 +49,7 @@ interface AppManifest {
 ```
 
 - 欄の意味は [app.md](app.md#appjson) にあります
-- 型が付いていても、検査するのは `id`・`name`・`entry` だけです。たとえば `version` に数値が入っていても、`parseAppManifest` は誤りにしません。型はあくまで「正しく書かれていればこうなる」という目安です
+- 型が付いていても、検査するのは `id`・`name`・`entry` と任意の `icon`・`role` の型です。たとえば `version` に数値が入っていても、`parseAppManifest` は誤りにしません。型はあくまで「正しく書かれていればこうなる」という目安です
 
 ## parseAppManifest
 

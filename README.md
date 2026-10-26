@@ -3,7 +3,7 @@
 ブラウザだけで動く、スマホの OS のようなアプリの土台です。アプリ（HTML ＋ AssemblyScript）を取ってきて、ブラウザの中でビルドして動かします。
 
 > [!WARNING]
-> **設計中です。** 仕様はまだ固まっていません。v0.2 は、カウンターのアプリ 1 つを動かすところまでの最小限の土台です。
+> **設計中です。** 仕様はまだ固まっていません。v0.2 は、ホームから設定アプリを開いて戻れるところまでの最小限の土台です。
 
 仕様は [docs/spec/](docs/spec/README.md) にあります。
 
@@ -27,21 +27,25 @@
 | [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
 | [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-アプリの例は [examples/counter](examples/counter) にあります。HTML の `bina="count"` から `bina.ts` を生成し、AS では `import { count } from "./bina";` と `count.text` で操作します。
+設定はシステムアプリ [apps/settings](apps/settings) が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。HTML の `bina` から `bina.ts` を生成し、AS では `elem.text` で文字を変えます。
 
 ```sh
-deno task gen:counter  # HTML を変えたら生成し直す（エディタの補完用）
+deno task gen:bindings  # HTML を変えたら生成し直す（エディタの補完用）
 ```
 
-## デモ
+## 単独で起動する
 
 Deno 2.9 以上が必要です。
 
 ```sh
-deno task demo:scene  # http://localhost:5175/
+deno task start  # http://localhost:5175/
 ```
 
-http://localhost:5175/ を開くと、カウンターのアプリをブラウザの中でビルドして動かします。
+http://localhost:5175/ を開くと、設定がホームに 1 つ並び、開いて「詳しく」を押すと説明が出ます。「戻る」でホームに戻れます。システムアプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
+
+`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。入口はリポジトリ直下の `index.html` と `src/main.ts` です。`apps/` の直下に `app.json` を持つフォルダを足すだけで、システムアプリが増えます。
+
+ホームはシステムアプリ [apps/home](apps/home) です（決定）。HTML と AS がタイルの見た目と並びを持ち、Scene の `mountShell` がアプリを開く枠と「戻る」の帯を持ちます。一覧・アイコン・`apps.*` は実装済み（形は案）です。ホームの差し替え、権限の仕組み、アプリの CSS の分離は未決です。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 
