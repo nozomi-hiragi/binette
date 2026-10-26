@@ -6,11 +6,19 @@ import { Window } from "happy-dom";
 import { buildApp, type HtmlParser, mountApp } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const counter = new URL("apps/counter/", root);
 const replique = await Deno.readTextFile(new URL("packages/replique/src/index.ts", root));
 const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": replique };
-const read = (path: string) => Deno.readTextFile(new URL(path, counter));
+const files: Record<string, string> = {
+  "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
+  "index.html": '<p bina="count">0</p><button bina-on-click="increment">+1</button>',
+  "main.ts": `import { count } from "./bina";
+let value = 0;
+export function start(): void { count.text = "0"; }
+export function increment(): void { value++; count.text = value.toString(); }
+`,
+};
+const read = (path: string) => Promise.resolve(files[path]!);
 
 /** 同じスレッドの MessageChannel に serveApp をつないだ Worker */
 function createWorker(): RegieWorker {
@@ -31,9 +39,9 @@ async function waitFor(condition: () => boolean): Promise<void> {
   assert(condition(), "待っても表示が変わりませんでした");
 }
 
-Deno.test("カウンターをビルドして動かせる", async () => {
+Deno.test("文字列のアプリをビルドし、連続クリックで状態を更新できる", async () => {
   const built = await buildApp(read, { libraries, parser });
-  assertEquals(built.manifest.id, "io.github.nozomi-hiragi.counter");
+  assertEquals(built.manifest.id, "click-state");
   assertMatch(built.html, /bina-on-click="increment"/);
   assertEquals(built.bindings.elements.count, { count: 1, kinds: [{ tag: "p" }] });
   assertEquals(built.bindings.clicks, ["increment"]);

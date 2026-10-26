@@ -31,14 +31,14 @@ Deno.test("CLI build は .binapp を書き、manifest と SVG が一致する", 
   const dir = await Deno.makeTempDir();
   const root = new URL("../../..", import.meta.url);
   try {
-    const out = `${dir}/apps/counter.binapp`;
-    const command = new Deno.Command(Deno.execPath(), { args: ["run", "-A", "packages/scene/src/cli.ts", "build", "apps/counter", "--out", out,
+    const out = `${dir}/apps/settings.binapp`;
+    const command = new Deno.Command(Deno.execPath(), { args: ["run", "-A", "packages/scene/src/cli.ts", "build", "apps/settings", "--out", out,
       "--replique", "packages/replique/src/index.ts"], cwd: root });
     const result = await command.output();
     assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
     const built = parsePrebuiltApp(await Deno.readTextFile(out));
-    assertEquals(built.manifest, JSON.parse(await Deno.readTextFile(new URL("apps/counter/app.json", root))));
-    assertEquals(built.icon, await Deno.readTextFile(new URL(`apps/counter/${built.manifest.icon}`, root)));
+    assertEquals(built.manifest, JSON.parse(await Deno.readTextFile(new URL("apps/settings/app.json", root))));
+    assertEquals(built.icon, await Deno.readTextFile(new URL(`apps/settings/${built.manifest.icon}`, root)));
     assertEquals(WebAssembly.validate(built.wasm as Uint8Array<ArrayBuffer>), true);
   } finally { await Deno.remove(dir, { recursive: true }); }
 });

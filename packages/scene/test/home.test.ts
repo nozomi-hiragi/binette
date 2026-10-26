@@ -7,9 +7,12 @@ import { buildApp, type Compiler, type HtmlParser, loadCompiler, mountHome } fro
 const root = new URL("../../..", import.meta.url);
 const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps = ["counter", "hello"].map((name) => ({
-  source: `https://example.com/${name}/`,
-  read: (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root)),
+const apps = ["設定", "設定の写し"].map((name, index) => ({
+  source: `https://example.com/settings-${index}/`,
+  async read(path: string): Promise<string> {
+    const text = await Deno.readTextFile(new URL(`apps/settings/${path}`, root));
+    return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), id: `settings-${index}`, name }) : text;
+  },
 }));
 const fixtures: InstalledApp[] = [];
 for (const app of apps) {
@@ -91,7 +94,7 @@ Deno.test("2 つ並び、アイコンは img の data URL、開いて戻ると W
     createWorker: worker.createWorker, onError: (error) => errors.push(error) });
   try {
     const tiles = element.querySelectorAll<HTMLButtonElement>(".bina-home-tile");
-    assertEquals([...tiles].map((button) => button.textContent), ["カウンター", "ハロー"]);
+    assertEquals([...tiles].map((button) => button.textContent), ["設定", "設定の写し"]);
     assertEquals(builds, 2);
     const records = await store.list();
     assertEquals(records.length, 2);
@@ -100,19 +103,19 @@ Deno.test("2 つ並び、アイコンは img の data URL、開いて戻ると W
     assertEquals(tiles[0]!.querySelector("img")!.getAttribute("src"),
       `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fixtures[0]!.icon!)}`);
     tiles[0]!.click();
-    await waitFor(() => worker.ready === 1 && element.querySelector("[bina=count]")?.textContent === "0");
+    await waitFor(() => worker.ready === 1 && element.querySelector("[bina=description]")?.textContent === "");
     tiles[1]!.click();
     assertEquals(worker.created, 1);
-    element.querySelector<HTMLButtonElement>("[bina-on-click=increment]")!.click();
-    await waitFor(() => element.querySelector("[bina=count]")?.textContent === "1");
+    element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
+    await waitFor(() => element.querySelector("[bina=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。");
     element.querySelector<HTMLButtonElement>(".bina-home-back")!.click();
     assertEquals(worker.live, 0);
-    assertEquals(element.querySelector("[bina=count]"), null);
+    assertEquals(element.querySelector("[bina=description]"), null);
     assertEquals(element.querySelector<HTMLElement>(".bina-home-grid")!.hidden, false);
     tiles[1]!.click();
     await waitFor(() => worker.ready === 2);
-    element.querySelector<HTMLButtonElement>("[bina-on-click=greet]")!.click();
-    await waitFor(() => element.querySelector("[bina=greeting]")?.textContent === "ハロー、Binette！");
+    element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
+    await waitFor(() => element.querySelector("[bina=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。");
     home.stop(); home.stop();
     assertEquals(worker.live, 0);
     assertEquals(worker.maximum, 1);
@@ -132,7 +135,7 @@ Deno.test("2 つ並び、アイコンは img の data URL、開いて戻ると W
     try {
       assertEquals(element.querySelectorAll(".bina-home-tile").length, 2);
       element.querySelector<HTMLButtonElement>(".bina-home-tile")!.click();
-      await waitFor(() => worker.ready === 3 && element.querySelector("[bina=count]")?.textContent === "0");
+      await waitFor(() => worker.ready === 3 && element.querySelector("[bina=description]")?.textContent === "");
       assertEquals(errors, []);
     } finally { again.stop(); }
   } finally { home.stop(); await window.happyDOM.close(); }
@@ -171,7 +174,7 @@ Deno.test("アプリごとの読み込み・保存の失敗があっても残り
   } }, onError: (error) => errors.push(error) });
   try {
     assertEquals(errors.length, 2);
-    assertEquals(element.querySelector(".bina-home-tile")!.textContent, "ハロー");
+    assertEquals(element.querySelector(".bina-home-tile")!.textContent, "設定の写し");
     assertEquals(element.querySelectorAll(".bina-home-tile").length, 1);
   } finally { home.stop(); await window.happyDOM.close(); }
 });
@@ -232,7 +235,7 @@ for (const action of ["back", "stop"] as const) {
         else element.querySelector<HTMLButtonElement>(".bina-home-back")!.click();
         assertEquals(worker.terminated, 1);
         worker.emit({ type: "ready", exports: ["start"] });
-        worker.emit({ type: "text", name: "count", value: "遅い表示" });
+        worker.emit({ type: "text", name: "description", value: "遅い表示" });
         worker.emit({ type: "done", id: 1 });
         await new Promise((resolve) => setTimeout(resolve, 0));
         assertEquals(element.querySelector(".bina-home-app"), null);
@@ -266,13 +269,13 @@ Deno.test("起動に失敗したらホームへ戻り、ほかのアプリを開
     assertEquals(element.querySelector<HTMLElement>(".bina-home-grid")!.hidden, false);
     tiles[1]!.click();
     await waitFor(() => good.ready === 1);
-    element.querySelector<HTMLButtonElement>("[bina-on-click=greet]")!.click();
-    await waitFor(() => element.querySelector("[bina=greeting]")?.textContent === "ハロー、Binette！");
+    element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
+    await waitFor(() => element.querySelector("[bina=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。");
     assertEquals(errors.length, 1);
   } finally { home.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("プリビルドは compiler を呼ばず保存し、開いて動く。同じ版は保存結果を使い、違う版は置き換える", async () => {
+Deno.test("プリビルドは compiler を呼ばず保存し、開いて動く。同じ版でも入れ直し、違う版も置き換える", async () => {
   const window = new Window();
   const element = elementIn(window);
   const store = createMemoryAppStore();
@@ -288,9 +291,9 @@ Deno.test("プリビルドは compiler を呼ばず保存し、開いて動く�
     assertEquals(element.querySelectorAll(".bina-home-tile").length, 2);
     assertEquals((await store.list()).length, 2);
     element.querySelector<HTMLButtonElement>(".bina-home-tile")!.click();
-    await waitFor(() => worker.ready === 1 && element.querySelector("[bina=count]")?.textContent === "0");
-    element.querySelector<HTMLButtonElement>("[bina-on-click=increment]")!.click();
-    await waitFor(() => element.querySelector("[bina=count]")?.textContent === "1");
+    await waitFor(() => worker.ready === 1 && element.querySelector("[bina=description]")?.textContent === "");
+    element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
+    await waitFor(() => element.querySelector("[bina=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。");
     home.stop();
     // 同じ版でも、保存結果は prebuilt で入れ直す。入れた日時は保つ
     const saved = (await store.get(fixtures[0]!.key))!;

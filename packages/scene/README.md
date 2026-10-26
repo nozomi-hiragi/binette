@@ -6,7 +6,7 @@ Binette のアプリを読み、AssemblyScript をブラウザの中で WASM に
 import { buildApp, mountApp } from "@binette/scene";
 
 // app.json からの相対パスを受けて、ファイルの中身を返す関数
-const read = async (path: string) => (await fetch(new URL(path, "https://example.com/counter/"))).text();
+const read = async (path: string) => (await fetch(new URL(path, "https://example.com/settings/"))).text();
 const built = await buildApp(read, {
   // Réplique は未公開なので、今は呼ぶ側がソースを渡す
   libraries: { "jsr:@binette/replique": repliqueSource },
@@ -35,7 +35,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 
 ## 単独フロント
 
-ルートで次を起動して http://localhost:5175/ を開きます。先に counter と hello をビルドし、ホームから開きます。ブラウザは `.binapp` を読み、初回も asc を読みません。
+ルートで次を起動して http://localhost:5175/ を開きます。先に設定アプリをビルドし、ホームから開きます。ブラウザは `.binapp` を読み、初回も asc を読みません。
 
 ```sh
 deno task start
