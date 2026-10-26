@@ -23,7 +23,7 @@ export function serveApp(scope: WorkerScope): void {
 
   const imports = {
     binette: {
-      "ui.text": (name: number, value: number) => {
+      "elem.text": (name: number, value: number) => {
         scope.postMessage({ type: "text", name: readString(name), value: readString(value) });
       },
     },
@@ -44,7 +44,7 @@ export function serveApp(scope: WorkerScope): void {
       try {
         const result = await WebAssembly.instantiate(data.wasm!, imports);
         instance = result.instance;
-        // トップレベルの初期化は instance を代入してから走らせる。初期化中の ui.text が文字列を読めるように
+        // トップレベルの初期化は instance を代入してから走らせる。初期化中の elem.text が文字列を読めるように
         const init = instance.exports._start;
         if (typeof init === "function") init();
         const names = Object.keys(instance.exports).filter((key) => key !== "_start" && typeof instance!.exports[key] === "function");

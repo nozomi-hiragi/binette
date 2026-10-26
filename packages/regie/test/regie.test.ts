@@ -4,7 +4,7 @@ import asc from "assemblyscript/asc";
 import { launchApp, serveApp, type RegieWorker } from "../src/index.ts";
 
 const source = `
-@external("binette", "ui.text")
+@external("binette", "elem.text")
 declare function text(name: string, value: string): void;
 export function hello(): void { text("名前", "値"); }
 export function boom(): void { throw new Error("こわれた"); }
@@ -35,7 +35,7 @@ function createWorker(): RegieWorker {
   };
 }
 
-test("export の一覧を受け取り、呼び出し中の ui.text が完了より先に届く", async () => {
+test("export の一覧を受け取り、呼び出し中の elem.text が完了より先に届く", async () => {
   const texts: [string, string][] = [];
   const app = await launchApp(await build(source), { createWorker, onText: (name, value) => texts.push([name, value]) });
   try {
@@ -63,10 +63,10 @@ test("WASM でないものは起動できない", async () => {
   await assert.rejects(launchApp(new Uint8Array([1, 2, 3]), { createWorker }), /起動できません/);
 });
 
-test("トップレベルの初期化で呼んだ ui.text も届く", async () => {
+test("トップレベルの初期化で呼んだ elem.text も届く", async () => {
   const texts: [string, string][] = [];
   const code = `
-@external("binette", "ui.text")
+@external("binette", "elem.text")
 declare function text(name: string, value: string): void;
 text("初期化", "済み");
 export function start(): void {}

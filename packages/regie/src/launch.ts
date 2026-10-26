@@ -9,7 +9,7 @@ export interface RegieWorker {
 
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
-  /** アプリが `ui.text` を呼んだとき */
+  /** アプリが要素の文字を書き換えたとき（`elem(name).text = value`） */
   onText?: (name: string, value: string) => void;
   /** アプリの中で起きたエラー（abort や、呼び出しの失敗） */
   onError?: (error: Error) => void;
@@ -21,7 +21,7 @@ export interface LaunchOptions {
 export interface RegieApp {
   /** アプリが export している関数の名前 */
   readonly exports: readonly string[];
-  /** export した関数を呼ぶ。終わったら解決する。呼び出し中の `ui.text` は、解決より先に `onText` に届く */
+  /** export した関数を呼ぶ。終わったら解決する。呼び出し中の文字の書き換えは、解決より先に `onText` に届く */
   call(name: string): Promise<void>;
   /** Worker を止める */
   stop(): void;

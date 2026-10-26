@@ -14,7 +14,7 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 - 動いているアプリの数に上限を持ち、裏に回ったアプリは止められる。状態はストレージから戻す前提にする
 - アプリは Régie が渡した呼び出ししか使えない。ネットワークや DOM に直接は触れない
 
-今のコードにあるのは、アプリの実行と `ui.text` の受け口だけです。
+今のコードにあるのは、アプリの実行と、文字の書き換え（`elem.text`）の受け口だけです。
 
 ## 実行の流れ（実装済み）
 
@@ -22,11 +22,11 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 メインスレッド（launchApp）              Worker（serveApp）
   ── init { wasm } ─────────────────→  WebAssembly.instantiate
                                         _start があれば呼ぶ（トップレベルの初期化）
-  ←──────────── text { name, value } ─  （初期化中の ui.text）
+  ←──────────── text { name, value } ─  （初期化中の elem.text）
   ←──────────── ready { exports } ────  export された関数名を返す
   launchApp が解決する
   ── call { id, name } ─────────────→  exports[name]() を呼ぶ
-  ←──────────── text { name, value } ─  （呼び出し中の ui.text）
+  ←──────────── text { name, value } ─  （呼び出し中の elem.text）
   ←──────────── done { id } ──────────  呼び終えた
   call が解決する
 ```
@@ -57,7 +57,7 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 
 ```ts
 interface LaunchOptions {
-  /** アプリが ui.text を呼んだとき */
+  /** アプリが要素の文字を書き換えたとき（elem(name).text = value） */
   onText?: (name: string, value: string) => void;
   /** アプリの中で起きたエラー（abort や、呼び出しの失敗） */
   onError?: (error: Error) => void;
@@ -145,7 +145,7 @@ Worker → メインスレッド:
 | --- | --- | --- |
 | `ready` | `exports: string[]` | 起動できた。export された関数名（`_start` を除く） |
 | `failed` | `message: string` | 起動できなかった。`message` は `アプリを起動できません: <理由>` |
-| `text` | `name: string`, `value: string` | アプリが `ui.text(name, value)` を呼んだ |
+| `text` | `name: string`, `value: string` | アプリが `elem(name).text = value` と書いた（import の `elem.text`） |
 | `done` | `id: number` | `call` を呼び終えた |
 | `fail` | `id: number`, `message: string` | `call` が失敗した |
 
@@ -167,7 +167,7 @@ Worker → メインスレッド:
 ### ビルドのしかた
 
 - AssemblyScript を `--exportStart _start` でビルドします（Scene の `buildApp` がそうする。[scene.md](scene.md#buildapp)）
-- `--exportStart` を付けると、トップレベルの初期化（グローバル変数の初期値、トップレベルの文）は WASM の start 節ではなく、export `_start` になります。Régie は instance を作り終えてから `_start` を呼びます。初期化の中で `ui.text` を呼んでも文字列を読めるようにするためです
+- `--exportStart` を付けると、トップレベルの初期化（グローバル変数の初期値、トップレベルの文）は WASM の start 節ではなく、export `_start` になります。Régie は instance を作り終えてから `_start` を呼びます。初期化の中で `elem(…).text` に書いても文字列を読めるようにするためです
 - `_start` が無い WASM も起動できます（その場合は呼ばない）
 - メモリは `memory` という名前で export されている必要があります（AS の既定）
 
@@ -177,10 +177,10 @@ Régie が WASM に渡す import は次の 2 つだけです。ほかの import 
 
 | モジュール | 名前 | 引数 | 内容 |
 | --- | --- | --- | --- |
-| `binette` | `ui.text` | `(name: i32, value: i32)` | 2 つとも AS の文字列のポインタ。読んで `text` を送る |
+| `binette` | `elem.text` | `(name: i32, value: i32)` | 2 つとも AS の文字列のポインタ。読んで `text` を送る |
 | `env` | `abort` | `(message: i32, fileName: i32, line: i32, column: i32)` | AS の `abort`。`message`・`fileName` は文字列のポインタで、`0` なら無し。例外を投げて、その呼び出しを止める |
 
-- `binette` の import の名前は `<名前空間>.<関数>` にします。Réplique の API と 1 対 1 で対応します（[replique.md](replique.md#呼び出しの一覧)）
+- `binette` の import の名前は `<対象>.<操作>`（例: `elem.text`）にします。Réplique の書き込みの操作と 1 対 1 で対応します。読む操作（`Elem.text` の getter など）は Réplique の中で済むので、import はありません（[replique.md](replique.md#呼び出しの一覧)）
 
 ### 文字列の読み方
 

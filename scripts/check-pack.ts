@@ -60,8 +60,8 @@ assert.throws(() => parseAppManifest("{"), BinetteError);
 // 入れた tarball だけで、AS をビルドして Worker 相当（MessageChannel）で動かす
 const files = {
   "app.json": JSON.stringify({ id: "example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
-  "src/index.html": '<p bina-text="count">0</p>',
-  "src/main.ts": 'import { ui } from "jsr:@binette/replique";\\nexport function start(): void { ui.text("count", "0"); }\\n',
+  "src/index.html": '<p bina="count">0</p>',
+  "src/main.ts": 'import { elem } from "jsr:@binette/replique";\\nexport function start(): void { elem("count").text = "0"; }\\n',
 };
 const replique = readFileSync(new URL(import.meta.resolve("@binette/replique")), "utf8");
 const built = await buildApp(async (path) => files[path], { libraries: { "jsr:@binette/replique": replique } });

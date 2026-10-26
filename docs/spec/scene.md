@@ -108,7 +108,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 | `node_modules/<指定子>/index.ts` | `libraries[<指定子>]`（あれば） |
 | それ以外（`asconfig.json` など） | `null`（無い） |
 
-- AS で `import { ui } from "jsr:@binette/replique"` と書くと、asc はこれをパッケージの import とみなし、`node_modules/jsr:@binette/replique.ts`、次に `node_modules/jsr:@binette/replique/index.ts` を読みに来ます。そこで `libraries["jsr:@binette/replique"]` を返すと解決します
+- AS で `import { elem } from "jsr:@binette/replique"` と書くと、asc はこれをパッケージの import とみなし、`node_modules/jsr:@binette/replique.ts`、次に `node_modules/jsr:@binette/replique/index.ts` を読みに来ます。そこで `libraries["jsr:@binette/replique"]` を返すと解決します
 - サブパス（`jsr:@binette/replique/glue` など）も、指定子をそのままキーにして引けます
 - `libraries` に無い指定子や、AS のファイルどうしの相対 import（`./util`）は解決できず、ビルドの誤りになります
 - Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Scene が JSR から取って差し込む（案。[app.md](app.md#インストール案)）
@@ -133,7 +133,7 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 1. `element.style.contain = "paint"` にする（アプリの描画が `element` の外に出ないように）
 2. `element.innerHTML = built.html` で HTML を描く
-3. Régie の `launchApp(built.wasm, …)` でアプリを起動する。`onText` を下の `bina-text` につなぐ
+3. Régie の `launchApp(built.wasm, …)` でアプリを起動する。`onText` を下の `bina` につなぐ
 4. `element` に `click` のリスナーを 1 つ付ける（下の `bina-on-click`）
 5. `app.exports` に `start` があれば `app.call("start")` を待つ。失敗したら `stop()` してから同じエラーで reject する
 6. `{ app, stop }` で解決する
@@ -144,31 +144,60 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 
 ### HTML とアプリのつなぎ方
 
-属性の接頭辞は `bina-` にする（決定 2026-10-26）。`data-*` はアプリが自由に使える。
+次のことを決めました（決定 2026-10-26）。
 
-| HTML | 意味 | アプリ側（Réplique） | 状態 |
+- HTML では、要素に `bina="名前"` で名前を付ける。アプリ（AS）は `elem("名前")` でその要素を操作する
+- 同じ名前の要素はまとめて変わる（見出しと本文に同じ件数を出す、など）
+- 名前を探すのは、そのアプリの領域（`mountApp` の `element`）の中だけ。フロントやほかのアプリの要素には届かない
+- Binette の属性の接頭辞は `bina`。`data-*`・`id`・`class` はアプリが自由に使える
+
+```html
+<h1 bina="count">0</h1>
+<p>いま <span bina="count">0</span> 件</p>
+<button bina-on-click="increment">+1</button>
+```
+
+| HTML | アプリ側（Réplique） | 意味 | 状態 |
 | --- | --- | --- | --- |
-| `bina-text="name"` | 文字を差し込む | `ui.text("name", "…")` | 実装済み |
-| `bina-on-click="fn"` | クリックで `fn()` | `export function fn(): void` | 実装済み |
-| `bina-show="name"` | 表示・非表示 | `ui.show("name", true)` | 案 |
-| `bina-enabled="name"` | 有効・無効 | `ui.enabled("name", false)` | 案 |
-| `bina-value="name"` | 入力欄の値 | `ui.value("name", "")` | 案 |
-| `bina-each="list"` ＋ `<template>` | 一覧の繰り返し | `ui.listClear` / `ui.listAdd` / `ui.itemText` | 案 |
-| `bina-on-input="fn"` | 入力で `fn(値)` | `export function fn(value: string): void` | 案 |
-| `bina-on-submit="fn"` | 送信で `fn()`（ページ移動はしない） | `export function fn(): void` | 案 |
+| `bina="name"` | `elem("name").text = "…"` | 文字を書き換える | 実装済み |
+| `bina="name"` | `elem("name").text` | アプリが最後に書いた文字を読む | 実装済み |
+| `bina-on-click="fn"` | `export function fn(): void` | クリックで `fn()` | 実装済み |
+| `bina="name"` | `elem("name").show = true` | 表示・非表示 | 案 |
+| `bina="name"` | `elem("name").enabled = false` | 有効・無効 | 案 |
+| `bina="name"` | `elem("name").value` | 入力欄の値の読み書き | 案 |
+| `bina="list"` ＋ `<template>` | `list("list").add()` などで行を足し、行から `item.elem("…")` | 一覧の繰り返し | 案 |
+| `bina-on-input="fn"` | `export function fn(value: string): void` | 入力で `fn(値)` | 案 |
+| `bina-on-submit="fn"` | `export function fn(): void` | 送信で `fn()`（ページ移動はしない） | 案 |
 
 - 一覧の中のイベントは、その行のキーを引数で渡す（案）
 
-`bina-text`（実装済み）:
+`bina="name"`（実装済み）:
 
-- `ui.text(name, value)` が届くたびに、`element` の中の `bina-text` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
-- 一致する要素が無ければ何もしません。HTML に最初から書いた文字（カウンターの `0` など）は、`ui.text` が来るまでそのまま出ます
+- アプリが `elem(name).text = value` と書くと、Régie から Scene に届き、`element` の中の `bina` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
+- 一致する要素が無ければ何もしません。HTML に最初から書いた文字（カウンターの `0` など）は、アプリが書くまでそのまま出ます
+- `element` の外にある、同じ名前の要素は変えません
 
 `bina-on-click`（実装済み）:
 
 - `element` で受けたクリックの `event.target` から `closest("[bina-on-click]")` で要素を探します。要素が `element` の中にあり、属性の値が空でなければ、その値の名前で `app.call(name)` を呼びます
 - 既定の動作（リンクの移動、フォームの送信など）は止めません
 - 呼び出しが失敗したら `onError` に渡します。Régie が `onError` で知らせたエラーと同じものは、二度は渡しません
+
+### 読める値（案）
+
+アプリは Worker の中にいて、画面（DOM）にその場で聞くことはできません。読めるのは「アプリの手元に写しがある値」だけです。
+
+- アプリが自分で書いた値（`text` など）: Réplique が書くときに覚えておく（`text` は実装済み）
+- 入力欄の値（`value`）: 入力のたびに Scene が Régie を通して値を送り、Réplique が覚えておく。Worker はメッセージを順に処理するので、ボタンを押したときには、それより前の入力はもう届いている
+- 要素の大きさや位置など、写しの無い値: 「終わったら呼ぶ関数」を渡して受け取る。AS には Promise・async・クロージャが無いため（[replique.md](replique.md#結果を受け取る呼び出し案)）
+
+### 止める操作（案）
+
+`elem()` からできる操作は、Binette が決めた一覧だけにします。次のような危ない操作は用意しません。
+
+- HTML の差し込み（`innerHTML` にあたるもの）。文字は `textContent` で入れる
+- `on*` 属性（`onclick` など）を付けること
+- 外の URL を `src`・`href`・CSS の `url()` に入れること
 
 ### まだしていないこと
 

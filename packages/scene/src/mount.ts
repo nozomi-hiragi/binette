@@ -18,7 +18,7 @@ export interface MountedApp {
 }
 
 /**
- * `element` に HTML を描き、Régie でアプリを起動して、`bina-text` と `bina-on-click` をつなぐ。
+ * `element` に HTML を描き、Régie でアプリを起動して、`bina` と `bina-on-click` をつなぐ。
  * export に `start` があれば呼ぶ。HTML の検証はまだしない。
  *
  * @throws {Error} アプリを起動できないとき、または `start()` が失敗したとき
@@ -39,8 +39,9 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     createWorker: options.createWorker,
     onError: report,
     onText(name, value) {
-      for (const target of element.querySelectorAll("[bina-text]")) {
-        if (target.getAttribute("bina-text") === name) target.textContent = value;
+      // 同じ名前の要素はまとめて変える。探すのはアプリの領域の中だけ
+      for (const target of element.querySelectorAll("[bina]")) {
+        if (target.getAttribute("bina") === name) target.textContent = value;
       }
     },
   });
