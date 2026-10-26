@@ -83,7 +83,7 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 `read` は、`app.json` を置いた場所からの相対パスを受けて、そのファイルの中身を返す関数です。取り方（`fetch`、`node:fs` など）は呼ぶ側が決めます。
 
 1. `read("app.json")` を `parseAppManifest` で読む（誤りは `BinetteError`）
-2. `entry.html` と `entry.as` のパスを整える（`./` と途中の `../` を畳む）。`/` で始まる、`\` を含む、`https:` のようなスキームで始まる、`app.json` のフォルダの外に出る、のどれかなら `アプリの入口は app.json のフォルダ内の相対パスにしてください。` の `Error`
+2. `entry.html` と `entry.as` のパスを整える（`./` と途中の `../` を畳む）。`/` で始まる、`\` を含む、`%` を含む（`%2e%2e` は URL で読むと `..` になるため）、`https:` のようなスキームで始まる、`app.json` のフォルダの外に出る、のどれかなら `アプリの入口は app.json のフォルダ内の相対パスにしてください。` の `Error`。`entry.as` のファイル名が `bina.ts` なら `entry.as に bina.ts という名前は使えません。bina.ts は HTML から自動生成するファイルです。` の `Error`
 3. `parser` を決める。省略されていて `globalThis.DOMParser` も無ければ `HTML を読む DOMParser がありません。parser を指定してください。` の `Error`
 4. HTML と AS を並べて読む
 5. HTML を `parseBindings` で読み（名前の誤りは `Error`）、`generateBindingsSource` で `bina.ts` のソースを作る
@@ -193,6 +193,7 @@ count.text = "1";
 ```
 
 - HTML に無い名前を `./bina` から import すると、ビルドの誤りになります（名前の打ち間違いが分かる）
+- `entry.as` を `bina.ts` という名前にはできません。生成したファイルが入口を上書きしてしまうため、`buildApp` も書き出しコマンドも誤りにします
 - 種類ごとの型（入力欄の `value`、チェックボックスの `checked` など）は、それらの操作を足すときに作ります（案）。そのときは、`kinds` に合わせて `elem()` ではなく種類ごとのクラスを返し、合わない操作をビルドの誤りにします
 
 ### 書き出しコマンド

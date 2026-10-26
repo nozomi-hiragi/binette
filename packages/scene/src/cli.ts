@@ -2,20 +2,18 @@ import { parseAppManifest } from "@binette/core";
 import { Window } from "happy-dom";
 import { resolve } from "node:path";
 import { generateBindingsSource, type HtmlParser, parseBindings } from "./bindings.ts";
-import { appPath, bindingsPath } from "./paths.ts";
+import { entryPaths } from "./paths.ts";
 
 /** アプリの HTML から、AS の入口と同じフォルダに bina.ts を書き出す */
 export async function writeBindings(dir: string): Promise<string> {
   const root = resolve(dir);
   const manifest = parseAppManifest(await Deno.readTextFile(resolve(root, "app.json")));
-  const entry = appPath(manifest.entry.as);
-  const htmlPath = appPath(manifest.entry.html);
-  if (!entry || !htmlPath) throw new Error("アプリの入口は app.json のフォルダ内の相対パスにしてください。");
+  const { html: htmlPath, bindings: bindingsFile } = entryPaths(manifest.entry);
   const window = new Window();
   try {
     const html = await Deno.readTextFile(resolve(root, htmlPath));
     const bindings = parseBindings(html, new window.DOMParser() as unknown as HtmlParser);
-    const path = resolve(root, bindingsPath(entry));
+    const path = resolve(root, bindingsFile);
     await Deno.writeTextFile(path, generateBindingsSource(bindings));
     return path;
   } finally {

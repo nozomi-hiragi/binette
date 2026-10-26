@@ -1,6 +1,6 @@
 import { parseAppManifest, type AppManifest } from "@binette/core";
 import { type Bindings, generateBindingsSource, type HtmlParser, parseBindings } from "./bindings.ts";
-import { appPath, bindingsPath } from "./paths.ts";
+import { appPath, entryPaths } from "./paths.ts";
 
 /** asc の標準出力・標準エラーの受け皿 */
 export interface CompilerStream {
@@ -75,15 +75,12 @@ function findLibrary(libraries: Record<string, string>, name: string): string | 
  */
 export async function buildApp(read: (path: string) => Promise<string>, options: BuildOptions = {}): Promise<BuiltApp> {
   const manifest = parseAppManifest(await read("app.json"));
-  const entry = appPath(manifest.entry.as);
-  const htmlPath = appPath(manifest.entry.html);
-  if (!entry || !htmlPath) throw new Error("アプリの入口は app.json のフォルダ内の相対パスにしてください。");
+  const { as: entry, html: htmlPath, bindings: generatedPath } = entryPaths(manifest.entry);
   const parser = options.parser ?? (typeof globalThis.DOMParser === "function" ? new globalThis.DOMParser() : undefined);
   if (!parser) throw new Error("HTML を読む DOMParser がありません。parser を指定してください。");
   const [html, source] = await Promise.all([read(htmlPath), read(entry)]);
   const bindings = parseBindings(html, parser);
   const generated = generateBindingsSource(bindings);
-  const generatedPath = bindingsPath(entry);
   const asc = options.compiler ?? await loadCompiler();
   const libraries = options.libraries ?? {};
   const stdout = asc.createMemoryStream();

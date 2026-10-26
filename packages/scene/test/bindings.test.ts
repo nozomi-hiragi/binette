@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { Window } from "happy-dom";
 import { buildApp, generateBindingsSource, type HtmlParser, parseBindings } from "../src/index.ts";
 import { writeBindings } from "../src/cli.ts";
+import { appPath } from "../src/paths.ts";
 
 const window = new Window();
 const parser = new window.DOMParser() as unknown as HtmlParser;
@@ -87,4 +88,27 @@ Deno.test("カウンターの生成ファイルが HTML と一致する", async 
   const root = new URL("../../../examples/counter/", import.meta.url);
   const html = await Deno.readTextFile(new URL("src/index.html", root));
   assertEquals(await Deno.readTextFile(new URL("src/bina.ts", root)), generateBindingsSource(parseBindings(html, parser)));
+});
+
+Deno.test("エンコードした .. や % を含むパスは受け付けない", async () => {
+  for (const path of ["./%2e%2e/x.ts", "%2E%2E/x.ts", "src/%2f../x.ts", "src/a%20b.ts"]) assertEquals(appPath(path), null, path);
+  const app = files("", "export function start(): void {}");
+  app["app.json"] = JSON.stringify({ id: "x", name: "x", entry: { html: "%2e%2e/index.html", as: "src/main.ts" } });
+  const reads: string[] = [];
+  await assertRejects(() => buildApp(async (path) => { reads.push(path); return app[path]!; }, { libraries, parser }), Error, "フォルダ内の相対パス");
+  assertEquals(reads, ["app.json"]);
+});
+
+Deno.test("entry.as が bina.ts だと、ビルドも書き出しも止まり、入口を上書きしない", async () => {
+  const app = files('<p bina="count"></p>', "export function start(): void {}");
+  app["app.json"] = JSON.stringify({ id: "x", name: "x", entry: { html: "index.html", as: "src/bina.ts" } });
+  app["src/bina.ts"] = "export function start(): void {}";
+  await assertRejects(() => buildApp(async (path) => app[path]!, { libraries, parser }), Error, "bina.ts という名前は使えません");
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${dir}/src`);
+    for (const [path, value] of Object.entries(app)) await Deno.writeTextFile(`${dir}/${path}`, value);
+    await assertRejects(() => writeBindings(dir), Error, "bina.ts という名前は使えません");
+    assertEquals(await Deno.readTextFile(`${dir}/src/bina.ts`), app["src/bina.ts"]);
+  } finally { await Deno.remove(dir, { recursive: true }); }
 });
