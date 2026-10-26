@@ -7,6 +7,8 @@ export interface MountOptions {
   onError?: (error: unknown) => void;
   /** Worker を作る関数。省略すると Régie の Blob URL の Worker */
   createWorker?: LaunchOptions["createWorker"];
+  /** 起動中でもアプリを止める */
+  signal?: AbortSignal;
 }
 
 /** 画面に出したアプリ */
@@ -37,6 +39,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
 
   const app = await launchApp(built.wasm, {
     createWorker: options.createWorker,
+    signal: options.signal,
     onError: report,
     onText(name, value) {
       // 同じ名前の要素はまとめて変える。探すのはアプリの領域の中だけ
@@ -58,9 +61,15 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
   };
   element.addEventListener("click", onClick);
   const stop = () => {
+    options.signal?.removeEventListener("abort", stop);
     element.removeEventListener("click", onClick);
     app.stop();
   };
+  options.signal?.addEventListener("abort", stop, { once: true });
+  if (options.signal?.aborted) {
+    stop();
+    throw new Error("アプリを止めました。");
+  }
 
   if (app.exports.includes("start")) {
     try {

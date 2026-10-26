@@ -17,6 +17,18 @@ Deno.test("検査しない欄はそのまま残る", () => {
   assertEquals(app.extra, [1]);
 });
 
+Deno.test("icon は任意の文字列で、ほかの型は BinetteError になる", () => {
+  assertEquals(parseAppManifest(JSON.stringify(manifest)).icon, undefined);
+  for (const icon of ["icon.svg", ""]) {
+    assertEquals(parseAppManifest(JSON.stringify({ ...manifest, icon })).icon, icon);
+  }
+  for (const icon of [null, 1, true, [], {}]) {
+    const error = assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, icon })), BinetteError);
+    assertEquals(error.code, "invalid_format");
+    assertEquals(error.message, "icon は文字列で指定してください。");
+  }
+});
+
 Deno.test("形式が正しくない app.json は BinetteError になる", () => {
   for (const [text, message] of [
     ["{", "app.json を JSON として読めません。"],

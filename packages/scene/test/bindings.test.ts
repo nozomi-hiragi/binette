@@ -83,10 +83,12 @@ Deno.test("CLI は HTML と同じソースを書き出す", async () => {
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
 
-Deno.test("カウンターの生成ファイルが HTML と一致する", async () => {
-  const root = new URL("../../../examples/counter/", import.meta.url);
-  const html = await Deno.readTextFile(new URL("src/index.html", root));
-  assertEquals(await Deno.readTextFile(new URL("src/bina.ts", root)), generateBindingsSource(parseBindings(html, parser)));
+Deno.test("アプリの例の生成ファイルが HTML と一致する", async () => {
+  for (const name of ["counter", "hello"]) {
+    const root = new URL(`../../../examples/${name}/`, import.meta.url);
+    const html = await Deno.readTextFile(new URL("src/index.html", root));
+    assertEquals(await Deno.readTextFile(new URL("src/bina.ts", root)), generateBindingsSource(parseBindings(html, parser)));
+  }
 });
 
 Deno.test("エンコードした .. や % を含むパスは受け付けない", async () => {

@@ -15,6 +15,8 @@ export interface LaunchOptions {
   onError?: (error: Error) => void;
   /** Worker を作る関数。省略すると Blob URL の Worker。テストでは同じスレッドの `MessageChannel` を渡す */
   createWorker?: () => RegieWorker;
+  /** 起動中でも Worker を止める */
+  signal?: AbortSignal;
 }
 
 /** 起動したアプリ */
@@ -45,24 +47,34 @@ function createBlobWorker(): RegieWorker {
  * @throws {Error} WASM を起動できないとき
  */
 export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions = {}): Promise<RegieApp> {
+  if (options.signal?.aborted) return Promise.reject(new Error("アプリを止めました。"));
   const worker = (options.createWorker ?? createBlobWorker)();
   const pending = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
   let nextId = 1;
   let stopped = false;
+  let rejectLaunch: ((error: Error) => void) | undefined;
 
   const stop = () => {
     if (stopped) return;
     stopped = true;
+    options.signal?.removeEventListener("abort", stop);
     worker.terminate();
+    rejectLaunch?.(new Error("アプリを止めました。"));
+    rejectLaunch = undefined;
     for (const { reject } of pending.values()) reject(new Error("アプリを止めました。"));
     pending.clear();
   };
 
   return new Promise<RegieApp>((resolve, reject) => {
+    rejectLaunch = reject;
+    options.signal?.addEventListener("abort", stop, { once: true });
+    if (options.signal?.aborted) { stop(); return; }
     worker.addEventListener("message", (event) => {
+      if (stopped) return;
       const data = event.data as { type: string; id?: number; name?: string; value?: string; message?: string; exports?: string[] };
       switch (data.type) {
         case "ready": {
+          rejectLaunch = undefined;
           const exports = Object.freeze([...data.exports!]);
           resolve({
             exports,
@@ -80,6 +92,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "failed": {
           const error = new Error(data.message);
+          rejectLaunch = undefined;
           stop();
           reject(error);
           break;
@@ -106,6 +119,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     try {
       worker.postMessage({ type: "init", wasm: copy }, [copy]);
     } catch (error) {
+      rejectLaunch = undefined;
       stop();
       reject(error);
     }
