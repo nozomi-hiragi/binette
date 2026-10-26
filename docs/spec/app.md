@@ -19,11 +19,12 @@ src/
 - ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[scene/build.md](scene/build.md#ファイルの解決)）
 
-例: [apps/counter](../../apps/counter)
+例: [apps/settings](../../apps/settings)
 
 ```
-apps/counter/
+apps/settings/
   app.json
+  icon.svg
   src/index.html
   src/main.ts
   src/bina.ts

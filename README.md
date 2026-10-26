@@ -3,7 +3,7 @@
 ブラウザだけで動く、スマホの OS のようなアプリの土台です。アプリ（HTML ＋ AssemblyScript）を取ってきて、ブラウザの中でビルドして動かします。
 
 > [!WARNING]
-> **設計中です。** 仕様はまだ固まっていません。v0.2 は、ホームからカウンターとハローの 2 つのアプリを開いて戻れるところまでの最小限の土台です。
+> **設計中です。** 仕様はまだ固まっていません。v0.2 は、ホームから設定アプリを開いて戻れるところまでの最小限の土台です。
 
 仕様は [docs/spec/](docs/spec/README.md) にあります。
 
@@ -27,7 +27,7 @@
 | [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
 | [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-システムアプリは [apps/counter](apps/counter) にあります。HTML の `bina="count"` から `bina.ts` を生成し、AS では `import { count } from "./bina";` と `count.text` で操作します。
+設定はシステムアプリ [apps/settings](apps/settings) が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。HTML の `bina` から `bina.ts` を生成し、AS では `elem.text` で文字を変えます。
 
 ```sh
 deno task gen:bindings  # HTML を変えたら生成し直す（エディタの補完用）
@@ -41,9 +41,11 @@ Deno 2.9 以上が必要です。
 deno task start  # http://localhost:5175/
 ```
 
-http://localhost:5175/ を開くと、カウンターとハローがホームに並び、開いて戻れます。システムアプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
+http://localhost:5175/ を開くと、設定がホームに 1 つ並び、開いて「詳しく」を押すと説明が出ます。「戻る」でホームに戻れます。システムアプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
 
 `deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。入口はリポジトリ直下の `index.html` と `src/main.ts` です。`apps/` の直下に `app.json` を持つフォルダを足すだけで、システムアプリが増えます。
+
+ホームは将来、システムアプリ `apps/home` にする方針です。Réplique の繰り返し（テンプレート）と画像・属性、入っているアプリの一覧・起動の特権の呼び出し、権限の仕組みが要ります。今は Scene の `mountHome` がホームを持ち、アプリを開いて戻す枠は OS 側に残ります。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 

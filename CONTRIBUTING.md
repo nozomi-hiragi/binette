@@ -18,9 +18,11 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 ## Binette の開発
 
-`deno task start` で counter と hello の `.binapp` を生成してから Vite を http://localhost:5175/ に起動します。`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを自動で見つけ、`.binapp/` に書き出します。フォルダを足すだけで増え、消すと古い `.binapp` も消えます。`deno task gen:bindings` は全システムアプリの `bina.ts` を生成します。`.binapp` と `dist/` はソースから再生成できる生成物なのでコミットしません。`deno task build` は相対 URL で動く静的ファイルを生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、asc を配布しません。
+`deno task start` で設定アプリの `.binapp` を生成してから Vite を http://localhost:5175/ に起動します。`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを自動で見つけ、`.binapp/` に書き出します。フォルダを足すだけで増え、消すと古い `.binapp` も消えます。`deno task gen:bindings` は全システムアプリの `bina.ts` を生成します。`.binapp` と `dist/` はソースから再生成できる生成物なのでコミットしません。`deno task build` は相対 URL で動く静的ファイルを生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、asc を配布しません。
 
 入口は直下の `index.html`・`vite.config.ts` と `src/main.ts` です。書き出しとホームの表示は、フォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。並び順と並べ替えの仕様は未決です。`deno task check` は生成物が無くても通り、`deno task test` は `dist/` と `.binapp/` を除外します。
+
+設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。ホームは将来 `apps/home` にする方針です。Réplique の繰り返し（テンプレート）と画像・属性、入っているアプリの一覧・起動の特権の呼び出し、権限の仕組みが要ります。今は Scene の `mountHome` がホームを持ち、アプリを開いて戻す枠は OS 側に残ります。
 
 ## バージョンの決め方
 

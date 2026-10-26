@@ -122,7 +122,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; icon?: string; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
 
 ```sh
-deno run -A packages/scene/src/cli.ts build apps/counter --out .binapp/counter.binapp --replique packages/replique/src/index.ts
+deno run -A packages/scene/src/cli.ts build apps/settings --out .binapp/settings.binapp --replique packages/replique/src/index.ts
 ```
 
 CLI は deno-dom の parser で `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはホームと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の `cli.ts <アプリのフォルダ>` による bina.ts の生成も残ります。

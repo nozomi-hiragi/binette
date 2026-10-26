@@ -66,7 +66,7 @@ function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions)
 `bina="name"`（実装済み）:
 
 - アプリが `elem(name).text = value` と書くと、Régie から Scene に届き、`element` の中の `bina` を持つ要素のうち、属性の値が `name` と完全に一致するものすべての `textContent` を `value` にします
-- 一致する要素が無ければ何もしません。HTML に最初から書いた文字（カウンターの `0` など）は、アプリが書くまでそのまま出ます
+- 一致する要素が無ければ何もしません。HTML に最初から書いた文字（`0` など）は、アプリが書くまでそのまま出ます
 - `element` の外にある、同じ名前の要素は変えません
 
 `bina-on-click`（実装済み）:

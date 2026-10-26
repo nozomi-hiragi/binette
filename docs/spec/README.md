@@ -44,14 +44,14 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | Binette | EbinaStation |
 | --- | --- |
-| フロントの実装（Régie と Scene を載せる。ホームは Binette が持ち、設定画面の持ち主は未決） | ebina-front |
+| フロントの実装（Régie と Scene を載せる。ホームと設定は Binette が持つ） | ebina-front |
 | Coulisses を WAKE と合わせて実装したもの | ebina-station（Station） |
 
 ## 単独で起動できるフロント（決定）
 
 Binette は単独で起動できます。入口はリポジトリ直下の `index.html`・`vite.config.ts` と `src/main.ts` です。Régie と Scene を載せます。
 
-`deno task start` で開発用に起動し、`deno task build` で `dist/` に静的ファイルを書き出します。システムアプリの counter と hello はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
+`deno task start` で開発用に起動し、`deno task build` で `dist/` に静的ファイルを書き出します。システムアプリの設定はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
 
 システムアプリ（OS と一緒に配るアプリ）は直下の `apps/<アプリ>/` に置きます。`app.json` を持つフォルダを足すだけで、ビルドとホームに含まれます。書き出し先は `.binapp/` で、一覧の index.json は作りません。
 
@@ -59,7 +59,9 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 リポジトリの `apps/` にあるアプリはどれも OS と一緒に配るシステムアプリです。OS と一緒に配らない見本を置くときは別のフォルダにします。
 
-ホームと設定を、Android のようにシステムアプリ（`apps/` の中のアプリ）にするかは未決です。その場合は、入っているアプリの一覧・起動などの特権の呼び出しと権限の仕組みが要ります。今は Scene の `mountHome` がホームを持ちます。
+設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。
+
+ホームは将来、システムアプリ `apps/home` にする方針です。そのために、Réplique の繰り返し（テンプレート）と画像・属性、入っているアプリの一覧・起動の特権の呼び出し、権限の仕組みが要ります。今は Scene の `mountHome` がホームを持ち、アプリを開いて戻す枠は OS 側に残ります。
 
 ## 層の分担（案）
 
@@ -69,7 +71,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | Régie | アプリの実行（Worker ＋ WASM）、権限の判断、アプリごとのストレージ、インストール済みアプリの記録、アプリからの呼び出しの受け口、データの書き出し。画面は持たない |
 | Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ、ホーム |
 | Coulisses | アプリのサーバーサイド処理、バックアップの受け取り |
-| フロントの実装 | ダイアログ、インストール確認などの見た目。設定画面の持ち主は未決。Régie と Coulisses の間の通信路を差し込む |
+| フロントの実装 | ダイアログ、インストール確認などの見た目。設定はシステムアプリ `apps/settings` が持つ。Régie と Coulisses の間の通信路を差し込む |
 
 - 依存の向き: `core` ← `regie` ← `scene`（フロント側）、`core` ← `coulisses`（サーバー側）。`replique` は AS 用で、Régie とは「呼び出しの一覧」（[replique.md](replique.md)）という約束だけを共有する
 - Binette は WAKE に依存しない。Régie と Coulisses の間の通信路はフロントの実装が渡す。EbinaStation ではそこに WAKE が入る
@@ -93,7 +95,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 ## v0.2 の最小限の土台（実装済み）
 
-ホームは Binette が持ちます（決定）。今は、最初から渡したカウンターとハローを並べ、1 つずつ開いて戻れます（[scene/home.md](scene/home.md)）。設定画面の持ち主は未決です。
+ホームは Binette が持ちます（決定）。今は設定アプリを並べ、開いて戻れます（[scene/home.md](scene/home.md)）。設定は `apps/settings` が持ち、設定の項目と読み書きの呼び出しは未決です。
 
 ホームは同じ入手元・ID・版のビルド結果を保存して使い回します。Binette はシステムアプリのプリビルド結果を、入手元 `binette:system` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 
