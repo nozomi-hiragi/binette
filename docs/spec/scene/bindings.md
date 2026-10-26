@@ -43,7 +43,7 @@ interface HtmlParser {
 }
 ```
 
-HTML の解析は、自前では書かず DOMParser に任せます。DOMParser はブラウザにしか無い（Deno にも Node にも無い）ので、外から渡せる形にしています。
+HTML の解析は、自前では書かず DOMParser に任せます。DOMParser はブラウザにしか無い（Deno には無い）ので、外から渡せる形にしています。
 
 | 動く場所 | 渡すもの |
 | --- | --- |

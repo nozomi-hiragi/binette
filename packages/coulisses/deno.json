@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "exports": "./src/index.ts",
   "imports": {
-    "@binette/core": "jsr:@binette/core@0.1.0"
+    "@binette/core": "jsr:@binette/core@0.1.0",
+    "@std/path": "jsr:@std/path@^1.1.6"
   },
   "publish": {
     "include": [

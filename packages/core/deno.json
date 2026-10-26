@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "exports": "./src/index.ts",
   "imports": {
-    "valibot": "npm:valibot@1.5.0"
+    "valibot": "jsr:@valibot/valibot@1.5.0"
   },
   "publish": {
     "include": [

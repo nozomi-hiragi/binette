@@ -1,4 +1,4 @@
-/** Worker 側が使うメッセージの入口。Worker の `self` や Node の `MessagePort` がこの形を持つ */
+/** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
   postMessage(message: unknown, transfer?: Transferable[]): void;
   addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;

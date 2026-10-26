@@ -1,5 +1,5 @@
-import { assertEquals, assertThrows } from "@std/assert";
-import { createCoulisses, createPanoplie, parsePanoplie } from "../src/index.ts";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { createCoulisses, createPanoplie, importPanoplie, parsePanoplie } from "../src/index.ts";
 
 const get = (coulisses: ReturnType<typeof createCoulisses>, path: string, method = "GET") =>
   coulisses.fetch(new Request(`http://localhost${path}`, { method }));
@@ -42,4 +42,25 @@ Deno.test("渡したパノプリや配列はあとで変えても影響しない
   panoplie.binettes.index = { binette: "0.1", redirect: "/x", assets: {} };
   assertEquals(await (await get(coulisses, "/a.txt")).text(), "abc");
   assertEquals((await get(coulisses, "/index.bina")).status, 404);
+});
+
+Deno.test("フォルダからパノプリを作る。. で始まるものとシンボリックリンクは入れない", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(`${root}/notes/.cache`, { recursive: true });
+    await Deno.writeTextFile(`${root}/index.bina`, JSON.stringify({ binette: "0.1", redirect: "/home" }));
+    await Deno.writeTextFile(`${root}/notes/1.bina`, JSON.stringify({ binette: "0.1", redirect: "/notes" }));
+    await Deno.writeTextFile(`${root}/notes/main.js`, "export {}");
+    await Deno.writeTextFile(`${root}/notes/.cache/x.js`, "x");
+    await Deno.writeTextFile(`${root}/.env`, "SECRET=1");
+    await Deno.symlink(`${root}/notes/main.js`, `${root}/link.js`);
+    const panoplie = await importPanoplie(root);
+    assertEquals(Object.keys(panoplie.binettes).sort(), ["index", "notes/1"]);
+    assertEquals(Object.keys(panoplie.files), ["notes/main.js"]);
+    assertEquals(new TextDecoder().decode(panoplie.files["notes/main.js"]!.body), "export {}");
+    await Deno.writeTextFile(`${root}/broken.bina`, "{");
+    await assertRejects(() => importPanoplie(root), Error, "/broken.bina: JSON として読めません。");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });

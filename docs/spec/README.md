@@ -65,10 +65,10 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | パッケージ | 依存 |
 | --- | --- |
-| `@binette/core` | `valibot@1.5.0` |
+| `@binette/core` | `@valibot/valibot@1.5.0`（JSR） |
 | `@binette/regie` | なし（core も使っていない） |
-| `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`、`@b-fuze/deno-dom@0.1.56`（書き出しコマンドだけ） |
-| `@binette/coulisses` | `@binette/core` |
+| `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`（npm）、`@b-fuze/deno-dom@0.1.56`（書き出しコマンドだけ） |
+| `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
 
 テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト。deno-dom には `style` とイベントが無いため）。どれも MIT です。

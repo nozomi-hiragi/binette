@@ -101,7 +101,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
       }
     });
-    // Uint8Array は一部だけ見ている場合があり、Node の Buffer の slice は写しを作らないので、WASM の分だけを新しいバッファに写して渡す
+    // Uint8Array は大きなバッファの一部だけを見ている場合があるので、WASM の分だけを新しいバッファに写して渡す
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       worker.postMessage({ type: "init", wasm: copy }, [copy]);
