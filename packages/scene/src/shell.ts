@@ -16,6 +16,8 @@ export type ShellApp = { source: string } & (
 export interface ShellOptions extends BuildOptions, Pick<MountOptions, "onError" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout"> {
   apps: ShellApp[];
   store: AppStore;
+  /** 最初の落ちからこの時間（ミリ秒、既定 5000）を過ぎてもホームが落ちるなら、開き直すのをやめる */
+  homeRetryWindow?: number;
 }
 
 /** 描画した枠 */
@@ -59,6 +61,16 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   let frozen = false;
   let generation = 0;
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
+  const homeRetryWindow = options.homeRetryWindow ?? 5000;
+  let homeStartedAt = 0;
+  let homeFailingSince: number | undefined;
+  /** ホームが落ちたときに開き直してよいか。落ち続けて homeRetryWindow を過ぎたら開き直さない */
+  const mayRestartHome = () => {
+    const now = performance.now();
+    // 前のホームが homeRetryWindow より長く動いていたなら、落ち続けてはいない
+    if (homeFailingSince === undefined || now - homeStartedAt >= homeRetryWindow) homeFailingSince = now;
+    return now - homeFailingSince < homeRetryWindow;
+  };
   let stopped = false;
   type Session = { controller: AbortController; mounted?: MountedApp; host: HTMLElement; home: boolean; finish: boolean };
   const sessions = new Set<Session>();
@@ -135,6 +147,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     const session = { controller: new AbortController(), host, home: atHome, mounted: undefined as MountedApp | undefined, finish: false };
     sessions.add(session);
     active = session;
+    if (atHome) homeStartedAt = performance.now();
     toolbar.hidden = atHome;
     if (clearStatus) status.hidden = true;
     root.insertBefore(host, status);
@@ -151,7 +164,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
         async onExit(error) {
           if (active !== session) return;
           cut(session);
-          if (home) await show(home, true);
+          // 落ち続けるホームは開き直さず、エラーを出したままにする（④ でここに Apps を出す）
+          if (home && (!atHome || mayRestartHome())) await show(home, true);
           report(error);
         },
         onFinish() {
@@ -179,7 +193,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       cut(session);
       if (!atHome && home) await show(home, true);
       report(error);
-      if (atHome && home && !stopped && current === generation) {
+      // 落ち続けるホームは開き直さず、エラーを出したままにする（④ でここに Apps を出す）
+      if (atHome && home && !stopped && current === generation && mayRestartHome()) {
         // 起動に失敗したホームも開き直す。stop を受け取れるよう、次のタスクに回す
         restartTimer = setTimeout(() => {
           if (!stopped && current === generation) void show(home, true, false);

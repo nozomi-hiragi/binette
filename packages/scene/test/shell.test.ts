@@ -282,3 +282,32 @@ Deno.test("ホームの起動失敗でもホームを開き直し、stop で再�
     } finally { shell.stop(); await window.happyDOM.close(); }
   }
 });
+
+Deno.test("落ち続けるホームは homeRetryWindow を過ぎたら開き直さない", async () => {
+  for (const phase of ["起動", "動作中"]) {
+    const window = new Window(); const element = elementIn(window); const errors: unknown[] = []; let count = 0;
+    const shell = await mountShell(element, { apps: [homeApp], store: createMemoryAppStore(), callTimeout: 10, homeRetryWindow: 60,
+      createWorker() {
+        count++;
+        const held = heldWorker();
+        if (phase === "動作中") {
+          // 起動を済ませてから落ちる
+          void (async () => {
+            await waitFor(() => held.messages.length === 1);
+            held.emit({ type: "ready", exports: [] });
+            for (let id = 1; id <= 3; id++) { await waitFor(() => held.messages.length === id + 1); held.emit({ type: "done", id }); }
+            held.emit({ type: "fail", id: 3, message: "ホームの失敗", exit: true });
+          })();
+        }
+        return held.createWorker();
+      }, onError: error => errors.push(error) });
+    try {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const settled = count;
+      assert(settled >= 2);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      assertEquals(count, settled);
+      assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false);
+    } finally { shell.stop(); await window.happyDOM.close(); }
+  }
+});

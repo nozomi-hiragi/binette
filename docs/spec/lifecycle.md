@@ -303,7 +303,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | スタック | 無い。仮に、戻る・別のアプリを開くと Pause → Stop → Destroy（System・Stack）を続けて呼ぶ。ホームも開くたびに起動し直す |
 | 起動の履歴、最後の状態 | 無い。Last は常に None・done=true・page=""・reason=User/Os を渡す |
 | Destroy の理由、自分を閉じる | 実装済み。finish は今の呼び出しのあと Pause → Stop → Destroy（User・App）でホームに戻る。ホーム自身なら起動し直す |
-| 落ちたとき | 状態を知らせずに捨て、ホームに戻ってエラーを出す。ホームの終了や起動失敗はホームを起動し直す。繰り返しの制限と Apps は無い |
+| 落ちたとき | 状態を知らせずに捨て、ホームに戻ってエラーを出す。ホームの終了や起動失敗はホームを起動し直す。最初の落ちから 5 秒（`homeRetryWindow`）を過ぎても落ち続けたら、開き直すのをやめてエラーを出したままにする。Apps は無い |
 | `App` クラス | launch で一回だけ渡し、6 つのメソッドを上書きできる。二回の launch はアプリの終了 |
 | デバッグメニュー | 無い。時間は LaunchOptions・ShellOptions で変更できる |
 | ホームの選び方 | 設定は無い。入手元が `binette:system` で `role: "home"` の最初のアプリを、いつも開く（[scene/shell.md](scene/shell.md)） |
