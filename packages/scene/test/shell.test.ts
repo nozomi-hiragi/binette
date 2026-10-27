@@ -265,8 +265,9 @@ Deno.test("ホーム自身の終了ではホームを開き直す", async () => 
   try {
     bad.emit({ type: "fail", id: 1, message: "ホームの失敗", exit: true });
     await waitFor(() => errors.length === 1);
-    assertEquals(count, 2); assertEquals(bad.terminated, 1);
-    assert(element.querySelector(".bina-shell-app"));
+    // 起動し直す前に少し待つ
+    await waitFor(() => count === 2 && element.querySelector(".bina-shell-app") !== null);
+    assertEquals(bad.terminated, 1);
     assertEquals(element.querySelector("[role=status]")!.textContent, "ホームの失敗");
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -609,5 +610,33 @@ launch(new Settings());`,
     element.querySelector<HTMLButtonElement>(".home-tile")!.click();
     await waitFor(() => element.querySelector("#checked")?.textContent === "確認済み");
     assertEquals(writes, []); assertEquals(await store.system.getSettings(), undefined); assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭打ちになり、「ホーム」で最初に戻る", async () => {
+  const window = new Window(); const element = elementIn(window); const times: number[] = [];
+  const shell = await mountShell(element, { apps: [homeApp, ...apps], store: createMemoryAppStore(), homeRetryWindow: 2600,
+    createWorker() {
+      times.push(performance.now());
+      const held = heldWorker();
+      queueMicrotask(() => held.emit({ type: "failed", message: "ホームの失敗" }));
+      return held.createWorker();
+    } });
+  try {
+    // 100 → 200 → 400 → 800 → 1000 の待ちで起動し直し、2.6 秒の窓を過ぎたら Apps
+    await waitFor(() => !element.querySelector<HTMLElement>(".bina-shell-apps")!.hidden);
+    const gaps = times.slice(1).map((time, i) => time - times[i]!);
+    assert(gaps.length >= 5, `起動し直した回数が少なすぎます: ${gaps.length}`);
+    for (const [i, gap] of gaps.entries()) {
+      const least = Math.min(100 * 2 ** i, 1000);
+      assert(gap >= least - 5, `${i} 回目の待ちが短すぎます: ${gap}`);
+      // 1000ms で頭打ちになり、それより大きく延びない
+      if (least === 1000) assert(gap < 1900, `待ちが頭打ちになっていません: ${gap}`);
+    }
+    // 「ホーム」で数え直すと、待ちも 100ms に戻る
+    const before = times.length;
+    element.querySelector<HTMLButtonElement>("[aria-label=ホームを開く]")!.click();
+    await waitFor(() => times.length >= before + 2);
+    assert(times[before + 1]! - times[before]! < 600, `待ちが戻っていません: ${times[before + 1]! - times[before]!}`);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });

@@ -30,6 +30,11 @@ export interface MountedShell {
   stop(): void;
 }
 
+/** 落ちたホームを起動し直す前の、最初の待ち（ミリ秒） */
+const HOME_RESTART_FIRST = 100;
+/** 起動し直す前の待ちの上限（ミリ秒） */
+const HOME_RESTART_MAX = 1000;
+
 const css = `
 :where(.bina-shell) { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; font: inherit; }
 :where(.bina-shell) [hidden] { display: none; }
@@ -75,6 +80,12 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let homeFailingSince: number | undefined;
   let homeUnavailable = false;
+  // 落ちたホームを起動し直す前の待ち。落ちるたびに倍にし、HOME_RESTART_MAX で頭打ちにする
+  let homeRestartDelay = HOME_RESTART_FIRST;
+  const resetHomeFailures = () => {
+    homeFailingSince = undefined;
+    homeRestartDelay = HOME_RESTART_FIRST;
+  };
   /**
    * ホームが落ちたときに開き直してよいか。落ち続けて homeRetryWindow を過ぎたら開き直さない
    * @param startedAt 落ちたホームの起動が済んだ時刻。起動に失敗したなら undefined
@@ -82,7 +93,10 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   const mayRestartHome = (startedAt?: number) => {
     const now = performance.now();
     // 落ちたホームが起動を済ませて homeRetryWindow より長く動いていたなら、落ち続けてはいない
-    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) homeFailingSince = now;
+    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) {
+      homeFailingSince = now;
+      homeRestartDelay = HOME_RESTART_FIRST;
+    }
     return now - homeFailingSince < settings.homeRetryWindow;
   };
   let stopped = false;
@@ -163,7 +177,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     home = homes[i]!;
     settings.home = home.key;
     saveSettings();
-    homeFailingSince = undefined;
+    resetHomeFailures();
     homeUnavailable = false;
     clearTimeout(restartTimer);
     if (previous?.key !== home.key) {
@@ -185,7 +199,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       if (!home) return;
       if (homeUnavailable) {
         homeUnavailable = false;
-        homeFailingSince = undefined;
+        resetHomeFailures();
       }
       void show(home, true);
     }));
@@ -216,6 +230,15 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     }
     appsHost.hidden = false;
     renderBar();
+  }
+  /** 待ってからホームを起動し直す。待つあいだに stop や別の移動があれば起動しない */
+  function restartHome(current: number) {
+    const delay = homeRestartDelay;
+    homeRestartDelay = Math.min(homeRestartDelay * 2, HOME_RESTART_MAX);
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      if (!stopped && current === generation && home) void show(home, true, false);
+    }, delay);
   }
   async function returnHome() {
     if (homeUnavailable) showApps();
@@ -307,8 +330,9 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
           const wasActive = active === started;
           cut(started);
           if (wasActive && home) {
-            if (atHome && !mayRestartHome(started.startedAt)) { showApps(); report(error); }
-            else void returnHome().then(() => report(error));
+            if (!atHome) void returnHome().then(() => report(error));
+            else if (!mayRestartHome(started.startedAt)) { showApps(); report(error); }
+            else { report(error); restartHome(generation); }
           } else report(error);
         },
         onFinish() {
@@ -347,11 +371,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       if (wasActive && !atHome) await returnHome();
       report(error);
       if (wasActive && atHome && home && !stopped && current === generation) {
-        if (mayRestartHome()) {
-          restartTimer = setTimeout(() => {
-            if (!stopped && current === generation && home) void show(home, true, false);
-          }, 0);
-        } else showApps();
+        if (mayRestartHome()) restartHome(current);
+        else showApps();
       }
     }
   }
