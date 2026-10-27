@@ -33,7 +33,7 @@ export interface MountedShell {
 const css = `
 :where(.bina-shell) { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; font: inherit; }
 :where(.bina-shell) [hidden] { display: none; }
-:where(.bina-shell-homebar) { display: flex; flex-wrap: wrap; flex-shrink: 0; margin-top: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
+:where(.bina-shell-homebar) { display: flex; flex-wrap: wrap; flex-shrink: 0; margin-top: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); border-top: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
 :where(.bina-shell-button) { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-surface, #fff); border-radius: var(--bina-shell-radius, 12px); padding: var(--bina-shell-button-padding, 12px); }
 :where(.bina-shell-button):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-shell-entry) { display: inline-flex; gap: var(--bina-shell-gap, 8px); }
