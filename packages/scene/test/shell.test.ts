@@ -1,11 +1,9 @@
 import { assert, assertEquals } from "@std/assert";
 import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, serveApp } from "@binette/regie";
-import { DOMParser } from "@b-fuze/deno-dom";
 import { Window } from "happy-dom";
-import { buildApp, type Compiler, type HtmlParser, loadCompiler, mountShell } from "../src/index.ts";
+import { buildApp, type Compiler, loadCompiler, mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const parser = new DOMParser() as unknown as HtmlParser;
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
 const apps = ["設定", "設定の写し"].map((name, index) => ({
   source: `https://example.com/settings-${index}/`,
@@ -15,11 +13,11 @@ const apps = ["設定", "設定の写し"].map((name, index) => ({
   },
 }));
 const homeRead = { source: "binette:system", read: (path: string) => Deno.readTextFile(new URL(`apps/home/${path}`, root)) };
-const builtHome = await buildApp(homeRead.read, { parser, libraries });
+const builtHome = await buildApp(homeRead.read, { libraries });
 const homeApp = { source: "binette:system", prebuilt: builtHome };
 const fixtures: InstalledApp[] = [];
 for (const app of apps) {
-  const built = await buildApp(app.read, { parser, libraries });
+  const built = await buildApp(app.read, { libraries });
   fixtures.push({ manifest: built.manifest, html: built.html, wasm: built.wasm, key: installedAppKey(app.source, built.manifest.id), source: app.source,
     icon: await app.read(built.manifest.icon!), installedAt: 1 });
 }
@@ -86,7 +84,7 @@ function heldWorker() {
 Deno.test("ホームが一覧を作り、開く・詳しく・戻るで一つずつ Worker が動く", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers();
   const errors: unknown[] = []; const store = createMemoryAppStore();
-  const shell = await mountShell(element, { apps: [homeApp, ...apps], store, parser, libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
+  const shell = await mountShell(element, { apps: [homeApp, ...apps], store, libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
   try {
     const tiles = element.querySelectorAll<HTMLButtonElement>(".home-tile");
     assertEquals([...tiles].map((t) => t.textContent), ["設定", "設定の写し"]);
@@ -99,11 +97,11 @@ Deno.test("ホームが一覧を作り、開く・詳しく・戻るで一つず
     await new Promise((resolve) => setTimeout(resolve, 0));
     assertEquals(element.querySelector(".home-grid"), null);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-toolbar")!.hidden, false);
-    element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
-    await waitFor(() => element.querySelector("[bina=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。");
+    element.querySelector<HTMLButtonElement>("#details")!.click();
+    await waitFor(() => element.querySelector("#description")?.textContent === "ブラウザだけで動く、アプリの土台です。");
     element.querySelector<HTMLButtonElement>(".bina-shell-back")!.click();
     await waitFor(() => element.querySelectorAll(".home-tile").length === 2);
-    assertEquals(element.querySelector("[bina=description]"), null);
+    assertEquals(element.querySelector("#description"), null);
     assertEquals(worker.created, 3); assertEquals(worker.maximum, 1); assertEquals(worker.live, 1);
     assertEquals(errors, []);
     shell.stop(); shell.stop();
@@ -123,7 +121,7 @@ Deno.test("read は同じ版を再ビルドせず、版が変われば保存し�
     const app = apps[0]!;
     shell = await mountShell(element, { apps: [homeApp, { ...app, async read(path) {
       const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), version: "0.2.0" }) : text;
-    } }], store, compiler, libraries, parser, createWorker: worker.createWorker });
+    } }], store, compiler, libraries, createWorker: worker.createWorker });
     assertEquals(builds, 1); assertEquals((await store.get(fixtures[0]!.key))!.manifest.version, "0.2.0");
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -172,7 +170,7 @@ Deno.test("フォルダ外の icon は読まずに拒む", async () => {
   const window = new Window(); const element = elementIn(window); const reads: string[] = []; const errors: unknown[] = []; const worker = workers(); const app = apps[0]!;
   const shell = await mountShell(element, { apps: [homeApp, { source: app.source, async read(path) {
     reads.push(path); const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
-  } }], store: createMemoryAppStore(), parser, libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
+  } }], store: createMemoryAppStore(), libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
   try { assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.querySelectorAll(".home-tile").length, 0); }
   finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -199,9 +197,9 @@ for (const action of ["back", "stop"] as const) for (const phase of ["ready", "r
       if (phase === "start") { worker.emit({ type: "ready", exports: ["start"] }); await waitFor(() => worker.messages.length === 2); }
       if (action === "stop") shell.stop(); else element.querySelector<HTMLButtonElement>(".bina-shell-back")!.click();
       assertEquals(worker.terminated, 1);
-      worker.emit({ type: "ready", exports: ["start"] }); worker.emit({ type: "text", name: "description", value: "遅い表示" }); worker.emit({ type: "done", id: 1 });
+      worker.emit({ type: "ready", exports: ["start"] }); worker.emit({ type: "dom", ops: [{ op: "text", handle: 1, value: "遅い表示" }] }); worker.emit({ type: "done", id: 1 });
       if (action === "back") await waitFor(() => element.querySelectorAll(".home-tile").length === 1);
-      assertEquals(element.querySelector("[bina=description]"), null); assertEquals(errors, []);
+      assertEquals(element.querySelector("#description"), null); assertEquals(errors, []);
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
 }
@@ -228,8 +226,9 @@ for (const phase of ["resolved", "start", "mounted"] as const) {
       bad.emit({ type: "ready", exports: phase === "start" ? ["start"] : ["showDetails"] });
       if (phase === "start") await waitFor(() => bad.messages.length === 2);
       if (phase === "mounted") {
+        bad.emit({ type: "dom", ops: [{ op: "byId", handle: 1, id: "details" }, { op: "listen", handle: 1, type: "click", listener: 0 }] });
         await new Promise(resolve => setTimeout(resolve, 0));
-        element.querySelector<HTMLButtonElement>("[bina-on-click=showDetails]")!.click();
+        element.querySelector<HTMLButtonElement>("#details")!.click();
         await waitFor(() => bad.messages.length === 2);
       }
       bad.emit({ type: "fail", id: 1, message: "実行の失敗", exit: true });

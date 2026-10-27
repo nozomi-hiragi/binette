@@ -1,7 +1,6 @@
 import { parseAppManifest } from "@binette/core";
 import { type AppStore, type InstalledApp, installedAppKey } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
-import { parseBindings } from "./bindings.ts";
 import { iconPath } from "./paths.ts";
 import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
@@ -38,13 +37,6 @@ const css = `
 /** 保存したシステムのホームを開き、アプリの起動と戻る帯を受け持つ */
 export async function mountShell(element: HTMLElement, options: ShellOptions): Promise<MountedShell> {
   const document = element.ownerDocument;
-  const parser = options.parser ?? {
-    parseFromString(html: string): Document {
-      const parsed = document.implementation.createHTMLDocument("");
-      parsed.documentElement.innerHTML = html;
-      return parsed;
-    },
-  };
   const root = document.createElement("div");
   root.className = "bina-shell";
   const style = document.createElement("style");
@@ -99,7 +91,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       } else if (!installed || installed.manifest.version !== manifest.version) {
         const path = iconPath(manifest.icon);
         // app.json は最初に読んだものを使う
-        const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), { ...options, parser });
+        const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), options);
         const icon = path === undefined ? undefined : await app.read(path);
         installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
@@ -124,7 +116,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     root.insertBefore(host, status);
     if (!atHome) back.focus();
     try {
-      const mounted = await mountApp(host, { ...installed, bindings: parseBindings(installed.html, parser) }, {
+      const mounted = await mountApp(host, installed, {
         createWorker: options.createWorker,
         signal: session.controller.signal,
         onError: (error) => { if (active === session) report(error); },

@@ -14,7 +14,7 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 - 動いているアプリの数に上限を持ち、裏に回ったアプリは止められる。状態はストレージから戻す前提にする
 - アプリは Régie が渡した呼び出ししか使えない。ネットワークや DOM に直接は触れない
 
-今のコードには、アプリの実行、文字・一覧・行のアイコン・ホーム用の呼び出しの受け口、インストール済みアプリの保存があります（実装済み、呼び出しの形は案）。
+今のコードには、アプリの実行、DOM 操作・ホーム用の呼び出しの受け口、インストール済みアプリの保存があります（実装済み、呼び出しの形は案）。
 
 ## 実行の流れ（実装済み）
 
@@ -22,18 +22,18 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 メインスレッド（launchApp）              Worker（serveApp）
   ── init { wasm, apps? } ─────────────────→  WebAssembly.instantiate
                                         _start があれば呼ぶ（トップレベルの初期化）
-  ←──────────── text { name, value } ─  （初期化中の elem.text）
+  ←──────────── dom { ops } ─  （初期化中の操作）
   ←──────────── ready { exports } ────  export された関数名を返す
   launchApp が解決する
   ── call { id, name, arg? } ─────────────→  exports[name](arg?) を呼ぶ
-  ←──────────── text { name, value } ─  （呼び出し中の elem.text）
+  ←──────────── dom { ops } ─  （呼び出し中の操作）
   ←──────────── done { id } ──────────  呼び終えた
   call が解決する
 ```
 
 - 1 つの Worker で 1 つのアプリを動かします
 - `start()` は Régie からは呼びません。呼ぶのは Scene です（[scene/mount.md](scene/mount.md#mountapp)）。Scene が HTML を描き終えてから呼ぶためです
-- メッセージは届いた順に処理されます。呼び出し中の `text` は、その呼び出しの `done` より先に届きます
+- メッセージは届いた順に処理されます。呼び出し中の `dom` は、その呼び出しの `done` より先に届きます
 
 ## API（実装済み）
 
@@ -59,13 +59,8 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 
 ```ts
 interface LaunchOptions {
-  /** アプリが要素の文字を書き換えたとき（elem(name).text = value） */
-  onText?: (name: string, value: string) => void;
+  onDom?: (ops: DomOp[]) => void;
   apps?: { id: string; name: string }[];
-  onListAdd?: (list: string, row: number) => void;
-  onListClear?: (list: string) => void;
-  onItemText?: (list: string, row: number, name: string, value: string) => void;
-  onItemIcon?: (list: string, row: number, app: number) => void;
   onOpen?: (i: number) => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
@@ -79,7 +74,7 @@ interface LaunchOptions {
 ```
 
 - `signal` が中断されたら Worker を止め、起動や呼び出しの待ちを reject する。中断済みなら Worker は作らない
-- `onText` は `text` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
+- `onDom` は `dom` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
 - `onExit` は起動後にアプリが終了したときだけ呼びます。`stop()` や `signal` では呼びません
 - `onError` は終了しない `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
 
@@ -159,11 +154,7 @@ Worker → メインスレッド:
 | --- | --- | --- |
 | `ready` | `exports: string[]` | 起動できた。export された関数名（`_start` と `__` で始まる名前を除く） |
 | `failed` | `message: string` | 起動できなかった。`message` は `アプリを起動できません: <理由>` |
-| `text` | `name: string`, `value: string` | アプリが `elem(name).text = value` と書いた（import の `elem.text`） |
-| `list.add` | `list: string`, `row: number` | 行を足す。番号は Worker が 0 から数える |
-| `list.clear` | `list: string` | 全行を消し、番号を戻す |
-| `item.text` | `list: string`, `row: number`, `name: string`, `value: string` | 行の文字 |
-| `item.icon` | `list: string`, `row: number`, `app: number` | 行のアイコン |
+| `dom` | `ops: DomOp[]` | 一回分の DOM 操作 |
 | `apps.open` | `i: number` | アプリを開く |
 | `done` | `id: number` | `call` を呼び終えた |
 | `fail` | `id: number`, `message: string`, `exit?: boolean` | `call` が失敗した。`exit: true` ならアプリを終了する |
@@ -186,34 +177,36 @@ Worker → メインスレッド:
 ### ビルドのしかた
 
 - AssemblyScript を `--exportStart _start --exportRuntime` でビルドします（Scene の `buildApp` がそうする。[scene/build.md](scene/build.md#buildapp)）
-- `--exportStart` を付けると、トップレベルの初期化（グローバル変数の初期値、トップレベルの文）は WASM の start 節ではなく、export `_start` になります。Régie は instance を作り終えてから `_start` を呼びます。初期化の中で `elem(…).text` に書いても文字列を読めるようにするためです
+- `--exportStart` を付けると、トップレベルの初期化（グローバル変数の初期値、トップレベルの文）は WASM の start 節ではなく、export `_start` になります。Régie は instance を作り終えてから `_start` を呼びます。初期化の中で `document` の操作をしても文字列を読めるようにするためです
 - `_start` が無い WASM も起動できます（その場合は呼ばない）
 - メモリは `memory` という名前で export されている必要があります（AS の既定）
 
 ### import
 
-Régie が WASM に渡す import は次の表と、下の一覧・ホーム用の呼び出しです。ほかの import を求める WASM はリンクに失敗し、起動できません（`failed`）。
+Régie が WASM に渡すのは `binette` の [Réplique の import](replique.md#wasm-import案実装済み) と `env.abort(message, fileName, line, column)` です（案・実装済み）。abort の文字列は AS のポインタで、0 なら無しです。ほかの import はリンクに失敗します。
 
-| モジュール | 名前 | 引数 | 内容 |
-| --- | --- | --- | --- |
-| `binette` | `elem.text` | `(name: i32, value: i32)` | 2 つとも AS の文字列のポインタ。読んで `text` を送る |
-| `env` | `abort` | `(message: i32, fileName: i32, line: i32, column: i32)` | AS の `abort`。`message`・`fileName` は文字列のポインタで、`0` なら無し。例外を投げて、その呼び出しを止める |
+### DOM の配送（案・実装済み）
 
-- `binette` の import の名前は `<対象>.<操作>`（例: `elem.text`）にします。Réplique の書き込みの操作と 1 対 1 で対応します。読む操作（`Elem.text` の getter など）は Réplique の中で済むので、import はありません（[replique.md](replique.md#呼び出しの一覧)）
+`dom.*` と `apps.icon` はその場では送らず配列に溜めます。`_start` 後の ready 前、および各 call 後の done / fail 前に `{ type: "dom", ops }` を一回送ります。空なら送りません。call の例外でもそこまでの操作を送り、初期化失敗時は捨てます。`onDom` は launchApp / call の解決・拒否より先に届きます。
 
-一覧・ホーム用の import（実装済み、形は案）:
+`apps.open` は従来どおり即時に送ります。その前に DOM を flush しないので、同じ呼び出し中では onOpen が onDom より先に届くことがあります。
 
-| 名前（モジュールは `binette`） | 引数 → 戻り値 |
-| --- | --- |
-| `list.add` | `(name: i32) → i32` |
-| `list.clear` | `(name: i32) → void` |
-| `item.text` | `(list: i32, row: i32, name: i32, value: i32) → void` |
-| `item.icon` | `(list: i32, row: i32, app: i32) → void` |
-| `apps.count` | `() → i32` |
-| `apps.name`・`apps.id` | `(i: i32) → i32`（文字列ポインタ） |
-| `apps.open` | `(i: i32) → void` |
+公開する判別共用体 `DomOp`（案・実装済み）:
 
-文字列の引数はすべて AS のポインタです。`apps` を渡したときだけ init に含め、Worker が同期で読みます。渡していないアプリの `apps.*` は `この呼び出しはホームのアプリだけが使えます。` の例外で失敗します。アプリ番号や行番号が範囲外でも例外です。各メッセージは対応する `onListAdd`・`onListClear`・`onItemText`・`onItemIcon`・`onOpen` に届きます。
+```ts
+type DomOp =
+  | { op: "byId"; handle: number; id: string }
+  | { op: "create"; handle: number; tag: string }
+  | { op: "text"; handle: number; value: string }
+  | { op: "class"; handle: number; value: string }
+  | { op: "append"; parent: number; child: number }
+  | { op: "remove"; handle: number }
+  | { op: "listen"; handle: number; type: string; listener: number }
+  | { op: "icon"; handle: number; app: number };
+
+```
+
+`apps.icon` も apps が無ければ例外、番号の範囲外も例外でアプリを終了します。`__bina_event` は exports 一覧から除かれますが、call では呼べます。Scene は `call("__bina_event", listener)` でイベントを伝えます。
 
 ### 文字列の読み方
 

@@ -27,10 +27,9 @@
 | [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
 | [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-設定はシステムアプリ [apps/settings](apps/settings) が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。HTML の `bina` から `bina.ts` を生成し、AS では `elem.text` で文字を変えます。
+設定はシステムアプリ [apps/settings](apps/settings) が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。AS の document API で通常の id の要素を参照し、文字の変更とクリックを扱います。
 
 ```sh
-deno task gen:bindings  # HTML を変えたら生成し直す（エディタの補完用）
 ```
 
 ## 単独で起動する

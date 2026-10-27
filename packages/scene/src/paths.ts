@@ -15,20 +15,12 @@ export function appPath(path: string): string | null {
   return parts.join("/");
 }
 
-/** AS の入口と同じフォルダに置く生成ファイルのパス */
-export function bindingsPath(entry: string): string {
-  return entry.slice(0, entry.lastIndexOf("/") + 1) + "bina.ts";
-}
-
-/** app.json の入口のパスを整え、生成する bina.ts のパスと合わせて返す */
-export function entryPaths(entry: { html: string; as: string }): { html: string; as: string; bindings: string } {
+/** app.json の入口をフォルダ内の相対パスに整える */
+export function entryPaths(entry: { html: string; as: string }): { html: string; as: string } {
   const html = appPath(entry.html);
   const as = appPath(entry.as);
   if (!html || !as) throw new Error("アプリの入口は app.json のフォルダ内の相対パスにしてください。");
-  const bindings = bindingsPath(as);
-  // 入口が bina.ts だと、生成したファイルで入口を上書きしてしまう
-  if (bindings === as) throw new Error("entry.as に bina.ts という名前は使えません。bina.ts は HTML から自動生成するファイルです。");
-  return { html, as, bindings };
+  return { html, as };
 }
 
 /** アイコンのパスを整える。指定が無ければ読まない */

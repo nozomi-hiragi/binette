@@ -5,7 +5,7 @@
  */
 export type { WorkerScope } from "./worker.ts";
 export { serveApp } from "./worker.ts";
-export type { LaunchOptions, RegieApp, RegieWorker } from "./launch.ts";
+export type { DomOp, LaunchOptions, RegieApp, RegieWorker } from "./launch.ts";
 export { launchApp } from "./launch.ts";
 export type { AppStore, IndexedDbAppStoreOptions, InstalledApp } from "./store.ts";
 export { createIndexedDbAppStore, createMemoryAppStore, installedAppKey } from "./store.ts";

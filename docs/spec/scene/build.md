@@ -36,16 +36,12 @@ interface Compiler {
 
 ```ts
 interface BuildOptions {
-  /** HTML を読む DOMParser。省略するとブラウザの globalThis.DOMParser */
-  parser?: HtmlParser;
   /** 指定子 → AS のソース。例: { "jsr:@binette/replique": source } */
   libraries?: Record<string, string>;
   /** 使う asc。省略すると loadCompiler() */
   compiler?: Compiler;
 }
 interface BuiltApp {
-  /** HTML から集めた名前（parseBindings の結果） */
-  bindings: Bindings;
   manifest: AppManifest;
   html: string;
   wasm: Uint8Array;
@@ -55,14 +51,13 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 
 `read` は、`app.json` を置いた場所からの相対パスを受けて、そのファイルの中身を返す関数です。取り方（`fetch`、`Deno.readTextFile` など）は呼ぶ側が決めます。
 
-1. `read("app.json")` を `parseAppManifest` で読む（誤りは `BinetteError`）
-2. `entry.html` と `entry.as` のパスを整える（`./` と途中の `../` を畳む）。`/` で始まる、`\` を含む、`%` を含む（`%2e%2e` は URL で読むと `..` になるため）、`https:` のようなスキームで始まる、`app.json` のフォルダの外に出る、のどれかなら `アプリの入口は app.json のフォルダ内の相対パスにしてください。` の `Error`。`entry.as` のファイル名が `bina.ts` なら `entry.as に bina.ts という名前は使えません。bina.ts は HTML から自動生成するファイルです。` の `Error`
-3. `parser` を決める。省略されていて `globalThis.DOMParser` も無ければ `HTML を読む DOMParser がありません。parser を指定してください。` の `Error`
-4. HTML と AS を並べて読む
-5. HTML を `parseBindings` で読み（名前の誤りは `Error`）、`generateBindingsSource` で `bina.ts` のソースを作る（詳しくは [bindings.md](bindings.md)）
-6. asc で AS を WASM にビルドする（下の「asc の呼び方」と「ファイルの解決」）
-7. WASM を `WebAssembly.compile` し、`bindings.clicks` と各 `bindings.lists` の `clicks` の関数名がすべて export された関数にあるか確かめる。無ければ `アプリをビルドできません。クリックで呼ぶ関数が export にありません: <名前>、<名前>` の `Error`
-8. `{ manifest, html, wasm, bindings }` を返す
+1. `read("app.json")` を parseAppManifest で読む（誤りは BinetteError）
+2. 入口のパスを整える。絶対パス・スキーム・バックスラッシュ・%・フォルダ外は拒む
+3. HTML と AS を読む
+4. AS の末尾に `\nexport { __bina_event } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
+5. asc でビルドし `{ manifest, html, wasm }` を返す
+
+`bina.ts` の生成を無くすのは決定 2026-10-27 です。HTML の解析、クリック関数の export 検査、BuiltApp.bindings、BuildOptions.parser と ShellOptions.parser、HtmlParser、deno-dom の依存を無くしました（案・実装済み）。入口に bina.ts というファイル名も使えます。
 
 - `read` が reject したら、そのまま reject します
 - `entry.css` は読みません
@@ -91,8 +86,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 | `name` | 返すもの |
 | --- | --- |
 | `app.json` のフォルダの外に出るパス、`/` で始まるパスなど | `null`（読まない） |
-| `entry.as` と同じパス | アプリの AS のソース（読み済みのもの） |
-| `entry.as` と同じフォルダの `bina.ts` | 生成した `bina.ts`。アプリのフォルダに `bina.ts` があっても、生成したものを使う |
+| `entry.as` と同じパス | アプリの AS のソースにイベントの再 export を末尾追加したもの |
 | `node_modules/<指定子>.ts` | `libraries[<指定子>]`（あれば） |
 | `node_modules/<指定子>/index.ts` | `libraries[<指定子>]`（あれば） |
 | そのほかの `.ts` で終わるパス | `read(パス)` の結果。reject したら `null` |
@@ -101,7 +95,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 - `name` は 2 と同じやり方で整えてから比べます
 - 読めないファイルに `null` を返すと、asc が「見つからない」（`TS6054`）誤りを出し、ビルドの誤りになります
 
-- AS で `import { elem } from "jsr:@binette/replique"` と書くと、asc はこれをパッケージの import とみなし、`node_modules/jsr:@binette/replique.ts`、次に `node_modules/jsr:@binette/replique/index.ts` を読みに来ます。そこで `libraries["jsr:@binette/replique"]` を返すと解決します
+- AS で `import { document } from "jsr:@binette/replique"` と書くと、asc はこれをパッケージの import とみなし、`node_modules/jsr:@binette/replique.ts`、次に `node_modules/jsr:@binette/replique/index.ts` を読みに来ます。そこで `libraries["jsr:@binette/replique"]` を返すと解決します
 - サブパス（`jsr:@binette/replique/glue` など）も、指定子をそのままキーにして引けます
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）は `read` で読むので使えます
 - `libraries` に無い指定子は解決できず、ビルドの誤りになります
@@ -126,6 +120,6 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 deno run -A packages/scene/src/cli.ts build apps/settings --out .binapp/settings.binapp --replique packages/replique/src/index.ts
 ```
 
-CLI は deno-dom の parser で `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはホームと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の `cli.ts <アプリのフォルダ>` による bina.ts の生成も残ります。
+CLI は `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはホームと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
 
 `deno task build:system`（`scripts/build-system.ts`）は `apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/<フォルダ名>.binapp` に書き出します。app.json の無いフォルダは無視します。古い `.binapp` は書き出す前に消し、失敗時はフォルダ名を出して終了コード 1 にします。フォルダ名は UTF-16 コード単位の辞書順（`<`・`>`）で比べます。このフォルダは gitignore に入れ、生成物はコミットしません。`deno task start` と `deno task build` は先にこのタスクを実行します。Binette は Vite の `import.meta.glob` で同梱した `.binapp` を fetch し、ブラウザでは asc を読みません。

@@ -1,22 +1,19 @@
-import { assert, assertEquals, assertMatch, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
-import { DOMParser } from "@b-fuze/deno-dom";
-// 描画とクリックは happy-dom で試す。deno-dom には style が無く、click のイベントも届かないため
 import { Window } from "happy-dom";
-import { buildApp, type HtmlParser, mountApp } from "../src/index.ts";
+import { buildApp, mountApp } from "../src/index.ts";
 
-const root = new URL("../../..", import.meta.url);
-const replique = await Deno.readTextFile(new URL("packages/replique/src/index.ts", root));
-const parser = new DOMParser() as unknown as HtmlParser;
-const libraries = { "jsr:@binette/replique": replique };
+const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
-  "index.html": '<p bina="count">0</p><button bina-on-click="increment">+1</button>',
-  "main.ts": `import { count } from "./bina";
+  "index.html": '<p id="count">0</p><button id="button">+1</button>',
+  "main.ts": `import { document, Event } from "jsr:@binette/replique";
 let value = 0;
-export function start(): void { count.text = "0"; }
-export function increment(): void { value++; count.text = value.toString(); }
-`,
+export function start(): void { document.getElementById("button").addEventListener("click", increment); }
+function increment(event: Event): void {
+ assert(event.type == "click"); assert(event.currentTarget === document.getElementById("button"));
+ value++; document.getElementById("count").textContent = value.toString();
+}`,
 };
 const read = (path: string) => Promise.resolve(files[path]!);
 
@@ -39,122 +36,116 @@ async function waitFor(condition: () => boolean): Promise<void> {
   assert(condition(), "待っても表示が変わりませんでした");
 }
 
-Deno.test("文字列のアプリをビルドし、連続クリックで状態を更新できる", async () => {
-  const built = await buildApp(read, { libraries, parser });
-  assertEquals(built.manifest.id, "click-state");
-  assertMatch(built.html, /bina-on-click="increment"/);
-  assertEquals(built.bindings.elements.count, { count: 1, kinds: [{ tag: "p" }] });
-  assertEquals(built.bindings.clicks, ["increment"]);
-
-  const window = new Window();
+Deno.test("document の同じ id は同じ Element で、クリックの currentTarget と状態を保つ", async () => {
+  const built = await buildApp(read, { libraries });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(element as never);
+  const errors: unknown[] = [];
+  const mounted = await mountApp(element, built, { createWorker, onError: e => errors.push(e) });
   try {
-    const element = window.document.createElement("div") as unknown as HTMLElement;
-    window.document.body.append(element as never);
-    const errors: unknown[] = [];
-    const mounted = await mountApp(element, built, { createWorker, onError: (error) => errors.push(error) });
-    try {
-      const text = element.querySelector("[bina=count]")!;
-      const button = element.querySelector("button")!;
-      assertEquals(text.textContent, "0");
-      button.click();
-      await waitFor(() => text.textContent === "1");
-      button.click();
-      await waitFor(() => text.textContent === "2");
-      assertEquals(errors, []);
-    } finally {
-      mounted.stop();
-    }
-  } finally {
-    await window.happyDOM.close();
-  }
+    assert(!mounted.app.exports.includes("__bina_event"));
+    const button = element.querySelector<HTMLButtonElement>("button")!;
+    button.click(); await waitFor(() => element.querySelector("p")!.textContent === "1");
+    button.click(); await waitFor(() => element.querySelector("p")!.textContent === "2");
+    assertEquals(errors, []);
+    mounted.stop(); button.click(); await new Promise(resolve => setTimeout(resolve, 0));
+    assertEquals(errors, []);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("同じ名前の要素はまとめて変わり、text を読むと最後に書いた値が返る", async () => {
-  const files: Record<string, string> = {
-    "app.json": JSON.stringify({ id: "x", name: "x", entry: { html: "i.html", as: "m.ts" } }),
-    "i.html": '<h1 bina="name"></h1><p bina="name"></p><p bina="echo"></p><button bina-on-click="copy">写す</button>',
-    "m.ts": `import { elem } from "jsr:@binette/replique";
-export function start(): void { elem("name").text = "あ"; }
-export function copy(): void { elem("echo").text = elem("name").text + "[" + elem("unset").text + "]"; }
-`,
-  };
-  const built = await buildApp(async (path) => files[path]!, { libraries, parser });
-  const window = new Window();
+Deno.test("作成・追加・削除、文字と class の読み書き、アイコンを反映する", async () => {
+  const source = `import { document, apps, Element, Event } from "jsr:@binette/replique";
+const tiles = document.getElementById("tiles");
+const button = document.createElement("BUTTON");
+const indices = new Map<Element, i32>();
+export function start(): void {
+ assert(tiles === document.getElementById("tiles"));
+ assert(tiles.textContent == ""); assert(tiles.className == "");
+ tiles.textContent = "";
+ button.className = "tile"; assert(button.className == "tile");
+ const img = document.createElement("img"); apps.icon(img, 0); button.appendChild(img);
+ const span = document.createElement("span"); span.textContent = "あ"; assert(span.textContent == "あ");
+ assert(button.appendChild(span) === span);
+ indices.set(button, 0); button.addEventListener("click", open); tiles.appendChild(button);
+}
+function open(event: Event): void { assert(event.currentTarget === button); apps.open(indices.get(event.currentTarget)); }
+export function remove(): void { button.remove(); }
+export function again(): void { tiles.appendChild(button); button.textContent = "文字だけ"; }
+export function clearIcon(): void { apps.icon(document.getElementById("old-icon"), 1); apps.icon(tiles, 0); }
+`;
+  const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<div id="tiles"><p>消える</p></div><img id="old-icon" src="old">', "main.ts": source }[path]!), { libraries });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(element as never); const opened: number[] = [];
+  const icon = '<svg><script>bad()</script></svg>';
+  const mounted = await mountApp(element, built, { createWorker, apps: [{ id: "a", name: "一", icon }, { id: "b", name: "二" }], onOpen: i => opened.push(i) });
   try {
-    // アプリの領域の外にある同じ名前の要素は変えない
-    const outside = window.document.createElement("p");
-    outside.setAttribute("bina", "name");
-    outside.textContent = "外";
-    const element = window.document.createElement("div") as unknown as HTMLElement;
-    window.document.body.append(outside, element as never);
-    const mounted = await mountApp(element, built, { createWorker });
-    try {
-      assertEquals([...element.querySelectorAll("[bina=name]")].map((target) => target.textContent), ["あ", "あ"]);
-      assertEquals(outside.textContent, "外");
-      element.querySelector("button")!.click();
-      const echo = element.querySelector("[bina=echo]")!;
-      await waitFor(() => echo.textContent === "あ[]");
-    } finally {
-      mounted.stop();
-    }
-  } finally {
-    await window.happyDOM.close();
-  }
+    const button = element.querySelector<HTMLButtonElement>("button")!;
+    assertEquals(button.type, "button"); assertEquals(button.className, "tile"); assertEquals(button.textContent, "あ");
+    assertEquals(element.querySelector("p"), null);
+    assertEquals(element.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`);
+    assertEquals(element.querySelector("img")!.getAttribute("alt"), ""); assertEquals(element.querySelector("script"), null);
+    button.querySelector<HTMLSpanElement>("span")!.click(); await waitFor(() => opened.length === 1); assertEquals(opened, [0]);
+    await mounted.app.call("remove"); assertEquals(element.querySelector("button"), null);
+    await mounted.app.call("again"); assertEquals(button.textContent, "文字だけ"); assertEquals(button.children.length, 0);
+    await mounted.app.call("clearIcon"); assertEquals(element.querySelector("#old-icon")!.getAttribute("src"), null);
+    assertEquals(element.querySelector("#tiles")!.hasAttribute("src"), false);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("無い id・枠自身・枠外には届かず、byId は毎回探し直す", async () => {
+  const special = 'a"\\]#あ';
+  const source = `import { document } from "jsr:@binette/replique";
+const e = document.getElementById("same");
+export function start(): void {
+ document.getElementById("host").textContent = "壊す";
+ document.getElementById("host").remove();
+ e.appendChild(document.getElementById("host"));
+ document.getElementById("missing").textContent = "無い";
+ document.getElementById("missing").remove();
+ document.getElementById("missing").addEventListener("click", () => {});
+ e.textContent = "内";
+ document.getElementById(${JSON.stringify(special)}).textContent = "特殊";
+}
+export function update(): void { e.textContent = "再検索"; }
+`;
+  const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<p id="same"></p>', "main.ts": source }[path]!), { libraries });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  element.id = "host"; const outside = window.document.createElement("p"); outside.id = "same"; outside.textContent = "外";
+  const missing = window.document.createElement("p"); missing.id = "missing"; missing.textContent = "外";
+  window.document.body.append(outside, missing, element as never);
+  const mounted = await mountApp(element, built, { createWorker });
+  try {
+    assertEquals(outside.textContent, "外"); assertEquals(missing.textContent, "外"); assertEquals(element.querySelector("p")!.textContent, "内");
+    element.querySelector("p")!.remove(); const replacement = window.document.createElement("p"); replacement.id = "same"; element.append(replacement as never);
+    await mounted.app.call("update"); assertEquals(replacement.textContent, "再検索");
+    const escaped = window.document.createElement("p"); escaped.id = special; element.append(escaped as never);
+    await mounted.app.call("start"); assertEquals(escaped.textContent, "特殊");
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("禁止タグと click 以外は onError に届き、アプリは動き続ける", async () => {
+  const source = `import { document } from "jsr:@binette/replique";
+export function start(): void {
+ const tags = ["script", "iframe", "object", "a", "style", "template"];
+ for (let i = 0; i < tags.length; i++) {
+   const bad = document.createElement(tags[i]); bad.textContent = "危険"; bad.className = "bad";
+   document.getElementById("count").appendChild(bad); bad.remove();
+ }
+ document.getElementById("button").addEventListener("input", () => {});
+}
+export function next(): void { document.getElementById("count").textContent = "続く"; }`;
+  const built = await buildApp(path => Promise.resolve({ ...files, "main.ts": source }[path]!), { libraries });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  const errors: unknown[] = []; const mounted = await mountApp(element, built, { createWorker, onError: e => errors.push(e) });
+  try {
+    assertEquals(errors.length, 7); assertEquals(element.querySelector(".bad"), null);
+    await mounted.app.call("next"); assertEquals(element.querySelector("p")!.textContent, "続く");
+  } finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
 Deno.test("ビルドに失敗する AS は Error になる", async () => {
-  const files: Record<string, string> = {
-    "app.json": JSON.stringify({ id: "x", name: "x", entry: { html: "i.html", as: "m.ts" } }),
-    "i.html": "<p></p>",
-    "m.ts": 'export function start(): void { const n: i32 = "文字"; }',
-  };
-  const error = await assertRejects(
-    () => buildApp(async (path) => files[path]!, { libraries, parser }),
-    Error,
-    "アプリをビルドできません。",
-  );
+  const error = await assertRejects(() => buildApp(path => Promise.resolve({ ...files, "main.ts": 'export function start(): void { const n: i32 = "文字"; }' }[path]!), { libraries }), Error, "アプリをビルドできません。");
   assert(error.message.includes("TS2322"));
-});
-
-Deno.test("行は template の後ろに増え、文字・アイコン・クリックが行だけに届き clear で消える", async () => {
-  const files = {
-    "app.json": JSON.stringify({ id: "list", name: "一覧", entry: { html: "i.html", as: "m.ts" } }),
-    "i.html": '<p bina="name">外</p><div><template bina="tiles"><button bina-on-click="openApp"><img bina-icon alt=""><span bina="name"></span></button><i bina="name"></i></template><b>末尾</b></div>',
-    "m.ts": `import { tiles } from "./bina"; import { apps, elem } from "jsr:@binette/replique";
-export function start(): void { for (let i = 0; i < apps.count(); i++) { const item = tiles.add(); item.elem("name").text = apps.name(i); item.icon(i); } elem("name").text = "外だけ"; }
-export function openApp(row: i32): void { apps.open(row); }
-export function clear(): void { tiles.clear(); }
-export function again(): void { const item = tiles.add(); item.elem("name").text = "再開"; item.icon(1); }
-`,
-  };
-  const built = await buildApp(async (path) => files[path as keyof typeof files], { libraries, parser });
-  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
-  window.document.body.append(element as never); const opened: number[] = [];
-  const icon = '<svg xmlns="http://www.w3.org/2000/svg"><script>bad()</script></svg>';
-  let init: Record<string, unknown> | undefined;
-  const mounted = await mountApp(element, built, { createWorker() {
-    const worker = createWorker();
-    return { ...worker, postMessage(message, transfer) {
-      if ((message as { type: string }).type === "init") init = message as Record<string, unknown>;
-      worker.postMessage(message, transfer);
-    } };
-  }, apps: [{ id: "a", name: "一", icon }, { id: "b", name: "二" }], onOpen: (i) => opened.push(i) });
-  try {
-    assertEquals(init!.apps, [{ id: "a", name: "一" }, { id: "b", name: "二" }]);
-    assertEquals(element.querySelector("p")!.textContent, "外だけ");
-    assertEquals([...element.querySelectorAll("span")].map((e) => e.textContent), ["一", "二"]);
-    assertEquals([...element.querySelectorAll("i")].map((e) => e.textContent), ["一", "二"]);
-    assertEquals([...element.querySelector("div")!.children].map((e) => e.tagName.toLowerCase()), ["template", "button", "i", "button", "i", "b"]);
-    assertEquals(element.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`);
-    assertEquals(element.querySelectorAll("img")[1]!.getAttribute("src"), null);
-    assertEquals(element.querySelector("script"), null);
-    element.querySelectorAll<HTMLButtonElement>("button")[1]!.querySelector("span")!.click();
-    await waitFor(() => opened.length === 1); assertEquals(opened, [1]);
-    await mounted.app.call("clear"); assertEquals(element.querySelectorAll("button").length, 0);
-    assertEquals(element.querySelector("template")!.content.querySelector("span")!.textContent, "");
-    await mounted.app.call("again"); assertEquals(element.querySelector("span")!.textContent, "再開");
-    element.querySelector<HTMLButtonElement>("button")!.click(); await waitFor(() => opened.length === 2); assertEquals(opened, [1, 0]);
-  } finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
 for (const phase of ["ready", "start", "mounted"] as const) {
@@ -165,7 +156,7 @@ for (const phase of ["ready", "start", "mounted"] as const) {
     const listeners = new Map<string, (event: never) => void>();
     const emit = (type: string, event: unknown) => listeners.get(type)?.(event as never);
     let terminated = 0;
-    const built = await buildApp(read, { libraries, parser });
+    const built = await buildApp(read, { libraries });
     const mounting = mountApp(element, built, {
       createWorker: () => ({
         postMessage(message) { messages.push(message); },
@@ -179,6 +170,7 @@ for (const phase of ["ready", "start", "mounted"] as const) {
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       if (phase === "mounted") {
+        emit("message", { data: { type: "dom", ops: [{ op: "byId", handle: 1, id: "button" }, { op: "listen", handle: 1, type: "click", listener: 0 }] } });
         emit("message", { data: { type: "done", id: 1 } });
         mounted = await mounting;
         element.querySelector<HTMLButtonElement>("button")!.click();
@@ -201,3 +193,23 @@ for (const phase of ["ready", "start", "mounted"] as const) {
     } finally { mounted?.stop(); await window.happyDOM.close(); }
   });
 }
+
+Deno.test("byId のリスナーは登録時の要素だけに付き、停止で外れる", async () => {
+  const built = await buildApp(read, { libraries });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  const mounted = await mountApp(element, built, { createWorker });
+  try {
+    const original = element.querySelector<HTMLButtonElement>("button")!;
+    let removed = 0;
+    const remove = original.removeEventListener.bind(original);
+    original.removeEventListener = (...args: Parameters<HTMLElement["removeEventListener"]>) => { removed++; remove(...args); };
+    const replacement = window.document.createElement("button"); replacement.id = "button";
+    original.replaceWith(replacement as never);
+    replacement.click(); await new Promise(resolve => setTimeout(resolve, 10));
+    assertEquals(element.querySelector("p")!.textContent, "0");
+    original.click(); await waitFor(() => element.querySelector("p")!.textContent === "1");
+    mounted.stop(); assertEquals(removed, 1);
+    original.click(); await new Promise(resolve => setTimeout(resolve, 10));
+    assertEquals(element.querySelector("p")!.textContent, "1");
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});

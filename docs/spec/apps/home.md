@@ -8,7 +8,7 @@
 
 - `app.json` に `"role": "home"` を書く（[app.md](../app.md#appjson)）
 - OS は、入手元が `binette:system` で `role` が `"home"` のアプリのうち、最初のものをホームとして開く。無ければ、画面と `onError` にエラーを出す（[scene/shell.md](../scene/shell.md#保存とホームの選び方)）
-- ホームだけが、入っているアプリの一覧と起動の呼び出し（`apps.*`）を使える。ほかのアプリが呼ぶと失敗する（[replique.md](../replique.md#実装済み形は案)）
+- ホームだけが、入っているアプリの一覧と起動の呼び出し（`apps.*`）を使える。ほかのアプリが呼ぶと失敗する（[replique.md](../replique.md#api案実装済み)）
 
 ```json
 {
@@ -32,37 +32,14 @@
 HTML（抜き出し）:
 
 ```html
-<div class="home-grid" aria-label="アプリ">
-  <template bina="tiles"><button type="button" class="home-tile" bina-on-click="openApp"><img class="home-icon" bina-icon alt=""><span bina="name"></span></button></template>
-</div>
+<div class="home-grid" id="tiles" aria-label="アプリ"></div>
 ```
 
-- `<template bina="tiles">` は一覧の 1 行の形。AS が行を足すと、OS が中身を写して並べる（[scene/bindings.md](../scene/bindings.md)、[scene/mount.md](../scene/mount.md)）
-- 行の中の `bina="name"` と `img[bina-icon]` は、その行の中だけで探す
+## 動き（案・実装済み）
 
-## 動き
+通常の id と document API を使う方針は決定 2026-10-27 です。start で tiles の textContent を空にし、アプリごとに button.home-tile、img.home-icon、名前の span を createElement で作り appendChild します。img は Scene が alt="" を付ける装飾画像です。apps.icon(img, i) で OS の SVG を画像に入れ、名前は textContent に書きます。
 
-```ts
-import { apps } from "jsr:@binette/replique";
-import { tiles } from "./bina";
-
-export function start(): void {
-  tiles.clear();
-  for (let i: i32 = 0; i < apps.count(); i++) {
-    const tile = tiles.add();
-    tile.elem("name").text = apps.name(i);
-    tile.icon(i);
-  }
-}
-
-export function openApp(row: i32): void {
-  apps.open(row);
-}
-```
-
-- `start()` で一覧を作り直す。行の番号とアプリの番号は同じになる
-- アイコンは `tile.icon(i)` で頼むと、OS がそのアプリの SVG を data URL にして `img` の `src` に入れる。ホームは SVG の中身も URL も扱わない
-- タイルを押すと、OS が `openApp(行の番号)` を呼ぶ。ホームは `apps.open(i)` で開くよう頼む
+グローバルの Map<Element, i32> にボタンと番号を覚え、click リスナーは Event.currentTarget から番号を引いて apps.open(i) を呼びます。ローカル変数を捕まえるクロージャは使いません。実際のソースは [main.ts](../../../apps/home/src/main.ts) にあります。
 
 ## OS の枠との分担
 

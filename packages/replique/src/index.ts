@@ -1,85 +1,108 @@
-/**
- * アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。
- * 中身は WASM の import で、Régie が `binette` という名前で渡す。
- */
-
+/** アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。 */
 // @ts-ignore: decorator
-@external("binette", "elem.text")
-declare function setText(name: string, value: string): void;
-
-/** アプリが最後に書いた文字。画面は Worker の外にあって読めないので、写しを手元に持つ */
-const texts = new Map<string, string>();
-
-/** HTML で `bina="name"` を付けた要素のまとまり。同じ名前の要素はまとめて変わる */
-export class Elem {
-  constructor(readonly name: string) {}
-
-  /** このアプリが最後に書いた文字。まだ書いていなければ空文字列 */
-  get text(): string {
-    return texts.has(this.name) ? texts.get(this.name)! : "";
-  }
-
-  /** 要素の文字を書き換える */
-  set text(value: string) {
-    texts.set(this.name, value);
-    setText(this.name, value);
-  }
-}
-
-/** `bina="name"` の要素のまとまりを返す */
-export function elem(name: string): Elem {
-  return new Elem(name);
-}
-
-// @ts-ignore: decorator
-@external("binette", "list.add")
+@external("binette", "dom.byId")
 // @ts-ignore: AssemblyScript の整数型
-declare function addRow(name: string): i32;
-// @ts-ignore: decorator
-@external("binette", "list.clear")
-declare function clearRows(name: string): void;
-// @ts-ignore: decorator
-@external("binette", "item.text")
-// @ts-ignore: AssemblyScript の整数型
-declare function setItemText(list: string, row: i32, name: string, value: string): void;
-// @ts-ignore: decorator
-@external("binette", "item.icon")
-// @ts-ignore: AssemblyScript の整数型
-declare function setItemIcon(list: string, row: i32, app: i32): void;
+declare function byId(handle: i32, id: string): void;
 
-/** 一覧の行の中の要素 */
-export class ItemElem {
+// @ts-ignore: decorator
+@external("binette", "dom.create")
+// @ts-ignore: AssemblyScript の整数型
+declare function create(handle: i32, tag: string): void;
+
+// @ts-ignore: decorator
+@external("binette", "dom.text")
+// @ts-ignore: AssemblyScript の整数型
+declare function text(handle: i32, value: string): void;
+
+// @ts-ignore: decorator
+@external("binette", "dom.class")
+// @ts-ignore: AssemblyScript の整数型
+declare function className(handle: i32, value: string): void;
+
+// @ts-ignore: decorator
+@external("binette", "dom.append")
+// @ts-ignore: AssemblyScript の整数型
+declare function append(parent: i32, child: i32): void;
+
+// @ts-ignore: decorator
+@external("binette", "dom.remove")
+// @ts-ignore: AssemblyScript の整数型
+declare function remove(handle: i32): void;
+
+// @ts-ignore: decorator
+@external("binette", "dom.listen")
+// @ts-ignore: AssemblyScript の整数型
+declare function listen(handle: i32, type: string, listener: i32): void;
+
+// @ts-ignore: decorator
+@external("binette", "apps.icon")
+// @ts-ignore: AssemblyScript の整数型
+declare function iconImport(handle: i32, app: i32): void;
+
+// @ts-ignore: AssemblyScript の整数型
+let nextHandle: i32 = 1;
+const elements = new Map<string, Element>();
+const listeners = new Array<(event: Event) => void>();
+const targets = new Array<Element>();
+const types = new Array<string>();
+
+/** リスナーを付けた要素とイベントの種類 */
+export class Event {
+  constructor(readonly type: string, readonly currentTarget: Element) {}
+}
+
+/** 番号で参照する要素。読み取り値はアプリが最後に書いた値 */
+export class Element {
+  private textValue: string = "";
+  private classValue: string = "";
   // @ts-ignore: AssemblyScript の整数型
-  constructor(private readonly list: string, private readonly row: i32, private readonly name: string) {}
+  readonly handle: i32;
+  // @ts-ignore: AssemblyScript の整数型
+  constructor(handle: i32) { this.handle = handle; }
 
-  /** 行の中の要素の文字を書き換える */
-  set text(value: string) {
-    setItemText(this.list, this.row, this.name, value);
+  get textContent(): string { return this.textValue; }
+  /** 子をすべて消して文字だけにする */
+  set textContent(value: string) { this.textValue = value; text(this.handle, value); }
+  get className(): string { return this.classValue; }
+  set className(value: string) { this.classValue = value; className(this.handle, value); }
+  appendChild(child: Element): Element { append(this.handle, child.handle); return child; }
+  remove(): void { remove(this.handle); }
+  addEventListener(type: string, listener: (event: Event) => void): void {
+    const index = listeners.length;
+    listeners.push(listener);
+    targets.push(this);
+    types.push(type);
+    listen(this.handle, type, index);
   }
 }
 
-/** 一覧の行。番号は 0 から */
-export class Item {
-  // @ts-ignore: AssemblyScript の整数型
-  constructor(private readonly list: string, private readonly row: i32) {}
-
-  elem(name: string): ItemElem { return new ItemElem(this.list, this.row, name); }
-  // @ts-ignore: AssemblyScript の整数型
-  icon(app: i32): void { setItemIcon(this.list, this.row, app); }
+export namespace document {
+  export function getElementById(id: string): Element {
+    if (elements.has(id)) return elements.get(id)!;
+    const element = new Element(nextHandle++);
+    elements.set(id, element);
+    byId(element.handle, id);
+    return element;
+  }
+  export function createElement(tag: string): Element {
+    const element = new Element(nextHandle++);
+    create(element.handle, tag);
+    return element;
+  }
 }
 
-/** HTML の template に対応する一覧 */
-export class List {
-  constructor(readonly name: string) {}
-
-  add(): Item { return new Item(this.name, addRow(this.name)); }
-  clear(): void { clearRows(this.name); }
+/** Régie がイベントのときに呼ぶ */
+// @ts-ignore: AssemblyScript の整数型
+export function __bina_event(listener: i32): void {
+  if (listener < 0 || listener >= listeners.length) return;
+  listeners[listener](new Event(types[listener], targets[listener]));
 }
-
-export function list(name: string): List { return new List(name); }
 
 /** ホームだけが使えるアプリの一覧と起動 */
 export namespace apps {
+  /** img に OS のアプリアイコンを入れる */
+  // @ts-ignore: AssemblyScript の整数型
+  export function icon(img: Element, i: i32): void { iconImport(img.handle, i); }
   // @ts-ignore: decorator
   @external("binette", "apps.count")
   // @ts-ignore: AssemblyScript の整数型

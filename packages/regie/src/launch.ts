@@ -7,16 +7,23 @@ export interface RegieWorker {
   terminate(): void;
 }
 
+/** アプリから届く DOM 操作 */
+export type DomOp =
+  | { op: "byId"; handle: number; id: string }
+  | { op: "create"; handle: number; tag: string }
+  | { op: "text"; handle: number; value: string }
+  | { op: "class"; handle: number; value: string }
+  | { op: "append"; parent: number; child: number }
+  | { op: "remove"; handle: number }
+  | { op: "listen"; handle: number; type: string; listener: number }
+  | { op: "icon"; handle: number; app: number };
+
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
-  /** アプリが要素の文字を書き換えたとき（`elem(name).text = value`） */
-  onText?: (name: string, value: string) => void;
+  /** _start または一回の call で溜めた操作。完了通知より先に届く */
+  onDom?: (ops: DomOp[]) => void;
   /** ホームへ渡すアプリ。省略時は apps.* を使えない */
   apps?: { id: string; name: string }[];
-  onListAdd?: (list: string, row: number) => void;
-  onListClear?: (list: string) => void;
-  onItemText?: (list: string, row: number, name: string, value: string) => void;
-  onItemIcon?: (list: string, row: number, app: number) => void;
   onOpen?: (i: number) => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
@@ -32,7 +39,7 @@ export interface LaunchOptions {
 export interface RegieApp {
   /** アプリが export している関数の名前 */
   readonly exports: readonly string[];
-  /** export した関数を呼ぶ。終わったら解決する。呼び出し中の文字の書き換えは、解決より先に `onText` に届く */
+  /** export した関数を呼ぶ。終わったら解決する。呼び出し中の DOM 操作は、解決より先に `onDom` に届く */
   call(name: string, arg?: number): Promise<void>;
   /** Worker を止める */
   stop(): void;
@@ -89,7 +96,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; name?: string; value?: string; message?: string; exports?: string[]; list?: string; row?: number; app?: number; i?: number };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number };
       switch (data.type) {
         case "ready": {
           rejectLaunch = undefined;
@@ -113,13 +120,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           exit(error);
           break;
         }
-        case "text":
-          options.onText?.(data.name!, data.value!);
-          break;
-        case "list.add": options.onListAdd?.(data.list!, data.row!); break;
-        case "list.clear": options.onListClear?.(data.list!); break;
-        case "item.text": options.onItemText?.(data.list!, data.row!, data.name!, data.value!); break;
-        case "item.icon": options.onItemIcon?.(data.list!, data.row!, data.app!); break;
+        case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": options.onOpen?.(data.i!); break;
         case "done": {
           pending.get(data.id!)?.resolve();

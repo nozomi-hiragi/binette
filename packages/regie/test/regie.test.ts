@@ -1,11 +1,11 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
-import { launchApp, serveApp, type RegieWorker } from "../src/index.ts";
+import { launchApp, serveApp, type DomOp, type RegieWorker } from "../src/index.ts";
 
 const source = `
-@external("binette", "elem.text")
-declare function text(name: string, value: string): void;
-export function hello(): void { text("名前", "値"); }
+@external("binette", "dom.text")
+declare function text(handle: i32, value: string): void;
+export function hello(): void { text(1, "値"); }
 export function boom(): void { throw new Error("こわれた"); }
 `;
 
@@ -36,13 +36,13 @@ function createWorker(): RegieWorker {
   };
 }
 
-Deno.test("export の一覧を受け取り、呼び出し中の elem.text が完了より先に届く", async () => {
-  const texts: [string, string][] = [];
-  const app = await launchApp(await build(source), { createWorker, onText: (name, value) => texts.push([name, value]) });
+Deno.test("export の一覧を受け取り、呼び出し中の dom.text が完了より先に届く", async () => {
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(source), { createWorker, onDom: (ops) => texts.push(ops) });
   try {
     assertEquals([...app.exports].sort(), ["boom", "hello"]);
     await app.call("hello");
-    assertEquals(texts, [["名前", "値"]]);
+    assertEquals(texts, [[{ op: "text", handle: 1, value: "値" }]]);
   } finally {
     app.stop();
   }
@@ -64,18 +64,18 @@ Deno.test("WASM でないものは起動できない", async () => {
   await assertRejects(() => launchApp(new Uint8Array([1, 2, 3]), { createWorker }), Error, "起動できません");
 });
 
-Deno.test("トップレベルの初期化で呼んだ elem.text も届く", async () => {
-  const texts: [string, string][] = [];
+Deno.test("トップレベルの初期化で呼んだ dom.text も届く", async () => {
+  const texts: DomOp[][] = [];
   const code = `
-@external("binette", "elem.text")
-declare function text(name: string, value: string): void;
-text("初期化", "済み");
+@external("binette", "dom.text")
+declare function text(handle: i32, value: string): void;
+text(1, "済み");
 export function start(): void {}
 `;
-  const app = await launchApp(await build(code), { createWorker, onText: (name, value) => texts.push([name, value]) });
+  const app = await launchApp(await build(code), { createWorker, onDom: (ops) => texts.push(ops) });
   try {
     assertEquals(app.exports, ["start"]);
-    assertEquals(texts, [["初期化", "済み"]]);
+    assertEquals(texts, [[{ op: "text", handle: 1, value: "済み" }]]);
   } finally {
     app.stop();
   }
@@ -108,64 +108,49 @@ Deno.test("init を送れなければ Worker を止めて reject する", async 
 });
 
 const homeSource = `
-import { list, apps, elem } from "./replique";
-const tiles = list("tiles");
-export function start(): void {
-  tiles.clear();
-  for (let i = 0; i < apps.count(); i++) {
-    const item = tiles.add();
-    item.elem("name").text = apps.name(i);
-    item.elem("id").text = apps.id(i);
-    item.icon(i);
-  }
-}
-export function openApp(row: i32): void { apps.open(row); }
-export function count(): void { elem("count").text = apps.count().toString(); }
-export function name(i: i32): void { elem("name").text = apps.name(i); }
-export function id(i: i32): void { elem("id").text = apps.id(i); }
-export function invalidText(row: i32): void {
-  // 低水準の import を使って、不正な行番号も確かめる
-  itemText("tiles", row, "name", "bad");
-}
-@external("binette", "item.text")
-declare function itemText(list: string, row: i32, name: string, value: string): void;
-@external("binette", "item.icon")
-declare function itemIcon(list: string, row: i32, app: i32): void;
-export function invalidIcon(row: i32): void { itemIcon("tiles", row, 0); }
-export function invalidIconApp(i: i32): void { itemIcon("tiles", 0, i); }
-export function clear(): void { tiles.clear(); }
-export function add(): void { elem("row").text = tiles.add().row.toString(); }
+import { document, apps } from "./replique";
+export function openApp(i: i32): void { apps.open(i); }
+export function count(): void { document.getElementById("count").textContent = apps.count().toString(); }
+export function name(i: i32): void { document.getElementById("name").textContent = apps.name(i); }
+export function id(i: i32): void { document.getElementById("id").textContent = apps.id(i); }
+export function icon(i: i32): void { apps.icon(document.createElement("img"), i); }
 `;
 
-Deno.test("Réplique の一覧、文字列返却、行の引数と起動が Worker を通る", async () => {
-  const events: unknown[] = [];
-  const app = await launchApp(await build(homeSource, true), {
-    createWorker, apps: [{ id: "設定.id", name: "設定🏠" }, { id: "", name: "" }],
-    onListAdd: (list, row) => events.push(["add", list, row]),
-    onListClear: (list) => events.push(["clear", list]),
-    onItemText: (list, row, name, value) => events.push(["text", list, row, name, value]),
-    onItemIcon: (list, row, i) => events.push(["icon", list, row, i]),
-    onOpen: (i) => events.push(["open", i]),
-    onText: (name, value) => events.push(["elem", name, value]),
-  });
+Deno.test("一回の call の操作を一回で解決前に届け、例外の前の操作も届ける", async () => {
+  const batches: DomOp[][] = []; const order: string[] = [];
+  const code = `import { document } from "./replique";
+export function hello(): void {
+ const e = document.getElementById("a"); e.textContent = "一"; e.className = "二";
+}
+export function boom(): void { hello(); throw new Error("こわれた"); }`;
+  const app = await launchApp(await build(code), { createWorker, onDom(ops) { batches.push(ops); order.push("dom"); }, onExit() { order.push("exit"); } });
   try {
-    assert(!app.exports.includes("__new"));
-    await app.call("start");
-    await app.call("openApp", 1);
-    await app.call("clear");
-    await app.call("add");
-    assertEquals(events, [
-      ["clear", "tiles"], ["add", "tiles", 0],
-      ["text", "tiles", 0, "name", "設定🏠"], ["text", "tiles", 0, "id", "設定.id"], ["icon", "tiles", 0, 0],
-      ["add", "tiles", 1], ["text", "tiles", 1, "name", ""], ["text", "tiles", 1, "id", ""], ["icon", "tiles", 1, 1],
-      ["open", 1], ["clear", "tiles"], ["add", "tiles", 0], ["elem", "row", "0"],
+    await app.call("hello").then(() => order.push("done"));
+    assertEquals(order, ["dom", "done"]);
+    assertEquals(batches, [[{ op: "byId", handle: 1, id: "a" }, { op: "text", handle: 1, value: "一" }, { op: "class", handle: 1, value: "二" }]]);
+    await assertRejects(() => app.call("boom"), Error, "こわれた");
+    assertEquals(order, ["dom", "done", "dom", "exit"]);
+    assertEquals(batches[1], [{ op: "text", handle: 1, value: "一" }, { op: "class", handle: 1, value: "二" }]);
+  } finally { app.stop(); }
+});
+
+Deno.test("apps の文字列と icon と open を渡す", async () => {
+  const batches: DomOp[][] = []; const opened: number[] = [];
+  const app = await launchApp(await build(homeSource, true), { createWorker, apps: [{ id: "設定.id", name: "設定🏠" }], onDom: ops => batches.push(ops), onOpen: i => opened.push(i) });
+  try {
+    await app.call("name", 0); await app.call("id", 0); await app.call("icon", 0); await app.call("openApp", 0);
+    assertEquals(batches, [
+      [{ op: "byId", handle: 1, id: "name" }, { op: "text", handle: 1, value: "設定🏠" }],
+      [{ op: "byId", handle: 2, id: "id" }, { op: "text", handle: 2, value: "設定.id" }],
+      [{ op: "create", handle: 3, tag: "img" }, { op: "icon", handle: 3, app: 0 }],
     ]);
+    assertEquals(opened, [0]);
   } finally { app.stop(); }
 });
 
 Deno.test("apps を渡さないと apps.* はすべてアプリを終了する", async () => {
   const wasm = await build(homeSource, true);
-  for (const fn of ["count", "name", "id", "openApp"]) {
+  for (const fn of ["count", "name", "id", "openApp", "icon"]) {
     const app = await launchApp(wasm, { createWorker });
     try { await assertRejects(() => app.call(fn, 0), Error, "この呼び出しはホームのアプリだけが使えます。"); }
     finally { app.stop(); }
@@ -175,35 +160,14 @@ Deno.test("apps を渡さないと apps.* はすべてアプリを終了する",
 Deno.test("空の apps は count が 0 で、範囲外の番号は終了する", async () => {
   const wasm = await build(homeSource, true);
   const texts: string[] = [];
-  const app = await launchApp(wasm, { createWorker, apps: [], onText: (_, value) => texts.push(value) });
+  const app = await launchApp(wasm, { createWorker, apps: [], onDom: ops => { for (const op of ops) if (op.op === "text") texts.push(op.value); } });
   try { await app.call("count"); assertEquals(texts, ["0"]); } finally { app.stop(); }
-  for (const fn of ["name", "id", "openApp"]) {
+  for (const fn of ["name", "id", "openApp", "icon"]) {
     for (const i of [-1, 0, 1]) {
       const app = await launchApp(wasm, { createWorker, apps: [] });
       try { await assertRejects(() => app.call(fn, i), Error, "アプリの番号が範囲外です。"); }
       finally { app.stop(); }
     }
-  }
-});
-
-Deno.test("行とアプリの範囲外の番号は終了する。clear 後の行も使えない", async () => {
-  const wasm = await build(homeSource, true);
-  const cases: [string, number, boolean, boolean, string][] = [];
-  for (const fn of ["invalidText", "invalidIcon"]) {
-    cases.push([fn, 0, false, false, "行"]);
-    for (const row of [-1, 1]) cases.push([fn, row, true, false, "行"]);
-  }
-  for (const fn of ["name", "id", "openApp", "invalidIconApp"]) {
-    for (const i of [-1, 1]) cases.push([fn, i, true, false, "アプリ"]);
-  }
-  cases.push(["invalidText", 0, true, true, "行"]);
-  for (const [fn, arg, start, clear, kind] of cases) {
-    const app = await launchApp(wasm, { createWorker, apps: [{ id: "settings", name: "設定" }] });
-    try {
-      if (start) await app.call("start");
-      if (clear) await app.call("clear");
-      await assertRejects(() => app.call(fn, arg), Error, kind + "の番号が範囲外です。");
-    } finally { app.stop(); }
   }
 });
 
@@ -218,7 +182,7 @@ Deno.test("文字列の返却でメモリが伸びても UTF-16 の内容を保�
   const value = "設定🏠".repeat(50000);
   const texts: string[] = [];
   const app = await launchApp(await build(homeSource, true), {
-    createWorker, apps: [{ id: value, name: value }], onText: (_, text) => texts.push(text),
+    createWorker, apps: [{ id: value, name: value }], onDom: ops => { for (const op of ops) if (op.op === "text") texts.push(op.value); },
   });
   try {
     for (let i = 0; i < 3; i++) {
@@ -226,22 +190,6 @@ Deno.test("文字列の返却でメモリが伸びても UTF-16 の内容を保�
       await app.call("id", 0);
     }
     assertEquals(texts, Array(6).fill(value));
-  } finally { app.stop(); }
-});
-
-Deno.test("行番号は同じ名前の一覧で共有し、ほかの一覧には影響しない", async () => {
-  const rows: unknown[] = [];
-  const code = `
-import { list } from "./replique";
-export function start(): void {
-  list("a").add(); list("b").add(); list("a").add();
-  list("a").clear(); list("a").add(); list("b").add();
-}
-`;
-  const app = await launchApp(await build(code), { createWorker, onListAdd: (list, row) => rows.push([list, row]) });
-  try {
-    await app.call("start");
-    assertEquals(rows, [["a", 0], ["b", 0], ["a", 1], ["a", 0], ["b", 1]]);
   } finally { app.stop(); }
 });
 
@@ -310,4 +258,33 @@ Deno.test("stop と signal は onExit を呼ばない", async () => {
     worker.emit("error", { message: "遅いエラー" });
     assertEquals(exits, []); assertEquals(worker.terminated, 1);
   }
+});
+
+Deno.test("apps.icon の範囲外は空でない一覧でもアプリを終了する", async () => {
+  const wasm = await build(homeSource, true);
+  for (const i of [-1, 1]) {
+    const exits: Error[] = [];
+    const app = await launchApp(wasm, { createWorker, apps: [{ id: "a", name: "一" }], onExit: e => exits.push(e) });
+    try {
+      await assertRejects(() => app.call("icon", i), Error, "アプリの番号が範囲外です。");
+      assertEquals(exits.length, 1);
+      await assertRejects(() => app.call("count"), Error, "アプリは止まっています。");
+    } finally { app.stop(); }
+  }
+});
+
+Deno.test("初期化は一回で ready 前に届き、空の call は配送せず、初期化失敗は捨てる", async () => {
+  const batches: DomOp[][] = [];
+  const code = `import { document } from "./replique";
+const e = document.getElementById("a"); e.textContent = "初期化";
+export function empty(): void {}`;
+  const app = await launchApp(await build(code), { createWorker, onDom: ops => batches.push(ops) });
+  try {
+    assertEquals(batches, [[{ op: "byId", handle: 1, id: "a" }, { op: "text", handle: 1, value: "初期化" }]]);
+    await app.call("empty"); assertEquals(batches.length, 1);
+  } finally { app.stop(); }
+  batches.length = 0;
+  const buildFail = await build(code + '\nthrow new Error("初期化失敗");');
+  await assertRejects(() => launchApp(buildFail, { createWorker, onDom: ops => batches.push(ops) }), Error);
+  assertEquals(batches, []);
 });
