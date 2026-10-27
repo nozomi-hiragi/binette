@@ -32,6 +32,10 @@ export interface MountOptions {
   apps?: { id: string; name: string; icon?: string }[];
   /** ホームが指定した番号のアプリを開く */
   onOpen?: (i: number) => void;
+  /** システムの設定アプリだけに渡す写しと変更の通知 */
+  os?: LaunchOptions["os"];
+  onSet?: LaunchOptions["onSet"];
+  onSetHome?: LaunchOptions["onSetHome"];
 }
 
 /** 画面に出したアプリ */
@@ -44,6 +48,8 @@ export interface MountedApp {
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
   /** 凍結中は Stop までの時間を数えない */
   setFrozen(frozen: boolean): void;
+  /** 次の Pause から使う時間。今の Pause の計時は変えない */
+  setStopDelay(delay: number): void;
   /** アプリを止め、クリックの受け付けをやめる */
   stop(): void;
 }
@@ -93,6 +99,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
   let frozen = false;
   let finishRequested = false;
   const openings: number[] = [];
+  const homes: number[] = [];
   let queue = Promise.resolve();
   const enqueue = (action: () => Promise<void>): Promise<void> => {
     const result = queue.then(async () => { if (alive) await action(); });
@@ -106,6 +113,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     if (mounting || closing || !alive) return;
     void enqueue(async () => {
       if (closing) return;
+      for (const i of homes.splice(0)) options.onSetHome?.(i);
       if (finishRequested) { finishRequested = false; openings.length = 0; options.onFinish?.(); }
       else for (const i of openings.splice(0)) options.onOpen?.(i);
     });
@@ -171,6 +179,9 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     callTimeout: options.callTimeout,
     page: options.page,
     last,
+    os: options.os,
+    onSet: options.onSet,
+    onSetHome(i) { homes.push(i); notifyRequests(); },
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -193,7 +204,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
   running = app;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
   let destroyTimer: ReturnType<typeof setTimeout> | undefined;
-  let remaining = options.stopDelay ?? 10000;
+  let stopDelay = options.stopDelay ?? 10000;
+  let remaining = stopDelay;
   let countingSince: number | undefined;
   const cancelTimer = () => {
     clearTimeout(stopTimer);
@@ -254,7 +266,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
   };
   const pauseState = async () => {
     if (state !== State.Resume && state !== State.Start && state !== State.Create) return;
-    remaining = options.stopDelay ?? 10000;
+    remaining = stopDelay;
     const paused = lifecycle(State.Pause);
     armTimer();
     await paused;
@@ -301,6 +313,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
       if (frozen) cancelTimer();
       else armTimer();
     },
+    setStopDelay(delay) { stopDelay = delay; },
     stop,
   };
   try {

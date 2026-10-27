@@ -360,3 +360,69 @@ export { __bina_lifecycle };`;
     assertEquals(values, ["届いた"]);
   } finally { app.stop(); }
 });
+
+const osSource = `import { document, os } from "./replique";
+function text(value: string): void { document.getElementById("value").textContent = value; }
+export function get(): void { text(os.get("stackSize").toString()); }
+export function set(value: i32): void { text(os.set("stackSize", value).toString() + ":" + os.get("stackSize").toString()); }
+export function unknown(): void { text(os.set("unknown", 1).toString()); }
+export function home(): void { text(os.home()); }
+export function homeCount(): void { text(os.homeCount().toString()); }
+export function homeName(i: i32): void { text(os.homeName(i)); }
+export function homeId(i: i32): void { text(os.homeId(i)); }
+export function setHome(i: i32): void { os.setHome(i); text(os.home()); }
+export function launchCount(): void { text(os.launchCount().toString()); }
+export function launchTime(i: i32): void { text(os.launchTime(i).toString()); }
+export function launchName(i: i32): void { text(os.launchName(i)); }
+export function ranges(): void {
+  assert(!os.set("historyLimit", -1)); assert(os.set("historyLimit", 0));
+  assert(!os.set("stopDelay", -1)); assert(os.set("stopDelay", 0));
+  assert(!os.set("homeRetryWindow", -1)); assert(os.set("homeRetryWindow", 0));
+  assert(!os.set("callTimeout", 999)); assert(os.set("callTimeout", 1000));
+  assert(!os.set("destroyTimeout", 999)); assert(os.set("destroyTimeout", 1000));
+}
+`;
+
+Deno.test("os を渡さないと os.* はすべてアプリを終了する", async () => {
+  const wasm = await build(osSource, true);
+  for (const name of ["get", "set", "unknown", "home", "homeCount", "homeName", "homeId", "setHome", "launchCount", "launchTime", "launchName"]) {
+    const exits: Error[] = [];
+    const app = await launchApp(wasm, { createWorker, onExit: error => exits.push(error) });
+    try {
+      await assertRejects(() => app.call(name, 0), Error, "システムの設定アプリだけ");
+      assertEquals(exits.length, 1);
+      await assertRejects(() => app.call("get"), Error, "止まっています");
+    } finally { app.stop(); }
+  }
+});
+
+Deno.test("os の写し、同期の set、範囲の検査、ホームと履歴を読み書きする", async () => {
+  const texts: string[] = []; const changes: [string, number][] = []; const homes: number[] = [];
+  const app = await launchApp(await build(osSource, true), { createWorker,
+    os: { settings: { home: "key", stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 },
+      homes: [{ id: "key", name: "ホーム🏠" }, { id: "other", name: "別" }], launches: [{ time: 1234567890123, name: "設定" }, { time: 0, name: "unknown-key" }] },
+    onSet: (name, value) => changes.push([name, value]), onSetHome: i => homes.push(i),
+    onDom(ops) { for (const op of ops) if (op.op === "text") texts.push(op.value); },
+  });
+  try {
+    await app.call("get"); await app.call("set", 0); await app.call("unknown"); await app.call("set", 1); await app.call("get");
+    assertEquals(texts.splice(0), ["3", "false:3", "false", "true:1", "1"]); assertEquals(changes.splice(0), [["stackSize", 1]]);
+    await app.call("ranges");
+    assertEquals(changes, [["historyLimit", 0], ["stopDelay", 0], ["homeRetryWindow", 0], ["callTimeout", 1000], ["destroyTimeout", 1000]]);
+    await app.call("home"); await app.call("homeCount"); await app.call("homeName", 0); await app.call("homeId", 1); await app.call("setHome", 1);
+    await app.call("launchCount"); await app.call("launchTime", 0); await app.call("launchName", 0); await app.call("launchName", 1);
+    assertEquals(texts, ["key", "2", "ホーム🏠", "other", "other", "2", "1234567890123.0", "設定", "unknown-key"]);
+    assertEquals(homes, [1]);
+  } finally { app.stop(); }
+});
+
+Deno.test("os のホームと履歴の番号が範囲外ならアプリを終了する", async () => {
+  const wasm = await build(osSource, true);
+  for (const name of ["homeName", "homeId", "setHome", "launchTime", "launchName"]) {
+    for (const i of [-1, 0]) {
+      const app = await launchApp(wasm, { createWorker, os: { settings: { home: "", stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 }, homes: [], launches: [] } });
+      try { await assertRejects(() => app.call(name, i), Error, "番号が範囲外"); }
+      finally { app.stop(); }
+    }
+  }
+});

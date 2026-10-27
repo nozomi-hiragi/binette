@@ -64,7 +64,7 @@ apps/settings/
 | `name` | 文字列 | 必須 | 表示名 |
 | `description` | 文字列 | 任意 | 説明 |
 | `icon` | 文字列 | 任意 | アイコンのパス。SVG 1 枚 |
-| `role` | 文字列 | 任意 | 役割。今は `"home"` だけに意味がある（実装済み、形は案） |
+| `role` | 文字列 | 任意 | `"home"` はホームの候補。`"settings"` は入手元が `binette:system` の場合だけ os.* を使える設定アプリ（実装済み、形は案） |
 | `entry` | オブジェクト | 必須 | 入口の HTML・CSS・AS（下の表） |
 | `permissions` | オブジェクト | 任意 | 使う権限の名前 → `{ "reason": 用途の説明 }`。説明はインストール画面に出す |
 | `server` | オブジェクト | 任意 | `{ "required": 真偽値 }`。サーバーサイドを使うか。`required: false` なら、サーバーが無くても動く |

@@ -1,3 +1,12 @@
+<style>
+  .settings-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .settings-label { flex: 1; }
+  .settings-value { min-width: 5em; text-align: right; }
+  .settings-row button { min-width: 44px; min-height: 44px; }
+  #homes { display: flex; flex-direction: column; align-items: start; gap: 8px; }
+  #homes button { padding: 12px; font: inherit; }
+  #history { padding-left: 1.5em; }
+</style>
 <h1>設定</h1>
 <section>
   <h2>Binette について</h2>
@@ -5,4 +14,16 @@
   <button id="details">詳しく</button>
   <p id="description"></p>
 </section>
-<p>設定できる項目はまだありません</p>
+<section>
+  <h2>ホーム</h2>
+  <div id="homes"></div>
+</section>
+<section>
+  <h2>デバッグ</h2>
+  <div id="debug"></div>
+</section>
+<section>
+  <h2>起動の履歴</h2>
+  <p>日時は UTC です。</p>
+  <ul id="history"></ul>
+</section>
