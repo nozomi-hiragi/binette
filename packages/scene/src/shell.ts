@@ -283,6 +283,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       if (current === generation && active === previous) active = undefined;
     }
     if (stopped || current !== generation) return;
+    // Pause を待つあいだに前のホームが落ちて予約した起動し直しは、この移動で要らなくなる
+    clearTimeout(restartTimer);
     // 同じアプリの Destroy が終わる前に次の記録を上書きしない
     const closing = [...sessions].find(s => s.closing && s.installed.key === installed.key);
     if (closing) await closing.closed;

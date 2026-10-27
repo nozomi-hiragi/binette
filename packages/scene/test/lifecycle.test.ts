@@ -492,3 +492,22 @@ Deno.test("起動の途中のクリックは捨てずに Resume のあとに届�
   try { await waitFor(() => logOf(element) === "create:0;start:1;resume;click;"); }
   finally { mounted.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("ホームが onPause で落ちても、開いたアプリから引き離さない", async () => {
+  const fixtures = await stackFixtures();
+  const home = fixtures[0]!.prebuilt;
+  fixtures[0]!.prebuilt = { ...await build(source.replace('onPause(): void { record("pause"); }', 'onPause(): void { record("pause"); throw new Error("ホームの Pause の失敗"); }'), true), manifest: home.manifest };
+  const window = new Window(); const element = host(window); const errors: unknown[] = [];
+  const shell = await mountShell(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, onError: e => errors.push(e) });
+  const start = activeHost(element);
+  try {
+    click(start, "open");
+    await waitFor(() => errors.length === 1 && activeHost(element) !== start && !!logOf(element)?.endsWith("resume;"));
+    const opened = activeHost(element);
+    // 起動し直しの予約（100ms〜）が残っていれば、ここでホームへ戻ってしまう
+    await sleep(400);
+    assertEquals(activeHost(element), opened);
+    assertEquals(element.querySelectorAll(".bina-shell-app:not([hidden])").length, 1);
+    assertEquals(element.querySelector('[aria-label="Aを開く"]')!.getAttribute("aria-pressed"), "true");
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
