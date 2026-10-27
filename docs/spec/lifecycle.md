@@ -205,7 +205,7 @@ launch(memo);
 
 - Pause は「離れたな」の検知、Stop は「だいぶ離れた」ということ（決定）
 - Pause からすぐ Destroy にはならない。Destroy の前には必ず Stop を通る（決定）
-- Stop からの Destroy は、いつでもあり得る（決定）。アプリは、戻すのに要るものを Stop までに保存しておく
+- Stop からの Destroy は、いつでもあり得る（決定）。アプリは、戻すのに要るものを Stop までに保存しておく。ページが隠れたまま切られることも考えると、`onPause` までに済ませるのがおすすめ
 - ページごと切られたときは、何も検知できない（決定）
 - `onStart` にも最後の状態を渡す。Stop から戻ったのか、Create のすぐあとかが分かる（決定）。値は `State.Create` か `State.Stop`
 
