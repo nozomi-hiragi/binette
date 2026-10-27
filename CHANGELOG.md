@@ -2,6 +2,12 @@
 
 ## v0.2.0（未リリース）
 
+- AppStore に `system: SystemStore` を追加。`LifecycleRecord`・`LaunchRecord`・`SystemSettings`・`SystemStore`・`DEFAULT_SYSTEM_SETTINGS`・`validateSystemSettings` を公開。最後の状態・起動の履歴・OS の設定を、メモリまたは同じ IndexedDB の別の表に保存する（v1 のアプリは残して v2 に移行）
+- SystemStore に `getLast`・`putLast`・`listLaunches`・`recordLaunch`・`getSettings`・`putSettings` を追加。状態の前後で保存を待ち、異常終了なら done=false のまま次の Create に渡す。履歴は新しいインスタンスだけを記録し、既定 100 件
+- LaunchOptions に `last`、MountOptions に `persistence`、ShellOptions に `stackSize`・`historyLimit` を追加。保存した OS の設定を ShellOptions より優先する。home は保存だけで、選択への反映は後続
+- 画面を切り替えても DOM と Worker を残して Pause にする。ホームを含め既定 3 インスタンスまで残し、上限超過では前面以外の最も長く前面に出ていないものを Stop → Destroy（System・Stack）。背面で落ちた場合は前面を変えずにエラーを出す
+- 上部の「戻る」の帯（`.bina-shell-toolbar`・`.bina-shell-back`）を下部のホームバー（`.bina-shell-homebar`・`.bina-shell-button`・`.bina-shell-entry`）に置き換える（見た目と操作は案）。ホーム・アプリの切り替え・× で終了（User・Os）を提供し、CSS 変数 `--bina-shell-gap` を追加
+
 - アプリの入口の `export function start()` を廃止し、`App`・`launch`・`State`・`DestroyKind`・`DestroyCause`・`DestroyReason`・`Last`・`__bina_lifecycle` を追加。Create → Start → Resume と Pause・Stop・Destroy を知らせる
 - `App.finish()` と `App.page` を追加。呼び出しの完了後に User・App で閉じ、ページごとの識別子を渡す
 - Régie の LaunchOptions に `callTimeout`・`page`・`onFinish` を追加。起動と呼び出しは既定 5 秒で時間切れにして終了する
@@ -9,10 +15,10 @@
 - Scene の MountedApp に `state`・`pause()`・`resume()`・`destroy(kind, cause)`・`setFrozen(frozen)`、State・DestroyKind・DestroyCause の export を追加
 - Scene の MountOptions と ShellOptions に `stopDelay`・`destroyTimeout`・`callTimeout`、MountOptions に `page`・`onFinish` を追加。Pause から既定 10 秒で Stop、onDestroy は既定 5 秒で打ち切る
 - ShellOptions に `homeRetryWindow` を追加。落ち続けるホームは、最初の落ちから既定 5 秒を過ぎたら開き直さない
-- hidden で Pause、visible で Resume にし、blur だけでは移さない。freeze の間は Stop の時間を数えず、戻る・別のアプリを開くときは仮に Pause → Stop → Destroy（System・Stack）で捨てる
+- hidden で Pause、visible で Resume にし、blur だけでは移さない。freeze の間は Stop の時間を数えず、戻る・別のアプリを開くときは画面を隠して Pause にし、インスタンスを残す
 - ホームと設定を App の派生クラスに移し、最初の画面を onCreate で作る
 
-- 仕様書にライフサイクルの章（`docs/spec/lifecycle.md`）を追加。ライブモード、画面を隠して残すこと（数はデバッグメニューで決める、既定 3）、起動の履歴、アプリの大本の `App` クラスと `onCreate`〜`onDestroy`、最後の状態の記録、Destroy の理由、ホームが落ち続けたときの受け皿の Apps を決める（App・6 つの状態・ページの識別子・時間切れは実装済み。スタックや記録などはまだ）
+- 仕様書にライフサイクルの章（`docs/spec/lifecycle.md`）を追加。ライブモード、画面を隠して残すこと（数はデバッグメニューで決める、既定 3）、起動の履歴、アプリの大本の `App` クラスと `onCreate`〜`onDestroy`、最後の状態の記録、Destroy の理由、ホームが落ち続けたときの受け皿の Apps を決める（App・6 つの状態・ページの識別子・時間切れは実装済み。スタック・最後の状態・履歴・OS の設定の保存も実装済み）
 - DOM 風の document・Element・Event・apps.icon・__bina_event を追加。通常の id と明示したリスナーで画面を扱う
 - Régie に onDom・DomOp を追加。_start と call の DOM 操作を完了前にまとめて送る
 - v0.2 の途中で elem・Elem・list・List・Item・ItemElem、bina 属性・bina.ts の生成を削除
@@ -28,7 +34,7 @@
 - Régie にメモリと IndexedDB の AppStore を追加。同じ版のビルド結果を使い回す
 - app.json の icon の型を検査し、SVG を画像として表示する
 - 設定をシステムアプリ `apps/settings` に置き、Binette の版と説明を表示する。設定の項目と読み書きの呼び出しは未決
-- ホームを HTML ＋ AS のシステムアプリ `apps/home` にする。Scene は `mountShell` で枠と「戻る」の帯を持つ
+- ホームを HTML ＋ AS のシステムアプリ `apps/home` にする。Scene は `mountShell` で枠とホームバーを持つ
 - app.json の role、ホーム用の apps.count・name・id・open を追加
 - Régie から AS へ文字列を返し、call に i32 の引数を渡せるようにする
 - 単独起動の入口をリポジトリ直下に追加

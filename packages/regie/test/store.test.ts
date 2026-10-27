@@ -43,3 +43,25 @@ Deno.test("メモリ版の読み書きで保存した値を共有しない", asy
   assertEquals(await store.get(original.key), expected);
   assertEquals(await createMemoryAppStore().list(), []);
 });
+
+Deno.test("OS の記録はアプリごとに分かれ、設定と履歴も写して保存する", async () => {
+  const store = createMemoryAppStore().system;
+  assertEquals(await store.getLast("a"), undefined); assertEquals(await store.getSettings(), undefined);
+  const record = { state: 6, done: false, page: "ページ", reason: { kind: 1, cause: 2 } };
+  await store.putLast("a", record); record.reason.kind = 0;
+  assertEquals((await store.getLast("a"))!.reason.kind, 1); assertEquals(await store.getLast("b"), undefined);
+  const last = (await store.getLast("a"))!; last.page = "変更";
+  assertEquals((await store.getLast("a"))!.page, "ページ");
+  const settings = { home: "home", stackSize: 2, callTimeout: 99 };
+  await store.putSettings(settings); settings.stackSize = 8;
+  const saved = (await store.getSettings())!; saved.home = "変更";
+  assertEquals(await store.getSettings(), { home: "home", stackSize: 2, callTimeout: 99 });
+  await store.putSettings({}); assertEquals(await store.getSettings(), {});
+  for (let i = 0; i < 105; i++) await store.recordLaunch({ time: i, app: `app${i}` });
+  const history = await store.listLaunches(); assertEquals(history.length, 100); assertEquals(history[0]!.time, 5);
+  assertEquals(history[99]!.time, 104); history[0]!.app = "変更";
+  assertEquals((await store.listLaunches())[0]!.app, "app5");
+  await Promise.all([store.recordLaunch({ time: 105, app: "a" }, 2), store.recordLaunch({ time: 106, app: "b" }, 2)]);
+  assertEquals(await store.listLaunches(), [{ time: 105, app: "a" }, { time: 106, app: "b" }]);
+  await store.recordLaunch({ time: 107, app: "c" }, 0); assertEquals(await store.listLaunches(), []);
+});

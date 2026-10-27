@@ -10,6 +10,7 @@ interface MountOptions {
   stopDelay?: number; // ミリ秒、既定 10000
   destroyTimeout?: number; // ミリ秒、既定 5000
   page?: string;
+  persistence?: { store: SystemStore; key: string; historyLimit?: number };
   onFinish?: () => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
@@ -36,7 +37,7 @@ interface MountedApp {
 function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions): Promise<MountedApp>
 ```
 
-Régie で _start を走らせてから HTML を枠に描き、初期化中に溜めた `onDom` の操作を反映します。`__bina_lifecycle(Create, None, 1)` → Start(Create) → Resume を呼んでから解決します。HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を OS が読まない方針は **決定 2026-10-27** です（[Réplique](../replique.md#画面を操作する方針決定-2026-10-27)）。
+Régie で _start を走らせてから HTML を枠に描き、初期化中に溜めた `onDom` の操作を反映します。`__bina_lifecycle(Create, last.state, Number(last.done))` → Start(Create) → Resume を呼んでから解決します。HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を OS が読まない方針は **決定 2026-10-27** です（[Réplique](../replique.md#画面を操作する方針決定-2026-10-27)）。
 
 ## 要素と操作（案・実装済み）
 
@@ -73,3 +74,9 @@ finish と open は現在の呼び出しが終わるまで保留し、状態の�
 - 最初の HTML の検査（script・on* 属性・外部 URL など。別作業）。今は innerHTML に描くため on* 属性は動く
 - setAttribute・style・value・input イベント・click 以外のイベント
 - entry.css の読み込み、Shadow DOM などによる CSS の分離
+
+## 最後の状態と起動の履歴（案・実装済み）
+
+persistence を指定すると、起動前に store.getLast(key) を読みます。key は installedAppKey です。無ければ None・done=true・page=""・reason=User/Os を使います。前回の page と reason は LaunchOptions.last で Worker に渡します。
+
+Create の直前に日時と key を履歴に足します。historyLimit は既定 100。各メソッドの前に `{ state, done: false, page, reason }` の保存を待ち、呼び出しが正常に返ったら done=true の保存を待ちます。状態の通知と保存は直列です。reason は Destroy のときだけ更新し、ほかでは前の値を保ちます。例外・時間切れ・stop で途中で切れたら done=false が残ります。保存の失敗もアプリの終了として扱い、続くメソッドを呼びません。persistence を省いた単独の mountApp は保存しません。

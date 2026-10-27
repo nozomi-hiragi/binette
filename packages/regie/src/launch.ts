@@ -1,4 +1,5 @@
 import { serveApp } from "./worker.ts";
+import type { LifecycleRecord } from "./store.ts";
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -24,6 +25,8 @@ export interface LaunchOptions {
   callTimeout?: number;
   /** 今のページの識別子 */
   page?: string;
+  /** 前回の最後の記録 */
+  last?: LifecycleRecord;
   /** アプリが自分を閉じたとき。今の呼び出しの完了後に届く */
   onFinish?: () => void;
   /** _start または一回の call で溜めた操作。完了通知より先に届く */
@@ -168,7 +171,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", ...(options.apps === undefined ? {} : { apps: options.apps }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

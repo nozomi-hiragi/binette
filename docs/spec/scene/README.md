@@ -10,7 +10,7 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 - AS のビルドと検証（[app.md のインストール](../app.md#インストール案)の 2 と 3）
 - HTML をフロントの画面の中に描き、アプリとつなぐ。アプリの領域は枠の外に出られないようにする
 - 起動すると、App の onCreate → onStart(Create) → onResume を呼ぶ
-- ホームを起動し、アプリを 1 つずつ開いて戻る枠を持つ（実装済み）
+- ホームを起動し、スタックとホームバーの枠を持つ（実装済み）
 
 読み込み・ビルド・描画・ホームは実装済みです。HTML や権限の検証はまだありません。
 
@@ -21,7 +21,7 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | `loadCompiler` | 関数 | asc を読み込む |
 | `buildApp` | 関数 | アプリを読んで WASM にビルドする |
 | `mountApp` | 関数 | HTML を描き、アプリを起動してつなぐ |
-| `mountShell` | 関数 | 保存し、ホームとアプリを開いて戻る枠を描く |
+| `mountShell` | 関数 | 保存し、ホームとアプリを開くホームバーの枠を描く |
 | `Compiler`・`CompilerStream` | 型 | asc のうち、Scene が使う分 |
 | `BuildOptions`・`BuiltApp` | 型 | `buildApp` の設定と結果 |
 | `MountOptions`・`MountedApp` | 型 | `mountApp` の設定と結果 |
@@ -34,7 +34,7 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | ファイル | 内容 |
 | --- | --- |
 | [build.md](build.md) | `loadCompiler`・`buildApp`。asc の呼び方と、ファイルの解決 |
-| [shell.md](shell.md) | `mountShell`。保存、ホームの選択、起動と戻る、CSS 変数 |
+| [shell.md](shell.md) | `mountShell`。保存、ホームの選択、スタックとホームバー、CSS 変数 |
 | [mount.md](mount.md) | `mountApp`。HTML とアプリのつなぎ方、読める値、止める操作 |
 
 ## 単独フロント（実装済み）
