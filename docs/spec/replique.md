@@ -17,19 +17,55 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 ## 使い方（実装済み）
 
 ```ts
-import { document, Event } from "jsr:@binette/replique";
+import { App, Last, document, launch } from "jsr:@binette/replique";
 
-let value = 0;
-export function start(): void {
-  document.getElementById("increment").addEventListener("click", increment);
+class Counter extends App {
+  private value: i32 = 0;
+  onCreate(_last: Last): void {
+    document.getElementById("increment").addEventListener("click", () => counter.increment());
+  }
+  increment(): void {
+    this.value++;
+    document.getElementById("count").textContent = this.value.toString();
+  }
 }
-function increment(event: Event): void {
-  value++;
-  document.getElementById("count").textContent = value.toString();
-}
+const counter = new Counter();
+launch(counter);
 ```
 
-HTML は `<p id="count">0</p><button id="increment">+1</button>` とします。`start()` は Scene が画面を用意してから呼びます。トップレベルの初期化でも操作できます。`_start` は初期化用なのでアプリには使いません。
+HTML は `<p id="count">0</p><button id="increment">+1</button>` とします。Scene は画面を用意してから `onCreate` → `onStart(State.Create)` → `onResume` を呼びます。トップレベルの初期化でも操作できます。`_start` は初期化用なのでアプリには使いません。
+
+## アプリの状態（実装済み）
+
+```ts
+export enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
+export enum DestroyKind { User, System }
+export enum DestroyCause { Os, App, Stack, Update, Uninstall }
+export class DestroyReason {
+  constructor(readonly kind: DestroyKind, readonly cause: DestroyCause) {}
+}
+export class Last {
+  constructor(readonly state: State, readonly done: boolean, readonly page: string, readonly reason: DestroyReason) {}
+}
+export class App {
+  onCreate(last: Last): void {}
+  onStart(last: State): void {}
+  onResume(): void {}
+  onPause(): void {}
+  onStop(): void {}
+  onDestroy(reason: DestroyReason): void {}
+  get page(): string;
+  finish(): void;
+}
+export function launch(app: App): void;
+export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
+```
+
+`launch` はトップレベルで一回だけ呼びます。グローバルにインスタンスを保持して GC から守り、仮想メソッドで通知します。二回目は例外でアプリを終了します。呼ばなければ状態の通知は何もせず、document とイベントは使えます。従来の `export function start()` は呼びません。
+
+`this.page` は今のページの識別子です。`finish()` は今の呼び出しの完了後、Pause → Stop → Destroy（User・App）でホームに戻します。`onStart` の引数は Create または Stop です。Last は OS から受け取りますが、記録の保存はまだ無く、今は None・done=true・page=""・reason=User/Os です。
+
+`__bina_lifecycle` の kind は State、Create の a/b は last.state/last.done、Start の a は前の State、Destroy の a/b は kind/cause です。Last のページと理由は import で受け取ります。Scene が入口に再 export を足し、`__bina_event` と同じく OS から call します。
 
 ## API（案・実装済み）
 
@@ -50,7 +86,7 @@ HTML は `<p id="count">0</p><button id="increment">+1</button>` とします。
 
 Element の中身は i32 の handle です。id の Map、リスナーと対象要素と種類の配列は Worker の生存中保持し、GC から守ります。`Map<Element, i32>` のキーに使えます。getter は画面に聞かず、HTML の初期値や子の変更から値を計算しません。
 
-`() => {}` もリスナー引数に書けます。asc 0.28.20 では引数なしの名前付き関数を直接渡すと型エラーになるため、`() => showDetails()` と包みます。無名関数からローカル変数は参照できず、グローバルは使えます。
+`() => {}` もリスナー引数に書けます。asc 0.28.20 では引数なしの名前付き関数を直接渡すと型エラーになるため、`() => showDetails()` と包みます。無名関数から this やローカル変数は参照できず、グローバルのインスタンスを通します。
 
 ### WASM import（案・実装済み）
 
@@ -68,6 +104,9 @@ Element の中身は i32 の handle です。id の Map、リスナーと対象�
 | `apps.count` | なし（i32 を返す） |
 | `apps.name` / `apps.id` | i（文字列ポインタを返す） |
 | `apps.open` | i |
+| `app.page` / `app.lastPage` | なし（文字列ポインタを返す） |
+| `app.lastKind` / `app.lastCause` | なし（i32 を返す。今はどちらも 0） |
+| `app.finish` | なし（自分を閉じる要求） |
 
 `apps.*` は apps が無ければ例外、番号の範囲外も例外でアプリを終了します。任意の URL や SVG をアプリから渡す API はありません。
 

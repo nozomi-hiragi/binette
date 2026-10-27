@@ -7,13 +7,15 @@ const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("..
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
   "index.html": '<p id="count">0</p><button id="button">+1</button>',
-  "main.ts": `import { document, Event } from "jsr:@binette/replique";
+  "main.ts": `import { App, Last, launch, document, Event } from "jsr:@binette/replique";
 let value = 0;
-export function start(): void { document.getElementById("button").addEventListener("click", increment); }
+export function initialize(): void { document.getElementById("button").addEventListener("click", increment); }
 function increment(event: Event): void {
  assert(event.type == "click"); assert(event.currentTarget === document.getElementById("button"));
  value++; document.getElementById("count").textContent = value.toString();
-}`,
+}
+class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+launch(new TestApp());`,
 };
 const read = (path: string) => Promise.resolve(files[path]!);
 
@@ -58,7 +60,7 @@ Deno.test("作成・追加・削除、文字と class の読み書き、アイ�
 const tiles = document.getElementById("tiles");
 const button = document.createElement("BUTTON");
 const indices = new Map<Element, i32>();
-export function start(): void {
+export function initialize(): void {
  assert(tiles === document.getElementById("tiles"));
  assert(tiles.textContent == ""); assert(tiles.className == "");
  tiles.textContent = "";
@@ -72,6 +74,9 @@ function open(event: Event): void { assert(event.currentTarget === button); apps
 export function remove(): void { button.remove(); }
 export function again(): void { tiles.appendChild(button); button.textContent = "文字だけ"; }
 export function clearIcon(): void { apps.icon(document.getElementById("old-icon"), 1); apps.icon(tiles, 0); }
+import { App, Last, launch } from "jsr:@binette/replique";
+class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+launch(new TestApp());
 `;
   const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<div id="tiles"><p>消える</p></div><img id="old-icon" src="old">', "main.ts": source }[path]!), { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
@@ -113,7 +118,7 @@ Deno.test("無い id・枠自身・枠外には届かず、byId は毎回探し�
   const special = 'a"\\]#あ';
   const source = `import { document } from "jsr:@binette/replique";
 const e = document.getElementById("same");
-export function start(): void {
+export function initialize(): void {
  document.getElementById("host").textContent = "壊す";
  document.getElementById("host").remove();
  e.appendChild(document.getElementById("host"));
@@ -124,6 +129,9 @@ export function start(): void {
  document.getElementById(${JSON.stringify(special)}).textContent = "特殊";
 }
 export function update(): void { e.textContent = "再検索"; }
+import { App, Last, launch } from "jsr:@binette/replique";
+class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+launch(new TestApp());
 `;
   const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<p id="same"></p>', "main.ts": source }[path]!), { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
@@ -136,13 +144,13 @@ export function update(): void { e.textContent = "再検索"; }
     element.querySelector("p")!.remove(); const replacement = window.document.createElement("p"); replacement.id = "same"; element.append(replacement as never);
     await mounted.app.call("update"); assertEquals(replacement.textContent, "再検索");
     const escaped = window.document.createElement("p"); escaped.id = special; element.append(escaped as never);
-    await mounted.app.call("start"); assertEquals(escaped.textContent, "特殊");
+    await mounted.app.call("initialize"); assertEquals(escaped.textContent, "特殊");
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
 Deno.test("禁止タグと click 以外は onError に届き、アプリは動き続ける", async () => {
   const source = `import { document } from "jsr:@binette/replique";
-export function start(): void {
+export function initialize(): void {
  const tags = ["script", "iframe", "object", "a", "style", "template"];
  for (let i = 0; i < tags.length; i++) {
    const bad = document.createElement(tags[i]); bad.textContent = "危険"; bad.className = "bad";
@@ -150,7 +158,10 @@ export function start(): void {
  }
  document.getElementById("button").addEventListener("input", () => {});
 }
-export function next(): void { document.getElementById("count").textContent = "続く"; }`;
+export function next(): void { document.getElementById("count").textContent = "続く"; }
+import { App, Last, launch } from "jsr:@binette/replique";
+class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+launch(new TestApp());`;
   const built = await buildApp(path => Promise.resolve({ ...files, "main.ts": source }[path]!), { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
   const errors: unknown[] = []; const mounted = await mountApp(element, built, { createWorker, onError: e => errors.push(e) });
@@ -161,11 +172,11 @@ export function next(): void { document.getElementById("count").textContent = "�
 });
 
 Deno.test("ビルドに失敗する AS は Error になる", async () => {
-  const error = await assertRejects(() => buildApp(path => Promise.resolve({ ...files, "main.ts": 'export function start(): void { const n: i32 = "文字"; }' }[path]!), { libraries }), Error, "アプリをビルドできません。");
+  const error = await assertRejects(() => buildApp(path => Promise.resolve({ ...files, "main.ts": 'export function initialize(): void { const n: i32 = "文字"; }' }[path]!), { libraries }), Error, "アプリをビルドできません。");
   assert(error.message.includes("TS2322"));
 });
 
-for (const phase of ["ready", "start", "mounted"] as const) {
+for (const phase of ["ready", "create", "mounted"] as const) {
   Deno.test(phase + " の終了は元のエラーを保ち、クリックと重複通知を止める", async () => {
     const window = new Window();
     const element = window.document.createElement("div") as unknown as HTMLElement;
@@ -182,17 +193,21 @@ for (const phase of ["ready", "start", "mounted"] as const) {
       }),
       onError: e => errors.push(e), onExit: e => exits.push(e),
     });
-    emit("message", { data: { type: "ready", exports: ["start", "increment"] } });
+    emit("message", { data: { type: "ready", exports: ["initialize", "increment"] } });
     if (phase !== "ready") await waitFor(() => messages.length === 2);
     let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
     try {
       if (phase === "mounted") {
         emit("message", { data: { type: "dom", ops: [{ op: "byId", handle: 1, id: "button" }, { op: "listen", handle: 1, type: "click", listener: 0 }] } });
         emit("message", { data: { type: "done", id: 1 } });
+        await waitFor(() => messages.length === 3);
+        emit("message", { data: { type: "done", id: 2 } });
+        await waitFor(() => messages.length === 4);
+        emit("message", { data: { type: "done", id: 3 } });
         mounted = await mounting;
         element.querySelector<HTMLButtonElement>("button")!.click();
         element.querySelector<HTMLButtonElement>("button")!.click();
-        assertEquals(messages.length, 4);
+        await waitFor(() => messages.length === 5);
       }
       emit("error", { message: "元のエラー", preventDefault() {} });
       if (phase !== "mounted") await assertRejects(() => mounting, Error, "アプリが落ちました: 元のエラー");
@@ -202,7 +217,7 @@ for (const phase of ["ready", "start", "mounted"] as const) {
         assertEquals(exits[0]!.message, "アプリが落ちました: 元のエラー");
       }
       const count = messages.length;
-      element.querySelector<HTMLButtonElement>("button")!.click();
+      element.querySelector<HTMLButtonElement>("button")?.click();
       await new Promise(resolve => setTimeout(resolve, 0));
       assertEquals(messages.length, count);
       assertEquals(errors, []); assertEquals(exits.length, phase === "mounted" ? 1 : 0);

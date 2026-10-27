@@ -1,8 +1,23 @@
-import { launchApp, type LaunchOptions, type RegieApp } from "@binette/regie";
+import { launchApp, type DomOp, type LaunchOptions, type RegieApp } from "@binette/regie";
 import type { BuiltApp } from "./build.ts";
+
+/** Réplique の State・DestroyKind・DestroyCause と同じ番号 */
+export enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
+export enum DestroyKind { User, System }
+export enum DestroyCause { Os, App, Stack, Update, Uninstall }
 
 /** {@link mountApp} の設定 */
 export interface MountOptions {
+  /** 呼び出しと起動の時間切れ（ミリ秒、既定 5000） */
+  callTimeout?: number;
+  /** Pause から Stop まで（ミリ秒、既定 10000） */
+  stopDelay?: number;
+  /** onDestroy の時間切れ（ミリ秒、既定 5000） */
+  destroyTimeout?: number;
+  /** 今のページの識別子 */
+  page?: string;
+  /** 今の呼び出しが終わってから、自分を閉じる */
+  onFinish?: () => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
   /** mountApp の完了後にアプリが終了したとき */
@@ -21,20 +36,25 @@ export interface MountOptions {
 export interface MountedApp {
   /** Régie で動いているアプリ */
   readonly app: RegieApp;
+  readonly state: State;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
+  /** 凍結中は Stop までの時間を数えない */
+  setFrozen(frozen: boolean): void;
   /** アプリを止め、クリックの受け付けをやめる */
   stop(): void;
 }
 
 /**
  * `element` に HTML を描き、Régie でアプリを起動して、document API の操作を反映する。
- * export に `start` があれば呼ぶ。HTML の検証はまだしない。
+ * _start のあとに HTML を描き、Create → Start → Resume を知らせる。HTML の検証はまだしない。
  *
- * @throws {Error} アプリを起動できないとき、または `start()` が失敗したとき
+ * @throws {Error} アプリを起動できないとき、または状態の通知が失敗したとき
  */
 export async function mountApp(element: HTMLElement, built: BuiltApp, options: MountOptions = {}): Promise<MountedApp> {
   // アプリの領域が外に出ないようにする
   element.style.contain = "paint";
-  element.innerHTML = built.html;
 
   // Régie が onError に渡したエラーを、call の失敗で二重に知らせないために覚えておく
   const reported = new WeakSet<object>();
@@ -58,76 +78,125 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     return found && found !== element && element.contains(found) ? found : undefined;
   };
   let running: RegieApp | undefined;
+  let state = State.None;
+  let alive = true;
+  let accepting = false;
+  let closing = false;
+  let destroying = false;
+  let frozen = false;
+  let finishRequested = false;
+  const openings: number[] = [];
+  let queue = Promise.resolve();
+  const enqueue = (action: () => Promise<void>): Promise<void> => {
+    const result = queue.then(async () => { if (alive) await action(); });
+    queue = result.catch(() => {});
+    return result;
+  };
+  const reportCall = (error: unknown) => {
+    if (alive && !destroying && (typeof error !== "object" || error === null || !reported.has(error))) report(error);
+  };
+  const notifyRequests = () => {
+    if (mounting || closing || !alive) return;
+    void enqueue(async () => {
+      if (closing) return;
+      if (finishRequested) { finishRequested = false; openings.length = 0; options.onFinish?.(); }
+      else for (const i of openings.splice(0)) options.onOpen?.(i);
+    });
+  };
   let mounting = true;
   let exitError: Error | undefined;
   const removeListeners = () => { for (const remove of removers.splice(0)) remove(); };
   let cleanup = removeListeners;
+  const applyDom = (ops: DomOp[]) => {
+    for (const op of ops) {
+      if (op.op === "byId") { ids.set(op.handle, op.id); continue; }
+      if (op.op === "create") {
+        const tag = op.tag.toLowerCase();
+        if (!allowed.has(tag)) { report(new Error(`作れないタグです: ${op.tag}`)); continue; }
+        const made = element.ownerDocument.createElement(tag);
+        if (tag === "button") made.setAttribute("type", "button");
+        // 装飾アイコンとして使う。属性 API が入るまではすべて空の代替テキストにする
+        if (tag === "img") made.setAttribute("alt", "");
+        created.set(op.handle, made);
+        continue;
+      }
+      if (op.op === "append") {
+        const parent = target(op.parent), child = target(op.child);
+        if (parent && child && child !== element && parent !== child && !child.contains(parent)) parent.appendChild(child);
+        continue;
+      }
+      if (op.op === "listen" && op.type !== "click") {
+        report(new Error(`使えないイベントです: ${op.type}`)); continue;
+      }
+      const node = target(op.handle);
+      if (!node || node === element) continue;
+      switch (op.op) {
+        case "text": node.textContent = op.value; break;
+        // SVG の className は読み取り専用なので、属性で書く
+        case "class": node.setAttribute("class", op.value); break;
+        case "remove": node.remove(); break;
+        case "icon": {
+          if (node.tagName.toLowerCase() !== "img") break;
+          const icon = options.apps?.[op.app]?.icon;
+          if (icon === undefined) node.removeAttribute("src");
+          else node.setAttribute("src", `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`);
+          break;
+        }
+        case "listen": {
+          const listener = () => {
+            if (!accepting || state !== State.Resume || closing) return;
+            void enqueue(async () => {
+              if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_event", op.listener);
+            }).catch(reportCall);
+          };
+          node.addEventListener("click", listener);
+          removers.push(() => node.removeEventListener("click", listener));
+          break;
+        }
+      }
+    }
+  };
+  let htmlReady = false;
+  const initialOps: DomOp[] = [];
   const app = await launchApp(built.wasm, {
     createWorker: options.createWorker,
     signal: options.signal,
-    onError: report,
+    callTimeout: options.callTimeout,
+    page: options.page,
+    onError: error => { if (!destroying) report(error); },
     onExit(error) {
+      if (destroying) return;
       exitError = error;
       reported.add(error);
       cleanup();
       if (!mounting) options.onExit?.(error);
     },
     ...(options.apps === undefined ? {} : { apps: options.apps.map(({ id, name }) => ({ id, name })) }),
-    onOpen: options.onOpen,
-    onDom(ops) {
-      for (const op of ops) {
-        if (op.op === "byId") { ids.set(op.handle, op.id); continue; }
-        if (op.op === "create") {
-          const tag = op.tag.toLowerCase();
-          if (!allowed.has(tag)) { report(new Error(`作れないタグです: ${op.tag}`)); continue; }
-          const made = element.ownerDocument.createElement(tag);
-          if (tag === "button") made.setAttribute("type", "button");
-          // 装飾アイコンとして使う。属性 API が入るまではすべて空の代替テキストにする
-          if (tag === "img") made.setAttribute("alt", "");
-          created.set(op.handle, made);
-          continue;
-        }
-        if (op.op === "append") {
-          const parent = target(op.parent), child = target(op.child);
-          if (parent && child && child !== element && parent !== child && !child.contains(parent)) parent.appendChild(child);
-          continue;
-        }
-        if (op.op === "listen" && op.type !== "click") {
-          report(new Error(`使えないイベントです: ${op.type}`)); continue;
-        }
-        const node = target(op.handle);
-        if (!node || node === element) continue;
-        switch (op.op) {
-          case "text": node.textContent = op.value; break;
-          // SVG の className は読み取り専用なので、属性で書く
-          case "class": node.setAttribute("class", op.value); break;
-          case "remove": node.remove(); break;
-          case "icon": {
-            if (node.tagName.toLowerCase() !== "img") break;
-            const icon = options.apps?.[op.app]?.icon;
-            if (icon === undefined) node.removeAttribute("src");
-            else node.setAttribute("src", `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`);
-            break;
-          }
-          case "listen": {
-            const listener = () => {
-              running?.call("__bina_event", op.listener).catch((error: unknown) => {
-                if (typeof error !== "object" || error === null || !reported.has(error)) report(error);
-              });
-            };
-            node.addEventListener("click", listener);
-            removers.push(() => node.removeEventListener("click", listener));
-            break;
-          }
-        }
-      }
-    },
+    onOpen(i) { openings.push(i); notifyRequests(); },
+    onFinish() { accepting = false; finishRequested = true; notifyRequests(); },
+    onDom(ops) { if (htmlReady) applyDom(ops); else initialOps.push(...ops); },
   }).catch((error: unknown) => { removeListeners(); throw error; });
 
   if (exitError) { removeListeners(); app.stop(); throw exitError; }
 
+  element.innerHTML = built.html;
+  htmlReady = true;
+  applyDom(initialOps);
   running = app;
+  let stopTimer: ReturnType<typeof setTimeout> | undefined;
+  let destroyTimer: ReturnType<typeof setTimeout> | undefined;
+  let remaining = options.stopDelay ?? 10000;
+  let countingSince: number | undefined;
+  const cancelTimer = () => {
+    clearTimeout(stopTimer);
+    if (countingSince !== undefined) remaining = Math.max(0, remaining - (performance.now() - countingSince));
+    countingSince = undefined;
+  };
   const stop = () => {
+    alive = false;
+    accepting = false;
+    cancelTimer();
+    clearTimeout(destroyTimer);
     options.signal?.removeEventListener("abort", stop);
     removeListeners();
     running = undefined;
@@ -140,15 +209,86 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     throw new Error("アプリを止めました。");
   }
 
-  if (app.exports.includes("start")) {
-    try {
-      await app.call("start");
-    } catch (error) {
-      stop();
-      throw error;
-    }
-  }
+  const lifecycle = async (next: State, a = 0, b = 0) => {
+    state = next;
+    await app.call("__bina_lifecycle", next, a, b);
+  };
+  const stopState = async () => {
+    cancelTimer();
+    if (state === State.Pause) await lifecycle(State.Stop);
+  };
+  const armTimer = () => {
+    if (!alive || closing || frozen || state !== State.Pause) return;
+    countingSince = performance.now();
+    stopTimer = setTimeout(() => {
+      countingSince = undefined;
+      remaining = 0;
+      void enqueue(stopState).catch(reportCall);
+    }, remaining);
+  };
+  const pauseState = async () => {
+    if (state !== State.Resume && state !== State.Start && state !== State.Create) return;
+    remaining = options.stopDelay ?? 10000;
+    const paused = lifecycle(State.Pause);
+    armTimer();
+    await paused;
+  };
+  let destruction: Promise<void> | undefined;
+  const mounted: MountedApp = {
+    app,
+    get state() { return state; },
+    pause() {
+      accepting = false;
+      return enqueue(pauseState);
+    },
+    resume() {
+      return enqueue(async () => {
+        if (closing) return;
+        cancelTimer();
+        if (state === State.Stop) await lifecycle(State.Start, State.Stop);
+        // onStart の中で finish したら、Resume に進まずに閉じる
+        if (finishRequested) return;
+        if (state === State.Pause || state === State.Start) await lifecycle(State.Resume);
+        accepting = state === State.Resume;
+      });
+    },
+    destroy(kind, cause) {
+      if (destruction) return destruction;
+      closing = true;
+      accepting = false;
+      cancelTimer();
+      destruction = enqueue(async () => {
+        await pauseState();
+        await stopState();
+        if (!alive) return;
+        destroying = true;
+        destroyTimer = setTimeout(stop, options.destroyTimeout ?? 5000);
+        try { await lifecycle(State.Destroy, kind, cause); }
+        catch { /* Destroy 中の終了は、ページごと切られたのと同じ扱い */ }
+        finally { stop(); }
+      });
+      return destruction;
+    },
+    setFrozen(value) {
+      if (frozen === value) return;
+      frozen = value;
+      if (frozen) cancelTimer();
+      else armTimer();
+    },
+    stop,
+  };
+  try {
+    await enqueue(async () => {
+      await lifecycle(State.Create, State.None, 1);
+      if (finishRequested) return;
+      await lifecycle(State.Start, State.Create);
+      if (finishRequested) return;
+      await lifecycle(State.Resume);
+      accepting = true;
+    });
+  } catch (error) { stop(); throw error; }
   if (exitError) { stop(); throw exitError; }
   mounting = false;
-  return { app, stop };
+  notifyRequests();
+  return mounted;
 }

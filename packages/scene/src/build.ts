@@ -82,7 +82,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
     readFile: async (name) => {
       const path = appPath(name);
       if (path === null) return null;
-      if (path === entry) return source + '\nexport { __bina_event } from "jsr:@binette/replique";\n';
+      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";\n';
       if (path.startsWith(NODE_MODULES)) return findLibrary(libraries, path);
       if (!path.endsWith(".ts")) return null;
       try { return await read(path) ?? null; } catch { return null; }

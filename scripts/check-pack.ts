@@ -75,7 +75,7 @@ try {
     `import { assertEquals, assertThrows } from "@std/assert";
 import { BINETTE_VERSION, BinetteError, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
 import { launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
-import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
+import { buildApp, mountApp, State, DestroyKind, DestroyCause, type BuiltApp, type MountedApp } from "@binette/scene";
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
 const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
@@ -87,7 +87,7 @@ assertThrows(() => parseAppManifest("{"), BinetteError);
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
   "src/index.html": '<p id="count">0</p>',
-  "src/main.ts": 'import { document } from "jsr:@binette/replique";\\nexport function start(): void { document.getElementById("count").textContent = "0"; }\\n',
+  "src/main.ts": 'import { App, Last, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last): void { document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
 };
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
 const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique } });
@@ -110,8 +110,8 @@ const app = await launchApp(built.wasm, {
   createWorker,
   onDom: (ops) => batches.push(ops),
 });
-assertEquals([...app.exports], ["start"]);
-await app.call("start");
+assertEquals([...app.exports], []);
+await app.call("__bina_lifecycle", 1, 0, 1);
 assertEquals(batches, [[{ op: "byId", handle: 1, id: "count" }, { op: "text", handle: 1, value: "0" }]]);
 app.stop();
 
@@ -122,12 +122,14 @@ assertEquals(parseBinette(await response.text()).redirect, "/home");
 
 // 型の宣言・利用もチェック
 const manifest: AppManifest = parseAppManifest(JSON.stringify({ id: "t", name: "t", entry: { html: "a", as: "b" } }));
-const options: LaunchOptions = { onDom: (ops) => void ops };
+const options: LaunchOptions = { onDom: (ops) => void ops, callTimeout: 5000, page: "consumer", onFinish: () => {} };
 const launch: (wasm: Uint8Array) => Promise<RegieApp> = (wasm) => launchApp(wasm, options);
 const build: (read: (path: string) => Promise<string>) => Promise<BuiltApp> = (read) => buildApp(read);
 const mount: (element: HTMLElement, built: BuiltApp) => Promise<MountedApp> = mountApp;
+const destroy = (mounted: MountedApp): Promise<void> => mounted.destroy(DestroyKind.System, DestroyCause.Stack);
+assertEquals(State.Resume, 3);
 const c: Coulisses = createCoulisses();
-void [manifest, launch, build, mount, c];
+void [manifest, launch, build, mount, destroy, c];
 
 console.log("Consumer passed (core, regie, scene, coulisses, replique)");
 `,

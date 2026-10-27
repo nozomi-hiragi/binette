@@ -54,7 +54,7 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 1. `read("app.json")` を parseAppManifest で読む（誤りは BinetteError）
 2. 入口のパスを整える。絶対パス・スキーム・バックスラッシュ・%・フォルダ外は拒む
 3. HTML と AS を読む
-4. AS の末尾に `\nexport { __bina_event } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
+4. AS の末尾に `\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
 5. asc でビルドし `{ manifest, html, wasm }` を返す
 
 `bina.ts` の生成を無くすのは決定 2026-10-27 です。HTML の解析、クリック関数の export 検査、BuiltApp.bindings、BuildOptions.parser と ShellOptions.parser、HtmlParser、deno-dom の依存を無くしました（案・実装済み）。入口に bina.ts というファイル名も使えます。
@@ -86,7 +86,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 | `name` | 返すもの |
 | --- | --- |
 | `app.json` のフォルダの外に出るパス、`/` で始まるパスなど | `null`（読まない） |
-| `entry.as` と同じパス | アプリの AS のソースにイベントの再 export を末尾追加したもの |
+| `entry.as` と同じパス | アプリの AS のソースにイベントとライフサイクルの再 export を末尾追加したもの |
 | `node_modules/<指定子>.ts` | `libraries[<指定子>]`（あれば） |
 | `node_modules/<指定子>/index.ts` | `libraries[<指定子>]`（あれば） |
 | そのほかの `.ts` で終わるパス | `read(パス)` の結果。reject したら `null` |

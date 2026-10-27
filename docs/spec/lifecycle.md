@@ -64,16 +64,16 @@ OS がページに読まれるたびに、そのページの識別子を作り�
 
 ### ページで起きること（決定）
 
-状態の移り方は、基本は OS の中の話です。ページから来るのは、別のタブや背面に回ったときに、前面のアプリを Pause にすることだけです。
+状態の移り方は、基本は OS の中の話です。ページから来るのは、ページが隠れたときに、前面のアプリを Pause にすることだけです。
 
 | ページで起きたこと | Binette の扱い |
 | --- | --- |
-| 隠れた（`visibilitychange` で hidden）、背面に回った（フォーカスが外れた） | 前面のアプリを Pause にする |
-| 凍結された（`freeze`） | 何もしない。ページの中は全部止まる |
-| 戻ってきた（visible、フォーカスが戻った、`resume`） | そのときのページを確かめ、見えていてフォーカスもあるときだけ、前面のアプリを Resume に戻す。Stop になっていたら `onStart(Stop)` → `onResume` |
+| 隠れた（`visibilitychange` で hidden） | 前面のアプリを Pause にする |
+| 凍結された（`freeze`） | Stop までの計時を止める。ページの中は全部止まる |
+| 戻ってきた（visible、`resume`） | そのときのページを確かめ、見えているときだけ、前面のアプリを Resume に戻す。Stop になっていたら `onStart(Stop)` → `onResume` |
 | 閉じた（`pagehide`）、ブラウザが落ちた | 何も検知できない。何も知らせずに全部終わる |
 
-`resume` は凍結が解けた知らせで、前面に戻った知らせではありません。凍結が解けても隠れたままのことがあります。なので、どの知らせのときも、`document.visibilityState` と `document.hasFocus()` で今のページを確かめてから移します。
+`resume` は凍結が解けた知らせで、前面に戻った知らせではありません。凍結が解けても隠れたままのことがあります。なので、どの知らせのときも、`document.visibilityState` で今のページを確かめてから移します。フォーカスが外れただけ（blur）では Pause にしません（決定 2026-10-27）。
 
 ページが閉じるときには、何も確実には届きません。なので **保存は終わりの知らせに頼らず、変えたときにする** のを決まりにします。
 
@@ -102,7 +102,7 @@ OS がページに読まれるたびに、そのページの識別子を作り�
 | できごと | 呼ぶもの |
 | --- | --- |
 | 起動（インスタンスが無い） | `onCreate(最後の状態)` → `onStart(Create)` → `onResume` |
-| フォーカスが移った（戻る、別のアプリを開く、別のタブ、背面に回った） | その瞬間に `onPause` |
+| 画面を離れた（戻る、別のアプリを開く、ページが隠れた） | その瞬間に `onPause` |
 | Pause のまま、Stop までの時間が過ぎた | `onStop` |
 | Pause の間に戻ってきた | `onResume` だけ |
 | Stop のあとに戻ってきた | `onStart(Stop)` → `onResume` |
@@ -291,18 +291,21 @@ launch(memo);
 
 ## 実装の状況
 
-今のコードは、この章のほとんどがまだです。
+App と 6 つの状態、ページの識別子、非表示・凍結・再開、時間切れを実装しています。スタックや最後の記録などはまだです。
 
 | 項目 | 今 |
 | --- | --- |
 | モードの見分け、透かし、インストールが要る操作のアラート | 無い。保存はいつも IndexedDB で、これは決まりどおり |
-| ページの識別子、ページで起きること、Service Worker | 無い |
-| アプリの状態 | 無い。`_start` → HTML → `export function start()` → イベントごと、の順だけある（[regie.md](regie.md)、[scene/mount.md](scene/mount.md)） |
-| 時間切れ | 無い |
-| スタック | 無い。戻る・別のアプリを開くと、画面を消してプロセスを終える。ホームも開くたびに起動し直す |
-| 起動の履歴、最後の状態、Destroy の理由 | 無い |
-| 落ちたとき | ホーム以外と同じく、ホームに戻ってエラーを出すだけ。Apps は無い |
-| `App` クラス、デバッグメニュー | 無い |
+| ページの識別子、ページで起きること | mountShell ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
+| Service Worker | 無い |
+| アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない（[scene/mount.md](scene/mount.md)） |
+| 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
+| スタック | 無い。仮に、戻る・別のアプリを開くと Pause → Stop → Destroy（System・Stack）を続けて呼ぶ。ホームも開くたびに起動し直す |
+| 起動の履歴、最後の状態 | 無い。Last は常に None・done=true・page=""・reason=User/Os を渡す |
+| Destroy の理由、自分を閉じる | 実装済み。finish は今の呼び出しのあと Pause → Stop → Destroy（User・App）でホームに戻る。ホーム自身なら起動し直す |
+| 落ちたとき | 状態を知らせずに捨て、ホームに戻ってエラーを出す。ホームの終了や起動失敗はホームを起動し直す。最初の落ちから 5 秒（`homeRetryWindow`）を過ぎても落ち続けたら、開き直すのをやめてエラーを出したままにする。Apps は無い |
+| `App` クラス | launch で一回だけ渡し、6 つのメソッドを上書きできる。二回の launch はアプリの終了 |
+| デバッグメニュー | 無い。時間は LaunchOptions・ShellOptions で変更できる |
 | ホームの選び方 | 設定は無い。入手元が `binette:system` で `role: "home"` の最初のアプリを、いつも開く（[scene/shell.md](scene/shell.md)） |
 
 ## 今はやらないこと

@@ -14,6 +14,10 @@ interface ShellOptions extends BuildOptions {
   store: AppStore;
   onError?: (error: unknown) => void;
   createWorker?: MountOptions["createWorker"];
+  callTimeout?: number; // ミリ秒、既定 5000
+  stopDelay?: number; // ミリ秒、既定 10000
+  destroyTimeout?: number; // ミリ秒、既定 5000
+  homeRetryWindow?: number; // ミリ秒、既定 5000
 }
 interface MountedShell { stop(): void; }
 function mountShell(element: HTMLElement, options: ShellOptions): Promise<MountedShell>
@@ -35,12 +39,20 @@ function mountShell(element: HTMLElement, options: ShellOptions): Promise<Mounte
 
 - ホームを領域いっぱいに開く。ホーム候補（`binette:system` かつ `role: "home"`）以外のアプリを渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
 - ホームだけに一覧を渡す。ほかのアプリでは `apps.*` は例外になる（[regie.md](../regie.md)）
-- ホームの `apps.open(i)` でホームを止めて隠し、そのアプリを開く。上に OS の「戻る」の帯を出す
-- 戻るとアプリを止めて消し、ホームを開き直す。`start()` が再び走り、一覧を作り直す。一度に動くのは 1 つだけ
-- 開いているアプリの `onExit` では、そのアプリを片付けてホームを開き直し、状態表示と onError にエラーを出します。ホーム自身が終了したら片付けて知らせるだけで、開き直しません。すでに別のアプリへ移っていたら何もしません
+- ホームの `apps.open(i)` でホームに Pause → Stop → Destroy（System・Stack）を知らせ、そのアプリを開く。上に OS の「戻る」の帯を出す
+- 戻ると Pause → Stop → Destroy（System・Stack）を続けて呼び、アプリを消してホームを開き直す。onCreate で一覧を作り直す。一度に動くのは 1 つだけ。スタックができるまでの仮の扱い
+- 開いているアプリの `onExit` では、そのアプリを片付けてホームを開き直し、状態表示と onError にエラーを出します。ホーム自身の終了や起動失敗もホームを開き直します。起動失敗の再試行は次のタスクに回し、stop で取り消せます。ホームが落ち続け、最初の落ちから `homeRetryWindow`（既定 5 秒）を過ぎてもまた落ちたら、開き直すのをやめてエラーを出したままにします。落ちたホームが起動を済ませてから `homeRetryWindow` より長く動いていたら、落ち続けてはいないものとして数え直します。起動の失敗（時間切れを含む）では数え直しません。Apps はまだ無く、④ でここに出します。すでに別のアプリへ移っていたら何もしません
 - 起動中の戻る・停止は AbortSignal で止める。`stop()` はイベントと画面も消し、2 回目からは何もしない
 
 ホームの差し替え、権限の仕組み、アプリの CSS の分離は未決です。今は入手元と role だけでホームを判断します。URL からの追加、更新や削除の操作、並べ替え、複数アプリの同時実行はまだありません。
+
+## ページとライフサイクル（実装済み）
+
+mountShell ごとに crypto.randomUUID() で一つの識別子を作り、ホームを含む全アプリに同じ page を渡します。保存はしません。
+
+visibilitychange で hidden なら前面のアプリを Pause にし、visible なら Resume にします。blur・focus だけでは移しません。freeze で Stop までの計時を止め、resume で残りから続けます。resume イベントは visibilityState が visible のときだけ前面のアプリを Resume にします。Stop から戻るなら Start(Stop) → Resume です。起動中にページが隠れた場合も、起動後に Pause にします。
+
+finish は現在の呼び出しのあと Pause → Stop → Destroy（User・App）を知らせてホームに戻します。ホーム自身ならホームを起動し直します。Destroy の時間切れはエラーを出しません。stop と起動中のキャンセルは何も知らせずに止めます。
 
 ## CSS 変数
 

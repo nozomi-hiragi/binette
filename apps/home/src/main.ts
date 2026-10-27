@@ -1,27 +1,32 @@
-import { apps, document, Element, Event } from "jsr:@binette/replique";
+import { App, apps, document, Element, Event, Last, launch } from "jsr:@binette/replique";
 
-const indices = new Map<Element, i32>();
+class Home extends App {
+  private indices: Map<Element, i32> = new Map<Element, i32>();
 
-export function start(): void {
-  const tiles = document.getElementById("tiles");
-  tiles.textContent = "";
-  indices.clear();
-  for (let i: i32 = 0; i < apps.count(); i++) {
-    const tile = document.createElement("button");
-    tile.className = "home-tile";
-    const img = document.createElement("img");
-    img.className = "home-icon";
-    apps.icon(img, i);
-    tile.appendChild(img);
-    const name = document.createElement("span");
-    name.textContent = apps.name(i);
-    tile.appendChild(name);
-    indices.set(tile, i);
-    tile.addEventListener("click", openApp);
-    tiles.appendChild(tile);
+  onCreate(_last: Last): void {
+    const tiles = document.getElementById("tiles");
+    tiles.textContent = "";
+    this.indices.clear();
+    for (let i: i32 = 0; i < apps.count(); i++) {
+      const tile = document.createElement("button");
+      tile.className = "home-tile";
+      const img = document.createElement("img");
+      img.className = "home-icon";
+      apps.icon(img, i);
+      tile.appendChild(img);
+      const name = document.createElement("span");
+      name.textContent = apps.name(i);
+      tile.appendChild(name);
+      this.indices.set(tile, i);
+      tile.addEventListener("click", (event: Event) => home.openApp(event));
+      tiles.appendChild(tile);
+    }
+  }
+
+  openApp(event: Event): void {
+    if (this.indices.has(event.currentTarget)) apps.open(this.indices.get(event.currentTarget));
   }
 }
 
-function openApp(event: Event): void {
-  if (indices.has(event.currentTarget)) apps.open(indices.get(event.currentTarget));
-}
+const home = new Home();
+launch(home);

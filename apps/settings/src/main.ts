@@ -1,9 +1,14 @@
-import { document } from "jsr:@binette/replique";
+import { App, document, Last, launch } from "jsr:@binette/replique";
 
-export function start(): void {
-  document.getElementById("details").addEventListener("click", () => showDetails());
+class Settings extends App {
+  onCreate(_last: Last): void {
+    document.getElementById("details").addEventListener("click", () => settings.showDetails());
+  }
+
+  showDetails(): void {
+    document.getElementById("description").textContent = "ブラウザだけで動く、アプリの土台です。";
+  }
 }
 
-function showDetails(): void {
-  document.getElementById("description").textContent = "ブラウザだけで動く、アプリの土台です。";
-}
+const settings = new Settings();
+launch(settings);
