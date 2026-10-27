@@ -2,7 +2,7 @@
 
 [仕様の目次](../README.md)
 
-Scene（シーン、舞台）はアプリの解釈層です。アプリのパッケージを読み、AS をビルドし、HTML を描いてアプリとつなぎます。依存は `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20` と、書き出しコマンドだけが使う `@b-fuze/deno-dom@0.1.56`（MIT）です。
+Scene（シーン、舞台）はアプリの解釈層です。アプリのパッケージを読み、AS をビルドし、HTML を描いてアプリとつなぎます。依存は `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`です。
 
 ## 役割（案）
 
@@ -20,17 +20,13 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | --- | --- | --- |
 | `loadCompiler` | 関数 | asc を読み込む |
 | `buildApp` | 関数 | アプリを読んで WASM にビルドする |
-| `parseBindings` | 関数 | HTML から `bina` の名前と `bina-on-click` の関数名を集める |
-| `generateBindingsSource` | 関数 | 名前から `bina.ts`（AS のソース）を作る |
 | `mountApp` | 関数 | HTML を描き、アプリを起動してつなぐ |
 | `mountShell` | 関数 | 保存し、ホームとアプリを開いて戻る枠を描く |
 | `Compiler`・`CompilerStream` | 型 | asc のうち、Scene が使う分 |
 | `BuildOptions`・`BuiltApp` | 型 | `buildApp` の設定と結果 |
-| `HtmlParser`・`Bindings`・`BindingKind` | 型 | `parseBindings` の入力と結果 |
 | `MountOptions`・`MountedApp` | 型 | `mountApp` の設定と結果 |
 | `ShellApp`・`ShellOptions`・`MountedShell` | 型 | `mountShell` の設定と結果 |
 
-ほかに、書き出しコマンド `jsr:@binette/scene/cli`（`writeBindings`）があります（[bindings.md](bindings.md#書き出しコマンド実装済み)）。
 
 
 ## ファイルの構成
@@ -38,7 +34,6 @@ Scene（シーン、舞台）はアプリの解釈層です。アプリのパッ
 | ファイル | 内容 |
 | --- | --- |
 | [build.md](build.md) | `loadCompiler`・`buildApp`。asc の呼び方と、ファイルの解決 |
-| [bindings.md](bindings.md) | HTML の名前の木（`parseBindings`）と、`bina.ts` の生成、書き出しコマンド |
 | [shell.md](shell.md) | `mountShell`。保存、ホームの選択、起動と戻る、CSS 変数 |
 | [mount.md](mount.md) | `mountApp`。HTML とアプリのつなぎ方、読める値、止める操作 |
 
@@ -50,3 +45,6 @@ Scene を載せる Binette の入口はリポジトリ直下にあります（[�
 - `apps/` のシステムアプリを `.binapp/` に書き出し、`src/main.ts` の `import.meta.glob("../.binapp/*.binapp", { query: "?url", import: "default", eager: true })` で同梱し、`mountShell` に `prebuilt` として渡します
 - 保存は IndexedDB を使い、ブラウザでは asc を読みません
 - Vite の `base: "./"` でサブパス配信に対応します
+
+
+v0.2 の途中で bina 属性と bina.ts の生成、bindings の API と仕様書を無くしました（決定 2026-10-27）。通常の id と document API に置き換えています。parser と deno-dom も不要になったため取り除きました（案・実装済み）。CLI は writePrebuiltApp による .binapp の書き出しだけを残します。

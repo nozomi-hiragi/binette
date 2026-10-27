@@ -19,7 +19,7 @@ interface MountedShell { stop(): void; }
 function mountShell(element: HTMLElement, options: ShellOptions): Promise<MountedShell>
 ```
 
-`apps` は渡された順に扱います。入手元 `source` は配信 URL と分けた変わらない名前です。システムアプリは `binette:system` を使います。`compiler`・`libraries`・`parser` は `buildApp` に渡します。parser を省略すると `element.ownerDocument` の文書で読みます。DOM は element から辿り、グローバルの document は使いません。
+`apps` は渡された順に扱います。入手元 `source` は配信 URL と分けた変わらない名前です。システムアプリは `binette:system` を使います。`compiler`・`libraries` は `buildApp` に渡します。parser は HTML の解析が不要になったため無くしました（案・実装済み）。DOM は element から辿り、グローバルの document は使いません。
 
 ## 保存とホームの選び方
 

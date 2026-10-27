@@ -17,9 +17,8 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 
 - `loadCompiler()` は asc を読み込みます。初回だけ dynamic import し、結果を使い回します。`buildApp` が必要なときに呼ぶので、先に呼んで読み込み時間を測ることもできます
 - `buildApp(read, options)` は `app.json`・HTML・AS を読み、AS を WASM にビルドします。ビルドに失敗すると、asc の出力を含む `Error` になります
-- `mountApp(element, built, options)` は `element` に HTML を描き、Régie でアプリを起動します。`bina="name"` の要素はアプリの `elem("name")` で、`bina-on-click="fn"` はクリックでアプリの `fn()` につながります。export に `start` があれば呼びます。HTML の安全性の検証、CSS、保存、権限はまだありません
-
-`<template bina="tiles">` は `list("tiles")` に対応します。`add()` で行を足し、行の `elem("name").text` と `icon(i)` を書けます。行の中のクリックには行番号（i32）を渡します。行の名前は `Bindings.lists` に集め、外側の要素と分けます。
+- `mountApp(element, built, options)` は HTML を描き Régie を起動し、document API の DOM 操作を枠内に反映します。通常の id を参照し、click は登録したリスナーに届きます。export に start があれば呼びます
+- 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML の検査はまだありません
 
 ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は `binette:system` かつ `role: "home"` の最初のアプリを開き、ホームだけに `apps` の一覧を渡します。ホームが別のアプリを開くとホームを止め、OS の「戻る」の帯を出します。戻るとホームを起動し直します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
 
@@ -33,7 +32,6 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 | `mountApp` / `mountShell` | アプリの描画と起動の枠 |
 | `PrebuiltApp` | manifest・HTML・任意の SVG・WASM |
 | `stringifyPrebuiltApp` / `parsePrebuiltApp` | `.binapp` の書き出しと読み込み |
-| `parseBindings` / `generateBindingsSource` | HTML の名前の収集と AS の生成 |
 
 `ShellApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system` など）。
 
@@ -55,12 +53,4 @@ Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` で�
 
 テストと型検査は、ルートの `deno task test` と `deno task check` で行います。
 
-HTML の `bina="count"` から `count` を export する `bina.ts` を生成できます。AS の入口と同じフォルダに置き、`import { count } from "./bina";` と `count.text` で操作します。同じ名前の要素はまとめて変わります。
-
-```sh
-deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
-```
-
-HTML を変えたら再実行すると、エディタの名前補完も更新されます。ビルド時は Scene が最新の HTML から生成するので、存在しない名前の import はビルドエラーになります。
-
-`parseBindings(html, parser)` は要素の数・種類とクリック関数を集め、`generateBindingsSource(bindings)` は AS のソースを返します。`buildApp` は HTML の名前を検査し、`bina-on-click` の関数が export に無ければビルドの誤りにします。結果にも `bindings` が含まれます。ブラウザ以外では、deno-dom（`jsr:@b-fuze/deno-dom`）の DOMParser を `buildApp` の `parser` に渡してください。AS の相対 import もアプリのフォルダ内で解決します。
+v0.2 の途中で bina 属性と bina.ts の生成、Bindings・BindingKind・HtmlParser・parseBindings・generateBindingsSource・writeBindings を廃止しました。BuiltApp.bindings と parser オプション、deno-dom も不要です。AS の入口末尾には __bina_event の再 export を差し込みます。AS の相対 import はアプリのフォルダ内で解決します。

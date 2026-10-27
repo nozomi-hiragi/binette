@@ -1,5 +1,5 @@
 import { resolve } from "@std/path";
-import { writeBindings, writePrebuiltApp } from "../packages/scene/src/cli.ts";
+import { writePrebuiltApp } from "../packages/scene/src/cli.ts";
 
 /** app.json を持つ直下のフォルダを UTF-16 コード単位の辞書順で返す */
 export async function systemApps(root: string): Promise<string[]> {
@@ -35,15 +35,8 @@ export async function buildSystem(root: string, out: string, replique: string): 
 if (import.meta.main) {
   const root = resolve(import.meta.dirname!, "..");
   try {
-    if (Deno.args.length === 1 && Deno.args[0] === "--bindings") {
-      for (const name of await systemApps(resolve(root, "apps"))) {
-        try { console.log(await writeBindings(resolve(root, "apps", name))); }
-        catch (error) { throw new Error(`システムアプリ「${name}」の bina.ts を書き出せません。${error instanceof Error ? error.message : String(error)}`); }
-      }
-    } else {
-      if (Deno.args.length) throw new Error("引数は --bindings だけ指定できます。");
-      console.log((await buildSystem(resolve(root, "apps"), resolve(root, ".binapp"), resolve(root, "packages/replique/src/index.ts"))).join("\n"));
-    }
+    if (Deno.args.length) throw new Error("引数は指定できません。");
+    console.log((await buildSystem(resolve(root, "apps"), resolve(root, ".binapp"), resolve(root, "packages/replique/src/index.ts"))).join("\n"));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     Deno.exitCode = 1;

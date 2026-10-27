@@ -57,7 +57,6 @@ try {
           "@binette/regie": "../packages/regie/src/index.ts",
           "@binette/scene": "../packages/scene/src/index.ts",
           "@binette/scene/cli": "../packages/scene/src/cli.ts",
-          "@b-fuze/deno-dom": "jsr:@b-fuze/deno-dom@0.1.56",
           "@std/path": "jsr:@std/path@^1.1.6",
           "@binette/coulisses": "../packages/coulisses/src/index.ts",
           "@binette/replique": "../packages/replique/src/index.ts",
@@ -77,8 +76,6 @@ try {
 import { BINETTE_VERSION, BinetteError, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
 import { launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
 import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
-import { DOMParser } from "@b-fuze/deno-dom";
-import { writeBindings } from "@binette/scene/cli";
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
 const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
@@ -89,13 +86,12 @@ assertThrows(() => parseAppManifest("{"), BinetteError);
 // 公開物のファイルだけで、AS をビルドして Worker 相当（MessageChannel）で動かす
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
-  "src/index.html": '<p bina="count">0</p>',
-  "src/main.ts": 'import { elem } from "jsr:@binette/replique";\\nexport function start(): void { elem("count").text = "0"; }\\n',
+  "src/index.html": '<p id="count">0</p>',
+  "src/main.ts": 'import { document } from "jsr:@binette/replique";\\nexport function start(): void { document.getElementById("count").textContent = "0"; }\\n',
 };
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
-const built = await buildApp(async (path) => files[path]!, { parser: new DOMParser() as unknown as import("@binette/scene").HtmlParser, libraries: { "jsr:@binette/replique": replique } });
+const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique } });
 assertEquals(built.manifest.id, "example.counter");
-void writeBindings;
 
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();
@@ -109,14 +105,14 @@ function createWorker(): RegieWorker {
   };
 }
 
-const texts: [string, string][] = [];
+const batches: import("@binette/regie").DomOp[][] = [];
 const app = await launchApp(built.wasm, {
   createWorker,
-  onText: (name, value) => texts.push([name, value]),
+  onDom: (ops) => batches.push(ops),
 });
 assertEquals([...app.exports], ["start"]);
 await app.call("start");
-assertEquals(texts, [["count", "0"]]);
+assertEquals(batches, [[{ op: "byId", handle: 1, id: "count" }, { op: "text", handle: 1, value: "0" }]]);
 app.stop();
 
 const coulisses = createCoulisses({ panoplie: createPanoplie({ index: { binette: BINETTE_VERSION, redirect: "/home" } }) });
@@ -126,7 +122,7 @@ assertEquals(parseBinette(await response.text()).redirect, "/home");
 
 // 型の宣言・利用もチェック
 const manifest: AppManifest = parseAppManifest(JSON.stringify({ id: "t", name: "t", entry: { html: "a", as: "b" } }));
-const options: LaunchOptions = { onText: (name: string, value: string) => void [name, value] };
+const options: LaunchOptions = { onDom: (ops) => void ops };
 const launch: (wasm: Uint8Array) => Promise<RegieApp> = (wasm) => launchApp(wasm, options);
 const build: (read: (path: string) => Promise<string>) => Promise<BuiltApp> = (read) => buildApp(read);
 const mount: (element: HTMLElement, built: BuiltApp) => Promise<MountedApp> = mountApp;

@@ -9,7 +9,5 @@ export type { MountedApp, MountOptions } from "./mount.ts";
 export { mountApp } from "./mount.ts";
 export type { ShellApp, ShellOptions, MountedShell } from "./shell.ts";
 export { mountShell } from "./shell.ts";
-export type { BindingKind, Bindings, HtmlParser } from "./bindings.ts";
-export { generateBindingsSource, parseBindings } from "./bindings.ts";
 export type { PrebuiltApp } from "./prebuilt.ts";
 export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";

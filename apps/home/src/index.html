@@ -15,6 +15,4 @@
   .home-icon { width: var(--bina-home-icon-size, 56px); height: var(--bina-home-icon-size, 56px); object-fit: contain; }
   .home-tile:focus-visible { outline: 2px solid var(--bina-home-focus, #3273b9); outline-offset: 2px; }
 </style>
-<div class="home-grid" aria-label="アプリ">
-  <template bina="tiles"><button type="button" class="home-tile" bina-on-click="openApp"><img class="home-icon" bina-icon alt=""><span bina="name"></span></button></template>
-</div>
+<div class="home-grid" id="tiles" aria-label="アプリ"></div>

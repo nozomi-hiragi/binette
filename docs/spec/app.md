@@ -13,7 +13,6 @@ src/
   index.html      見た目。スクリプトは書かない
   style.css       見た目。フロントのテーマの CSS 変数を使える
   main.ts         動き。AS で書き、WASM にビルドする
-  bina.ts         HTML の名前から自動生成する（案。補完のためにコミットする）
 ```
 
 - ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
@@ -27,7 +26,6 @@ apps/settings/
   icon.svg
   src/index.html
   src/main.ts
-  src/bina.ts
 ```
 
 ## app.json
@@ -129,7 +127,7 @@ apps/settings/
 
 ## インストール（案）
 
-システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証、クリック関数の export の確認もしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[scene/build.md](scene/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
+システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証はしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[scene/build.md](scene/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
 
 追加するアプリのインストールは、次の流れを予定しています。
 
@@ -138,15 +136,17 @@ apps/settings/
 3. 検証する
    - WASM が import している呼び出しを一覧にし、`permissions` と照合する。宣言にない権限を使っていたら止める
    - HTML に `<script>`・`on*` 属性・外部 URL が無いことを確かめる
-   - HTML の `bina-on-*` に書いた名前が、WASM の export にあることを確かめる
 4. 権限と用途を見せて、ユーザーが許可する
 5. Régie がビルド結果と記録を保存する
 
 - 更新は同じ入手元からだけ受け付ける。権限が増えていたら、もう一度許可を求める
 - 今の `mountShell` は、最初から渡されたアプリを読む。prebuilt は毎回その内容で `AppStore` に保存し直す（入れた日時は保つ）。開発用の read は、同じ入手元・ID・版が保存済みなら使い回し、無ければビルドして保存する。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う
-- 3 のクリック関数の export の確認は実装済み。HTML や権限の検証、4 の許可の画面はまだ無い。5 はビルド結果の保存だけ
+- 3 の HTML や権限の検証、4 の許可の画面はまだ無い。5 はビルド結果の保存だけ
 - アプリの追加方法は未決。URL からの追加、更新、削除、並べ替えはまだ無い
 
 ## ホームのアイコン（実装済み）
 
 `icon` があれば、`entry` と同じくパスを整えて（`app.json` のフォルダの外は読まない。[scene/shell.md](scene/shell.md#保存とホームの選び方)）SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。
+
+
+画面は通常の id を document.getElementById で参照し、アプリ自身が変更とクリックを扱います（決定 2026-10-27）。bina 属性の解釈と bina.ts の生成は無くしました。API は [Réplique](replique.md)、まだしていない最初の HTML 検査・setAttribute・style・value・input / click 以外のイベントは [mount.md](scene/mount.md) を見てください。

@@ -1,27 +1,19 @@
 # @binette/replique
 
-Binette のアプリ（AssemblyScript）が Régie を呼ぶためのライブラリです。中身は WASM の import（`binette` モジュール）で、実行は `@binette/regie` が受け持ちます。
+Binette のアプリ（AssemblyScript）が Régie を呼ぶライブラリです。document API と要素・イベントの管理を持ち、WASM の import（binette モジュール）は Régie が受け持ちます。
 
 ```ts
-import { count } from "./bina";
+import { document } from "jsr:@binette/replique";
 
 export function start(): void {
-  count.text = "0";
+  document.getElementById("details").addEventListener("click", () => {
+    document.getElementById("description").textContent = "説明";
+  });
 }
 ```
 
-今あるのは `elem(name).text` だけです。書くと、HTML で `bina="name"` を付けた要素の文字をまとめて書き換えます。読むと、そのアプリが最後に書いた文字を返します（まだ書いていなければ空文字列）。
+Element は textContent・className、appendChild・remove・addEventListener を持ちます。同じ id は同じ Element を返し、無い id は何もしません。getter は最後に書いた値（まだなら空文字列）です。Event.currentTarget はリスナーを付けた Element です。apps.icon(img, i) はホーム用のアイコン表示です。
 
-アプリはこのパッケージを自分では持ち込みません。ビルドする Scene が `jsr:@binette/replique` として差し込みます。
+アプリはパッケージを自分では持ち込まず、Scene がソースを差し込み、入口に __bina_event の再 export を足します。bina.ts の生成は廃止しました。
 
-ルートの `deno task check` で、AssemblyScript としても型検査します（asc の `--noEmit`）。
-
-仕様は [docs/spec/replique.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/replique.md) にあります。
-
-HTML の `bina="count"` から `count` を export する `bina.ts` を生成できます。AS の入口と同じフォルダに置き、`import { count } from "./bina";` と `count.text` で操作します。同じ名前の要素はまとめて変わります。
-
-```sh
-deno run -A jsr:@binette/scene/cli <アプリのフォルダ>
-```
-
-HTML を変えたら再実行すると、エディタの名前補完も更新されます。ビルド時は Scene が最新の HTML から生成するので、存在しない名前の import はビルドエラーになります。
+ルートの deno task check で Deno と asc の両方の型検査をします。仕様は [Réplique](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/replique.md) を見てください。
