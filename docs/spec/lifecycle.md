@@ -319,7 +319,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | モードの見分け、透かし、インストールが要る操作のアラート | 無い。保存はいつも IndexedDB で、これは決まりどおり |
 | ページの識別子、ページで起きること | mountShell ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
 | Service Worker | 無い |
-| アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない（[scene/mount.md](scene/mount.md)） |
+| アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない。起動の途中のクリックは Resume のあとに届ける（[scene/mount.md](scene/mount.md)） |
 | 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
 | スタック | 既定 3（ホームを含む）。画面を隠して Pause にし、DOM と Worker を残す。残っていれば Resume、Stop なら Start(Stop) → Resume。上限を超えたら、前面以外で最も長く前面に出ていないものを Stop → Destroy（System・Stack） |
 | 起動の履歴、最後の状態 | SystemStore に保存。各メソッドの前後に state・done・page・reason を書き、次の Create に渡す。初回は None・done=true。起動のたびに日時と installedAppKey を記録し、既定 100 件を残す。前面に出すだけでは記録しない |

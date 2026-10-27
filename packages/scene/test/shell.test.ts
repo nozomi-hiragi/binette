@@ -32,7 +32,9 @@ function elementIn(window: Window): HTMLElement {
   return element;
 }
 async function waitFor(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !condition(); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
   assert(condition(), "待ってもホームの状態が変わりませんでした");
 }
 function workers() {
@@ -93,11 +95,14 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
     tiles[0]!.click(); tiles[1]!.click();
     await waitFor(() => worker.ready === 2);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assertEquals(element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden, true);
+    await waitFor(() => element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden === true);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
-    element.querySelector<HTMLButtonElement>("#details")!.click();
-    await waitFor(() => element.querySelector("#description")?.textContent === "ブラウザだけで動く、アプリの土台です。");
+    // #details は最初の HTML にあり、リスナーは onCreate で付く。付くまで押し直す（押しても同じ文字を書くだけ）
+    await waitFor(() => {
+      if (element.querySelector("#description")?.textContent === "ブラウザだけで動く、アプリの土台です。") return true;
+      element.querySelector<HTMLButtonElement>("#details")!.click();
+      return false;
+    });
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(element.querySelector("#description")!.textContent, "ブラウザだけで動く、アプリの土台です。");
@@ -343,7 +348,8 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     const value = (i: number) => rows[i]!.querySelector(".settings-value")!.textContent;
     const click = (i: number, direction: number) => rows[i]!.querySelectorAll<HTMLButtonElement>("button")[direction]!.click();
     for (let i = 0; i < 6; i++) click(i, 0);
-    await waitFor(() => value(0) === "1");
+    // クリックは順に処理されるので、最後の行が変われば全部済んでいる
+    await waitFor(() => value(5) === "0 秒");
     for (let i = 0; i < 6; i++) click(i, 0);
     await new Promise(resolve => setTimeout(resolve, 20));
     assertEquals([...rows].map((_, i) => value(i)), ["1", "0 秒", "0", "1 秒", "1 秒", "0 秒"]);
@@ -388,7 +394,8 @@ Deno.test("設定した Stop までの時間は、残っているインスタン
     element.querySelector<HTMLButtonElement>(".home-tile")!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("#debug")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     await waitFor(() => worker.live === 2);
-    for (let i = 0; i < 100 && (await store.system.getLast(key))?.state !== 5; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    const deadline = performance.now() + 10000;
+    while ((await store.system.getLast(key))?.state !== 5 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
     assertEquals((await store.system.getLast(key))!.state, 5);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });

@@ -59,7 +59,7 @@ Régie で _start を走らせてから HTML を枠に描き、初期化中に�
 
 listen は click だけ本物のリスナーを付ける。それ以外は onError に知らせて何もしない。byId は listen の時点で見つかった要素に付けるので、あとから同じ id の要素に交換してもリスナーは移らない。
 
-リスナーは `app.call("__bina_event", listener)` を呼ぶ。Réplique が Event の type と currentTarget を用意する。起動中、および Pause・Stop・Destroy のクリックは捨てる。状態の通知とイベントは直列に処理する。Régie が知らせたエラーは call の reject から二重に知らせない。
+リスナーは `app.call("__bina_event", listener)` を呼ぶ。Réplique が Event の type と currentTarget を用意する。Pause・Stop・Destroy のクリックは捨てる。起動の途中（Create・Start）のクリックは捨てずに待たせ、Resume のあとに届ける（onCreate で作ったボタンが、すぐ押されても効くように。案）。状態の通知とイベントは直列に処理する。Régie が知らせたエラーは call の reject から二重に知らせない。
 
 `stop()` と signal の中断、アプリ終了で全リスナーを外す。stop は描いた HTML は消さない。起動中の失敗は mountApp の reject、完了後の終了は onExit で知らせる。`element.style.contain = "paint"` で描画を枠に収める。DOM は element.ownerDocument から辿る。
 

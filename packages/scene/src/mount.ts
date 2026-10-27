@@ -159,7 +159,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
         }
         case "listen": {
           const listener = () => {
-            if (!accepting || state !== State.Resume || closing) return;
+            // 起動の途中（Create・Start）のクリックは捨てずに、Resume のあとへ回す。Pause と Stop の間は捨てる
+            if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
             void enqueue(async () => {
               if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_event", op.listener);
             }).catch(reportCall);
