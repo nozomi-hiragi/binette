@@ -20,6 +20,12 @@ export type DomOp =
 
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
+  /** 一回の呼び出しと起動の時間切れ（ミリ秒、既定 5000） */
+  callTimeout?: number;
+  /** 今のページの識別子 */
+  page?: string;
+  /** アプリが自分を閉じたとき。今の呼び出しの完了後に届く */
+  onFinish?: () => void;
   /** _start または一回の call で溜めた操作。完了通知より先に届く */
   onDom?: (ops: DomOp[]) => void;
   /** ホームへ渡すアプリ。省略時は apps.* を使えない */
@@ -40,7 +46,7 @@ export interface RegieApp {
   /** アプリが export している関数の名前 */
   readonly exports: readonly string[];
   /** export した関数を呼ぶ。終わったら解決する。呼び出し中の DOM 操作は、解決より先に `onDom` に届く */
-  call(name: string, arg?: number): Promise<void>;
+  call(name: string, ...args: number[]): Promise<void>;
   /** Worker を止める */
   stop(): void;
 }
@@ -56,7 +62,7 @@ function createBlobWorker(): RegieWorker {
 
 /**
  * アプリの WASM を Worker で起動する。export された関数名の一覧を受け取ったら解決する。
- * `start()` はここでは呼ばない。呼び出し側が画面を用意してから `call("start")` する。
+ * 状態の通知は、呼び出し側が画面を用意してから行う。
  * WASM は `--exportStart _start` でビルドしておく。トップレベルの初期化は、起動のときに `_start` で走らせる。
  *
  * @param wasm ビルドしたアプリの WASM
@@ -65,7 +71,11 @@ function createBlobWorker(): RegieWorker {
 export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions = {}): Promise<RegieApp> {
   if (options.signal?.aborted) return Promise.reject(new Error("アプリを止めました。"));
   const worker = (options.createWorker ?? createBlobWorker)();
-  const pending = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
+  const pending = new Map<number, { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  const timeout = options.callTimeout ?? 5000;
+  let initTimer: ReturnType<typeof setTimeout> | undefined;
+  let finishing = false;
+  const openings: number[] = [];
   let nextId = 1;
   let stopped = false;
   let rejectLaunch: ((error: Error) => void) | undefined;
@@ -73,17 +83,25 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const finish = (error: Error, notify: boolean) => {
     if (stopped) return;
     stopped = true;
+    clearTimeout(initTimer);
     options.signal?.removeEventListener("abort", stop);
     worker.terminate();
     const launching = rejectLaunch;
     rejectLaunch = undefined;
     launching?.(error);
-    for (const { reject } of pending.values()) reject(error);
+    for (const { reject, timer } of pending.values()) { clearTimeout(timer); reject(error); }
     pending.clear();
     if (!launching && notify) options.onExit?.(error);
   };
   const stop = () => finish(new Error("アプリを止めました。"), false);
   const exit = (error: Error) => finish(error, true);
+
+  const expired = () => exit(new Error("アプリが応答しないので終了しました。"));
+  const notifyRequests = () => {
+    if (rejectLaunch || pending.size || stopped) return;
+    if (finishing) { finishing = false; openings.length = 0; options.onFinish?.(); }
+    else for (const i of openings.splice(0)) options.onOpen?.(i);
+  };
 
   return new Promise<RegieApp>((resolve, reject) => {
     rejectLaunch = reject;
@@ -99,20 +117,24 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
       const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number };
       switch (data.type) {
         case "ready": {
+          clearTimeout(initTimer);
           rejectLaunch = undefined;
           const exports = Object.freeze([...data.exports!]);
           resolve({
             exports,
-            call(name, arg) {
+            call(name, ...args) {
               if (stopped) return Promise.reject(new Error("アプリは止まっています。"));
               return new Promise<void>((resolveCall, rejectCall) => {
                 const id = nextId++;
-                pending.set(id, { resolve: resolveCall, reject: rejectCall });
-                worker.postMessage({ type: "call", id, name, ...(arg === undefined ? {} : { arg }) });
+                const timer = setTimeout(expired, timeout);
+                pending.set(id, { resolve: resolveCall, reject: rejectCall, timer });
+                try { worker.postMessage({ type: "call", id, name, args }); }
+                catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
               });
             },
             stop,
           });
+          notifyRequests();
           break;
         }
         case "failed": {
@@ -121,18 +143,23 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           break;
         }
         case "dom": options.onDom?.(data.ops!); break;
-        case "apps.open": options.onOpen?.(data.i!); break;
+        case "apps.open": openings.push(data.i!); break;
+        case "finish": finishing = true; break;
         case "done": {
+          clearTimeout(pending.get(data.id!)?.timer);
           pending.get(data.id!)?.resolve();
           pending.delete(data.id!);
+          notifyRequests();
           break;
         }
         case "fail": {
           const error = new Error(data.message);
           if (data.exit) { exit(error); break; }
           options.onError?.(error);
+          clearTimeout(pending.get(data.id!)?.timer);
           pending.get(data.id!)?.reject(error);
           pending.delete(data.id!);
+          notifyRequests();
           break;
         }
       }
@@ -140,7 +167,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     // Uint8Array は大きなバッファの一部だけを見ている場合があるので、WASM の分だけを新しいバッファに写して渡す
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
-      worker.postMessage({ type: "init", wasm: copy, ...(options.apps === undefined ? {} : { apps: options.apps }) }, [copy]);
+      initTimer = setTimeout(expired, timeout);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", ...(options.apps === undefined ? {} : { apps: options.apps }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

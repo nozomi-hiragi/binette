@@ -6,6 +6,11 @@
 
 ```ts
 interface MountOptions {
+  callTimeout?: number; // ミリ秒、既定 5000
+  stopDelay?: number; // ミリ秒、既定 10000
+  destroyTimeout?: number; // ミリ秒、既定 5000
+  page?: string;
+  onFinish?: () => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
   /** mountApp の完了後にアプリが終了したとき */
@@ -20,13 +25,18 @@ interface MountOptions {
 interface MountedApp {
   /** Régie で動いているアプリ */
   readonly app: RegieApp;
+  readonly state: State;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
+  setFrozen(frozen: boolean): void;
   /** アプリを止め、クリックの受け付けをやめる */
   stop(): void;
 }
 function mountApp(element: HTMLElement, built: BuiltApp, options?: MountOptions): Promise<MountedApp>
 ```
 
-HTML を枠に描き、Régie を起動して `onDom` の操作を反映します。export に start があれば call してから解決します。HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を OS が読まない方針は **決定 2026-10-27** です（[Réplique](../replique.md#画面を操作する方針決定-2026-10-27)）。
+Régie で _start を走らせてから HTML を枠に描き、初期化中に溜めた `onDom` の操作を反映します。`__bina_lifecycle(Create, None, 1)` → Start(Create) → Resume を呼んでから解決します。HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を OS が読まない方針は **決定 2026-10-27** です（[Réplique](../replique.md#画面を操作する方針決定-2026-10-27)）。
 
 ## 要素と操作（案・実装済み）
 
@@ -44,9 +54,19 @@ HTML を枠に描き、Régie を起動して `onDom` の操作を反映しま�
 
 listen は click だけ本物のリスナーを付ける。それ以外は onError に知らせて何もしない。byId は listen の時点で見つかった要素に付けるので、あとから同じ id の要素に交換してもリスナーは移らない。
 
-リスナーは `app.call("__bina_event", listener)` を呼ぶ。Réplique が Event の type と currentTarget を用意する。起動の ready 待ちのクリックは捨てる。Régie が知らせたエラーは call の reject から二重に知らせない。
+リスナーは `app.call("__bina_event", listener)` を呼ぶ。Réplique が Event の type と currentTarget を用意する。起動中、および Pause・Stop・Destroy のクリックは捨てる。状態の通知とイベントは直列に処理する。Régie が知らせたエラーは call の reject から二重に知らせない。
 
 `stop()` と signal の中断、アプリ終了で全リスナーを外す。stop は描いた HTML は消さない。起動中の失敗は mountApp の reject、完了後の終了は onExit で知らせる。`element.style.contain = "paint"` で描画を枠に収める。DOM は element.ownerDocument から辿る。
+
+## 状態と時間（実装済み）
+
+State・DestroyKind・DestroyCause は Scene からも export し、Réplique と同じ番号です。pause は Resume → Pause、resume は Pause → Resume、Stop → Start(Stop) → Resume を知らせます。同じ状態への重複通知はしません。destroy は必要なら Pause → Stop を通り、Destroy を知らせたあと Worker を止めます。
+
+Pause から stopDelay 後に Stop にします。setFrozen(true) でタイマーを解除して残り時間を覚え、false で残りから数え直します。resume・destroy・stop ではタイマーを解除します。
+
+onDestroy は destroyTimeout で Worker を止めます。Destroy 中は Régie の時間切れや終了も onError / onExit に流さず、エラー表示やホーム復帰を重複させません。二つの時間切れは先に来た方で終了します。Pause・Stop の失敗は通常の終了として扱います。
+
+finish と open は現在の呼び出しが終わるまで保留し、状態の通知の途中に別の呼び出しを入れません。onCreate / onStart で finish した場合は、続く起動通知をやめ、onFinish を知らせます。stop は状態を通知せずに Worker とリスナーを止め、HTML は残します。
 
 ## まだしていないこと
 

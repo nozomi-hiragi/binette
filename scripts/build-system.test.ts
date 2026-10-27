@@ -7,7 +7,7 @@ async function app(root: string, name: string): Promise<void> {
   await Deno.mkdir(`${root}/${name}`, { recursive: true });
   await Deno.writeTextFile(`${root}/${name}/app.json`, JSON.stringify({ id: name, name, entry: { html: "index.html", as: "main.ts" } }));
   await Deno.writeTextFile(`${root}/${name}/index.html`, "<p>例</p>");
-  await Deno.writeTextFile(`${root}/${name}/main.ts`, "export function start(): void {}");
+  await Deno.writeTextFile(`${root}/${name}/main.ts`, 'import { App, launch } from "jsr:@binette/replique"; launch(new App());');
 }
 Deno.test("システムアプリだけをフォルダ名順で書き出し、古い .binapp を消す", async () => {
   const dir = await Deno.makeTempDir();

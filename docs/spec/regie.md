@@ -20,19 +20,19 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 
 ```
 メインスレッド（launchApp）              Worker（serveApp）
-  ── init { wasm, apps? } ─────────────────→  WebAssembly.instantiate
+  ── init { wasm, page, apps? } ─────────────────→  WebAssembly.instantiate
                                         _start があれば呼ぶ（トップレベルの初期化）
   ←──────────── dom { ops } ─  （初期化中の操作）
   ←──────────── ready { exports } ────  export された関数名を返す
   launchApp が解決する
-  ── call { id, name, arg? } ─────────────→  exports[name](arg?) を呼ぶ
+  ── call { id, name, args } ─────────────→  exports[name](...args) を呼ぶ
   ←──────────── dom { ops } ─  （呼び出し中の操作）
   ←──────────── done { id } ──────────  呼び終えた
   call が解決する
 ```
 
 - 1 つの Worker で 1 つのアプリを動かします
-- `start()` は Régie からは呼びません。呼ぶのは Scene です（[scene/mount.md](scene/mount.md#mountapp)）。Scene が HTML を描き終えてから呼ぶためです
+- 状態の通知は Scene が HTML を描き終えてから `__bina_lifecycle` で呼びます（[scene/mount.md](scene/mount.md#mountapp)）
 - メッセージは届いた順に処理されます。呼び出し中の `dom` は、その呼び出しの `done` より先に届きます
 
 ## API（実装済み）
@@ -46,19 +46,22 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 アプリの WASM を Worker で起動します。
 
 1. `options.createWorker` で Worker を作る。省略すると、下の「Blob URL の Worker」を作る
-2. Worker の `message` を受け始めてから、`{ type: "init", wasm, apps? }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（大きなバッファの一部を見るものを含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
+2. Worker の `message` を受け始めてから、`{ type: "init", wasm, page, apps? }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（大きなバッファの一部を見るものを含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
 3. `ready` が来たら `RegieApp` で解決する
 4. `failed` が来たら Worker を止め（`stop()` と同じ）、`failed` の `message` を持つ `Error` で reject する
 
 - WASM の作り方は [WASM の約束](#wasm-の約束実装済み) に合わせます
 - Worker の `error`・`messageerror`、アプリの中の例外では、アプリが終了したものとして Worker を止めます。ready 前なら起動を reject し、ready 後なら待っている call をすべて同じ Error で reject して `onExit` を 1 回呼びます。以後の call は `アプリは止まっています。` で reject します
 - `error` の文は `アプリが落ちました: <message>`。message が無ければ `アプリが落ちました。` です。`messageerror` は `アプリとのやりとりに失敗しました。` です
-- 無限ループの時間切れは未決です
+- init の送信から ready まで、および call の送信から完了まで、既定 5 秒で時間切れにします。Worker を止め、待つ call をすべて同じ Error（`アプリが応答しないので終了しました。`）で reject します。ready 前は launchApp の reject、ready 後は onExit で一回知らせます。完了や停止時にはタイマーを解除します
 
 ### LaunchOptions
 
 ```ts
 interface LaunchOptions {
+  callTimeout?: number; // ミリ秒、既定 5000
+  page?: string; // 省略時は空文字列
+  onFinish?: () => void;
   onDom?: (ops: DomOp[]) => void;
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
@@ -97,17 +100,17 @@ interface RegieApp {
   /** アプリが export している関数の名前。_start は含まない */
   readonly exports: readonly string[];
   /** export した関数を呼ぶ。終わったら解決する */
-  call(name: string, arg?: number): Promise<void>;
+  call(name: string, ...args: number[]): Promise<void>;
   /** Worker を止める */
   stop(): void;
 }
 ```
 
 - `exports` は凍結した配列です。WASM の export のうち関数だけで、`_start` と `__` で始まるランタイムの関数を除きます。`memory` などは入りません
-- `call(name, arg?)`:
+- `call(name, ...args)`:
   - 止めたあとに呼ぶと、`アプリは止まっています。` の `Error` で reject する（Worker には送らない）
-  - 要求番号（1 から順に増える整数）を付けて `{ type: "call", id, name, arg }` を送り、同じ番号の `done` で解決、`fail` で reject する
-  - `arg` があれば i32 の引数を 1 つ渡します。戻り値は返しません
+  - 要求番号（1 から順に増える整数）を付けて `{ type: "call", id, name, args }` を送り、同じ番号の `done` で解決、`fail` で reject する
+  - `args` をそのまま可変長の数値引数として渡します。戻り値は返しません
 - `stop()`: Worker を `terminate` し、待っている `call` をすべて `アプリを止めました。` の `Error` で reject します。2 回目からは何もしません
 
 ### serveApp
@@ -145,8 +148,8 @@ URL.revokeObjectURL(url);
 
 | `type` | 欄 | 意味 |
 | --- | --- | --- |
-| `init` | `wasm: ArrayBuffer`, `apps?: { id: string; name: string }[]` | WASM を起動する。1 つの Worker に 1 回だけ送る |
-| `call` | `id: number`, `name: string`, `arg?: number` | export の `name` を呼ぶ。arg があれば i32 を 1 つ渡す |
+| `init` | `wasm: ArrayBuffer`, `page: string`, `apps?: { id: string; name: string }[]` | WASM を起動する。1 つの Worker に 1 回だけ送る |
+| `call` | `id: number`, `name: string`, `args: number[]` | export の `name` に可変長の数値引数を渡す |
 
 Worker → メインスレッド:
 
@@ -156,6 +159,7 @@ Worker → メインスレッド:
 | `failed` | `message: string` | 起動できなかった。`message` は `アプリを起動できません: <理由>` |
 | `dom` | `ops: DomOp[]` | 一回分の DOM 操作 |
 | `apps.open` | `i: number` | アプリを開く |
+| `finish` | なし | アプリが自分を閉じる |
 | `done` | `id: number` | `call` を呼び終えた |
 | `fail` | `id: number`, `message: string`, `exit?: boolean` | `call` が失敗した。`exit: true` ならアプリを終了する |
 
@@ -185,11 +189,13 @@ Worker → メインスレッド:
 
 Régie が WASM に渡すのは `binette` の [Réplique の import](replique.md#wasm-import案実装済み) と `env.abort(message, fileName, line, column)` です（案・実装済み）。abort の文字列は AS のポインタで、0 なら無しです。ほかの import はリンクに失敗します。
 
+ページの識別子は init で受け取り、`app.page` から返します。Last 用の `app.lastPage` は空文字列、`app.lastKind`・`app.lastCause` は 0 を返します。文字列は既存の `__new` で確保して返します。
+
 ### DOM の配送（案・実装済み）
 
 `dom.*` と `apps.icon` はその場では送らず配列に溜めます。`_start` 後の ready 前、および各 call 後の done / fail 前に `{ type: "dom", ops }` を一回送ります。空なら送りません。call の例外でもそこまでの操作を送り、初期化失敗時は捨てます。`onDom` は launchApp / call の解決・拒否より先に届きます。
 
-`apps.open` は従来どおり即時に送ります。その前に DOM を flush しないので、同じ呼び出し中では onOpen が onDom より先に届くことがあります。
+`apps.open` と `app.finish` の import は即時にメッセージを送ります。メインは ready または待つ call の完了まで要求を保留し、DOM 操作が届いたあとに onOpen / onFinish を呼びます。同じ呼び出しの finish は open より優先します。
 
 公開する判別共用体 `DomOp`（案・実装済み）:
 
@@ -206,7 +212,7 @@ type DomOp =
 
 ```
 
-`apps.icon` も apps が無ければ例外、番号の範囲外も例外でアプリを終了します。`__bina_event` は exports 一覧から除かれますが、call では呼べます。Scene は `call("__bina_event", listener)` でイベントを伝えます。
+`apps.icon` も apps が無ければ例外、番号の範囲外も例外でアプリを終了します。`__bina_event` と `__bina_lifecycle` は exports 一覧から除かれますが、call では呼べます。Scene は `call("__bina_event", listener)` でイベントを伝えます。
 
 ### 文字列の読み方
 

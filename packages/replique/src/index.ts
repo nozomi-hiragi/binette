@@ -120,3 +120,70 @@ export namespace apps {
   // @ts-ignore: AssemblyScript の整数型
   export declare function open(i: i32): void;
 }
+
+/** インスタンスの状態。None は前の記録が無いことを表す */
+export enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
+export enum DestroyKind { User, System }
+export enum DestroyCause { Os, App, Stack, Update, Uninstall }
+
+/** インスタンスを捨てる理由 */
+export class DestroyReason {
+  constructor(readonly kind: DestroyKind, readonly cause: DestroyCause) {}
+}
+
+/** 前回の最後の記録 */
+export class Last {
+  constructor(readonly state: State, readonly done: boolean, readonly page: string, readonly reason: DestroyReason) {}
+}
+
+// @ts-ignore: decorator
+@external("binette", "app.page")
+declare function pageImport(): string;
+// @ts-ignore: decorator
+@external("binette", "app.lastPage")
+declare function lastPageImport(): string;
+// @ts-ignore: decorator
+@external("binette", "app.lastKind")
+declare function lastKindImport(): DestroyKind;
+// @ts-ignore: decorator
+@external("binette", "app.lastCause")
+declare function lastCauseImport(): DestroyCause;
+// @ts-ignore: decorator
+@external("binette", "app.finish")
+declare function finishImport(): void;
+
+/** アプリの大本。必要な知らせだけ上書きする */
+export class App {
+  onCreate(last: Last): void {}
+  onStart(last: State): void {}
+  onResume(): void {}
+  onPause(): void {}
+  onStop(): void {}
+  onDestroy(reason: DestroyReason): void {}
+  get page(): string { return pageImport(); }
+  finish(): void { finishImport(); }
+}
+
+// グローバルで持ち、アプリを GC から守る
+let application: App | null = null;
+
+/** トップレベルで一回だけインスタンスを渡す */
+export function launch(app: App): void {
+  if (application !== null) throw new Error("launch は一回だけ呼べます。");
+  application = app;
+}
+
+/** OS が状態を進める。launch が無いアプリには何もしない */
+// @ts-ignore: AssemblyScript の整数型
+export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
+  const app = application;
+  if (app === null) return;
+  switch (kind) {
+    case State.Create: app.onCreate(new Last(a, b != 0, lastPageImport(), new DestroyReason(lastKindImport(), lastCauseImport()))); break;
+    case State.Start: app.onStart(a); break;
+    case State.Resume: app.onResume(); break;
+    case State.Pause: app.onPause(); break;
+    case State.Stop: app.onStop(); break;
+    case State.Destroy: app.onDestroy(new DestroyReason(a, b)); break;
+  }
+}

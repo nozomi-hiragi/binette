@@ -2,7 +2,7 @@ import { parseAppManifest } from "@binette/core";
 import { type AppStore, type InstalledApp, installedAppKey } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
 import { iconPath } from "./paths.ts";
-import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
+import { DestroyCause, DestroyKind, type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
 import type { PrebuiltApp } from "./prebuilt.ts";
 
@@ -13,7 +13,7 @@ export type ShellApp = { source: string } & (
 );
 
 /** 枠の設定 */
-export interface ShellOptions extends BuildOptions, Pick<MountOptions, "onError" | "createWorker"> {
+export interface ShellOptions extends BuildOptions, Pick<MountOptions, "onError" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout"> {
   apps: ShellApp[];
   store: AppStore;
 }
@@ -55,10 +55,17 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   status.hidden = true;
   root.append(style, toolbar, status);
   element.replaceChildren(root);
+  const page = crypto.randomUUID();
+  let frozen = false;
+  let generation = 0;
+  let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
-  let active: { controller: AbortController; mounted?: MountedApp; host: HTMLElement; home: boolean } | undefined;
+  type Session = { controller: AbortController; mounted?: MountedApp; host: HTMLElement; home: boolean; finish: boolean };
+  const sessions = new Set<Session>();
+  let active: Session | undefined;
   const reported = new WeakSet<object>();
   const report = (error: unknown) => {
+    if (stopped) return;
     status.textContent = error instanceof Error ? error.message : String(error);
     status.hidden = false;
     if (typeof error === "object" && error !== null) {
@@ -67,12 +74,20 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     }
     options.onError?.(error);
   };
-  const leave = () => {
+  const cut = (session: Session) => {
+    if (active === session) active = undefined;
+    session.controller.abort();
+    session.mounted?.stop();
+    session.host.remove();
+    sessions.delete(session);
+  };
+  const leave = async (kind: DestroyKind, cause: DestroyCause) => {
     const previous = active;
     active = undefined;
-    previous?.controller.abort();
-    previous?.mounted?.stop();
-    previous?.host.remove();
+    if (!previous) return;
+    try { await previous.mounted?.destroy(kind, cause); }
+    catch (error) { return error; }
+    finally { cut(previous); }
   };
   const installedApps: InstalledApp[] = [];
   const seen = new Set<string>();
@@ -103,13 +118,22 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   const isHome = (app: InstalledApp) => app.source === "binette:system" && app.manifest.role === "home";
   const home = installedApps.find(isHome);
   const apps = installedApps.filter((app) => !isHome(app));
-  const show = async (installed: InstalledApp, atHome: boolean, clearStatus = true): Promise<void> => {
+  const show = async (installed: InstalledApp, atHome: boolean, clearStatus = true, kind = DestroyKind.System, cause = DestroyCause.Stack): Promise<void> => {
     if (stopped) return;
-    leave();
+    clearTimeout(restartTimer);
+    const current = ++generation;
+    const exitError = await leave(kind, cause);
+    if (stopped || current !== generation) return;
+    if (exitError !== undefined) {
+      report(exitError);
+      if (home) { installed = home; atHome = true; }
+      clearStatus = false;
+    }
     const host = document.createElement("div");
     host.className = "bina-shell-app";
     host.classList.toggle("bina-shell-content", !atHome);
-    const session = { controller: new AbortController(), host, home: atHome, mounted: undefined as MountedApp | undefined };
+    const session = { controller: new AbortController(), host, home: atHome, mounted: undefined as MountedApp | undefined, finish: false };
+    sessions.add(session);
     active = session;
     toolbar.hidden = atHome;
     if (clearStatus) status.hidden = true;
@@ -118,13 +142,22 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     try {
       const mounted = await mountApp(host, installed, {
         createWorker: options.createWorker,
+        callTimeout: options.callTimeout,
+        stopDelay: options.stopDelay,
+        destroyTimeout: options.destroyTimeout,
+        page,
         signal: session.controller.signal,
         onError: (error) => { if (active === session) report(error); },
         async onExit(error) {
           if (active !== session) return;
-          leave();
-          if (!atHome && home) await show(home, true);
+          cut(session);
+          if (home) await show(home, true);
           report(error);
+        },
+        onFinish() {
+          if (active !== session) return;
+          session.finish = true;
+          if (session.mounted && home) void show(home, true, true, DestroyKind.User, DestroyCause.App);
         },
         ...(atHome ? {
           apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })),
@@ -135,23 +168,51 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
         } : {}),
       });
       if (active !== session) mounted.stop();
-      else session.mounted = mounted;
+      else {
+        session.mounted = mounted;
+        mounted.setFrozen(frozen);
+        if (session.finish && home) void show(home, true, true, DestroyKind.User, DestroyCause.App);
+        else if (document.visibilityState === "hidden") await mounted.pause();
+      }
     } catch (error) {
       if (active !== session) return;
-      leave();
+      cut(session);
       if (!atHome && home) await show(home, true);
       report(error);
+      if (atHome && home && !stopped && current === generation) {
+        // 起動に失敗したホームも開き直す。stop を受け取れるよう、次のタスクに回す
+        restartTimer = setTimeout(() => {
+          if (!stopped && current === generation) void show(home, true, false);
+        }, 0);
+      }
     }
   };
   const goBack = () => { if (!stopped && active && !active.home && home) void show(home, true); };
+  const updateVisibility = () => {
+    const mounted = active?.mounted;
+    if (!mounted) return;
+    const action = document.visibilityState === "visible" ? mounted.resume() : mounted.pause();
+    // Régie の終了通知が、エラーとホームへの復帰を受け持つ
+    void action.catch(() => {});
+  };
+  const freeze = () => { frozen = true; active?.mounted?.setFrozen(true); };
+  const resume = () => { frozen = false; active?.mounted?.setFrozen(false); updateVisibility(); };
   back.addEventListener("click", goBack);
+  document.addEventListener("visibilitychange", updateVisibility);
+  document.addEventListener("freeze", freeze);
+  document.addEventListener("resume", resume);
   if (home) await show(home, true, false);
   else report(new Error("ホームのシステムアプリがありません。"));
   return {
     stop() {
       if (stopped) return;
       stopped = true;
-      leave();
+      generation++;
+      clearTimeout(restartTimer);
+      for (const session of sessions) cut(session);
+      document.removeEventListener("visibilitychange", updateVisibility);
+      document.removeEventListener("freeze", freeze);
+      document.removeEventListener("resume", resume);
       back.removeEventListener("click", goBack);
       root.remove();
     },

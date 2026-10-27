@@ -17,7 +17,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 
 - `loadCompiler()` は asc を読み込みます。初回だけ dynamic import し、結果を使い回します。`buildApp` が必要なときに呼ぶので、先に呼んで読み込み時間を測ることもできます
 - `buildApp(read, options)` は `app.json`・HTML・AS を読み、AS を WASM にビルドします。ビルドに失敗すると、asc の出力を含む `Error` になります
-- `mountApp(element, built, options)` は HTML を描き Régie を起動し、document API の DOM 操作を枠内に反映します。通常の id を参照し、click は登録したリスナーに届きます。export に start があれば呼びます
+- `mountApp(element, built, options)` は HTML を描き Régie を起動し、document API の DOM 操作を枠内に反映します。通常の id を参照し、click は登録したリスナーに届きます。onCreate → onStart(Create) → onResume を呼びます
 - 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML の検査はまだありません
 
 ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は `binette:system` かつ `role: "home"` の最初のアプリを開き、ホームだけに `apps` の一覧を渡します。ホームが別のアプリを開くとホームを止め、OS の「戻る」の帯を出します。戻るとホームを起動し直します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
@@ -53,4 +53,6 @@ Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` で�
 
 テストと型検査は、ルートの `deno task test` と `deno task check` で行います。
 
-v0.2 の途中で bina 属性と bina.ts の生成、Bindings・BindingKind・HtmlParser・parseBindings・generateBindingsSource・writeBindings を廃止しました。BuiltApp.bindings と parser オプション、deno-dom も不要です。AS の入口末尾には __bina_event の再 export を差し込みます。AS の相対 import はアプリのフォルダ内で解決します。
+v0.2 の途中で bina 属性と bina.ts の生成、Bindings・BindingKind・HtmlParser・parseBindings・generateBindingsSource・writeBindings を廃止しました。BuiltApp.bindings と parser オプション、deno-dom も不要です。AS の入口末尾には __bina_event・__bina_lifecycle の再 export を差し込みます。AS の相対 import はアプリのフォルダ内で解決します。
+
+MountedApp は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen) を持ちます。State・DestroyKind・DestroyCause は Scene からも export します。ShellOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。戻るときは仮に Pause → Stop → Destroy（System・Stack）で捨て、finish は User・App で捨ててホームを開き直します。stop() は何も知らせずに止めます。

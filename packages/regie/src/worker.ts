@@ -17,6 +17,7 @@ export function serveApp(scope: WorkerScope): void {
   let exited = false;
   let instance: WebAssembly.Instance | undefined;
   let apps: { id: string; name: string }[] | undefined;
+  let page = "";
   let ops: DomOp[] = [];
   const flush = () => {
     if (ops.length) { scope.postMessage({ type: "dom", ops }); ops = []; }
@@ -50,6 +51,11 @@ export function serveApp(scope: WorkerScope): void {
 
   const imports = {
     binette: {
+      "app.page": () => writeString(page),
+      "app.lastPage": () => writeString(""),
+      "app.lastKind": () => 0,
+      "app.lastCause": () => 0,
+      "app.finish": () => scope.postMessage({ type: "finish" }),
       "dom.byId": (handle: number, id: number) => ops.push({ op: "byId", handle, id: readString(id) }),
       "dom.create": (handle: number, tag: number) => ops.push({ op: "create", handle, tag: readString(tag) }),
       "dom.text": (handle: number, value: number) => ops.push({ op: "text", handle, value: readString(value) }),
@@ -79,10 +85,11 @@ export function serveApp(scope: WorkerScope): void {
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; arg?: number; apps?: { id: string; name: string }[] };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: number[]; page?: string; apps?: { id: string; name: string }[] };
     if (data.type === "init") {
       try {
         apps = data.apps;
+        page = data.page ?? "";
         ops = [];
         const result = await WebAssembly.instantiate(data.wasm!, imports);
         instance = result.instance;
@@ -107,8 +114,7 @@ export function serveApp(scope: WorkerScope): void {
         return;
       }
       try {
-        if (data.arg === undefined) fn();
-        else fn(data.arg);
+        fn(...(data.args ?? []));
         flush();
         scope.postMessage({ type: "done", id: data.id });
       } catch (error) {

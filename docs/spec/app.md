@@ -150,3 +150,5 @@ apps/settings/
 
 
 画面は通常の id を document.getElementById で参照し、アプリ自身が変更とクリックを扱います（決定 2026-10-27）。bina 属性の解釈と bina.ts の生成は無くしました。API は [Réplique](replique.md)、まだしていない最初の HTML 検査・setAttribute・style・value・input / click 以外のイベントは [mount.md](scene/mount.md) を見てください。
+
+起動は AS のトップレベルで `App` の派生クラスを `launch` に一回渡します。Scene は `_start` → HTML → onCreate(Last) → onStart(Create) → onResume の順に進めます。最初の画面は onCreate で作り、従来の `export function start()` は呼びません。this.page でページの識別子を読み、this.finish() で自分を閉じられます（[lifecycle.md](lifecycle.md)、[replique.md](replique.md)）。

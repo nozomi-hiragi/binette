@@ -96,7 +96,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
 2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
 3. Scene が HTML を描き、Régie が WASM を Worker で起動する（[regie.md](regie.md)）
-4. Scene が start() を呼ぶ。アプリは通常の id を document.getElementById で参照し、textContent などを変更する。addEventListener の click は Réplique の Event を受け取る（決定 2026-10-27）。
+4. Scene が App の onCreate → onStart(Create) → onResume を呼ぶ。アプリは通常の id を document.getElementById で参照し、textContent などを変更する。addEventListener の click は Réplique の Event を受け取る（決定 2026-10-27）。
 
 ビルド結果の保存は実装済みです。権限の確認・サーバー通信・HTML の検証はまだありません。
 

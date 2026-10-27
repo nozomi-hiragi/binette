@@ -70,11 +70,11 @@ Deno.test("トップレベルの初期化で呼んだ dom.text も届く", async
 @external("binette", "dom.text")
 declare function text(handle: i32, value: string): void;
 text(1, "済み");
-export function start(): void {}
+export function hello(): void {}
 `;
   const app = await launchApp(await build(code), { createWorker, onDom: (ops) => texts.push(ops) });
   try {
-    assertEquals(app.exports, ["start"]);
+    assertEquals(app.exports, ["hello"]);
     assertEquals(texts, [[{ op: "text", handle: 1, value: "済み" }]]);
   } finally {
     app.stop();
@@ -287,4 +287,76 @@ export function empty(): void {}`;
   const buildFail = await build(code + '\nthrow new Error("初期化失敗");');
   await assertRejects(() => launchApp(buildFail, { createWorker, onDom: ops => batches.push(ops) }), Error);
   assertEquals(batches, []);
+});
+
+/** 無限ループをメインとは別のスレッドで実行する */
+function realWorker(): RegieWorker {
+  const url = URL.createObjectURL(new Blob([`(${serveApp.toString()})(self)`], { type: "text/javascript" }));
+  try { return new Worker(url, { type: "module" }); }
+  finally { URL.revokeObjectURL(url); }
+}
+
+Deno.test("call の時間切れで Worker と待つ call をすべて終了し、一度だけ知らせる", async () => {
+  const exits: Error[] = [];
+  const app = await launchApp(await build('export function loop(): void { while (true) {} }'), { createWorker: realWorker, callTimeout: 100, onExit: e => exits.push(e) });
+  try {
+    const results = await Promise.allSettled([app.call("loop"), app.call("loop")]);
+    assertEquals(results.map(r => r.status), ["rejected", "rejected"]);
+    for (const result of results) {
+      assert(result.status === "rejected"); assertEquals(result.reason, exits[0]);
+    }
+    assertEquals(exits.length, 1); assert(exits[0]!.message.includes("応答しない"));
+    await assertRejects(() => app.call("loop"), Error, "止まっています");
+  } finally { app.stop(); }
+});
+
+Deno.test("_start の無限ループは ready 前の時間切れとして reject する", async () => {
+  const exits: Error[] = [];
+  await assertRejects(async () => launchApp(await build('while (true) {}'), { createWorker: realWorker, callTimeout: 100, onExit: e => exits.push(e) }), Error, "応答しない");
+  assertEquals(exits, []);
+});
+
+Deno.test("call は可変長引数をそのまま WASM に渡す", async () => {
+  const values: DomOp[][] = [];
+  const code = `@external("binette", "dom.text") declare function text(handle: i32, value: string): void;
+export function args(a: i32, b: i32, c: i32): void { text(a, b.toString() + ":" + c.toString()); }`;
+  const app = await launchApp(await build(code), { createWorker, onDom: ops => values.push(ops) });
+  try { await app.call("args", 7, 8, 9); assertEquals(values, [[{ op: "text", handle: 7, value: "8:9" }]]); }
+  finally { app.stop(); }
+});
+
+Deno.test("page の既定値と finish の配送は呼び出し中の DOM を反映したあとになる", async () => {
+  const code = `import { App, document } from "./replique";
+const app = new App();
+export function finish(): void { app.finish(); document.getElementById("page").textContent = app.page; }`;
+  const wasm = await build(code, true);
+  for (const page of [undefined, "ページ🏠"]) {
+    const order: string[] = []; const texts: string[] = [];
+    const app = await launchApp(wasm, { createWorker, page, onFinish() { order.push("finish"); }, onDom(ops) {
+      order.push("dom"); for (const op of ops) if (op.op === "text") texts.push(op.value);
+    } });
+    try {
+      await app.call("finish");
+      assertEquals(texts, [page ?? ""]); assertEquals(order, ["dom", "finish"]);
+    } finally { app.stop(); }
+  }
+});
+
+Deno.test("launch のインスタンスは GC 後も上書きしたメソッドで OS の Last を受け取る", async () => {
+  const code = `import { App, Last, State, document, launch, __bina_lifecycle } from "./replique";
+class TestApp extends App {
+  onCreate(last: Last): void {
+    assert(last.state == State.Stop && !last.done);
+    document.getElementById("log").textContent = "届いた";
+  }
+}
+launch(new TestApp());
+export { __bina_lifecycle };`;
+  const values: string[] = [];
+  const app = await launchApp(await build(code, true), { createWorker, onDom(ops) { for (const op of ops) if (op.op === "text") values.push(op.value); } });
+  try {
+    await app.call("__collect");
+    await app.call("__bina_lifecycle", 1, 5, 0);
+    assertEquals(values, ["届いた"]);
+  } finally { app.stop(); }
 });
