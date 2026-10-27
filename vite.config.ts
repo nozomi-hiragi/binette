@@ -6,7 +6,7 @@ const here = import.meta.dirname!;
 // ワークスペースのパッケージをビルドせずにソースから読む。ビルド済みのアプリだけを配る
 export default defineConfig({
   base: "./",
-  publicDir: false,
+  publicDir: "public",
   build: {
     assetsInlineLimit: 0,
     rollupOptions: { external: ["assemblyscript/asc"] },

@@ -20,9 +20,14 @@ interface ShellOptions extends BuildOptions {
   homeRetryWindow?: number; // ミリ秒、既定 5000
   stackSize?: number; // ホームを含む、既定 3
   historyLimit?: number; // 既定 100
+  installed?: boolean; // 指定時は表示モードの判定を上書き
 }
-interface MountedShell { stop(): void; }
+interface MountedShell {
+  requireInstall(reason: string): boolean;
+  stop(): void;
+}
 function mountShell(element: HTMLElement, options: ShellOptions): Promise<MountedShell>
+function isInstalled(window: Window | null): boolean
 ```
 
 `apps` は渡された順に扱います。入手元 `source` は配信 URL と分けた変わらない名前です。システムアプリは `binette:system` を使います。`compiler`・`libraries` は `buildApp` に渡します。parser は HTML の解析が不要になったため無くしました（案・実装済み）。DOM は element から辿り、グローバルの document は使いません。
@@ -57,6 +62,18 @@ function mountShell(element: HTMLElement, options: ShellOptions): Promise<Mounte
 
 見た目は `:where(.bina-shell-apps…)` の CSS と既存の `--bina-shell-*` 変数（gap・padding・background・color・focus）で決めます。ホームや設定のクラスを使わず、アプリの枠の中にも置きません。
 
+## ライブモード（案・実装済み）
+
+`isInstalled(window)` は display-mode が standalone・minimal-ui・window-controls-overlay のどれか、または navigator.standalone が true のとき true を返します。fullscreen だけでは false です。matchMedia が無い・使えないときも落ちません。mountShell は element.ownerDocument.defaultView で判定し、display-mode の change と appinstalled で表示を切り替えます。ShellOptions.installed が指定されていればその値を使い、matchMedia は見ません。
+
+ライブモードでは `.bina-shell-stage`（ホームバーより上の表示領域）の右下に「ライブモード」の透かしを出します。`.bina-shell-live` はアプリの枠の外に置き、最上層・pointer-events: none・aria-hidden: true にします。safe area を取り、ホームバーには重なりません。ホームバーの右端には `.bina-shell-install` の「インストール」を出し、aria-label でライブモードも伝えます。
+
+beforeinstallprompt を受け取ったら preventDefault して保持し、ボタンで一度だけ prompt を呼びます。無い場合や失敗した場合は `.bina-shell-install-dialog` の dialog に手順と「閉じる」を出します。iPhone・iPad などは「Safari の共有 → ホーム画面に追加」、ほかはブラウザのメニューからの追加を案内します。showModal / close の無い DOM では open 属性で代用します。閉じたことは保存しません。インストール済みになれば透かし・ボタン・手順を隠します。
+
+`MountedShell.requireInstall(reason)` は OS のための関数です。インストール済みなら何も表示せず true、ライブモードなら同じ dialog に理由と手順を出して false を返します。理由は textContent で入れます。Réplique・Régie の API には足さず、アプリには渡しません。stop は表示とイベントの監視を消します。保存などをライブ専用に扱う処理はしません。
+
+マニフェストと Service Worker はルートの OS が持ち、Scene は登録しません。キャッシュと本番だけの登録は [lifecycle.md](../lifecycle.md#service-worker決定) のとおりです。
+
 ## OS の記録と設定（案・実装済み）
 
 `store.system` の SystemStore を使います。最後の状態と起動の履歴のキーは installedAppKey です。各状態のメソッドの前後に記録し、前回の値を次の onCreate に渡します。履歴はインスタンスを作るときだけ追加します。
@@ -77,7 +94,7 @@ finish は現在の呼び出しのあと Pause → Stop → Destroy（User・App
 
 ## CSS 変数
 
-ホームバー・枠・Apps の変数は `--bina-shell-*` です。ホームの変数は `apps/home/src/index.html` が持ち、フロントから上書きできます。
+ホームバー・枠・Apps・ライブモードの変数は `--bina-shell-*` です。ホームの変数は `apps/home/src/index.html` が持ち、フロントから上書きできます。
 
 | 名前 | 既定値 | 用途 |
 | --- | --- | --- |
@@ -91,5 +108,8 @@ finish は現在の呼び出しのあと Pause → Stop → Destroy（User・App
 | `--bina-shell-button-padding` | `12px` | ボタンの余白 |
 | `--bina-shell-focus` | `#3273b9` | フォーカスの枠 |
 | `--bina-shell-error` | `#b3261e` | 状態表示の文字 |
+| `--bina-shell-live-color` | `var(--bina-shell-color, #16181d)` | 透かしの文字 |
+| `--bina-shell-live-opacity` | `0.35` | 透かしの薄さ |
+| `--bina-shell-live-size` | `0.875em` | 透かしの文字の大きさ |
 
 ホームのタイルの変数（`--bina-home-*`）は [apps/home.md](../apps/home.md#見た目) にあります。
