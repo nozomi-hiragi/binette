@@ -167,6 +167,11 @@ register(memo);
 
 いつ何を呼ぶか。Pause・Stop・Destroy に移るきっかけは決定、ほかは案です。
 
+- Pause は「離れたな」の検知、Stop は「だいぶ離れた」ということ（決定）
+- Pause からすぐ Destroy にはならない。Destroy の前には必ず Stop を通る（決定）
+- Stop からの Destroy は、いつでもあり得る（決定）。アプリは、戻すのに要るものを Stop までに保存しておく
+- ページごと切られたときは、何も検知できない（決定）
+
 | できごと | 呼ぶもの |
 | --- | --- |
 | 起動 | `onCreate(最後の状態)` → `onStart` → `onResume` |
@@ -174,7 +179,7 @@ register(memo);
 | Pause のまま、デバッグメニューで決めた時間が過ぎた | `onStop`（決定） |
 | Pause の間に戻ってきた | `onResume` だけ |
 | Stop のあとに戻ってきた | `onStart` → `onResume` |
-| スタックから外れた・故意に破棄した | `onDestroy`（決定）。まだ Stop でなければ先に `onStop`（案）。返ったら Worker を止める |
+| スタックから外れた・故意に破棄した | まだ Stop でなければ先に `onStop`、そのあと `onDestroy`（決定）。返ったら Worker を止める |
 | 例外・Worker の落ち・ページごと切られた | 何も呼ばない |
 
 - Stop までの時間の既定値は未決
