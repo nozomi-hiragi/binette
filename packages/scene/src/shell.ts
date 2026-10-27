@@ -16,7 +16,7 @@ export type ShellApp = { source: string } & (
 export interface ShellOptions extends BuildOptions, Pick<MountOptions, "onError" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout"> {
   apps: ShellApp[];
   store: AppStore;
-  /** 最初の落ちからこの時間（ミリ秒、既定 5000）を過ぎてもホームが落ちるなら、開き直すのをやめる */
+  /** 最初の落ちからこの時間（ミリ秒、既定 5000）を過ぎてもホームが落ちるなら、Apps を出す */
   homeRetryWindow?: number;
   /** ホームを含むインスタンスの上限（既定 3、1 以上） */
   stackSize?: number;
@@ -30,6 +30,11 @@ export interface MountedShell {
   stop(): void;
 }
 
+/** 落ちたホームを起動し直す前の、最初の待ち（ミリ秒） */
+const HOME_RESTART_FIRST = 100;
+/** 起動し直す前の待ちの上限（ミリ秒） */
+const HOME_RESTART_MAX = 1000;
+
 const css = `
 :where(.bina-shell) { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; font: inherit; }
 :where(.bina-shell) [hidden] { display: none; }
@@ -39,6 +44,9 @@ const css = `
 :where(.bina-shell-entry) { display: inline-flex; gap: var(--bina-shell-gap, 8px); }
 :where(.bina-shell-button)[aria-pressed="true"] { border-color: var(--bina-shell-focus, #3273b9); }
 :where(.bina-shell-app) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+:where(.bina-shell-apps) { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-height: 0; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
+:where(.bina-shell-apps-link) { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; text-align: start; text-decoration: underline; overflow-wrap: anywhere; }
+:where(.bina-shell-apps-link):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-shell-status) { color: var(--bina-shell-error, #b3261e); }
 `;
 
@@ -61,13 +69,23 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   status.className = "bina-shell-status";
   status.setAttribute("role", "status");
   status.hidden = true;
-  root.append(style, status, toolbar);
+  const appsHost = document.createElement("div");
+  appsHost.className = "bina-shell-apps";
+  appsHost.hidden = true;
+  root.append(style, appsHost, status, toolbar);
   element.replaceChildren(root);
   const page = crypto.randomUUID();
   let frozen = false;
   let generation = 0;
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let homeFailingSince: number | undefined;
+  let homeUnavailable = false;
+  // 落ちたホームを起動し直す前の待ち。落ちるたびに倍にし、HOME_RESTART_MAX で頭打ちにする
+  let homeRestartDelay = HOME_RESTART_FIRST;
+  const resetHomeFailures = () => {
+    homeFailingSince = undefined;
+    homeRestartDelay = HOME_RESTART_FIRST;
+  };
   /**
    * ホームが落ちたときに開き直してよいか。落ち続けて homeRetryWindow を過ぎたら開き直さない
    * @param startedAt 落ちたホームの起動が済んだ時刻。起動に失敗したなら undefined
@@ -75,7 +93,10 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   const mayRestartHome = (startedAt?: number) => {
     const now = performance.now();
     // 落ちたホームが起動を済ませて homeRetryWindow より長く動いていたなら、落ち続けてはいない
-    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) homeFailingSince = now;
+    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) {
+      homeFailingSince = now;
+      homeRestartDelay = HOME_RESTART_FIRST;
+    }
     return now - homeFailingSince < settings.homeRetryWindow;
   };
   let stopped = false;
@@ -156,7 +177,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     home = homes[i]!;
     settings.home = home.key;
     saveSettings();
-    homeFailingSince = undefined;
+    resetHomeFailures();
+    homeUnavailable = false;
     clearTimeout(restartTimer);
     if (previous?.key !== home.key) {
       for (const session of [...sessions]) if (session.installed.key === previous?.key) await close(session, DestroyKind.User, DestroyCause.Os);
@@ -173,7 +195,14 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     return node;
   };
   function renderBar() {
-    toolbar.replaceChildren(button("ホーム", "ホームを開く", () => { if (home) void show(home, true); }));
+    toolbar.replaceChildren(button("ホーム", "ホームを開く", () => {
+      if (!home) return;
+      if (homeUnavailable) {
+        homeUnavailable = false;
+        resetHomeFailures();
+      }
+      void show(home, true);
+    }));
     toolbar.setAttribute("aria-label", "ホームバー");
     for (const session of sessions) {
       if (session.home || session.closing) continue;
@@ -186,6 +215,35 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       toolbar.append(entry);
     }
   }
+  function showApps() {
+    if (stopped) return;
+    clearTimeout(restartTimer);
+    generation++;
+    homeUnavailable = true;
+    if (!appsHost.hasChildNodes()) {
+      for (const app of [...apps].sort((a, b) => a.manifest.name < b.manifest.name ? -1 : a.manifest.name > b.manifest.name ? 1 : 0)) {
+        const name = app.manifest.name;
+        const link = button(name, `${name}を開く`, () => { void show(app, false); });
+        link.className = "bina-shell-apps-link";
+        appsHost.append(link);
+      }
+    }
+    appsHost.hidden = false;
+    renderBar();
+  }
+  /** 待ってからホームを起動し直す。待つあいだに stop や別の移動があれば起動しない */
+  function restartHome(current: number) {
+    const delay = homeRestartDelay;
+    homeRestartDelay = Math.min(homeRestartDelay * 2, HOME_RESTART_MAX);
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      if (!stopped && current === generation && home) void show(home, true, false);
+    }, delay);
+  }
+  async function returnHome() {
+    if (homeUnavailable) showApps();
+    else if (home) await show(home, true, false);
+  }
   function close(session: Session, kind: DestroyKind, cause: DestroyCause): Promise<void> {
     if (stopped || !sessions.has(session) || session.closing) return session.closed ?? Promise.resolve();
     session.closing = true;
@@ -197,7 +255,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       try { await session.mounted?.destroy(kind, cause); }
       catch (error) { report(error); }
       finally { cut(session); }
-      if (wasActive && home && !stopped && current === generation) await show(home, true, false);
+      if (wasActive && !stopped && current === generation) await returnHome();
     })();
     return session.closed;
   }
@@ -225,12 +283,15 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       if (current === generation && active === previous) active = undefined;
     }
     if (stopped || current !== generation) return;
+    // Pause を待つあいだに前のホームが落ちて予約した起動し直しは、この移動で要らなくなる
+    clearTimeout(restartTimer);
     // 同じアプリの Destroy が終わる前に次の記録を上書きしない
     const closing = [...sessions].find(s => s.closing && s.installed.key === installed.key);
     if (closing) await closing.closed;
     if (stopped || current !== generation) return;
     let session = [...sessions].find(s => !s.closing && s.installed.key === installed.key);
     if (session && !session.mounted) return;
+    appsHost.hidden = true;
     if (clearStatus) status.hidden = true;
     if (session) {
       active = session;
@@ -270,8 +331,10 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
           if (!sessions.has(started)) return;
           const wasActive = active === started;
           cut(started);
-          if (wasActive && home && (!atHome || mayRestartHome(started.startedAt))) {
-            void show(home, true, false).then(() => report(error));
+          if (wasActive && home) {
+            if (!atHome) void returnHome().then(() => report(error));
+            else if (!mayRestartHome(started.startedAt)) { showApps(); report(error); }
+            else { report(error); restartHome(generation); }
           } else report(error);
         },
         onFinish() {
@@ -307,13 +370,11 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       if (!sessions.has(started)) return;
       const wasActive = active === started;
       cut(started);
-      if (wasActive && !atHome && home) await show(home, true, false);
+      if (wasActive && !atHome) await returnHome();
       report(error);
-      // 落ち続けるホームは開き直さず、エラーを出したままにする（④ でここに Apps を出す）
-      if (wasActive && atHome && home && !stopped && current === generation && mayRestartHome()) {
-        restartTimer = setTimeout(() => {
-          if (!stopped && current === generation && home) void show(home, true, false);
-        }, 0);
+      if (wasActive && atHome && home && !stopped && current === generation) {
+        if (mayRestartHome()) restartHome(current);
+        else showApps();
       }
     }
   }

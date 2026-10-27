@@ -88,6 +88,7 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
   const errors: unknown[] = []; const store = createMemoryAppStore();
   const shell = await mountShell(element, { apps: [homeApp, ...apps], store, libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
   try {
+    assertEquals(element.querySelector(".bina-shell-apps")!.children.length, 0);
     const tiles = element.querySelectorAll<HTMLButtonElement>(".home-tile");
     assertEquals([...tiles].map((t) => t.textContent), ["設定", "設定の写し"]);
     assertEquals(element.querySelector("svg"), null);
@@ -264,8 +265,9 @@ Deno.test("ホーム自身の終了ではホームを開き直す", async () => 
   try {
     bad.emit({ type: "fail", id: 1, message: "ホームの失敗", exit: true });
     await waitFor(() => errors.length === 1);
-    assertEquals(count, 2); assertEquals(bad.terminated, 1);
-    assert(element.querySelector(".bina-shell-app"));
+    // 起動し直す前に少し待つ
+    await waitFor(() => count === 2 && element.querySelector(".bina-shell-app") !== null);
+    assertEquals(bad.terminated, 1);
     assertEquals(element.querySelector("[role=status]")!.textContent, "ホームの失敗");
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -290,33 +292,163 @@ Deno.test("ホームの起動失敗でもホームを開き直し、stop で再�
   }
 });
 
-Deno.test("落ち続けるホームは homeRetryWindow を過ぎたら開き直さない", async () => {
-  for (const phase of ["起動", "動作中"]) {
-    const window = new Window(); const element = elementIn(window); const errors: unknown[] = []; let count = 0;
-    const shell = await mountShell(element, { apps: [homeApp], store: createMemoryAppStore(), callTimeout: 10, homeRetryWindow: 60,
+Deno.test("ホームの起動失敗が続くと homeRetryWindow を過ぎて Apps を出す", async () => {
+  const window = new Window(); const element = elementIn(window); const errors: unknown[] = [];
+  const held: ReturnType<typeof heldWorker>[] = [];
+  const mounting = mountShell(element, { apps: [homeApp], store: createMemoryAppStore(), homeRetryWindow: 40,
+    createWorker() { const worker = heldWorker(); held.push(worker); return worker.createWorker(); }, onError: error => errors.push(error) });
+  await waitFor(() => held[0]?.messages.length === 1);
+  const firstFailure = performance.now();
+  held[0]!.emit({ type: "failed", message: "ホームの起動失敗" });
+  const shell = await mounting;
+  try {
+    let failed = 1;
+    await waitFor(() => {
+      if (element.querySelector<HTMLElement>(".bina-shell-apps")?.hidden === false) return true;
+      if (held[failed]?.messages.length === 1) held[failed++]!.emit({ type: "failed", message: "ホームの起動失敗" });
+      return false;
+    });
+    assert(performance.now() - firstFailure >= 40);
+    assert(held.length >= 2); assertEquals(errors.length, held.length);
+    assertEquals(element.querySelectorAll(".bina-shell-app").length, 0);
+    assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false);
+    assertEquals(element.querySelector("[role=status]")!.textContent, "ホームの起動失敗");
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("動作中のホームが落ち続けると Apps を出し、ホームボタンで時間を数え直す", async () => {
+  const window = new Window(); const element = elementIn(window); const errors: unknown[] = [];
+  const held: ReturnType<typeof heldWorker>[] = []; const store = createMemoryAppStore();
+  let resumed = 0;
+  const mounting = mountShell(element, { apps: [homeApp], homeRetryWindow: 80,
+    store: { ...store, system: { ...store.system, async putLast(key, record) {
+      await store.system.putLast(key, record);
+      if (record.state === 3 && record.done) resumed++;
+    } } },
+    createWorker() { const worker = heldWorker(); held.push(worker); return worker.createWorker(); }, onError: error => errors.push(error) });
+  const boot = async (index: number) => {
+    await waitFor(() => held[index]?.messages.length === 1);
+    const worker = held[index]!;
+    worker.emit({ type: "ready", exports: [] });
+    for (let id = 1; id <= 3; id++) {
+      await waitFor(() => worker.messages.length === id + 1);
+      worker.emit({ type: "done", id });
+    }
+    await waitFor(() => resumed === index + 1);
+  };
+  await boot(0);
+  const shell = await mounting;
+  try {
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const index = cycle * 2;
+      if (cycle) {
+        element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
+        await boot(index);
+        assertEquals(element.querySelector<HTMLElement>(".bina-shell-apps")!.hidden, true);
+      }
+      held[index]!.emit({ type: "fail", id: 3, message: "ホームの失敗", exit: true });
+      const failedAt = performance.now();
+      await waitFor(() => held.length === index + 2);
+      // 次のホームを起動し終える前に、最初の落ちからの時間を過ごす
+      await waitFor(() => performance.now() - failedAt >= 80);
+      await boot(index + 1);
+      held[index + 1]!.emit({ type: "fail", id: 3, message: "ホームの失敗", exit: true });
+      await waitFor(() => element.querySelector<HTMLElement>(".bina-shell-apps")!.hidden === false);
+      assertEquals(held.length, index + 2);
+      assertEquals(errors.length, index + 2);
+      assertEquals(element.querySelector("[role=status]")!.textContent, "ホームの失敗");
+    }
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候補を含めない", async () => {
+  const window = new Window(); const element = elementIn(window);
+  const names = ["設定", "a", "Z", '<img src=x onerror="alert(1)">', "A", "あ"];
+  const listing = names.map((name, i) => ({ source: "binette:system", prebuilt: { ...fixtures[0]!, manifest: { ...fixtures[0]!.manifest, id: `app-${i}`, name } } }));
+  const other = { source: "elsewhere", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "other", name: "別のホーム" } } };
+  const shell = await mountShell(element, { apps: [homeApp, ...listing, other], store: createMemoryAppStore(), homeRetryWindow: 0,
+    createWorker() { throw new Error("ホームの起動失敗"); } });
+  try {
+    const host = element.querySelector<HTMLElement>(".bina-shell-apps")!;
+    assertEquals(host.hidden, false);
+    assertEquals(host.parentElement, element.querySelector(".bina-shell"));
+    assertEquals(host.closest(".bina-shell-app"), null);
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("button")];
+    assertEquals(buttons.map(button => button.textContent), ['<img src=x onerror="alert(1)">', "A", "Z", "a", "あ", "設定"]);
+    assertEquals(host.children.length, names.length);
+    for (const button of buttons) {
+      assertEquals(button.type, "button"); assertEquals(button.getAttribute("aria-label"), `${button.textContent}を開く`);
+      assertEquals(button.children.length, 0);
+    }
+    assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム");
+    shell.stop(); assertEquals(element.children.length, 0);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+for (const action of ["close", "finish", "crash", "startup"] as const) {
+  Deno.test(`Apps から開いて ${action} したら Apps に戻り、スタックには数えない`, async () => {
+    const window = new Window(); const element = elementIn(window); const good = workers(); const bad = heldWorker(); const errors: unknown[] = []; let count = 0;
+    const shell = await mountShell(element, { apps: [homeApp, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore(), stackSize: 1, homeRetryWindow: 0,
       createWorker() {
         count++;
-        const held = heldWorker();
-        if (phase === "動作中") {
-          // 起動を済ませてから落ちる
-          void (async () => {
-            await waitFor(() => held.messages.length === 1);
-            held.emit({ type: "ready", exports: [] });
-            for (let id = 1; id <= 3; id++) { await waitFor(() => held.messages.length === id + 1); held.emit({ type: "done", id }); }
-            held.emit({ type: "fail", id: 3, message: "ホームの失敗", exit: true });
-          })();
-        }
-        return held.createWorker();
+        if (count === 1) throw new Error("ホームの起動失敗");
+        return action === "close" ? good.createWorker() : bad.createWorker();
       }, onError: error => errors.push(error) });
     try {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      const settled = count;
-      assert(settled >= 2);
-      await new Promise(resolve => setTimeout(resolve, 100));
-      assertEquals(count, settled);
-      assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false);
+      const host = element.querySelector<HTMLElement>(".bina-shell-apps")!;
+      host.querySelector<HTMLButtonElement>("button")!.click();
+      await waitFor(() => count === 2);
+      assertEquals(host.hidden, true);
+      if (action === "close") {
+        await waitFor(() => element.querySelectorAll(".settings-row").length === 6);
+        assertEquals(good.live, 1); assertEquals(good.terminated, 0);
+        assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム設定×");
+        element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
+      } else if (action === "startup") bad.emit({ type: "failed", message: "アプリの起動失敗" });
+      else {
+        bad.emit({ type: "ready", exports: [] });
+        for (let id = 1; id <= 3; id++) {
+          await waitFor(() => bad.messages.length === id + 1);
+          if (id === 3 && action === "finish") bad.emit({ type: "finish" });
+          bad.emit({ type: "done", id });
+        }
+        if (action === "crash") bad.emit({ type: "fail", id: 3, message: "アプリの失敗", exit: true });
+        else {
+          for (let id = 4; id <= 6; id++) {
+            await waitFor(() => bad.messages.length === id + 1);
+            bad.emit({ type: "done", id });
+          }
+        }
+      }
+      await waitFor(() => !host.hidden && element.querySelector(".bina-shell-app") === null);
+      assertEquals(count, 2); assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム");
+      assertEquals(errors.length, action === "startup" || action === "crash" ? 2 : 1);
     } finally { shell.stop(); await window.happyDOM.close(); }
-  }
+  });
+}
+
+Deno.test("Apps から開いたアプリの背面でもホームを再試行でき、成功後はホームに戻る", async () => {
+  const window = new Window(); const element = elementIn(window); const good = workers(); let count = 0;
+  const store = createMemoryAppStore(); let resumed = 0;
+  const shell = await mountShell(element, { apps: [homeApp, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], homeRetryWindow: 0,
+    store: { ...store, system: { ...store.system, async putLast(key, record) {
+      await store.system.putLast(key, record);
+      if (record.state === 3 && record.done) resumed++;
+    } } },
+    createWorker() { if (++count === 1) throw new Error("ホームの起動失敗"); return good.createWorker(); } });
+  try {
+    const host = element.querySelector<HTMLElement>(".bina-shell-apps")!;
+    host.querySelector<HTMLButtonElement>("button")!.click();
+    await waitFor(() => resumed === 1);
+    assertEquals(host.hidden, true);
+    element.querySelector<HTMLButtonElement>('.bina-shell-homebar [aria-label=ホームを開く]')!.click();
+    await waitFor(() => resumed === 2);
+    element.querySelector<HTMLButtonElement>('.bina-shell-homebar [aria-label="設定を開く"]')!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>("#debug")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
+    await waitFor(() => element.querySelector("#debug") === null && !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    assertEquals(host.hidden, true); assertEquals(count, 3); assertEquals(good.live, 1);
+  } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
 Deno.test("os は system の role settings だけに渡し、ほかのアプリが呼ぶと終了する", async () => {
@@ -478,5 +610,33 @@ launch(new Settings());`,
     element.querySelector<HTMLButtonElement>(".home-tile")!.click();
     await waitFor(() => element.querySelector("#checked")?.textContent === "確認済み");
     assertEquals(writes, []); assertEquals(await store.system.getSettings(), undefined); assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭打ちになり、「ホーム」で最初に戻る", async () => {
+  const window = new Window(); const element = elementIn(window); const times: number[] = [];
+  const shell = await mountShell(element, { apps: [homeApp, ...apps], store: createMemoryAppStore(), homeRetryWindow: 2600,
+    createWorker() {
+      times.push(performance.now());
+      const held = heldWorker();
+      queueMicrotask(() => held.emit({ type: "failed", message: "ホームの失敗" }));
+      return held.createWorker();
+    } });
+  try {
+    // 100 → 200 → 400 → 800 → 1000 の待ちで起動し直し、2.6 秒の窓を過ぎたら Apps
+    await waitFor(() => !element.querySelector<HTMLElement>(".bina-shell-apps")!.hidden);
+    const gaps = times.slice(1).map((time, i) => time - times[i]!);
+    assert(gaps.length >= 5, `起動し直した回数が少なすぎます: ${gaps.length}`);
+    for (const [i, gap] of gaps.entries()) {
+      const least = Math.min(100 * 2 ** i, 1000);
+      assert(gap >= least - 5, `${i} 回目の待ちが短すぎます: ${gap}`);
+      // 1000ms で頭打ちになり、それより大きく延びない
+      if (least === 1000) assert(gap < 1900, `待ちが頭打ちになっていません: ${gap}`);
+    }
+    // 「ホーム」で数え直すと、待ちも 100ms に戻る
+    const before = times.length;
+    element.querySelector<HTMLButtonElement>("[aria-label=ホームを開く]")!.click();
+    await waitFor(() => times.length >= before + 2);
+    assert(times[before + 1]! - times[before]! < 600, `待ちが戻っていません: ${times[before + 1]! - times[before]!}`);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
