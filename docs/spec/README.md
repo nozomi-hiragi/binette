@@ -13,7 +13,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | --- | --- |
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
 | [core.md](core.md) | `@binette/core`。形式の型と読み込み |
-| [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ |
+| [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ、`App` クラス |
 | [regie.md](regie.md) | `@binette/regie`。アプリの実行（Worker ＋ WASM） |
 | [scene/](scene/README.md) | `@binette/scene`。アプリのビルド（[build.md](scene/build.md)）、画面への描画（[mount.md](scene/mount.md)） |
 | [replique.md](replique.md) | `@binette/replique`。アプリが Régie を呼ぶためのライブラリ（AS） |

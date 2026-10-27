@@ -2,7 +2,7 @@
 
 ## v0.2.0（未リリース）
 
-- 仕様書にライフサイクルの章（`docs/spec/lifecycle.md`）を追加。ライブモード、画面を隠して残すこと、終わり方と次の起動での後始末を決める（実装はまだ）
+- 仕様書にライフサイクルの章（`docs/spec/lifecycle.md`）を追加。ライブモード、画面を隠して残すこと（数はデバッグメニューで決める、既定 3）、起動の履歴、アプリの大本の `App` クラスと `onCreate`〜`onDestroy`、最後の状態の記録を決める（実装はまだ）
 - DOM 風の document・Element・Event・apps.icon・__bina_event を追加。通常の id と明示したリスナーで画面を扱う
 - Régie に onDom・DomOp を追加。_start と call の DOM 操作を完了前にまとめて送る
 - v0.2 の途中で elem・Elem・list・List・Item・ItemElem、bina 属性・bina.ts の生成を削除
