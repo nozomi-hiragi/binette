@@ -20,7 +20,7 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 
 ```
 メインスレッド（launchApp）              Worker（serveApp）
-  ── init { wasm, page, apps? } ─────────────────→  WebAssembly.instantiate
+  ── init { wasm, page, apps?, os? } ─────────────→  WebAssembly.instantiate
                                         _start があれば呼ぶ（トップレベルの初期化）
   ←──────────── dom { ops } ─  （初期化中の操作）
   ←──────────── ready { exports } ────  export された関数名を返す
@@ -46,7 +46,7 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 アプリの WASM を Worker で起動します。
 
 1. `options.createWorker` で Worker を作る。省略すると、下の「Blob URL の Worker」を作る
-2. Worker の `message` を受け始めてから、`{ type: "init", wasm, page, apps? }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（大きなバッファの一部を見るものを含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
+2. Worker の `message` を受け始めてから、`{ type: "init", wasm, page, apps?, os? }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（大きなバッファの一部を見るものを含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
 3. `ready` が来たら `RegieApp` で解決する
 4. `failed` が来たら Worker を止め（`stop()` と同じ）、`failed` の `message` を持つ `Error` で reject する
 
@@ -66,6 +66,9 @@ interface LaunchOptions {
   onDom?: (ops: DomOp[]) => void;
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
+  os?: OsSnapshot;
+  onSet?: (name: string, value: number) => void;
+  onSetHome?: (i: number) => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
   /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
@@ -75,12 +78,18 @@ interface LaunchOptions {
   /** 起動中でも Worker を止める */
   signal?: AbortSignal;
 }
+interface OsSnapshot {
+  settings: SystemSettings;
+  homes: { id: string; name: string }[]; // id は installedAppKey
+  launches: { time: number; name: string }[]; // 新しい順
+}
 ```
 
 - `signal` が中断されたら Worker を止め、起動や呼び出しの待ちを reject する。中断済みなら Worker は作らない
 - `onDom` は `dom` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
 - `onExit` は起動後にアプリが終了したときだけ呼びます。`stop()` や `signal` では呼びません
 - `onError` は終了しない `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
+- `os` は設定アプリに渡す起動時の写しです。渡す条件は Scene が確認します。省略した場合の os.* は例外でアプリを終了します。API と範囲は [Réplique](replique.md#設定アプリの-os案実装済み) を参照してください。onSet はメッセージが来たとき、onSetHome は呼び出しの完了後に通知します。Scene はさらに状態の通知と起動の完了を待ってホームを変更します
 
 ### RegieWorker
 
@@ -149,7 +158,7 @@ URL.revokeObjectURL(url);
 
 | `type` | 欄 | 意味 |
 | --- | --- | --- |
-| `init` | `wasm: ArrayBuffer`, `page: string`, `last?: LifecycleRecord`, `apps?: { id: string; name: string }[]` | WASM を起動する。1 つの Worker に 1 回だけ送る |
+| `init` | `wasm: ArrayBuffer`, `page: string`, `last?: LifecycleRecord`, `apps?: { id: string; name: string }[]`, `os?: OsSnapshot` | WASM を起動する。1 つの Worker に 1 回だけ送る |
 | `call` | `id: number`, `name: string`, `args: number[]` | export の `name` に可変長の数値引数を渡す |
 
 Worker → メインスレッド:
@@ -160,6 +169,8 @@ Worker → メインスレッド:
 | `failed` | `message: string` | 起動できなかった。`message` は `アプリを起動できません: <理由>` |
 | `dom` | `ops: DomOp[]` | 一回分の DOM 操作 |
 | `apps.open` | `i: number` | アプリを開く |
+| `os.set` | `name: string`, `value: number` | 数の設定を変更する。Worker と OS の両方で範囲を確かめる |
+| `os.setHome` | `i: number` | ホームの候補から選ぶ |
 | `finish` | なし | アプリが自分を閉じる |
 | `done` | `id: number` | `call` を呼び終えた |
 | `fail` | `id: number`, `message: string`, `exit?: boolean` | `call` が失敗した。`exit: true` ならアプリを終了する |
@@ -272,7 +283,7 @@ interface LifecycleRecord {
 }
 interface LaunchRecord { time: number; app: string } // Unix epoch ミリ秒、installedAppKey
 interface SystemSettings {
-  home: string; // 既定 ""。選択への反映は③
+  home: string; // installedAppKey。既定 "" は system のホーム
   stackSize: number; // 既定 3
   stopDelay: number; // 既定 10000 ミリ秒
   callTimeout: number; // 既定 5000 ミリ秒
@@ -292,4 +303,4 @@ interface SystemStore {
 
 getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。IndexedDB では履歴の読み足しと書き込みを同じトランザクションにし、同時に起動しても失いません。
 
-putSettings は全体を置き換えます。部分的に保存でき、省いた項目は mountShell の既定を使います。home は文字列、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外ならエラーです。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。
+putSettings は全体を置き換えます。部分的に保存でき、省いた項目は mountShell の既定を使います。home は文字列、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。

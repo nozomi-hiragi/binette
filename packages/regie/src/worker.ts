@@ -1,4 +1,4 @@
-import type { DomOp } from "./launch.ts";
+import type { DomOp, OsSnapshot } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -17,6 +17,7 @@ export function serveApp(scope: WorkerScope): void {
   let exited = false;
   let instance: WebAssembly.Instance | undefined;
   let apps: { id: string; name: string }[] | undefined;
+  let os: OsSnapshot | undefined;
   let page = "";
   let last = { page: "", reason: { kind: 0, cause: 0 } };
   let ops: DomOp[] = [];
@@ -32,6 +33,23 @@ export function serveApp(scope: WorkerScope): void {
     if (!Number.isInteger(i) || i < 0 || i >= values.length) throw new Error("アプリの番号が範囲外です。");
     return values[i]!;
   };
+  const system = () => {
+    if (os === undefined) throw new Error("この呼び出しはシステムの設定アプリだけが使えます。");
+    return os;
+  };
+  const homeAt = (i: number) => {
+    const homes = system().homes;
+    if (!Number.isInteger(i) || i < 0 || i >= homes.length) throw new Error("ホームの番号が範囲外です。");
+    return homes[i]!;
+  };
+  const launchAt = (i: number) => {
+    const launches = system().launches;
+    if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
+    return launches[i]!;
+  };
+  // toString() で作る Worker なので、OS と同じ設定 API の範囲をここでも確かめる
+  const settingName = (name: string): name is Exclude<keyof OsSnapshot["settings"], "home"> =>
+    ["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name);
   /** __new はメモリを伸ばすことがあるので、確保してから buffer を読む */
   const writeString = (value: string): number => {
     const allocate = instance!.exports.__new;
@@ -52,6 +70,33 @@ export function serveApp(scope: WorkerScope): void {
 
   const imports = {
     binette: {
+      "os.get": (ptr: number) => {
+        const settings = system().settings;
+        const name = readString(ptr);
+        if (!settingName(name)) throw new Error("知らない設定です。");
+        return settings[name];
+      },
+      "os.set": (ptr: number, value: number) => {
+        const settings = system().settings;
+        const name = readString(ptr);
+        if (!settingName(name) || !Number.isInteger(value) || value < 0 ||
+          (name === "stackSize" && value < 1) ||
+          ((name === "callTimeout" || name === "destroyTimeout") && value < 1000)) return false;
+        settings[name] = value;
+        scope.postMessage({ type: "os.set", name, value });
+        return true;
+      },
+      "os.home": () => writeString(system().settings.home),
+      "os.homeCount": () => system().homes.length,
+      "os.homeName": (i: number) => writeString(homeAt(i).name),
+      "os.homeId": (i: number) => writeString(homeAt(i).id),
+      "os.setHome": (i: number) => {
+        system().settings.home = homeAt(i).id;
+        scope.postMessage({ type: "os.setHome", i });
+      },
+      "os.launchCount": () => system().launches.length,
+      "os.launchTime": (i: number) => launchAt(i).time,
+      "os.launchName": (i: number) => writeString(launchAt(i).name),
       "app.page": () => writeString(page),
       "app.lastPage": () => writeString(last.page),
       "app.lastKind": () => last.reason.kind,
@@ -86,10 +131,11 @@ export function serveApp(scope: WorkerScope): void {
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: number[]; page?: string; last?: typeof last; apps?: { id: string; name: string }[] };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: number[]; page?: string; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot };
     if (data.type === "init") {
       try {
         apps = data.apps;
+        os = data.os;
         page = data.page ?? "";
         last = data.last ?? last;
         ops = [];

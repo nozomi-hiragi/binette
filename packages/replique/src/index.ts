@@ -121,6 +121,50 @@ export namespace apps {
   export declare function open(i: i32): void;
 }
 
+/** システムの設定アプリだけが使える OS の設定と起動の履歴 */
+export namespace os {
+  // @ts-ignore: decorator
+  @external("binette", "os.get")
+  // @ts-ignore: AssemblyScript の型
+  export declare function get(name: string): i32;
+  // @ts-ignore: decorator
+  @external("binette", "os.set")
+  // @ts-ignore: AssemblyScript の型
+  export declare function set(name: string, value: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette", "os.home")
+  // @ts-ignore: AssemblyScript の型
+  export declare function home(): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.homeCount")
+  // @ts-ignore: AssemblyScript の型
+  export declare function homeCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "os.homeName")
+  // @ts-ignore: AssemblyScript の型
+  export declare function homeName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.homeId")
+  // @ts-ignore: AssemblyScript の型
+  export declare function homeId(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.setHome")
+  // @ts-ignore: AssemblyScript の型
+  export declare function setHome(i: i32): void;
+  // @ts-ignore: decorator
+  @external("binette", "os.launchCount")
+  // @ts-ignore: AssemblyScript の型
+  export declare function launchCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "os.launchTime")
+  // @ts-ignore: AssemblyScript の型
+  export declare function launchTime(i: i32): f64;
+  // @ts-ignore: decorator
+  @external("binette", "os.launchName")
+  // @ts-ignore: AssemblyScript の型
+  export declare function launchName(i: i32): string;
+}
+
 /** インスタンスの状態。None は前の記録が無いことを表す */
 export enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
 export enum DestroyKind { User, System }

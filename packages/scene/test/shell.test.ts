@@ -6,7 +6,7 @@ import { buildApp, type Compiler, loadCompiler, mountShell } from "../src/index.
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
 const apps = ["設定", "設定の写し"].map((name, index) => ({
-  source: `https://example.com/settings-${index}/`,
+  source: "binette:system",
   async read(path: string): Promise<string> {
     const text = await Deno.readTextFile(new URL(`apps/settings/${path}`, root));
     return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), id: `settings-${index}`, name }) : text;
@@ -32,7 +32,9 @@ function elementIn(window: Window): HTMLElement {
   return element;
 }
 async function waitFor(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !condition(); i++) await new Promise((resolve) => setTimeout(resolve, 5));
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
   assert(condition(), "待ってもホームの状態が変わりませんでした");
 }
 function workers() {
@@ -93,11 +95,14 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
     tiles[0]!.click(); tiles[1]!.click();
     await waitFor(() => worker.ready === 2);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    assertEquals(element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden, true);
+    await waitFor(() => element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden === true);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
-    element.querySelector<HTMLButtonElement>("#details")!.click();
-    await waitFor(() => element.querySelector("#description")?.textContent === "ブラウザだけで動く、アプリの土台です。");
+    // #details は最初の HTML にあり、リスナーは onCreate で付く。付くまで押し直す（押しても同じ文字を書くだけ）
+    await waitFor(() => {
+      if (element.querySelector("#description")?.textContent === "ブラウザだけで動く、アプリの土台です。") return true;
+      element.querySelector<HTMLButtonElement>("#details")!.click();
+      return false;
+    });
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(element.querySelector("#description")!.textContent, "ブラウザだけで動く、アプリの土台です。");
@@ -312,4 +317,166 @@ Deno.test("落ち続けるホームは homeRetryWindow を過ぎたら開き直�
       assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false);
     } finally { shell.stop(); await window.happyDOM.close(); }
   }
+});
+
+Deno.test("os は system の role settings だけに渡し、ほかのアプリが呼ぶと終了する", async () => {
+  for (const [source, role] of [["elsewhere", "settings"], ["binette:system", undefined]]) {
+    const window = new Window(); const element = elementIn(window); const worker = workers(); const errors: unknown[] = [];
+    const fixture = fixtures[0]!;
+    const app = { source: source!, prebuilt: { ...fixture, manifest: { ...fixture.manifest, role } } };
+    const shell = await mountShell(element, { apps: [homeApp, app], store: createMemoryAppStore(), createWorker: worker.createWorker, onError: e => errors.push(e) });
+    try {
+      element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+      await waitFor(() => errors.length === 1);
+      assert((errors[0] as Error).message.includes("システムの設定アプリだけ"));
+      assertEquals(worker.terminated, 1);
+      assertEquals(element.querySelectorAll("#debug").length, 0);
+      assertEquals(element.querySelector<HTMLElement>(".bina-shell-app")!.hidden, false);
+    } finally { shell.stop(); await window.happyDOM.close(); }
+  }
+});
+
+Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の起動でスタックと履歴の上限が効く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore(); const errors: unknown[] = [];
+  await store.system.putSettings({ stackSize: 2, stopDelay: 0, historyLimit: 0, callTimeout: 1000, destroyTimeout: 1000, homeRetryWindow: 0 });
+  const options = { apps: [homeApp, ...apps], store, libraries, createWorker: worker.createWorker, onError: (e: unknown) => errors.push(e) };
+  let shell = await mountShell(element, options);
+  try {
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => element.querySelectorAll(".settings-row").length === 6);
+    const rows = element.querySelectorAll<HTMLElement>(".settings-row");
+    const value = (i: number) => rows[i]!.querySelector(".settings-value")!.textContent;
+    const click = (i: number, direction: number) => rows[i]!.querySelectorAll<HTMLButtonElement>("button")[direction]!.click();
+    for (let i = 0; i < 6; i++) click(i, 0);
+    // クリックは順に処理されるので、最後の行が変われば全部済んでいる
+    await waitFor(() => value(5) === "0 秒");
+    for (let i = 0; i < 6; i++) click(i, 0);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assertEquals([...rows].map((_, i) => value(i)), ["1", "0 秒", "0", "1 秒", "1 秒", "0 秒"]);
+    assertEquals(worker.live, 2);
+    for (let i = 0; i < 6; i++) click(i, 1);
+    await waitFor(() => value(5) === "1 秒");
+    assertEquals([...rows].map((_, i) => value(i)), ["2", "1 秒", "10", "2 秒", "2 秒", "1 秒"]);
+    // stackSize を 1 に戻しても、その場ではホームを捨てない
+    click(0, 0);
+    await waitFor(() => value(0) === "1");
+    await waitFor(() => worker.live === 2);
+    element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    element.querySelectorAll<HTMLButtonElement>(".home-tile")[1]!.click();
+    await waitFor(() => worker.created === 3 && worker.live === 1);
+    assertEquals((await store.system.listLaunches()).length, 1);
+    await waitFor(() => errors.length === 0);
+    shell.stop();
+    const saved = (await store.system.getSettings())!;
+    assertEquals(saved, { home: "", stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
+    shell = await mountShell(element, options);
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => element.querySelectorAll(".settings-row").length === 6 && worker.live === 1);
+    assertEquals([...element.querySelectorAll(".settings-value")].map(node => node.textContent), ["1", "1 秒", "10", "2 秒", "2 秒", "1 秒"]);
+    assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("設定した Stop までの時間は、残っているインスタンスの次の Pause から効く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker, stopDelay: 1000 });
+  const key = installedAppKey(homeApp.source, builtHome.manifest.id);
+  try {
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => element.querySelectorAll(".settings-row").length === 6);
+    element.querySelectorAll<HTMLElement>(".settings-row")[1]!.querySelector<HTMLButtonElement>("button")!.click();
+    await waitFor(() => element.querySelectorAll(".settings-value")[1]!.textContent === "0 秒");
+    await new Promise(resolve => setTimeout(resolve, 30));
+    assertEquals((await store.system.getLast(key))!.state, 4);
+    element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>("#debug")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => worker.live === 2);
+    const deadline = performance.now() + 10000;
+    while ((await store.system.getLast(key))?.state !== 5 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+    assertEquals((await store.system.getLast(key))!.state, 5);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ホームの選択を保存し、前のホームを User・Os で Destroy し、次のホームに apps を渡す", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  const other = { source: "elsewhere", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "other-home", name: "別のホーム" } } };
+  const otherKey = installedAppKey(other.source, other.prebuilt.manifest.id);
+  const options = { apps: [homeApp, ...apps, other], store, libraries, createWorker: worker.createWorker };
+  let shell = await mountShell(element, options);
+  try {
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => element.querySelectorAll("#homes button").length === 2);
+    assertEquals(element.querySelector("#homes button")!.textContent, "ホーム（使用中）");
+    element.querySelectorAll<HTMLButtonElement>("#homes button")[1]!.click();
+    await waitFor(() => element.querySelectorAll("#homes button")[1]!.textContent === "別のホーム（使用中）" && worker.live === 1);
+    assertEquals((await store.system.getSettings())!.home, otherKey);
+    const old = (await store.system.getLast(installedAppKey(homeApp.source, builtHome.manifest.id)))!;
+    assertEquals({ state: old.state, done: old.done, reason: old.reason }, { state: 6, done: true, reason: { kind: 0, cause: 0 } });
+    element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
+    await waitFor(() => element.querySelectorAll(".home-tile").length === 2);
+    assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>("#homes")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
+    await waitFor(() => element.querySelector("#homes") === null && !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
+    shell.stop();
+    // 今回の apps に無くても、保存済みのホームを選べる
+    shell = await mountShell(element, { ...options, apps: [homeApp, ...apps] });
+    assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
+    assertEquals(element.querySelectorAll(".home-tile").length, 2);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("保存した home が無ければ system のホームを使う", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  await store.system.putSettings({ home: "missing" });
+  const shell = await mountShell(element, { apps: [homeApp], store, createWorker: worker.createWorker });
+  try { assertEquals((await store.system.listLaunches())[0]!.app, installedAppKey(homeApp.source, builtHome.manifest.id)); }
+  finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で表示する", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  const times = [-1, 0, Date.UTC(2000, 1, 29, 12, 34, 56), Date.UTC(2100, 2, 1)];
+  for (const time of times) await store.system.recordLaunch({ time, app: "無いアプリの識別子" });
+  const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker });
+  try {
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => element.querySelectorAll("#history li").length === 5);
+    const lines = [...element.querySelectorAll("#history li")].map(node => node.textContent!);
+    assert(lines[0]!.endsWith(" ホーム"));
+    assertEquals(lines.slice(1), ["2100-03-01 00:00:00 無いアプリの識別子", "2000-02-29 12:34:56 無いアプリの識別子", "1970-01-01 00:00:00 無いアプリの識別子", "1969-12-31 23:59:59 無いアプリの識別子"]);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("os.set の範囲外と知らない名前は false になり、SystemStore に保存しない", async () => {
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "bad-settings", name: "検査用設定", role: "settings", entry: { html: "index.html", as: "main.ts" } }),
+    "index.html": '<p id="checked"></p>',
+    "main.ts": `import { App, Last, document, launch, os } from "jsr:@binette/replique";
+class Settings extends App {
+  onCreate(_last: Last): void {
+    assert(!os.set("unknown", 1)); assert(!os.set("home", 1)); assert(!os.set("stackSize", 0));
+    assert(!os.set("historyLimit", -1)); assert(!os.set("stopDelay", -1)); assert(!os.set("homeRetryWindow", -1));
+    assert(!os.set("callTimeout", 999)); assert(!os.set("destroyTimeout", 999));
+    assert(os.get("stackSize") == 3);
+    document.getElementById("checked").textContent = "確認済み";
+  }
+}
+launch(new Settings());`,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore(); const writes: unknown[] = []; const errors: unknown[] = [];
+  const shell = await mountShell(element, { apps: [homeApp, { source: "binette:system", prebuilt: built }],
+    store: { ...store, system: { ...store.system, putSettings(settings) { writes.push(settings); return store.system.putSettings(settings); } } },
+    createWorker: worker.createWorker, onError: e => errors.push(e) });
+  try {
+    element.querySelector<HTMLButtonElement>(".home-tile")!.click();
+    await waitFor(() => element.querySelector("#checked")?.textContent === "確認済み");
+    assertEquals(writes, []); assertEquals(await store.system.getSettings(), undefined); assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
 });

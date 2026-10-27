@@ -72,7 +72,8 @@ export function validateSystemSettings(settings: Partial<SystemSettings>): void 
   for (const [key, value] of Object.entries(settings)) {
     if (key === "home") {
       if (typeof value !== "string") throw new Error("home は文字列にしてください。");
-    } else if (typeof value !== "number" || !Number.isFinite(value) || value < 0 ||
+    } else if (!["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(key) ||
+      typeof value !== "number" || !Number.isFinite(value) || value < 0 ||
       ((key === "stackSize" || key === "historyLimit") && !Number.isInteger(value)) ||
       (key === "stackSize" && value < 1)) {
       throw new Error(`OS の設定が範囲外です: ${key}`);

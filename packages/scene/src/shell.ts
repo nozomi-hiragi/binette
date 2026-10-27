@@ -1,5 +1,5 @@
 import { parseAppManifest } from "@binette/core";
-import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, validateSystemSettings } from "@binette/regie";
+import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
 import { iconPath } from "./paths.ts";
 import { DestroyCause, DestroyKind, type MountedApp, type MountOptions, mountApp } from "./mount.ts";
@@ -67,7 +67,6 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   let frozen = false;
   let generation = 0;
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
-  const homeRetryWindow = settings.homeRetryWindow;
   let homeFailingSince: number | undefined;
   /**
    * ホームが落ちたときに開き直してよいか。落ち続けて homeRetryWindow を過ぎたら開き直さない
@@ -76,8 +75,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   const mayRestartHome = (startedAt?: number) => {
     const now = performance.now();
     // 落ちたホームが起動を済ませて homeRetryWindow より長く動いていたなら、落ち続けてはいない
-    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= homeRetryWindow)) homeFailingSince = now;
-    return now - homeFailingSince < homeRetryWindow;
+    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) homeFailingSince = now;
+    return now - homeFailingSince < settings.homeRetryWindow;
   };
   let stopped = false;
   type Session = { controller: AbortController; mounted?: MountedApp; host: HTMLElement; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
@@ -129,9 +128,41 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       seen.add(key);
     } catch (error) { report(error); }
   }
-  const isHome = (app: InstalledApp) => app.source === "binette:system" && app.manifest.role === "home";
-  const home = installedApps.find(isHome);
-  const apps = installedApps.filter((app) => !isHome(app));
+  // ホーム候補は、今回渡されたアプリ以外も含めて保存先から探す
+  const available = new Map(installedApps.map(app => [app.key, app]));
+  for (const app of await options.store.list()) if (!available.has(app.key)) available.set(app.key, app);
+  const homes = [...available.values()].filter(app => app.manifest.role === "home");
+  let home = homes.find(app => app.key === settings.home) ?? homes.find(app => app.source === "binette:system");
+  const apps = installedApps.filter(app => app.manifest.role !== "home");
+  let saving = Promise.resolve();
+  const saveSettings = () => {
+    const copy = { ...settings };
+    saving = saving.then(() => options.store.system.putSettings(copy)).catch(report);
+  };
+  const setSetting = (name: string, value: number) => {
+    if (stopped || !["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name)) return;
+    const key = name as Exclude<keyof SystemSettings, "home">;
+    try {
+      validateSystemSettings({ [key]: value });
+      if (!Number.isInteger(value) || ((key === "callTimeout" || key === "destroyTimeout") && value < 1000)) return;
+    } catch { return; }
+    settings[key] = value;
+    if (key === "stopDelay") for (const session of sessions) session.mounted?.setStopDelay(value);
+    saveSettings();
+  };
+  const selectHome = async (i: number) => {
+    if (stopped || !Number.isInteger(i) || !homes[i]) return;
+    const previous = home;
+    home = homes[i]!;
+    settings.home = home.key;
+    saveSettings();
+    homeFailingSince = undefined;
+    clearTimeout(restartTimer);
+    if (previous?.key !== home.key) {
+      for (const session of [...sessions]) if (session.installed.key === previous?.key) await close(session, DestroyKind.User, DestroyCause.Os);
+    }
+    renderBar();
+  };
   const button = (text: string, label: string, action: () => void) => {
     const node = document.createElement("button");
     node.type = "button";
@@ -221,6 +252,11 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     root.insertBefore(host, status);
     renderBar();
     try {
+      const atSettings = installed.source === "binette:system" && installed.manifest.role === "settings";
+      const launches = atSettings ? (await options.store.system.listLaunches()).reverse().map(record => ({
+        time: record.time, name: available.get(record.app)?.manifest.name ?? record.app,
+      })) : [];
+      if (!sessions.has(started) || stopped) return;
       const mounted = await mountApp(host, installed, {
         createWorker: options.createWorker,
         callTimeout: settings.callTimeout,
@@ -243,6 +279,11 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
           started.finish = true;
           if (started.mounted) void close(started, DestroyKind.User, DestroyCause.App);
         },
+        ...(atSettings ? {
+          os: { settings: { ...settings, home: home?.key ?? settings.home }, homes: homes.map(app => ({ id: app.key, name: app.manifest.name })), launches },
+          onSet: setSetting,
+          onSetHome(i: number) { void selectHome(i).catch(report); },
+        } : {}),
         ...(atHome ? {
           apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })),
           onOpen(i: number) {
@@ -253,6 +294,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       });
       if (!sessions.has(started) || stopped) { mounted.stop(); return; }
       started.mounted = mounted;
+      mounted.setStopDelay(settings.stopDelay);
       started.startedAt = performance.now();
       mounted.setFrozen(frozen);
       if (started.closing) { cut(started); return; }
@@ -270,7 +312,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       // 落ち続けるホームは開き直さず、エラーを出したままにする（④ でここに Apps を出す）
       if (wasActive && atHome && home && !stopped && current === generation && mayRestartHome()) {
         restartTimer = setTimeout(() => {
-          if (!stopped && current === generation) void show(home, true, false);
+          if (!stopped && current === generation && home) void show(home, true, false);
         }, 0);
       }
     }

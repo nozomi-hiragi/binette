@@ -171,10 +171,12 @@ OS が画面の下に、ホームへ戻るボタンと、残しているホー�
 Android の既定のホームアプリと同じ形にします。
 
 - アプリは、`app.json` の `"role": "home"` で「ホームになれる」と手を挙げるだけ
-- どのアプリをホームにするかは、OS の設定のオブジェクトの `home`（アプリの識別子）に記録する。OS は起動のときにこれを読んで、立ち上げるアプリを知る
+- どのアプリをホームにするかは、OS の設定のオブジェクトの `home`（`installedAppKey(source, manifest.id)`）に記録する。OS は起動のときにこれを読んで、立ち上げるアプリを知る
 - `home` が空のとき、またはそのアプリが無いときは、`role: "home"` のシステムアプリを使う（案）。選んでいたホームを削除したら、`home` を空に戻す（案）
-- `home` を変えられるのは設定アプリだけ。`role: "home"` のアプリの中から選ぶ（案）
-- OS の設定のオブジェクトには、デバッグメニューの値も入れる（案）。保存の API は [SystemStore](regie.md#systemstore案実装済み)。`home` は今回保存だけを実装し、ホームの選択への反映は③で行う
+- `home` を変えられるのは入手元が `binette:system` で `role: "settings"` の設定アプリだけ。保存済みの `role: "home"` のアプリの中から、入手元を問わず選ぶ（案・実装済み）
+- 選んだらその場で保存し、以後のホームバー・前面を閉じたとき・finish・異常終了からの復帰は新しいホームを使う。前のホームのインスタンスは Stop → Destroy（User・Os）で捨てる。設定アプリは開いたままにする（案・実装済み）
+- ホームだけが使う `apps.*` は選んだホームに渡す。ほかのホーム候補をアプリの一覧には並べない（案・実装済み）
+- OS の設定のオブジェクトには、デバッグメニューの値も入れる（案・実装済み）。保存の API は [SystemStore](regie.md#systemstore案実装済み)
 
 ## 終わり方（決定）
 
@@ -290,10 +292,23 @@ launch(memo);
 | スタックできるアプリの数 | 3 | 決定 |
 | Stop までの時間 | 10 秒 | 決定 |
 | 起動の履歴の最大の行数 | 100 行 | 決定 |
-| 呼び出しと `onDestroy` の時間切れ | 5 秒 | 時間は決定、変えられるのは案 |
+| 呼び出しの時間切れ | 5 秒 | 時間は決定、変えられるのは案 |
+| `onDestroy` の時間切れ | 5 秒 | 時間は決定、変えられるのは案 |
 | Apps を出すまでの時間 | 5 秒 | 案 |
 
-決めた値は保存します（案）。
+決めた値は保存します（案・実装済み）。設定アプリの `os.*` で読み書きします。画面は「名前 値 − ＋」の行で、数は 1（履歴は 10）ずつ、時間は 1 秒ずつ変えます。スタックは 1 以上、履歴は 0 以上、Stop と Apps の時間は 0 以上、2 つの時間切れは 1 秒以上です。下限で − を押しても変わりません。起動の履歴は新しい順に UTC の `YYYY-MM-DD HH:MM:SS アプリの名前` を並べます。名前が見つからなければ識別子を使います。履歴は設定アプリのインスタンスを作る直前の写しで、閉じて開き直すと新しくなります（案・実装済み）。
+
+### 値を変えたときに効く所（案・実装済み）
+
+その場で mountShell の設定を変え、SystemStore に保存します。
+
+| 値 | いつから使うか |
+| --- | --- |
+| stackSize | 次にインスタンスを作るときに片付ける。減らしたその場では閉じず、残っている画面を前面に出すだけでも片付けない |
+| stopDelay | 今あるインスタンスも含め、次に Pause になるとき。今の Pause の計時は変えない |
+| callTimeout・destroyTimeout | 次にインスタンスを作るとき |
+| historyLimit | 次に起動の履歴を足すとき。減らしたその場では消さない |
+| homeRetryWindow | 次にホームが落ちたとき。Apps 自体はまだ無い |
 
 ## 実装の状況
 
@@ -304,15 +319,15 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | モードの見分け、透かし、インストールが要る操作のアラート | 無い。保存はいつも IndexedDB で、これは決まりどおり |
 | ページの識別子、ページで起きること | mountShell ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
 | Service Worker | 無い |
-| アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない（[scene/mount.md](scene/mount.md)） |
+| アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない。起動の途中のクリックは Resume のあとに届ける（[scene/mount.md](scene/mount.md)） |
 | 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
 | スタック | 既定 3（ホームを含む）。画面を隠して Pause にし、DOM と Worker を残す。残っていれば Resume、Stop なら Start(Stop) → Resume。上限を超えたら、前面以外で最も長く前面に出ていないものを Stop → Destroy（System・Stack） |
 | 起動の履歴、最後の状態 | SystemStore に保存。各メソッドの前後に state・done・page・reason を書き、次の Create に渡す。初回は None・done=true。起動のたびに日時と installedAppKey を記録し、既定 100 件を残す。前面に出すだけでは記録しない |
 | Destroy の理由、自分を閉じる | 実装済み。finish は今の呼び出しのあと Pause → Stop → Destroy（User・App）でホームに戻る。ホーム自身なら起動し直す |
 | 落ちたとき | 状態を知らせずに捨て、前面ならホームに戻ってエラーを出す。隠れたアプリなら前面を変えずにエラーを出す。ホームの終了や起動失敗はホームを起動し直す。最初の落ちから 5 秒（`homeRetryWindow`）を過ぎても落ち続けたら、開き直すのをやめてエラーを出したままにする。Apps は無い |
 | `App` クラス | launch で一回だけ渡し、6 つのメソッドを上書きできる。二回の launch はアプリの終了 |
-| デバッグメニュー | 画面とアプリからの呼び出しは無い。OS の設定は SystemStore で保存でき、mountShell で読み、ShellOptions の値より優先する |
-| ホームの選び方 | home の保存先はあるが、読み方は③。今は入手元が `binette:system` で `role: "home"` の最初のアプリを、いつも開く（[scene/shell.md](scene/shell.md)） |
+| デバッグメニュー | 設定アプリの − ＋ と os.* を実装。値は SystemStore に保存し、上の表の時点から使う。mountShell の作り直しでも残り、ShellOptions より優先する |
+| ホームの選び方 | installedAppKey を home に保存。保存済みの role home を入手元に関係なく選べる。空・見つからない場合は system のホーム。変更後は新しいホームに apps.* を渡し、前のホームは User・Os で Destroy。アプリの削除が無いので、削除時に home を空にする処理はまだ無い（[scene/shell.md](scene/shell.md)） |
 
 ## 今はやらないこと
 
@@ -376,6 +391,8 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 24. 今のページの識別子は `this.page`
 25. `State`・`Last`・`DestroyReason` の形（上の表）
 26. デバッグメニューで決めた値は保存する
+27. 値の変更が効く時点は「値を変えたときに効く所」の表のとおり。画面は − ＋、履歴は UTC の日時と名前
+28. home の識別子は installedAppKey。変更したら前のホームを User・Os で Destroy し、以後の復帰と apps.* は新しいホームへ渡す
 
 ## 未決
 

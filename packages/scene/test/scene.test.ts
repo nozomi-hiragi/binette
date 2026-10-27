@@ -34,7 +34,9 @@ function createWorker(): RegieWorker {
 
 /** 条件が成り立つまで待つ */
 async function waitFor(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !condition(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
   assert(condition(), "待っても表示が変わりませんでした");
 }
 

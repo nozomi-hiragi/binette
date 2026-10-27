@@ -33,13 +33,13 @@ function mountShell(element: HTMLElement, options: ShellOptions): Promise<Mounte
 2. `installedAppKey(source, manifest.id)` で保存先を引く。同じ key は重ねない
 3. `prebuilt` は版にかかわらず毎回保存し直す。保存済みの `installedAt` は保つ。compiler は呼ばない
 4. `read` は同じ版が保存済みなら使い回す。無いか版が違うときだけビルドし、HTML・WASM・SVG・manifest・日時を保存する。アイコンのパスは `iconPath` で検査する（[build.md](build.md)）
-5. 保存できたアプリのうち、入手元が `binette:system` で `manifest.role === "home"` の最初のものをホームとして開く。無ければ画面と `onError` にエラーを出す
+5. `store.list()` も読み、今回保存したアプリと合わせて `manifest.role === "home"` をホーム候補にする。入手元は問わない。settings.home の installedAppKey に合うものを開き、空・無効なら入手元が `binette:system` の最初のホームを開く。無ければ画面と `onError` にエラーを出す
 
-対象は `store.list()` 全件ではなく、`apps` で渡したものです。1 つの保存に失敗しても残りを扱い、画面と `onError` に知らせます。システムアプリは `.binapp` を同梱し、ブラウザでは asc を読みません。
+インストール・更新する対象と通常のアプリの一覧は `apps` で渡したものです。ホーム候補と履歴の名前の解決は `store.list()` 全件を含みます。1 つの保存に失敗しても残りを扱い、画面と `onError` に知らせます。システムアプリは `.binapp` を同梱し、ブラウザでは asc を読みません。
 
 ## 開く・戻る・停止
 
-- ホームを領域いっぱいに開く。ホーム候補（`binette:system` かつ `role: "home"`）以外のアプリを渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
+- ホームを領域いっぱいに開く。ホーム候補（`role: "home"`）以外のアプリを渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
 - ホームだけに一覧を渡す。ほかのアプリでは `apps.*` は例外になる（[regie.md](../regie.md)）
 - ホームの `apps.open(i)` やホームバーの名前のボタンで、そのアプリを前面に出す。元の画面は hidden にして Pause にし、DOM と Worker を残す。Pause なら Resume、Stop なら Start(Stop) → Resume。無ければインスタンスを作る
 - ホームも含め既定 3 インスタンスまで残す。超えたら前面以外で最後に前面に出た順に片付け、Stop → Destroy（System・Stack）を通す
@@ -47,13 +47,17 @@ function mountShell(element: HTMLElement, options: ShellOptions): Promise<Mounte
 - 落ちたインスタンスは状態を知らせずにスタックから外し、状態表示と onError にエラーを出す。前面ならホームへ戻り、背面なら画面を変えない。ホーム自身が前面で落ちた場合と起動失敗では開き直す。最初の落ちから homeRetryWindow を過ぎても落ち続けたら開き直さず、エラーを残す。落ちたホームが起動を済ませてから homeRetryWindow より長く動いていたら数え直す。起動の失敗（時間切れを含む）では数え直さない。Apps は④
 - 起動中に離れた場合と `stop()` は AbortSignal で何も知らせずに止める。stop は全インスタンス・イベント・画面を消し、2 回目から何もしない
 
-ホームの差し替え、権限の仕組み、アプリの CSS の分離は後続の作業です。今は入手元と role だけでホームを判断します。URL からの追加、更新や削除の操作、並べ替えはまだありません。
+設定アプリの os.setHome で選ぶと home をその場で保存し、前のホームを User・Os で Destroy します。設定アプリは開いたまま、以後のホームボタンとホームへ戻る動きは新しいホームを使い、apps.* も新しいホームだけに渡します。権限の仕組み、アプリの CSS の分離は後続の作業です。URL からの追加、更新や削除の操作、並べ替えはまだありません。
 
 ## OS の記録と設定（案・実装済み）
 
 `store.system` の SystemStore を使います。最後の状態と起動の履歴のキーは installedAppKey です。各状態のメソッドの前後に記録し、前回の値を次の onCreate に渡します。履歴はインスタンスを作るときだけ追加します。
 
-mountShell の最初に getSettings() を読みます。各項目は保存した値 → ShellOptions → DEFAULT_SYSTEM_SETTINGS の順で使います。時間の単位はミリ秒、stackSize は 1 以上の整数、historyLimit は 0 以上の整数です。時間は有限の 0 以上の数です。保存は putSettings() でオブジェクト全体を置き換え、省いた項目は既定へ戻します。変更は次の mountShell から使います。home は今回保存だけで、ホームを選ぶ処理にはまだ使いません。
+mountShell の最初に getSettings() を読みます。各項目は保存した値 → ShellOptions → DEFAULT_SYSTEM_SETTINGS の順で使います。時間の単位はミリ秒、stackSize は 1 以上の整数、historyLimit は 0 以上の整数です。内部で使う時間は有限の 0 以上の数です。保存は putSettings() でオブジェクト全体を置き換え、省いた項目は既定へ戻します。
+
+入手元が binette:system で role settings のアプリを起動するときだけ、MountOptions の os に設定・ホーム候補・新しい順の履歴を写して渡します。onSet・onSetHome は Worker → LaunchOptions → MountOptions → shell の順で受けます。os.set は数の 6 項目だけを許し、Worker と OS で範囲を確認します。OS は validateSystemSettings に加え、整数であることと callTimeout/destroyTimeout が 1000 以上であることを確かめます。その場で settings を更新し、写したオブジェクトを順番に putSettings で保存します。保存の失敗は画面と onError に出します。
+
+反映時点は [ライフサイクルの表](../lifecycle.md#値を変えたときに効く所案実装済み) のとおりです。stopDelay は MountedApp.setStopDelay(delay) で既存のインスタンスにも渡し、次の Pause から使います。履歴の写しは設定アプリ自身の起動記録を追加する直前に作ります。
 
 ## ページとライフサイクル（実装済み）
 

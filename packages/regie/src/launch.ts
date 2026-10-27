@@ -1,5 +1,12 @@
 import { serveApp } from "./worker.ts";
-import type { LifecycleRecord } from "./store.ts";
+import type { LifecycleRecord, SystemSettings } from "./store.ts";
+
+/** 設定アプリの起動時に渡す写し。ホームの id は installedAppKey */
+export interface OsSnapshot {
+  settings: SystemSettings;
+  homes: { id: string; name: string }[];
+  launches: { time: number; name: string }[];
+}
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -34,6 +41,10 @@ export interface LaunchOptions {
   /** ホームへ渡すアプリ。省略時は apps.* を使えない */
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
+  /** システムの設定アプリだけに渡す。省略時は os.* を使えない */
+  os?: OsSnapshot;
+  onSet?: (name: string, value: number) => void;
+  onSetHome?: (i: number) => void;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
   /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
@@ -79,6 +90,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   let initTimer: ReturnType<typeof setTimeout> | undefined;
   let finishing = false;
   const openings: number[] = [];
+  const homes: number[] = [];
   let nextId = 1;
   let stopped = false;
   let rejectLaunch: ((error: Error) => void) | undefined;
@@ -102,6 +114,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const expired = () => exit(new Error("アプリが応答しないので終了しました。"));
   const notifyRequests = () => {
     if (rejectLaunch || pending.size || stopped) return;
+    for (const i of homes.splice(0)) options.onSetHome?.(i);
     if (finishing) { finishing = false; openings.length = 0; options.onFinish?.(); }
     else for (const i of openings.splice(0)) options.onOpen?.(i);
   };
@@ -117,7 +130,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -147,6 +160,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": openings.push(data.i!); break;
+        case "os.set": options.onSet?.(data.name!, data.value!); break;
+        case "os.setHome": homes.push(data.i!); break;
         case "finish": finishing = true; break;
         case "done": {
           clearTimeout(pending.get(data.id!)?.timer);
@@ -171,7 +186,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

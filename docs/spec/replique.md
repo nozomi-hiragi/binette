@@ -110,6 +110,31 @@ Element の中身は i32 の handle です。id の Map、リスナーと対象�
 
 `apps.*` は apps が無ければ例外、番号の範囲外も例外でアプリを終了します。任意の URL や SVG をアプリから渡す API はありません。
 
+### 設定アプリの os.*（案・実装済み）
+
+入手元が `binette:system` で app.json の `role` が `"settings"` のアプリだけに渡します。ほかのアプリが呼ぶと例外でアプリを終了します。`binette` モジュールの同名の WASM import に対応します。
+
+```ts
+export namespace os {
+  export function get(name: string): i32;
+  export function set(name: string, value: i32): bool;
+  export function home(): string;
+  export function homeCount(): i32;
+  export function homeName(i: i32): string;
+  export function homeId(i: i32): string;
+  export function setHome(i: i32): void;
+  export function launchCount(): i32;
+  export function launchTime(i: i32): f64;
+  export function launchName(i: i32): string;
+}
+```
+
+- get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
+- set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
+- home は実際に使うホームの installedAppKey（`JSON.stringify([source, manifest.id])`）。設定が空・無効なら system のホームのキーです。homeCount/homeName/homeId は、保存済みの role home の候補数・名前・キーです。入手元を問いません。setHome はその番号を保存し、Worker の home も更新します。番号の範囲外は例外です
+- launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ installedAppKey。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
+- home/homeName/homeId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
+
 `@external("binette", "dom.text")` と `// @ts-ignore: decorator` で import を宣言します。型検査は Deno と asc の両方で行います。AS235（クラスや名前空間自体は WASM の export にならない）は想定した警告です。
 
 ## まだしていないこと

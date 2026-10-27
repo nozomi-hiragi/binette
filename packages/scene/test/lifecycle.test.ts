@@ -6,7 +6,9 @@ import { buildApp, DestroyCause, DestroyKind, mountApp, mountShell, State } from
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 400 && !condition(); i++) await sleep(5);
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await sleep(5);
   assert(condition(), "待っても状態が変わりませんでした");
 }
 function createWorker(): RegieWorker {
@@ -462,4 +464,31 @@ Deno.test("Pause を待つあいだに同じアプリへ戻っても、前面を
     bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
     assertEquals(visible(), 1); assert(a.hidden);
   } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("起動の途中のクリックは捨てずに Resume のあとに届ける", async () => {
+  // Resume の通知を止めておき、その間にクリックする
+  let release: (() => void) | undefined;
+  const heldResume = (): RegieWorker => {
+    const inner = createWorker();
+    return {
+      postMessage(message, transfer) {
+        const call = message as { type: string; name?: string; args?: number[] };
+        if (!release && call.type === "call" && call.name === "__bina_lifecycle" && call.args?.[0] === State.Resume) {
+          release = () => inner.postMessage(message, transfer); return;
+        }
+        inner.postMessage(message, transfer);
+      },
+      addEventListener: inner.addEventListener,
+      terminate: inner.terminate,
+    };
+  };
+  const window = new Window(); const element = host(window);
+  const mounting = mountApp(element, await build(), { createWorker: heldResume });
+  await waitFor(() => release !== undefined);
+  click(element, "click");
+  release!();
+  const mounted = await mounting;
+  try { await waitFor(() => logOf(element) === "create:0;start:1;resume;click;"); }
+  finally { mounted.stop(); await window.happyDOM.close(); }
 });

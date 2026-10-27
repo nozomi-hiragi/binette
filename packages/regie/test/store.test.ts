@@ -1,5 +1,5 @@
-import { assertEquals, assertNotEquals } from "@std/assert";
-import { createMemoryAppStore, type InstalledApp, installedAppKey } from "../src/index.ts";
+import { assertEquals, assertNotEquals, assertThrows } from "@std/assert";
+import { createMemoryAppStore, type InstalledApp, installedAppKey, validateSystemSettings, type SystemSettings } from "../src/index.ts";
 
 const app = (source: string, id: string): InstalledApp => ({
   key: installedAppKey(source, id), source,
@@ -64,4 +64,16 @@ Deno.test("OS の記録はアプリごとに分かれ、設定と履歴も写し
   await Promise.all([store.recordLaunch({ time: 105, app: "a" }, 2), store.recordLaunch({ time: 106, app: "b" }, 2)]);
   assertEquals(await store.listLaunches(), [{ time: 105, app: "a" }, { time: 106, app: "b" }]);
   await store.recordLaunch({ time: 107, app: "c" }, 0); assertEquals(await store.listLaunches(), []);
+});
+
+Deno.test("OS の設定は知らない名前と範囲外を拒み、保存済みの値を変えない", async () => {
+  const store = createMemoryAppStore().system;
+  await store.putSettings({ stackSize: 2 });
+  for (const value of [{ unknown: 1 }, { stackSize: 0 }, { stackSize: 1.5 }, { historyLimit: -1 }, { historyLimit: 0.5 },
+    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { home: 1 }]) {
+    const settings = value as Partial<SystemSettings>;
+    assertThrows(() => validateSystemSettings(settings));
+    assertThrows(() => store.putSettings(settings));
+    assertEquals(await store.getSettings(), { stackSize: 2 });
+  }
 });

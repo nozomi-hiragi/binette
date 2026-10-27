@@ -22,6 +22,9 @@ interface MountOptions {
   signal?: AbortSignal;
   apps?: { id: string; name: string; icon?: string }[];
   onOpen?: (i: number) => void;
+  os?: LaunchOptions["os"];
+  onSet?: LaunchOptions["onSet"];
+  onSetHome?: LaunchOptions["onSetHome"];
 }
 interface MountedApp {
   /** Régie で動いているアプリ */
@@ -31,6 +34,7 @@ interface MountedApp {
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
   setFrozen(frozen: boolean): void;
+  setStopDelay(delay: number): void;
   /** アプリを止め、クリックの受け付けをやめる */
   stop(): void;
 }
@@ -55,7 +59,7 @@ Régie で _start を走らせてから HTML を枠に描き、初期化中に�
 
 listen は click だけ本物のリスナーを付ける。それ以外は onError に知らせて何もしない。byId は listen の時点で見つかった要素に付けるので、あとから同じ id の要素に交換してもリスナーは移らない。
 
-リスナーは `app.call("__bina_event", listener)` を呼ぶ。Réplique が Event の type と currentTarget を用意する。起動中、および Pause・Stop・Destroy のクリックは捨てる。状態の通知とイベントは直列に処理する。Régie が知らせたエラーは call の reject から二重に知らせない。
+リスナーは `app.call("__bina_event", listener)` を呼ぶ。Réplique が Event の type と currentTarget を用意する。Pause・Stop・Destroy のクリックは捨てる。起動の途中（Create・Start）のクリックは捨てずに待たせ、Resume のあとに届ける（onCreate で作ったボタンが、すぐ押されても効くように。案）。状態の通知とイベントは直列に処理する。Régie が知らせたエラーは call の reject から二重に知らせない。
 
 `stop()` と signal の中断、アプリ終了で全リスナーを外す。stop は描いた HTML は消さない。起動中の失敗は mountApp の reject、完了後の終了は onExit で知らせる。`element.style.contain = "paint"` で描画を枠に収める。DOM は element.ownerDocument から辿る。
 
@@ -64,6 +68,8 @@ listen は click だけ本物のリスナーを付ける。それ以外は onErr
 State・DestroyKind・DestroyCause は Scene からも export し、Réplique と同じ番号です。pause は Resume → Pause、resume は Pause → Resume、Stop → Start(Stop) → Resume を知らせます。同じ状態への重複通知はしません。destroy は必要なら Pause → Stop を通り、Destroy を知らせたあと Worker を止めます。
 
 Pause から stopDelay 後に Stop にします。setFrozen(true) でタイマーを解除して残り時間を覚え、false で残りから数え直します。resume・destroy・stop ではタイマーを解除します。
+
+setStopDelay(delay) は次の Pause から使う時間を変更します。今 Pause で進んでいる計時は変更しません。os と onSet は LaunchOptions に渡し、onSetHome は状態の通知と mountApp の完了後に通知します。渡してよいアプリの条件は shell が確認します。
 
 onDestroy は destroyTimeout で Worker を止めます。Destroy 中は Régie の時間切れや終了も onError / onExit に流さず、エラー表示やホーム復帰を重複させません。二つの時間切れは先に来た方で終了します。Pause・Stop の失敗は通常の終了として扱います。
 
