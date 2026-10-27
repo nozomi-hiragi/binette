@@ -62,17 +62,19 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   let generation = 0;
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   const homeRetryWindow = options.homeRetryWindow ?? 5000;
-  let homeStartedAt = 0;
   let homeFailingSince: number | undefined;
-  /** ホームが落ちたときに開き直してよいか。落ち続けて homeRetryWindow を過ぎたら開き直さない */
-  const mayRestartHome = () => {
+  /**
+   * ホームが落ちたときに開き直してよいか。落ち続けて homeRetryWindow を過ぎたら開き直さない
+   * @param startedAt 落ちたホームの起動が済んだ時刻。起動に失敗したなら undefined
+   */
+  const mayRestartHome = (startedAt?: number) => {
     const now = performance.now();
-    // 前のホームが homeRetryWindow より長く動いていたなら、落ち続けてはいない
-    if (homeFailingSince === undefined || now - homeStartedAt >= homeRetryWindow) homeFailingSince = now;
+    // 落ちたホームが起動を済ませて homeRetryWindow より長く動いていたなら、落ち続けてはいない
+    if (homeFailingSince === undefined || (startedAt !== undefined && now - startedAt >= homeRetryWindow)) homeFailingSince = now;
     return now - homeFailingSince < homeRetryWindow;
   };
   let stopped = false;
-  type Session = { controller: AbortController; mounted?: MountedApp; host: HTMLElement; home: boolean; finish: boolean };
+  type Session = { controller: AbortController; mounted?: MountedApp; host: HTMLElement; home: boolean; finish: boolean; startedAt?: number };
   const sessions = new Set<Session>();
   let active: Session | undefined;
   const reported = new WeakSet<object>();
@@ -144,10 +146,9 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     const host = document.createElement("div");
     host.className = "bina-shell-app";
     host.classList.toggle("bina-shell-content", !atHome);
-    const session = { controller: new AbortController(), host, home: atHome, mounted: undefined as MountedApp | undefined, finish: false };
+    const session = { controller: new AbortController(), host, home: atHome, mounted: undefined as MountedApp | undefined, finish: false, startedAt: undefined as number | undefined };
     sessions.add(session);
     active = session;
-    if (atHome) homeStartedAt = performance.now();
     toolbar.hidden = atHome;
     if (clearStatus) status.hidden = true;
     root.insertBefore(host, status);
@@ -165,7 +166,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
           if (active !== session) return;
           cut(session);
           // 落ち続けるホームは開き直さず、エラーを出したままにする（④ でここに Apps を出す）
-          if (home && (!atHome || mayRestartHome())) await show(home, true);
+          if (home && (!atHome || mayRestartHome(session.startedAt))) await show(home, true);
           report(error);
         },
         onFinish() {
@@ -184,6 +185,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       if (active !== session) mounted.stop();
       else {
         session.mounted = mounted;
+        session.startedAt = performance.now();
         mounted.setFrozen(frozen);
         if (session.finish && home) void show(home, true, true, DestroyKind.User, DestroyCause.App);
         else if (document.visibilityState === "hidden") await mounted.pause();

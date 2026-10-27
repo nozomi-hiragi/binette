@@ -227,3 +227,34 @@ for (const state of ["pause", "stop"] as const) {
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
 }
+
+Deno.test("onStart(Stop) で finish したら onResume を呼ばずに閉じる", async () => {
+  const built = await build(source.replace('onStart(last: State): void { record("start:" + last.toString()); }',
+    'onStart(last: State): void { record("start:" + last.toString()); if (last == State.Stop) this.finish(); }'));
+  const window = new Window(); const element = host(window); let finished = 0;
+  const mounted = await mountApp(element, built, { createWorker, stopDelay: 10, onFinish: () => finished++ });
+  try {
+    await mounted.pause();
+    await waitFor(() => mounted.state === State.Stop);
+    await mounted.resume();
+    await waitFor(() => finished === 1);
+    assertEquals(logOf(element), "create:0;start:1;resume;pause;stop;start:5;");
+    assertEquals(mounted.state, State.Start);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("起動で固まるホームは、時間切れのあと開き直し続けない", async () => {
+  const builtHome = await build("let spin: i32 = 0;\nwhile (true) { spin++; }", true);
+  const window = new Window(); const element = host(window); const errors: unknown[] = []; let count = 0;
+  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: builtHome }], store: createMemoryAppStore(),
+    callTimeout: 50, homeRetryWindow: 50, createWorker() { count++; return realWorker(); }, onError: e => errors.push(e) });
+  try {
+    await waitFor(() => count >= 2);
+    await sleep(400);
+    const settled = count;
+    await sleep(300);
+    assertEquals(count, settled);
+    assert(settled <= 3);
+    assert((errors.at(-1) as Error).message.includes("応答しない"));
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});

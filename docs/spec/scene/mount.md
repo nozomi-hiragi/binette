@@ -66,7 +66,7 @@ Pause から stopDelay 後に Stop にします。setFrozen(true) でタイマ�
 
 onDestroy は destroyTimeout で Worker を止めます。Destroy 中は Régie の時間切れや終了も onError / onExit に流さず、エラー表示やホーム復帰を重複させません。二つの時間切れは先に来た方で終了します。Pause・Stop の失敗は通常の終了として扱います。
 
-finish と open は現在の呼び出しが終わるまで保留し、状態の通知の途中に別の呼び出しを入れません。onCreate / onStart で finish した場合は、続く起動通知をやめ、onFinish を知らせます。stop は状態を通知せずに Worker とリスナーを止め、HTML は残します。
+finish と open は現在の呼び出しが終わるまで保留し、状態の通知の途中に別の呼び出しを入れません。onCreate / onStart で finish した場合は、続く起動通知をやめ、onFinish を知らせます。Stop から戻るときの onStart(Stop) で finish した場合も、Resume に進みません。stop は状態を通知せずに Worker とリスナーを止め、HTML は残します。
 
 ## まだしていないこと
 

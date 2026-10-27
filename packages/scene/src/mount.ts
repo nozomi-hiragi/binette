@@ -246,6 +246,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
         if (closing) return;
         cancelTimer();
         if (state === State.Stop) await lifecycle(State.Start, State.Stop);
+        // onStart の中で finish したら、Resume に進まずに閉じる
+        if (finishRequested) return;
         if (state === State.Pause || state === State.Start) await lifecycle(State.Resume);
         accepting = state === State.Resume;
       });
