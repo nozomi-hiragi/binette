@@ -92,6 +92,23 @@ export function clearIcon(): void { apps.icon(document.getElementById("old-icon"
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
+Deno.test("SVG の要素にも class を書き、同じまとまりの残りの操作も反映する", async () => {
+  const source = `import { document } from "jsr:@binette/replique";
+export function mark(): void { document.getElementById("mark").className = "active"; document.getElementById("after").textContent = "届いた"; }
+`;
+  const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<svg id="mark"></svg><p id="after"></p>', "main.ts": source }[path]!), { libraries });
+  const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(element as never);
+  const mounted = await mountApp(element, built, { createWorker });
+  try {
+    // ブラウザの SVG の className は読み取り専用の SVGAnimatedString。happy-dom は書けるので、同じにする
+    Object.defineProperty(element.querySelector("#mark")!, "className", { get: () => ({ baseVal: "" }) });
+    await mounted.app.call("mark");
+    assertEquals(element.querySelector("#mark")!.getAttribute("class"), "active");
+    assertEquals(element.querySelector("#after")!.textContent, "届いた");
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
 Deno.test("無い id・枠自身・枠外には届かず、byId は毎回探し直す", async () => {
   const special = 'a"\\]#あ';
   const source = `import { document } from "jsr:@binette/replique";

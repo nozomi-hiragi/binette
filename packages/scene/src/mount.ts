@@ -99,7 +99,8 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
         if (!node || node === element) continue;
         switch (op.op) {
           case "text": node.textContent = op.value; break;
-          case "class": node.className = op.value; break;
+          // SVG の className は読み取り専用なので、属性で書く
+          case "class": node.setAttribute("class", op.value); break;
           case "remove": node.remove(); break;
           case "icon": {
             if (node.tagName.toLowerCase() !== "img") break;
