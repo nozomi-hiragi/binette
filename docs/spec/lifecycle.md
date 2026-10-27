@@ -46,7 +46,7 @@ Binette の土台が、ページ・アプリ・プロセス・画面をいつ作
 | --- | --- |
 | 隠れた（`visibilitychange` で hidden） | 前面の画面も隠れた扱いにする（アプリには `onPause`） |
 | 凍結された（`freeze`） | すべてのプロセスが一時停止と同じになる。Binette は何もしなくてよい |
-| 戻ってきた（visible、`resume`） | 前面の画面を見える扱いに戻す（アプリには `onResume`、Stop のあとなら `onStart` → `onResume`） |
+| 戻ってきた（visible、`resume`） | 前面の画面を見える扱いに戻す（アプリには `onResume`、Stop のあとなら `onStart(Stop)` → `onResume`） |
 | 閉じた（`pagehide`）、ブラウザが落ちた | 何も知らせずに全部終わる |
 
 ページが閉じるときには、何も確実には届きません。なので次を決まりにします。
@@ -105,7 +105,7 @@ Binette の土台が、ページ・アプリ・プロセス・画面をいつ作
 
 1. トップレベルの初期化（`_start`）。ここでアプリが `register` する（案）
 2. HTML を枠に描く
-3. `onCreate(最後の状態)` → `onStart` → `onResume`（決定は 6 つのメソッドがあること。この順に続けて呼ぶのは案）。最初の画面は `onCreate` で作る
+3. `onCreate(最後の状態)` → `onStart(Create)` → `onResume`（決定は 6 つのメソッドがあること。この順に続けて呼ぶのは案）。最初の画面は `onCreate` で作る
 4. あとはイベントのたびに 1 回呼ぶ。画面の操作は、1 回の呼び出しの分をまとめて反映する
 
 実装: 今は 1・2・4 と、3 の代わりの `start()`（[regie.md](regie.md)、[scene/mount.md](scene/mount.md)）。
@@ -152,6 +152,9 @@ class Memo extends App {
       // 前回は途中で切られた。ここで直す
     }
   }
+  onStart(last: State): void {
+    if (last == State.Stop) { /* しばらく離れていた */ }
+  }
   onPause(): void { }
   onDestroy(): void { }
 }
@@ -171,14 +174,15 @@ register(memo);
 - Pause からすぐ Destroy にはならない。Destroy の前には必ず Stop を通る（決定）
 - Stop からの Destroy は、いつでもあり得る（決定）。アプリは、戻すのに要るものを Stop までに保存しておく
 - ページごと切られたときは、何も検知できない（決定）
+- `onStart` にも最後の状態を渡す。Stop から戻ったのか、Create のすぐあとかが分かる（決定）。値は `State.Create` か `State.Stop`
 
 | できごと | 呼ぶもの |
 | --- | --- |
-| 起動 | `onCreate(最後の状態)` → `onStart` → `onResume` |
+| 起動 | `onCreate(最後の状態)` → `onStart(Create)` → `onResume` |
 | 別のアプリなどにフォーカスが移った（戻る、別のアプリを開く、ページが隠れた） | その瞬間に `onPause`（決定）。プロセスにはイベントを届けない |
 | Pause のまま、デバッグメニューで決めた時間が過ぎた | `onStop`（決定） |
 | Pause の間に戻ってきた | `onResume` だけ |
-| Stop のあとに戻ってきた | `onStart` → `onResume` |
+| Stop のあとに戻ってきた | `onStart(Stop)` → `onResume` |
 | スタックから外れた・故意に破棄した | まだ Stop でなければ先に `onStop`、そのあと `onDestroy`（決定）。返ったら Worker を止める |
 | 例外・Worker の落ち・ページごと切られた | 何も呼ばない |
 
