@@ -1,6 +1,12 @@
 /// <reference path="./env.d.ts" />
 import { createIndexedDbAppStore } from "@binette/regie";
 import { mountShell, parsePrebuiltApp } from "@binette/scene";
+
+// Service Worker は本番の OS だけが持つ。アプリには登録する呼び出しを渡さない
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.register(new URL("./sw.js", document.baseURI), { scope: "./" }).catch(console.error);
+}
+
 /** システムアプリの入手元。OS を更新しても変えない */
 const SYSTEM = "binette:system";
 const appUrls = import.meta.glob<string>("../.binapp/*.binapp", { query: "?url", import: "default", eager: true });

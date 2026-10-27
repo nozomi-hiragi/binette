@@ -47,9 +47,10 @@ Binette が、ページ・アプリ・プロセス・画面をいつ作り、い
 
 - ライブで試した内容は、インストールのときに引き継がない。引き継げることも保証しない（決定）。OS は引き継ぐための処理をしない。Chromium のように保存場所が同じなら見えることもあるが、それはたまたまで、当てにしない
 - `display-mode` はインストールの有無そのものではなく、表示のしかた。`fullscreen` は、ふつうのタブを全画面にしただけでも当てはまるので、見分けには使わない。Binette の Web アプリマニフェストの `display` は `standalone` にする（案）
-- 透かしは、殻が一番上に薄く出す。`pointer-events: none` で下のアプリを押せるままにし、iPhone の角やホームバーに隠れないよう safe area を取る。アプリの枠の外なので、アプリからは消せない（案）
-- インストールを勧める表示の形は未決。Chromium は `beforeinstallprompt` でボタンからインストールの画面を出せる。iPhone の Safari と Firefox にはその仕組みが無いので、「共有 → ホーム画面に追加」などの手順を見せることになる
-- インストールが要る操作のアラートには、インストールの手順（上と同じもの）を添える（案）
+- 見分けは Scene の `isInstalled(window)` が受け持つ。`navigator.standalone === true` か上の 3 つの `display-mode` ならインストール済み。`matchMedia` の `change` で切り替え、`appinstalled` を受け取ったときもインストール済みの表示にする。テストなどでは `ShellOptions.installed` で上書きでき、指定時は `matchMedia` を使わない。DOM と window は表示先の element から辿り、`matchMedia` が無い環境はライブモードにする（案・実装済み）
+- 透かしは、殻が一番上に薄く出す。`pointer-events: none` で下のアプリを押せるままにし、iPhone の角やホームバーに隠れないよう safe area を取る。ホームバーより上の表示領域の右下、アプリの枠の外に置くので、アプリからは消せない。飾りとして `aria-hidden="true"` にし、モードはボタンの aria-label で伝える（案・実装済み）
+- インストールを勧める表示の形は未決。最小の案として、ライブモードのときだけホームバーの右端に「インストール」を出す。Chromium の `beforeinstallprompt` は `preventDefault()` して保持し、ボタンで一度だけ `prompt()` を呼ぶ。受け取れない場合や失敗した場合は、OS の `<dialog>` に手順と「閉じる」を出す。iPhone などは「Safari の共有 → ホーム画面に追加」、ほかは「ブラウザのメニューから『アプリをインストール』または『ホーム画面に追加』」。`showModal` が無い DOM では `open` 属性で代用する。閉じたことは保存しない。インストール済みになればボタン・透かし・開いている手順を消す（案・実装済み）
+- インストールが要る操作のアラートには、インストールの手順（上と同じもの）を添える。OS 用の `MountedShell.requireInstall(reason)` は、インストール済みなら何も出さず true、ライブモードなら理由と手順の枠を出して false を返す。理由は textContent で入れ、HTML として読まない。Réplique・Régie には渡さず、通知などで実際に使うのは今後の作業（案・仕組みは実装済み）
 - ブラウザによる違い（知っておくこと）:
   - iPhone では、タブとホーム画面のアプリで保存場所が別。タブで試したものは、インストールしても見えない。Chromium では同じ保存場所なので、タブとインストール版で同じデータが見える
   - iPhone の Safari は、インストールしていないサイトの保存を、7 日使わないと消すことがある。`navigator.storage.persist()` も、インストールしていないと断られやすい
@@ -83,6 +84,14 @@ OS がページに読まれるたびに、そのページの識別子を作り�
 - 役目は、オフラインのキャッシュ。将来は、プッシュ通知などで、ページが閉じていても短時間だけ起こされる
 - ずっと動き続けることはできない（ブラウザが数十秒で止める）ので、画面なしで動き続ける処理には使えない
 - 将来、アプリが「通知が来たらこの関数を呼んで」と頼み、その中でアプリの WASM を画面なしで短く動かす形はとれる（未決）
+
+今のキャッシュの形は案・実装済みです。
+
+- ルートの OS が本番だけ `sw.js` を scope `./` で登録する。開発サーバーでは登録しない。アプリには登録の API を渡さない
+- `manifest.webmanifest` は name・short_name が Binette、display が standalone、start_url・scope が `./`。背景色とテーマ色は index.html の白に合わせ、自作の B の SVG を使う。SW・マニフェスト・アイコンは Vite の publicDir から dist 直下へ写す。URL は相対指定でサブパスにも置ける
+- `binette-v0.2.0-1` に版付きのキャッシュを作る。install で `./`・`./index.html`・マニフェスト・アイコンを入れて skipWaiting、activate で古い `binette-` のキャッシュだけを消して clients.claim する
+- ページの読み込み（navigate）はネットを先に試し、成功時にキャッシュを更新する。通信や HTTP の失敗では同じ URL のキャッシュ、それが無ければ `./`・`./index.html` の順に返す
+- 同じオリジンのほかの GET はキャッシュを先に返し、裏で取り直して置き換える（stale-while-revalidate）。未保存ならネットから取って保存する。成功した応答だけを保存し、別のオリジンと GET 以外には触らない。ハッシュ付き JS や `.binapp` は SW の制御下で取得したときに入るため、初回の登録直後はオンラインで再読み込みしてからオフラインで使う
 
 ## アプリの状態（決定）
 
@@ -325,13 +334,13 @@ launch(memo);
 
 ## 実装の状況
 
-App と 6 つの状態、ページの識別子、非表示・凍結・再開、時間切れ、スタック、最後の状態、起動の履歴、OS の設定の保存、Apps を実装しています。ホームバーと Apps の見た目と操作は案です。
+App と 6 つの状態、ページの識別子、非表示・凍結・再開、時間切れ、スタック、最後の状態、起動の履歴、OS の設定の保存、Apps、ライブモードの表示とインストール案内、Service Worker を実装しています。ホームバー・Apps・ライブモードの見た目と操作、キャッシュの形は案です。
 
 | 項目 | 今 |
 | --- | --- |
-| モードの見分け、透かし、インストールが要る操作のアラート | 無い。保存はいつも IndexedDB で、これは決まりどおり |
+| モードの見分け、透かし、インストールが要る操作のアラート | isInstalled と installed の上書き、display-mode の change、appinstalled、透かし、ホームバーのインストールボタン、prompt と手順の dialog、requireInstall を実装。保存はいつも IndexedDB で、これは決まりどおり。インストールを必須とする操作自体はまだ無い |
 | ページの識別子、ページで起きること | mountShell ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
-| Service Worker | 無い |
+| Service Worker | 本番の OS だけが登録。マニフェストと自作アイコンを同梱。版付きキャッシュ、navigate はネット優先、同じオリジンのほかの GET は stale-while-revalidate。開発では登録しない。プッシュ通知は未実装 |
 | アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない。起動の途中のクリックは Resume のあとに届ける（[scene/mount.md](scene/mount.md)） |
 | 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
 | スタック | 既定 3（ホームを含む）。画面を隠して Pause にし、DOM と Worker を残す。残っていれば Resume、Stop なら Start(Stop) → Resume。上限を超えたら、前面以外で最も長く前面に出ていないものを Stop → Destroy（System・Stack） |
@@ -357,10 +366,14 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 
 ページ
 
-1. インストールが要る操作のアラートに、インストールの手順を添える
-2. 透かしの出し方: 殻が一番上に薄く出す、`pointer-events: none`、safe area を取る、アプリからは消せない
+1. インストールが要る操作のアラートに、インストールの手順を添える。OS 用の requireInstall(reason) は true / false を返し、ライブなら理由を添えた dialog を出す
+2. 透かしの出し方: 殻が一番上に薄く出す、`pointer-events: none`、safe area を取る、ホームバーより上の右下、アプリからは消せない
 3. ページの識別子は読まれるたびに新しく作り、保存しない（`crypto.randomUUID()` など）
-4. インストール済みの見分けは `display-mode` の `standalone`・`minimal-ui`・`window-controls-overlay` と `navigator.standalone`。`fullscreen` は使わず、Binette のマニフェストの `display` は `standalone`
+4. インストール済みの見分けは isInstalled に置き、`display-mode` の `standalone`・`minimal-ui`・`window-controls-overlay` と `navigator.standalone`。`fullscreen` は使わず、change・appinstalled に追従する。ShellOptions.installed で上書きできる。Binette のマニフェストの `display` は `standalone`
+
+- インストールボタンはライブのときだけホームバーの右端。beforeinstallprompt を保持して prompt を呼び、無ければ閉じるボタン付きの dialog に手順を出す。閉じた記録は保存しない
+- マニフェスト・自作の B の SVG・sw.js を dist 直下へ置く。本番だけ OS が相対 URL と scope ./ で SW を登録し、開発では登録しない
+- SW の版付きキャッシュ、install の最低限のシェル、skipWaiting、activate の古い binette- の削除と clients.claim。navigate はネット優先、同じオリジンのほかの GET は stale-while-revalidate。別のオリジンと GET 以外には触らない
 
 アプリの状態と時間
 

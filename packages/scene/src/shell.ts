@@ -5,6 +5,7 @@ import { iconPath } from "./paths.ts";
 import { DestroyCause, DestroyKind, type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
 import type { PrebuiltApp } from "./prebuilt.ts";
+import { mountLiveMode } from "./live.ts";
 
 /** 枠で開くアプリ。read は開発用 */
 export type ShellApp = { source: string } & (
@@ -22,10 +23,14 @@ export interface ShellOptions extends BuildOptions, Pick<MountOptions, "onError"
   stackSize?: number;
   /** 起動の履歴の上限（既定 100） */
   historyLimit?: number;
+  /** ページのインストール済み判定を上書きする。指定時は matchMedia を使わない */
+  installed?: boolean;
 }
 
 /** 描画した枠 */
 export interface MountedShell {
+  /** インストール済みなら true。ライブモードなら理由と手順を表示して false */
+  requireInstall(reason: string): boolean;
   /** 起動中のアプリを止め、イベントと画面を消す */
   stop(): void;
 }
@@ -36,9 +41,13 @@ const HOME_RESTART_FIRST = 100;
 const HOME_RESTART_MAX = 1000;
 
 const css = `
-:where(.bina-shell) { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; font: inherit; }
+:where(.bina-shell) { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; font: inherit; isolation: isolate; }
 :where(.bina-shell) [hidden] { display: none; }
-:where(.bina-shell-homebar) { display: flex; flex-wrap: wrap; flex-shrink: 0; margin-top: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); border-top: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
+:where(.bina-shell-stage) { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; isolation: isolate; }
+:where(.bina-shell-live) { position: absolute; z-index: 2147483647; pointer-events: none; right: max(var(--bina-shell-padding, 12px), env(safe-area-inset-right, 0px)); bottom: max(var(--bina-shell-padding, 12px), env(safe-area-inset-bottom, 0px)); color: var(--bina-shell-live-color, var(--bina-shell-color, #16181d)); opacity: var(--bina-shell-live-opacity, 0.35); font-size: var(--bina-shell-live-size, 0.875em); }
+:where(.bina-shell-install) { margin-inline-start: auto; }
+:where(.bina-shell-install-dialog) { z-index: 2147483647; max-width: min(28rem, 80vw); padding: var(--bina-shell-padding, 12px); border: 1px solid var(--bina-shell-border, #d5dae1); border-radius: var(--bina-shell-radius, 12px); background: var(--bina-shell-surface, #fff); color: var(--bina-shell-color, #16181d); font: inherit; overflow-wrap: anywhere; }
+:where(.bina-shell-homebar) { display: flex; flex-wrap: wrap; flex-shrink: 0; margin-top: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); padding-bottom: max(var(--bina-shell-padding, 12px), env(safe-area-inset-bottom, 0px)); padding-left: max(var(--bina-shell-padding, 12px), env(safe-area-inset-left, 0px)); padding-right: max(var(--bina-shell-padding, 12px), env(safe-area-inset-right, 0px)); border-top: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
 :where(.bina-shell-button) { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-surface, #fff); border-radius: var(--bina-shell-radius, 12px); padding: var(--bina-shell-button-padding, 12px); }
 :where(.bina-shell-button):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-shell-entry) { display: inline-flex; gap: var(--bina-shell-gap, 8px); }
@@ -72,7 +81,11 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   const appsHost = document.createElement("div");
   appsHost.className = "bina-shell-apps";
   appsHost.hidden = true;
-  root.append(style, appsHost, status, toolbar);
+  const stage = document.createElement("div");
+  stage.className = "bina-shell-stage";
+  stage.append(appsHost, status);
+  const live = mountLiveMode(stage, options.installed);
+  root.append(style, stage, toolbar);
   element.replaceChildren(root);
   const page = crypto.randomUUID();
   let frozen = false;
@@ -214,6 +227,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       entry.append(open, button("×", `${name}を閉じる`, () => { void close(session, DestroyKind.User, DestroyCause.Os); }));
       toolbar.append(entry);
     }
+    toolbar.append(live.button);
   }
   function showApps() {
     if (stopped) return;
@@ -310,7 +324,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     const started = session;
     sessions.add(started);
     active = started;
-    root.insertBefore(host, status);
+    stage.insertBefore(host, status);
     renderBar();
     try {
       const atSettings = installed.source === "binette:system" && installed.manifest.role === "settings";
@@ -394,6 +408,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   if (home) await show(home, true, false);
   else report(new Error("ホームのシステムアプリがありません。"));
   return {
+    requireInstall: live.requireInstall,
     stop() {
       if (stopped) return;
       stopped = true;
@@ -403,6 +418,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
       document.removeEventListener("visibilitychange", updateVisibility);
       document.removeEventListener("freeze", freeze);
       document.removeEventListener("resume", resume);
+      live.stop();
       root.remove();
     },
   };

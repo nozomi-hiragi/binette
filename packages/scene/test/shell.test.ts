@@ -371,7 +371,7 @@ Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候�
   try {
     const host = element.querySelector<HTMLElement>(".bina-shell-apps")!;
     assertEquals(host.hidden, false);
-    assertEquals(host.parentElement, element.querySelector(".bina-shell"));
+    assertEquals(host.parentElement, element.querySelector(".bina-shell-stage"));
     assertEquals(host.closest(".bina-shell-app"), null);
     const buttons = [...host.querySelectorAll<HTMLButtonElement>("button")];
     assertEquals(buttons.map(button => button.textContent), ['<img src=x onerror="alert(1)">', "A", "Z", "a", "あ", "設定"]);
@@ -380,7 +380,7 @@ Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候�
       assertEquals(button.type, "button"); assertEquals(button.getAttribute("aria-label"), `${button.textContent}を開く`);
       assertEquals(button.children.length, 0);
     }
-    assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム");
+    assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホームインストール");
     shell.stop(); assertEquals(element.children.length, 0);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -402,7 +402,7 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
       if (action === "close") {
         await waitFor(() => element.querySelectorAll(".settings-row").length === 6);
         assertEquals(good.live, 1); assertEquals(good.terminated, 0);
-        assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム設定×");
+        assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム設定×インストール");
         element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
       } else if (action === "startup") bad.emit({ type: "failed", message: "アプリの起動失敗" });
       else {
@@ -421,7 +421,7 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
         }
       }
       await waitFor(() => !host.hidden && element.querySelector(".bina-shell-app") === null);
-      assertEquals(count, 2); assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム");
+      assertEquals(count, 2); assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホームインストール");
       assertEquals(errors.length, action === "startup" || action === "crash" ? 2 : 1);
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
