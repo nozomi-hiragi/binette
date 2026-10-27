@@ -81,7 +81,7 @@ function heldWorker() {
   };
 }
 
-Deno.test("ホームが一覧を作り、開く・詳しく・戻るで一つずつ Worker が動く", async () => {
+Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM が残る", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers();
   const errors: unknown[] = []; const store = createMemoryAppStore();
   const shell = await mountShell(element, { apps: [homeApp, ...apps], store, libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
@@ -90,18 +90,20 @@ Deno.test("ホームが一覧を作り、開く・詳しく・戻るで一つず
     assertEquals([...tiles].map((t) => t.textContent), ["設定", "設定の写し"]);
     assertEquals(element.querySelector("svg"), null);
     assertEquals(tiles[0]!.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fixtures[0]!.icon!)}`);
-    assertEquals(element.querySelector<HTMLElement>(".bina-shell-toolbar")!.hidden, true);
+    assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
     tiles[0]!.click(); tiles[1]!.click();
     await waitFor(() => worker.ready === 2);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    assertEquals(element.querySelector(".home-grid"), null);
-    assertEquals(element.querySelector<HTMLElement>(".bina-shell-toolbar")!.hidden, false);
+    assertEquals(element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden, true);
+    assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
     element.querySelector<HTMLButtonElement>("#details")!.click();
     await waitFor(() => element.querySelector("#description")?.textContent === "ブラウザだけで動く、アプリの土台です。");
-    element.querySelector<HTMLButtonElement>(".bina-shell-back")!.click();
-    await waitFor(() => element.querySelectorAll(".home-tile").length === 2);
-    assertEquals(element.querySelector("#description"), null);
-    assertEquals(worker.created, 3); assertEquals(worker.maximum, 1); assertEquals(worker.live, 1);
+    element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>(".home-grid")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    assertEquals(element.querySelector("#description")!.textContent, "ブラウザだけで動く、アプリの土台です。");
+    element.querySelector<HTMLButtonElement>('[aria-label="設定を開く"]')!.click();
+    await waitFor(() => !element.querySelector<HTMLElement>("#description")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    assertEquals(worker.created, 2); assertEquals(worker.maximum, 2); assertEquals(worker.live, 2);
     assertEquals(errors, []);
     shell.stop(); shell.stop();
     assertEquals(worker.live, 0); assertEquals(element.childNodes.length, 0);
@@ -194,7 +196,7 @@ for (const action of ["back", "stop"] as const) for (const phase of ["ready", "r
       assertEquals(Object.hasOwn(worker.messages[0] as object, "apps"), false);
       if (phase === "resolved") worker.emit({ type: "ready", exports: [] });
       if (phase === "create") { worker.emit({ type: "ready", exports: ["create"] }); await waitFor(() => worker.messages.length === 2); }
-      if (action === "stop") shell.stop(); else element.querySelector<HTMLButtonElement>(".bina-shell-back")!.click();
+      if (action === "stop") shell.stop(); else element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
       await waitFor(() => worker.terminated === 1);
       worker.emit({ type: "ready", exports: ["create"] }); worker.emit({ type: "dom", ops: [{ op: "text", handle: 1, value: "遅い表示" }] }); worker.emit({ type: "done", id: 1 });
       if (action === "back") await waitFor(() => element.querySelectorAll(".home-tile").length === 1);
@@ -238,7 +240,7 @@ for (const phase of ["resolved", "create", "mounted"] as const) {
       await waitFor(() => errors.length === 1 && element.querySelectorAll(".home-tile").length === 1);
       assertEquals((errors[0] as Error).message, "実行の失敗");
       assertEquals(element.querySelector("[role=status]")!.textContent, "実行の失敗");
-      assertEquals(bad.terminated, 1); assertEquals(count, 3);
+      assertEquals(bad.terminated, 1); assertEquals(count, 2);
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
 }

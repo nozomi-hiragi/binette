@@ -21,7 +21,7 @@
 }
 ```
 
-- `role` は持たない。ホームの一覧にふつうのアプリとして並び、開くと OS の「戻る」の帯が上に出る（[home.md](home.md#os-の枠との分担)）
+- `role` は持たない。ホームの一覧にふつうのアプリとして並び、開くと OS のホームバーが下に出る（[home.md](home.md#os-の枠との分担)）
 - 通常の id と document API を使う（決定 2026-10-27）。`Settings extends App` の onCreate で id="details" のボタンに click リスナーを付け、押すと id="description" の p の textContent に説明を書く（案・実装済み）
 - トップレベルで `launch(settings)` を一回呼ぶ。click のハンドラーはグローバルの settings インスタンスを通す
 - 版の `0.2` は HTML に書いたもので、OS から読んではいない

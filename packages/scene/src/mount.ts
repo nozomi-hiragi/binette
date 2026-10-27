@@ -1,4 +1,4 @@
-import { launchApp, type DomOp, type LaunchOptions, type RegieApp } from "@binette/regie";
+import { launchApp, type DomOp, type LaunchOptions, type RegieApp, type SystemStore, type LifecycleRecord } from "@binette/regie";
 import type { BuiltApp } from "./build.ts";
 
 /** Réplique の State・DestroyKind・DestroyCause と同じ番号 */
@@ -16,6 +16,8 @@ export interface MountOptions {
   destroyTimeout?: number;
   /** 今のページの識別子 */
   page?: string;
+  /** 最後の状態と起動の履歴の保存先。key は installedAppKey */
+  persistence?: { store: SystemStore; key: string; historyLimit?: number };
   /** 今の呼び出しが終わってから、自分を閉じる */
   onFinish?: () => void;
   /** アプリを終了しない呼び出しの失敗 */
@@ -53,6 +55,11 @@ export interface MountedApp {
  * @throws {Error} アプリを起動できないとき、または状態の通知が失敗したとき
  */
 export async function mountApp(element: HTMLElement, built: BuiltApp, options: MountOptions = {}): Promise<MountedApp> {
+  const persistence = options.persistence;
+  const last = (persistence ? await persistence.store.getLast(persistence.key) : undefined) ?? {
+    state: State.None, done: true, page: "", reason: { kind: DestroyKind.User, cause: DestroyCause.Os },
+  };
+  let reason = last.reason;
   // アプリの領域が外に出ないようにする
   element.style.contain = "paint";
 
@@ -163,6 +170,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,
+    last,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -211,7 +219,25 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
 
   const lifecycle = async (next: State, a = 0, b = 0) => {
     state = next;
-    await app.call("__bina_lifecycle", next, a, b);
+    if (next === State.Destroy) reason = { kind: a, cause: b };
+    const record: LifecycleRecord = { state: next, done: false, page: options.page ?? "", reason };
+    try {
+      if (persistence) {
+        if (next === State.Create) await persistence.store.recordLaunch({ time: Date.now(), app: persistence.key }, persistence.historyLimit);
+        if (!alive) return;
+        await persistence.store.putLast(persistence.key, record);
+      }
+      if (!alive) return;
+      await app.call("__bina_lifecycle", next, a, b);
+      if (alive && persistence) await persistence.store.putLast(persistence.key, { ...record, done: true });
+    } catch (error) {
+      if (alive && !destroying) {
+        exitError = error instanceof Error ? error : new Error(String(error));
+        cleanup();
+        if (!mounting) options.onExit?.(exitError);
+      }
+      throw error;
+    }
   };
   const stopState = async () => {
     cancelTimer();
@@ -279,7 +305,7 @@ export async function mountApp(element: HTMLElement, built: BuiltApp, options: M
   };
   try {
     await enqueue(async () => {
-      await lifecycle(State.Create, State.None, 1);
+      await lifecycle(State.Create, last.state, Number(last.done));
       if (finishRequested) return;
       await lifecycle(State.Start, State.Create);
       if (finishRequested) return;

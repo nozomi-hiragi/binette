@@ -20,7 +20,7 @@ const mounted = await mountApp(document.querySelector("#app")!, built, { onError
 - `mountApp(element, built, options)` は HTML を描き Régie を起動し、document API の DOM 操作を枠内に反映します。通常の id を参照し、click は登録したリスナーに届きます。onCreate → onStart(Create) → onResume を呼びます
 - 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML の検査はまだありません
 
-ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は `binette:system` かつ `role: "home"` の最初のアプリを開き、ホームだけに `apps` の一覧を渡します。ホームが別のアプリを開くとホームを止め、OS の「戻る」の帯を出します。戻るとホームを起動し直します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
+ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は `binette:system` かつ `role: "home"` の最初のアプリを開き、ホームだけに `apps` の一覧を渡します。ホームが別のアプリを開くとホームを隠して Pause にし、OS のホームバーで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
 
 動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene/README.md) にあります。
 
@@ -55,4 +55,6 @@ Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` で�
 
 v0.2 の途中で bina 属性と bina.ts の生成、Bindings・BindingKind・HtmlParser・parseBindings・generateBindingsSource・writeBindings を廃止しました。BuiltApp.bindings と parser オプション、deno-dom も不要です。AS の入口末尾には __bina_event・__bina_lifecycle の再 export を差し込みます。AS の相対 import はアプリのフォルダ内で解決します。
 
-MountedApp は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen) を持ちます。State・DestroyKind・DestroyCause は Scene からも export します。ShellOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。戻るときは仮に Pause → Stop → Destroy（System・Stack）で捨て、finish は User・App で捨ててホームを開き直します。stop() は何も知らせずに止めます。
+MountedApp は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen) を持ちます。State・DestroyKind・DestroyCause は Scene からも export します。ShellOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。ホームに戻るときはインスタンスを残し、finish は User・App で捨ててホームへ戻ります。stop() は何も知らせずに止めます。
+
+AppStore.system に最後の状態・起動の履歴・OS の設定を保存します。ShellOptions の stackSize・historyLimit は既定の上限です。保存した設定を優先し、home の選択への反映は後続の作業です。単独の mountApp では MountOptions.persistence に保存先とキーを渡せます。
