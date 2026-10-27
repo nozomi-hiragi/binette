@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- ホームの起動失敗や動作中の落ちが homeRetryWindow を過ぎても続いたら、shell が直接 Apps を描く。ホーム候補を除くホームと同じ一覧（設定を含む）を、名前の文字コード順に縦のリンクで並べる。Apps はスタックとホームバーの一覧に数えない
+- Apps から開いたアプリを閉じたら Apps に戻る。ホームバーの「ホーム」で失敗の計時を消してホームを再試行し、また落ち続ければ Apps を出す。見た目は `.bina-shell-apps`・`.bina-shell-apps-link` と既存の `--bina-shell-*` で変えられる（案）
 - システムの role settings だけに Réplique の `os.get`・`set`・`home`・`homeCount`・`homeName`・`homeId`・`setHome`・`launchCount`・`launchTime`・`launchName` を渡す。渡されていないアプリからの呼び出しはアプリを終了し、set の範囲外と知らない名前は false を返して保存しない
 - Régie に `OsSnapshot`、LaunchOptions と MountOptions に `os`・`onSet`・`onSetHome`、MountedApp に `setStopDelay` を追加。設定の変更を保存し、次の操作から使う。stopDelay は既存インスタンスの次の Pause からも反映する
 - 設定アプリにホームの選択、6 項目のデバッグ値の − ＋、新しい順の起動の履歴（UTC）を追加。home は installedAppKey で保存し、選んだホームへ戻る。前のホームは User・Os で Destroy し、新しいホームに apps.* を渡す
@@ -18,7 +20,7 @@
 - Régie の `call(name, ...args)` を可変長引数にする
 - Scene の MountedApp に `state`・`pause()`・`resume()`・`destroy(kind, cause)`・`setFrozen(frozen)`、State・DestroyKind・DestroyCause の export を追加
 - Scene の MountOptions と ShellOptions に `stopDelay`・`destroyTimeout`・`callTimeout`、MountOptions に `page`・`onFinish` を追加。Pause から既定 10 秒で Stop、onDestroy は既定 5 秒で打ち切る
-- ShellOptions に `homeRetryWindow` を追加。落ち続けるホームは、最初の落ちから既定 5 秒を過ぎたら開き直さない
+- ShellOptions に `homeRetryWindow` を追加。落ち続けるホームは、最初の落ちから既定 5 秒を過ぎたら Apps に切り替える
 - hidden で Pause、visible で Resume にし、blur だけでは移さない。freeze の間は Stop の時間を数えず、戻る・別のアプリを開くときは画面を隠して Pause にし、インスタンスを残す
 - ホームと設定を App の派生クラスに移し、最初の画面を onCreate で作る
 
