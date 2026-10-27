@@ -190,7 +190,8 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
         try { await previous.mounted.pause(); }
         catch (error) { report(error); clearStatus = false; }
       } else cut(previous);
-      if (active === previous) active = undefined;
+      // Pause を待つあいだに別の移動が前面を決めていたら、それを消さない
+      if (current === generation && active === previous) active = undefined;
     }
     if (stopped || current !== generation) return;
     // 同じアプリの Destroy が終わる前に次の記録を上書きしない

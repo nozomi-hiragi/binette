@@ -427,3 +427,39 @@ for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeo
     } finally { mounted?.stop(); await window.happyDOM.close(); }
   });
 }
+
+Deno.test("Pause を待つあいだに同じアプリへ戻っても、前面を失わない", async () => {
+  // 一回だけ Pause の通知を止めておける Worker
+  let holding = false; let release: (() => void) | undefined;
+  const delayedWorker = (): RegieWorker => {
+    const inner = createWorker();
+    return {
+      postMessage(message, transfer) {
+        const call = message as { type: string; name?: string; args?: number[] };
+        if (holding && call.type === "call" && call.name === "__bina_lifecycle" && call.args?.[0] === State.Pause) {
+          holding = false; release = () => inner.postMessage(message, transfer); return;
+        }
+        inner.postMessage(message, transfer);
+      },
+      addEventListener: inner.addEventListener,
+      terminate: inner.terminate,
+    };
+  };
+  const window = new Window(); const element = host(window);
+  const shell = await mountShell(element, { apps: await stackFixtures(), store: createMemoryAppStore(), createWorker: delayedWorker });
+  const home = activeHost(element);
+  const visible = () => element.querySelectorAll(".bina-shell-app:not([hidden])").length;
+  try {
+    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    const a = activeHost(element);
+    holding = true;
+    bar(element, "ホームを開く"); await waitFor(() => release !== undefined);
+    bar(element, "Aを開く");
+    release!();
+    await waitFor(() => !!a.querySelector("#log")!.textContent!.endsWith("pause;resume;"));
+    assertEquals(activeHost(element), a); assertEquals(visible(), 1);
+    assertEquals(element.querySelector('[aria-label="Aを開く"]')!.getAttribute("aria-pressed"), "true");
+    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
+    assertEquals(visible(), 1); assert(a.hidden);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
