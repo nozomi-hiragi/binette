@@ -39,6 +39,7 @@ function isInstalled(window: Window | null): boolean
 
 - `mountShell` は `createShellUi` → `startSystem({ ...options, ui })` → `ui.bind(system)` → `system.openHome()` の順に呼びます。startSystem はホームを開く前に解決するので、ホームの起動中のボタンとページの知らせも Régie に届きます（[regie/system.md](../regie/system.md#api案)）
 - ビルドを Régie に移すまでは、`BuildOptions` は Scene の `ShellOptions` にあり、`mountShell` はそれを使って `buildApp` を `startSystem` に渡します
+- 途中で失敗したら大枠を止め、渡した要素の中身を元に戻してから reject します
 - `mountShell` の使い方は今と同じです。ルートの `src/main.ts` は変わりません
 - DOM は element から辿り、グローバルの document は使いません
 

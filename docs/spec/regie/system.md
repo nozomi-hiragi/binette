@@ -34,7 +34,7 @@ interface SystemUi {
   present(instance: { id: number; app: InstalledApp; home: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
   /** 見せる状態が変わった */
   update(view: SystemView): void;
-  /** エラーを見せる */
+  /** エラーを見せる。同じエラーが何度か届くことがある（Pause の失敗など）。まとめるのは UI の役目 */
   report(error: unknown): void;
 }
 interface SystemView {

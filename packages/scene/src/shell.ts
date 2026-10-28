@@ -150,11 +150,16 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
 
 /** システムと表示をつなぎ、ホームを開く */
 export async function mountShell(element: HTMLElement, options: ShellOptions): Promise<MountedShell> {
+  const previous = [...element.childNodes];
   const ui = createShellUi(element, options);
   try {
     const system = await startSystem({ ...options, ui, build: options.build ?? (read => buildApp(read, options)) });
     ui.bind(system);
     await system.openHome();
     return { requireInstall: ui.requireInstall, stop() { system.stop(); ui.stop(); } };
-  } catch (error) { ui.stop(); throw error; }
+  } catch (error) {
+    ui.stop();
+    element.replaceChildren(...previous);
+    throw error;
+  }
 }

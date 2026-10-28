@@ -549,6 +549,19 @@ launch(new Settings());`,
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
+Deno.test("設定の検査に失敗したら要素の中身を残す", async () => {
+  const window = new Window();
+  const element = elementIn(window);
+  element.textContent = "読み込み中";
+  const store = await savedStore();
+  store.system.getSettings = () => Promise.resolve({ stackSize: 0 });
+  let rejected = false;
+  try { await mountShell(element, { store, apps: [homeApp] }); } catch { rejected = true; }
+  assert(rejected);
+  assertEquals(element.textContent, "読み込み中");
+  await window.happyDOM.close();
+});
+
 Deno.test("createShellUi は bind 前のボタンを無視し、bind で現在のページを一度知らせる", async () => {
   const window = new Window(); const element = elementIn(window);
   Object.defineProperty(window.document, "visibilityState", { configurable: true, value: "hidden" });
