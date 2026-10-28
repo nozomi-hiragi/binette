@@ -1,8 +1,8 @@
-import { parseAppManifest } from "@binette/core";
+import { DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
 import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
 import { iconPath } from "./paths.ts";
-import { DestroyCause, DestroyKind, type MountedApp, type MountOptions, mountApp } from "./mount.ts";
+import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
 
 import type { PrebuiltApp } from "./prebuilt.ts";
 import { mountLiveMode } from "./live.ts";

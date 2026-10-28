@@ -18,7 +18,7 @@ app.stop();
 
 仕様は [docs/spec/regie/](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/regie/README.md) にあります。
 
-`DomOp` は byId・create・text・class・append・remove・listen・icon の判別共用体です。_start と call の操作は完了通知前に一回届きます。空の操作は送らず、call の例外までの操作も送ります。apps.open と finish の要求は、現在の呼び出しの完了後に onOpen / onFinish へ届けます。
+`@binette/core` の `DomOp` は byId・create・text・class・append・remove・listen・icon の判別共用体です。_start と call の操作は完了通知前に一回届きます。空の操作は送らず、call の例外までの操作も送ります。apps.open と finish の要求は、現在の呼び出しの完了後に onOpen / onFinish へ届けます。
 
 LaunchOptions は callTimeout（ミリ秒、既定 5000）、page（省略時は空文字列）、onFinish を持ちます。起動と呼び出しの時間切れは、Worker を終了して reject し、起動後なら onExit で知らせます。
 

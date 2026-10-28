@@ -73,9 +73,9 @@ try {
   Deno.writeTextFileSync(
     join(consumer, "consumer.ts"),
     `import { assertEquals, assertThrows } from "@std/assert";
-import { BINETTE_VERSION, BinetteError, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
+import { BINETTE_VERSION, BinetteError, State, DestroyKind, DestroyCause, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
 import { launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
-import { buildApp, mountApp, State, DestroyKind, DestroyCause, type BuiltApp, type MountedApp } from "@binette/scene";
+import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
 const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
@@ -105,7 +105,7 @@ function createWorker(): RegieWorker {
   };
 }
 
-const batches: import("@binette/regie").DomOp[][] = [];
+const batches: import("@binette/core").DomOp[][] = [];
 const app = await launchApp(built.wasm, {
   createWorker,
   onDom: (ops) => batches.push(ops),

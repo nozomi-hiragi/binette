@@ -39,7 +39,7 @@ Régie（レジ、操作室）はカーネルです。Binette の中身を全部
 | `writePrebuiltApp`（CLI） | 関数 | `@binette/regie/cli` | `@binette/scene/cli` |
 
 - `.binapp` を読むだけの `parsePrebuiltApp` は本体に置きます。ブラウザの OS はビルドせず、`.binapp` を読むだけだからです
-- `State`・`DestroyKind`・`DestroyCause`・`DomOp` は core に移します（[core.md](../core.md#ライフサイクルの番号案)）
+- `State`・`DestroyKind`・`DestroyCause`・`DomOp` は core で公開しています（実装済み。[core.md](../core.md#ライフサイクルの番号案)）
 
 ## 依存
 

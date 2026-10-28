@@ -12,3 +12,5 @@ export type { AppEntry, AppManifest, AppPermission } from "./app.ts";
 export { parseAppManifest } from "./app.ts";
 export { BinetteError, parseBinette } from "./parse.ts";
 export { BINETTE_VERSION } from "./schema.ts";
+export { DestroyCause, DestroyKind, State } from "./lifecycle.ts";
+export type { DomOp } from "./dom.ts";

@@ -2,6 +2,7 @@
 
 ## v0.2.0（未リリース）
 
+- Régie の `DomOp` と Scene の `State`・`DestroyKind`・`DestroyCause` を `@binette/core` へ移す。Régie・Scene からの export はやめる
 - Scene に `isInstalled(window)`、ShellOptions に `installed`、MountedShell に OS 用の `requireInstall(reason)` を追加。display-mode の 3 つと iPhone の standalone で判定し、change・appinstalled に追従する。fullscreen だけではインストール済みにしない
 - ライブモードではホームバーの上の右下に透かし、バーの右端に「インストール」を表示。beforeinstallprompt があれば prompt、無ければ OS の dialog に手順と閉じるボタンを出す。requireInstall は同じ枠に理由を文字として添え、ライブなら false、インストール済みなら true を返す。保存の扱いは変えない（表示と API の形は案）
 - ルートの OS にマニフェストと自作の B の SVG、本番だけ登録する手書きの Service Worker を追加。版付きキャッシュに最低限のシェルを入れ、navigate はネット優先、同じオリジンのほかの GET は stale-while-revalidate。別オリジンと GET 以外には触らず、古い binette- キャッシュを消す。開発では登録しない（キャッシュの形は案）

@@ -1,4 +1,5 @@
-import type { DomOp, OsSnapshot } from "./launch.ts";
+import type { DomOp } from "@binette/core";
+import type { OsSnapshot } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
