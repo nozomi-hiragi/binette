@@ -74,7 +74,7 @@ try {
     join(consumer, "consumer.ts"),
     `import { assertEquals, assertThrows } from "@std/assert";
 import { BINETTE_VERSION, BinetteError, State, DestroyKind, DestroyCause, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
-import { launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
+import { startProcess, type Process, type ProcessOptions, launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
 import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
@@ -125,8 +125,17 @@ const manifest: AppManifest = parseAppManifest(JSON.stringify({ id: "t", name: "
 const options: LaunchOptions = { onDom: (ops) => void ops, callTimeout: 5000, page: "consumer", onFinish: () => {} };
 const launch: (wasm: Uint8Array) => Promise<RegieApp> = (wasm) => launchApp(wasm, options);
 const build: (read: (path: string) => Promise<string>) => Promise<BuiltApp> = (read) => buildApp(read);
-const mount: (element: HTMLElement, built: BuiltApp) => Promise<MountedApp> = mountApp;
-const destroy = (mounted: MountedApp): Promise<void> => mounted.destroy(DestroyKind.System, DestroyCause.Stack);
+const mount: (element: HTMLElement, html: string, process: Process) => MountedApp = mountApp;
+const processOptions: ProcessOptions = { createWorker, stopDelay: 10000 };
+const process = await startProcess(built.wasm, processOptions);
+const processBatches: import("@binette/core").DomOp[][] = [];
+process.attach(ops => { if (ops.length) processBatches.push(ops); });
+assertEquals(process.state, State.None);
+await process.begin();
+assertEquals(process.state, State.Resume);
+assertEquals(processBatches, batches);
+const destroy = (process: Process): Promise<void> => process.destroy(DestroyKind.System, DestroyCause.Stack);
+await destroy(process);
 assertEquals(State.Resume, 3);
 const c: Coulisses = createCoulisses();
 void [manifest, launch, build, mount, destroy, c];

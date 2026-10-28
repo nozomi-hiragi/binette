@@ -10,7 +10,7 @@ Régie（レジ、操作室）はカーネルです。Binette の中身を全部
 | --- | --- | --- |
 | アプリの AS を WASM にビルドし、`.binapp` に書き出す。検証もここに足す | 実装済み・今は Scene。Régie へ移す | [build.md](build.md) |
 | アプリの WASM を Worker で動かし、呼び出しを受ける | 実装済み | [run.md](run.md) |
-| 1 アプリ分の状態の移り変わり、時間切れ、最後の状態、イベントを届けるか | 実装済み・今は Scene。Régie へ移す | [process.md](process.md) |
+| 1 アプリ分の状態の移り変わり、時間切れ、最後の状態、イベントを届けるか | 実装済み | [process.md](process.md) |
 | インストール、ホームの選び方、スタック、閉じる、落ちたとき、権限、OS の設定、ページで起きたこと | 実装済み・今は Scene。Régie へ移す | [system.md](system.md) |
 | インストール済みアプリと OS の記録の保存 | 実装済み | [store.md](store.md) |
 
@@ -31,7 +31,7 @@ Régie（レジ、操作室）はカーネルです。Binette の中身を全部
 | 名前 | 種類 | 入口 | 今 |
 | --- | --- | --- | --- |
 | `startSystem`・`SystemOptions`・`SystemApp`・`SystemUi`・`SystemView`・`BinetteSystem` | 関数・型 | `@binette/regie` | 無い（Scene の `mountShell` の中） |
-| `startProcess`・`ProcessOptions`・`Process` | 関数・型 | `@binette/regie` | 無い（Scene の `mountApp` の中） |
+| `startProcess`・`ProcessOptions`・`Process` | 関数・型 | `@binette/regie` | `@binette/regie` |
 | `launchApp`・`serveApp`・`LaunchOptions`・`RegieApp`・`RegieWorker`・`WorkerScope`・`OsSnapshot` | 関数・型 | `@binette/regie` | 同じ |
 | `createMemoryAppStore`・`createIndexedDbAppStore`・`installedAppKey`・`DEFAULT_SYSTEM_SETTINGS`・`validateSystemSettings` と保存の型 | 関数・型 | `@binette/regie` | 同じ |
 | `parsePrebuiltApp`・`stringifyPrebuiltApp`・`PrebuiltApp` | 関数・型 | `@binette/regie` | `@binette/scene` |

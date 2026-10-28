@@ -1,8 +1,8 @@
 import { DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
-import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "@binette/regie";
+import { startProcess, type Process, type ProcessOptions, type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "@binette/regie";
 import { type BuildOptions, buildApp } from "./build.ts";
 import { iconPath } from "./paths.ts";
-import { type MountedApp, type MountOptions, mountApp } from "./mount.ts";
+import { type MountedApp, mountApp } from "./mount.ts";
 
 import type { PrebuiltApp } from "./prebuilt.ts";
 import { mountLiveMode } from "./live.ts";
@@ -14,7 +14,7 @@ export type ShellApp = { source: string } & (
 );
 
 /** 枠の設定 */
-export interface ShellOptions extends BuildOptions, Pick<MountOptions, "onError" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout"> {
+export interface ShellOptions extends BuildOptions, Pick<ProcessOptions, "onError" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout"> {
   apps: ShellApp[];
   store: AppStore;
   /** 最初の落ちからこの時間（ミリ秒、既定 5000）を過ぎてもホームが落ちるなら、Apps を出す */
@@ -113,7 +113,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     return now - homeFailingSince < settings.homeRetryWindow;
   };
   let stopped = false;
-  type Session = { controller: AbortController; mounted?: MountedApp; host: HTMLElement; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
+  type Session = { controller: AbortController; mounted?: Process; view?: MountedApp; host: HTMLElement; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
   let shown = 0;
   const sessions = new Set<Session>();
   let active: Session | undefined;
@@ -132,6 +132,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
     if (active === session) active = undefined;
     session.controller.abort();
     session.mounted?.stop();
+    session.view?.stop();
     session.host.remove();
     sessions.delete(session);
     renderBar();
@@ -332,7 +333,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
         time: record.time, name: available.get(record.app)?.manifest.name ?? record.app,
       })) : [];
       if (!sessions.has(started) || stopped) return;
-      const mounted = await mountApp(host, installed, {
+      const mounted = await startProcess(installed.wasm, {
         createWorker: options.createWorker,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
@@ -357,12 +358,12 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
           if (started.mounted) void close(started, DestroyKind.User, DestroyCause.App);
         },
         ...(atSettings ? {
-          os: { settings: { ...settings, home: home?.key ?? settings.home }, homes: homes.map(app => ({ id: app.key, name: app.manifest.name })), launches },
+          grants: { os: { settings: { ...settings, home: home?.key ?? settings.home }, homes: homes.map(app => ({ id: app.key, name: app.manifest.name })), launches } },
           onSet: setSetting,
           onSetHome(i: number) { void selectHome(i).catch(report); },
         } : {}),
         ...(atHome ? {
-          apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })),
+          grants: { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) },
           onOpen(i: number) {
             if (active !== started || !Number.isInteger(i) || !apps[i]) return;
             void show(apps[i]!, false);
@@ -370,6 +371,12 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
         } : {}),
       });
       if (!sessions.has(started) || stopped) { mounted.stop(); return; }
+      started.view = mountApp(host, installed.html, mounted, {
+        apps: atHome ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
+        onError: error => { if (sessions.has(started)) report(error); },
+      });
+      await mounted.begin();
+      if (!sessions.has(started) || stopped) { mounted.stop(); started.view.stop(); return; }
       started.mounted = mounted;
       mounted.setStopDelay(settings.stopDelay);
       started.startedAt = performance.now();

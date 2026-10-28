@@ -1,7 +1,8 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
-import { buildApp, mountApp } from "../src/index.ts";
+import { buildApp } from "../src/index.ts";
+import { mountStartedApp } from "./mount-helper.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const files: Record<string, string> = {
@@ -45,7 +46,7 @@ Deno.test("document の同じ id は同じ Element で、クリックの current
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
   const errors: unknown[] = [];
-  const mounted = await mountApp(element, built, { createWorker, onError: e => errors.push(e) });
+  const mounted = await mountStartedApp(element, built, { createWorker, onError: e => errors.push(e) });
   try {
     assert(!mounted.app.exports.includes("__bina_event"));
     const button = element.querySelector<HTMLButtonElement>("button")!;
@@ -84,7 +85,7 @@ launch(new TestApp());
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never); const opened: number[] = [];
   const icon = '<svg><script>bad()</script></svg>';
-  const mounted = await mountApp(element, built, { createWorker, apps: [{ id: "a", name: "一", icon }, { id: "b", name: "二" }], onOpen: i => opened.push(i) });
+  const mounted = await mountStartedApp(element, built, { createWorker, apps: [{ id: "a", name: "一", icon }, { id: "b", name: "二" }], onOpen: i => opened.push(i) });
   try {
     const button = element.querySelector<HTMLButtonElement>("button")!;
     assertEquals(button.type, "button"); assertEquals(button.className, "tile"); assertEquals(button.textContent, "あ");
@@ -106,7 +107,7 @@ export function mark(): void { document.getElementById("mark").className = "acti
   const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<svg id="mark"></svg><p id="after"></p>', "main.ts": source }[path]!), { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
-  const mounted = await mountApp(element, built, { createWorker });
+  const mounted = await mountStartedApp(element, built, { createWorker });
   try {
     // ブラウザの SVG の className は読み取り専用の SVGAnimatedString。happy-dom は書けるので、同じにする
     Object.defineProperty(element.querySelector("#mark")!, "className", { get: () => ({ baseVal: "" }) });
@@ -140,7 +141,7 @@ launch(new TestApp());
   element.id = "host"; const outside = window.document.createElement("p"); outside.id = "same"; outside.textContent = "外";
   const missing = window.document.createElement("p"); missing.id = "missing"; missing.textContent = "外";
   window.document.body.append(outside, missing, element as never);
-  const mounted = await mountApp(element, built, { createWorker });
+  const mounted = await mountStartedApp(element, built, { createWorker });
   try {
     assertEquals(outside.textContent, "外"); assertEquals(missing.textContent, "外"); assertEquals(element.querySelector("p")!.textContent, "内");
     element.querySelector("p")!.remove(); const replacement = window.document.createElement("p"); replacement.id = "same"; element.append(replacement as never);
@@ -166,7 +167,7 @@ class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
 launch(new TestApp());`;
   const built = await buildApp(path => Promise.resolve({ ...files, "main.ts": source }[path]!), { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
-  const errors: unknown[] = []; const mounted = await mountApp(element, built, { createWorker, onError: e => errors.push(e) });
+  const errors: unknown[] = []; const mounted = await mountStartedApp(element, built, { createWorker, onError: e => errors.push(e) });
   try {
     assertEquals(errors.length, 7); assertEquals(element.querySelector(".bad"), null);
     await mounted.app.call("next"); assertEquals(element.querySelector("p")!.textContent, "続く");
@@ -187,7 +188,7 @@ for (const phase of ["ready", "create", "mounted"] as const) {
     const emit = (type: string, event: unknown) => listeners.get(type)?.(event as never);
     let terminated = 0;
     const built = await buildApp(read, { libraries });
-    const mounting = mountApp(element, built, {
+    const mounting = mountStartedApp(element, built, {
       createWorker: () => ({
         postMessage(message) { messages.push(message); },
         addEventListener(type, listener) { listeners.set(type, listener as (event: never) => void); },
@@ -197,7 +198,7 @@ for (const phase of ["ready", "create", "mounted"] as const) {
     });
     emit("message", { data: { type: "ready", exports: ["initialize", "increment"] } });
     if (phase !== "ready") await waitFor(() => messages.length === 2);
-    let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
+    let mounted: Awaited<ReturnType<typeof mountStartedApp>> | undefined;
     try {
       if (phase === "mounted") {
         emit("message", { data: { type: "dom", ops: [{ op: "byId", handle: 1, id: "button" }, { op: "listen", handle: 1, type: "click", listener: 0 }] } });
@@ -231,7 +232,7 @@ for (const phase of ["ready", "create", "mounted"] as const) {
 Deno.test("byId のリスナーは登録時の要素だけに付き、停止で外れる", async () => {
   const built = await buildApp(read, { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;
-  const mounted = await mountApp(element, built, { createWorker });
+  const mounted = await mountStartedApp(element, built, { createWorker });
   try {
     const original = element.querySelector<HTMLButtonElement>("button")!;
     let removed = 0;

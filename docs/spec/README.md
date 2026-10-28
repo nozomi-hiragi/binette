@@ -92,7 +92,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | 仕様 | 今のコードの場所 |
 | --- | --- |
 | [regie/build.md](regie/build.md) | `packages/scene/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` |
-| [regie/process.md](regie/process.md) | `packages/scene/src/mount.ts` の状態・時間・保存・イベントの判断 |
+| [regie/process.md](regie/process.md) | `packages/regie/src/process.ts` の状態・時間・保存・イベントの判断 |
 | [regie/system.md](regie/system.md) | `packages/scene/src/shell.ts` の判断 |
 | [core.md のライフサイクルの番号と DomOp](core.md#ライフサイクルの番号案) | 実装済み。`packages/core/src/lifecycle.ts`・`dom.ts` |
 | [scene/mount.md](scene/mount.md)・[scene/shell.md](scene/shell.md) | 同じファイルの表示の部分 |
