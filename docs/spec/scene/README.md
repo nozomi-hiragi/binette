@@ -37,7 +37,7 @@ Scene（システム UI）
 | `isInstalled` | 関数 | ページがインストール済みか | 同じ |
 | `ShellOptions`・`MountedShell`・`ShellUi`・`MountedApp` | 型 | 上の設定と結果 | 一部同じ |
 
-ビルドと `.binapp` の関数（`buildApp`・`loadCompiler`・`parsePrebuiltApp`・`stringifyPrebuiltApp` と CLI）、`State`・`DestroyKind`・`DestroyCause` は Scene から外します。
+ビルドと `.binapp` の関数（`buildApp`・`loadCompiler`・`parsePrebuiltApp`・`stringifyPrebuiltApp` と CLI）は Scene から外します。`State`・`DestroyKind`・`DestroyCause` はもう Scene から外し、`@binette/core` で公開しています。
 
 ## 依存
 
