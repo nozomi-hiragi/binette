@@ -32,6 +32,7 @@ export interface SystemView {
   instances: { id: number; key: string; name: string; home: boolean; closing: boolean }[];
   front: number | "apps" | undefined;
   apps: { key: string; name: string }[];
+  clearError: boolean;
 }
 
 /** 起動したシステム */
@@ -93,10 +94,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const sessions = new Set<Session>();
   let active: Session | undefined;
   let hiding: Session | undefined;
-  let lastError: unknown;
   const report = (error: unknown) => {
     if (stopped) return;
-    lastError = error;
     options.ui.report(error);
   };
   const cut = (session: Session) => {
@@ -169,13 +168,13 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }
     renderBar();
   };
-  function renderBar() {
+  function renderBar(clearError = false) {
     options.ui.update({
       instances: [...sessions].map(s => ({ id: s.id, key: s.installed.key, name: s.installed.manifest.name, home: s.home, closing: s.closing })),
       front: appsShown ? "apps" : active === hiding ? undefined : active?.id,
       apps: [...apps].sort((a, b) => a.manifest.name < b.manifest.name ? -1 : a.manifest.name > b.manifest.name ? 1 : 0).map(app => ({ key: app.key, name: app.manifest.name })),
+      clearError,
     });
-    if (!stopped && lastError !== undefined) options.ui.report(lastError);
   }
   function showApps() {
     if (stopped) return;
@@ -247,12 +246,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     let session = [...sessions].find(s => !s.closing && s.installed.key === installed.key);
     if (session && !session.mounted) return;
     appsShown = false;
-    if (clearStatus) lastError = undefined;
     hiding = undefined;
     if (session) {
       active = session;
       session.lastShown = ++shown;
-      renderBar();
+      renderBar(clearStatus);
       try {
         if (visible && !frozen) await session.mounted!.resume();
       } catch { /* 終了通知が片付ける */ }
@@ -262,7 +260,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const started = session;
     sessions.add(started);
     active = started;
-    renderBar();
+    renderBar(clearStatus);
     try {
       const atSettings = installed.source === "binette:system" && installed.manifest.role === "settings";
       const launches = atSettings ? (await options.store.system.listLaunches()).reverse().map(record => ({

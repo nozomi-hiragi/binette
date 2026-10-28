@@ -44,6 +44,8 @@ interface SystemView {
   front: number | "apps" | undefined;
   /** Apps に並べるアプリ（名前の順） */
   apps: { key: string; name: string }[];
+  /** show でエラー表示を消すときだけ true */
+  clearError: boolean;
 }
 interface BinetteSystem {
   /** ホームを開く。startSystem のあと、システム UI をつないでから呼ぶ。ホームが残っていなければ起動する */

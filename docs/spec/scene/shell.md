@@ -47,8 +47,8 @@ function isInstalled(window: Window | null): boolean
 | Régie から | 大枠がすること |
 | --- | --- |
 | `present(instance, process)` | 置き場の要素（`.bina-shell-app`、ホーム以外は `.bina-shell-content` も）を作り、エラー表示の前に入れ、[mountApp](mount.md) で描く。`remove()` で mountApp を止めて要素を消す |
-| `update(view)` | 前面の置き場だけを見せ、ほかは hidden にする。`front` が `"apps"` なら Apps の一覧を見せる。ホームバーを描き直す |
-| `report(error)` | エラー表示に文を出し、`onError` に知らせる。同じエラーは二度知らせない。前面を変えるときは、次の `update` で消す |
+| `update(view)` | 前面の置き場だけを見せ、ほかは hidden にする。`front` が `"apps"` なら Apps の一覧を見せる。ホームバーを描き直し、`clearError` が true のときだけエラー表示を隠す |
+| `report(error)` | エラー表示に文を出し、`onError` に知らせる。同じオブジェクトは一度だけ知らせ、文字列などは呼ばれるたびに知らせる |
 
 ## ホームバー（案・実装済み）
 

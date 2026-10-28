@@ -116,8 +116,6 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-
-
 Deno.test("ホームが無い・system でないと画面と onError に知らせる", async () => {
   for (const source of ["elsewhere", "binette:system"]) {
     const window = new Window(); const element = elementIn(window); const errors: unknown[] = [];
@@ -575,4 +573,60 @@ Deno.test("createShellUi は bind 前のボタンを無視し、bind で現在�
     window.document.dispatchEvent(new window.Event("visibilitychange"));
     assertEquals(pages.length, 2); assertEquals(element.children.length, 0);
   } finally { ui.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("読み込み・保存の失敗があっても残りを渡し、重複は並べない", async () => {
+  const window = new Window(); const element = elementIn(window); const store = await savedStore(); const worker = workers(); const errors: unknown[] = [];
+  const shell = await mountShell(element, { apps: [homeApp, { source: "bad", read: () => Promise.resolve("{") }, ...apps, apps[1]!],
+    store: { ...store, get(key) { return key === fixtures[0]!.key ? Promise.reject(new Error("保存失敗")) : store.get(key); } },
+    createWorker: worker.createWorker, onError: (e) => errors.push(e) });
+  try {
+    assertEquals(errors.length, 2); assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false); assertEquals(element.querySelectorAll(".home-tile").length, 1);
+    assertEquals(element.querySelector(".home-tile")!.textContent, "設定の写し");
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ホームは system かつ role home の最初のもの。別のホームも一覧に含めない", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
+  const shell = await mountShell(element, { apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore(), createWorker: worker.createWorker });
+  try { assertEquals(element.querySelectorAll(".home-tile").length, 1); }
+  finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("フォルダ外の icon は読まずに拒む", async () => {
+  const window = new Window(); const element = elementIn(window); const reads: string[] = []; const errors: unknown[] = []; const worker = workers(); const app = apps[0]!;
+  const shell = await mountShell(element, { apps: [homeApp, { source: app.source, async read(path) {
+    reads.push(path); const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
+  } }], store: createMemoryAppStore(), libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
+  try { assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.querySelectorAll(".home-tile").length, 0); }
+  finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭打ちになり、「ホーム」で最初に戻る", async () => {
+  const window = new Window(); const element = elementIn(window); const times: number[] = [];
+  const shell = await mountShell(element, { apps: [homeApp, ...apps], store: createMemoryAppStore(), homeRetryWindow: 2600,
+    createWorker() {
+      times.push(performance.now());
+      const held = heldWorker();
+      queueMicrotask(() => held.emit({ type: "failed", message: "ホームの失敗" }));
+      return held.createWorker();
+    } });
+  try {
+    // 100 → 200 → 400 → 800 → 1000 の待ちで起動し直し、2.6 秒の窓を過ぎたら Apps
+    await waitFor(() => !element.querySelector<HTMLElement>(".bina-shell-apps")!.hidden);
+    const gaps = times.slice(1).map((time, i) => time - times[i]!);
+    assert(gaps.length >= 5, `起動し直した回数が少なすぎます: ${gaps.length}`);
+    for (const [i, gap] of gaps.entries()) {
+      const least = Math.min(100 * 2 ** i, 1000);
+      assert(gap >= least - 5, `${i} 回目の待ちが短すぎます: ${gap}`);
+      // 1000ms で頭打ちになり、それより大きく延びない
+      if (least === 1000) assert(gap < 1900, `待ちが頭打ちになっていません: ${gap}`);
+    }
+    // 「ホーム」で数え直すと、待ちも 100ms に戻る
+    const before = times.length;
+    element.querySelector<HTMLButtonElement>("[aria-label=ホームを開く]")!.click();
+    await waitFor(() => times.length >= before + 2);
+    assert(times[before + 1]! - times[before]! < 600, `待ちが戻っていません: ${times[before + 1]! - times[before]!}`);
+  } finally { shell.stop(); await window.happyDOM.close(); }
 });

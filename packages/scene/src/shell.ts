@@ -97,7 +97,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     },
     update(view) {
       if (stopped) return;
-      if (typeof view.front === "number") status.hidden = true;
+      if (view.clearError) status.hidden = true;
       front = view.front;
       for (const [id, entry] of hosts) entry.host.hidden = id !== front;
       appsHost.hidden = front !== "apps";
@@ -144,7 +144,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       root.remove();
     },
   };
-  ui.update({ instances: [], front: undefined, apps: [] });
+  ui.update({ instances: [], front: undefined, apps: [], clearError: false });
   return ui;
 }
 

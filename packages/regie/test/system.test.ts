@@ -66,13 +66,21 @@ async function build(code = source, home = false) {
 /** プロセスの出力と置き場の寿命だけを記録する偽 UI */
 function output() {
   const records = new Map<number, { id: number; process: Process; text: Map<string, string>; listeners: Map<string, number>; connected: boolean }>();
-  let view: SystemView = { instances: [], front: undefined, apps: [] };
+  let view: SystemView = { instances: [], front: undefined, apps: [], clearError: false };
+  let homeApps: { id: string; name: string; icon?: string }[] | undefined;
   const errors: unknown[] = [];
-  const reported = new Set<unknown>();
+  const reported = new WeakSet<object>();
   const ui: SystemUi = {
     update(value) { view = value; },
-    report(error) { if (!reported.has(error)) { reported.add(error); errors.push(error); } },
+    report(error) {
+      if (typeof error === "object" && error !== null) {
+        if (reported.has(error)) return;
+        reported.add(error);
+      }
+      errors.push(error);
+    },
     present(instance, process) {
+      if (instance.home) homeApps = instance.apps;
       const record = { id: instance.id, process, text: new Map<string, string>(), listeners: new Map<string, number>(), connected: true };
       const ids = new Map<number, string>();
       process.attach((ops: DomOp[]) => {
@@ -86,7 +94,7 @@ function output() {
       return { remove() { record.connected = false; process.attach(() => {}); } };
     },
   };
-  return { ui, errors, get view() { return view; }, get active() { return records.get(view.front as number)!; } };
+  return { ui, errors, get homeApps() { return homeApps; }, get view() { return view; }, get active() { return records.get(view.front as number)!; } };
 }
 type Output = ReturnType<typeof output>;
 type RecordOutput = Output["active"];
@@ -226,7 +234,6 @@ Deno.test("隠れたインスタンスの Stop の例外はスタックから外
     assertEquals(element.view.instances.find(instance => instance.name === "A"), undefined);
     assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
     assert((errors[0] as Error).message.includes("背面の失敗"));
-    assertEquals(element.errors.length > 0, true);
   } finally { shell.stop(); }
 });
 
@@ -288,9 +295,10 @@ Deno.test("read は同じ版を再ビルドせず、版が変われば保存し�
     return { ...fixtures[0]!, manifest: parseAppManifest(await read("app.json")) };
   };
   const cached = apps.map((app) => ({ ...app, async read(path: string) { assertEquals(path, "app.json"); return await app.read(path); } }));
-  let shell = await startSystem({ ui: element.ui, apps: [homeApp, ...cached], store, build });
+  let shell = await startSystem({ ui: element.ui, apps: [homeApp, ...cached], store, build, createWorker });
   try {
-    assertEquals(builds, 0); assertEquals(element.view.apps.length, 2);
+    await shell.openHome();
+    assertEquals(builds, 0); assertEquals(element.homeApps!.map(app => app.name), ["設定", "設定の写し"]);
     shell.stop();
     const app = apps[0]!;
     shell = await startSystem({ ui: element.ui, apps: [homeApp, { ...app, async read(path) {
@@ -316,11 +324,11 @@ Deno.test("prebuilt は compiler を使わず毎回保存し、installedAt を�
 Deno.test("読み込み・保存の失敗があっても残りを渡し、重複は並べない", async () => {
   const element = output(); const store = await savedStore(); const errors = element.errors;
   const shell = await startSystem({ ui: element.ui, apps: [homeApp, { source: "bad", read: () => Promise.resolve("{") }, ...apps, apps[1]!],
-    store: { ...store, get(key) { return key === fixtures[0]!.key ? Promise.reject(new Error("保存失敗")) : store.get(key); } },
+    store: { ...store, get(key) { return key === fixtures[0]!.key ? Promise.reject(new Error("保存失敗")) : store.get(key); } }, createWorker,
      });
   try {
-    assertEquals(errors.length, 2); assertEquals(element.errors.length > 0, true); assertEquals(element.view.apps.length, 1);
-    assertEquals(element.view.apps[0]!.name, "設定の写し");
+    await shell.openHome();
+    assertEquals(errors.length, 2); assertEquals(element.homeApps!.map(app => app.name), ["設定の写し"]);
   } finally { shell.stop(); }
 });
 
@@ -329,7 +337,7 @@ Deno.test("ホームは system かつ role home の最初のもの。別のホ�
   const element = output();
   const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
   const shell = await startSystem({ ui: element.ui, createWorker, apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore() });
-  try { await shell.openHome(); assertEquals(element.view.apps.length, 1); assertEquals(element.view.instances.find(instance => instance.home)!.key, installedAppKey(homeApp.source, builtHome.manifest.id)); }
+  try { await shell.openHome(); assertEquals(element.homeApps!.map(app => app.name), ["設定"]); assertEquals(element.view.instances.find(instance => instance.home)!.key, installedAppKey(homeApp.source, builtHome.manifest.id)); }
   finally { shell.stop(); }
 });
 
@@ -338,9 +346,21 @@ Deno.test("フォルダ外の icon は読まずに拒む", async () => {
   const element = output(); const reads: string[] = []; const errors = element.errors; const app = apps[0]!;
   const shell = await startSystem({ ui: element.ui, apps: [homeApp, { source: app.source, async read(path) {
     reads.push(path); const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
-  } }], store: createMemoryAppStore() });
-  try { assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.view.apps.length, 0); }
+  } }], store: createMemoryAppStore(), createWorker });
+  try { await shell.openHome(); assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.homeApps, []); }
   finally { shell.stop(); }
+});
+
+Deno.test("文字列のエラーは後続の update で再通知しない", async () => {
+  const element = output();
+  const shell = await startSystem({ ui: element.ui, apps: [homeApp, { source: "bad", read: () => Promise.reject("設定の失敗") }],
+    createWorker, store: createMemoryAppStore() });
+  try {
+    assertEquals(element.errors, ["設定の失敗"]);
+    await shell.openHome();
+    await shell.openHome();
+    assertEquals(element.errors, ["設定の失敗"]);
+  } finally { shell.stop(); }
 });
 
 Deno.test("保存した home が無ければ system のホームを使う", async () => {
