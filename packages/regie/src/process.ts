@@ -98,8 +98,6 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     });
   };
   let mounting = true;
-  let starting = true;
-  let beginning = false;
   let exitError: Error | undefined;
   let cleanup = () => {};
   let sink: ((ops: DomOp[]) => void) | undefined;
@@ -119,7 +117,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       exitError = error;
       reported.add(error);
       cleanup();
-      if (!starting && !beginning) options.onExit?.(error);
+      if (!mounting) options.onExit?.(error);
     },
     ...(options.grants?.apps === undefined ? {} : { apps: options.grants?.apps.map(({ id, name }) => ({ id, name })) }),
     onOpen(i) { openings.push(i); notifyRequests(); },
@@ -214,7 +212,6 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       }).catch(reportCall);
     },
     async begin() {
-      beginning = true;
       try {
         await enqueue(async () => {
           await lifecycle(State.Create, last.state, Number(last.done));
@@ -224,9 +221,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
           await lifecycle(State.Resume);
           accepting = true;
         });
-      } catch (error) { beginning = false; stop(); throw error; }
+      } catch (error) { stop(); throw error; }
       if (exitError) { stop(); throw exitError; }
-      beginning = false;
       mounting = false;
       notifyRequests();
     },
@@ -271,6 +267,5 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     setStopDelay(delay) { stopDelay = delay; },
     stop,
   };
-  starting = false;
   return process;
 }

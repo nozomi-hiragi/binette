@@ -47,7 +47,7 @@ listen は click だけ本物のリスナーを付ける。それ以外は onErr
 
 リスナーは `process.dispatch(listener)` を呼ぶだけです。Pause・Stop・Destroy のクリックを捨てる、起動の途中のクリックを Resume まで待たせる、といった判断はプロセスがします（[regie/process.md](../regie/process.md#イベントを届けるか)）。
 
-`stop()` で全リスナーを外す。アプリが終了したときも呼ぶ側が `stop()` を呼ぶ。stop は描いた HTML は消さない。DOM は element.ownerDocument から辿る。
+`stop()` で全リスナーを外す。mountApp はプロセスの終わりを見ないので、プロセスが終わる経路ではどれも、呼ぶ側が MountedApp の `stop()` も呼ぶ: `onExit` を受けたとき、`begin()` が reject したとき、`process.destroy()` が終わったとき、`process.stop()` を呼ぶとき。Binette のシステム UI は、置き場を消すときにプロセスと MountedApp の両方を止める。stop は描いた HTML は消さない。DOM は element.ownerDocument から辿る。
 
 ## まだしていないこと
 
