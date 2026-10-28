@@ -16,7 +16,7 @@ app.stop();
 
 テストは、ルートの `deno task test` で行います。
 
-仕様は [docs/spec/regie.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/regie.md) にあります。
+仕様は [docs/spec/regie/](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/regie/README.md) にあります。
 
 `DomOp` は byId・create・text・class・append・remove・listen・icon の判別共用体です。_start と call の操作は完了通知前に一回届きます。空の操作は送らず、call の例外までの操作も送ります。apps.open と finish の要求は、現在の呼び出しの完了後に onOpen / onFinish へ届けます。
 

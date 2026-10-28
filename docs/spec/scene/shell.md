@@ -17,7 +17,7 @@ interface ShellUiOptions {
   onError?: (error: unknown) => void;
 }
 interface ShellUi extends SystemUi {
-  /** ボタンとページの知らせを Régie のシステムにつなぐ */
+  /** ボタンとページの知らせを Régie のシステムにつなぎ、今のページの様子を setPage で一度渡す。bind の前に押されたボタンは何もしない */
   bind(system: BinetteSystem): void;
   /** インストール済みなら true。ライブモードなら理由と手順を表示して false */
   requireInstall(reason: string): boolean;
@@ -37,6 +37,7 @@ function mountShell(element: HTMLElement, options: ShellOptions): Promise<Mounte
 function isInstalled(window: Window | null): boolean
 ```
 
+- `mountShell` は `createShellUi` → `startSystem({ ...options, ui })` → `ui.bind(system)` → `system.openHome()` の順に呼びます。startSystem はホームを開く前に解決するので、ホームの起動中のボタンとページの知らせも Régie に届きます（[regie/system.md](../regie/system.md#api案)）
 - `mountShell` の使い方は今と同じです。ルートの `src/main.ts` は変わりません
 - DOM は element から辿り、グローバルの document は使いません
 
@@ -52,7 +53,7 @@ function isInstalled(window: Window | null): boolean
 
 - 「ホーム」と、スタックのホーム以外のインスタンスの名前と「×」を並べる。閉じている途中のものは出さない
 - 名前のボタンは `aria-pressed` で前面かを示す。aria-label は「名前を開く」「名前を閉じる」「ホームを開く」。バー自体は「ホームバー」
-- 押されたら Régie の `openHome()`・`open(key)`・`close(id)` を呼ぶだけ
+- 押されたら Régie の `openHome()`・`open(key)`（`SystemView.instances` の key）・`close(id)` を呼ぶだけ
 - ホームバーはホームと Apps でも表示する。ライブモードなら右端に「インストール」を出す
 - バーの操作と見た目は案（[lifecycle.md](../lifecycle.md#ホームバー案実装済み)）
 

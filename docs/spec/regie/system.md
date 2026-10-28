@@ -37,13 +37,14 @@ interface SystemUi {
 }
 interface SystemView {
   /** スタック。並びはホームバーに出す順 */
-  instances: { id: number; name: string; home: boolean; closing: boolean }[];
+  instances: { id: number; key: string; name: string; home: boolean; closing: boolean }[];
   /** 前面。"apps" は Apps の一覧 */
   front: number | "apps" | undefined;
   /** Apps に並べるアプリ（名前の順） */
   apps: { key: string; name: string }[];
 }
 interface BinetteSystem {
+  /** ホームを開く。startSystem のあと、システム UI をつないでから呼ぶ。ホームが残っていなければ起動する */
   openHome(): Promise<void>;
   open(key: string): Promise<void>;
   close(id: number): Promise<void>;
@@ -54,6 +55,8 @@ interface BinetteSystem {
 function startSystem(options: SystemOptions): Promise<BinetteSystem>
 ```
 
+- `startSystem` は、インストールと設定の読み込みとホームの選択までを済ませて解決します。ホームはまだ開きません。呼ぶ側はシステム UI をつなぎ（ボタンとページの知らせ）、今のページの様子を `setPage` で渡してから `openHome()` を呼びます。ホームの起動中に押されたボタンやページの知らせも、そのまま受けられるようにするためです
+- `instances` の `key` は installedAppKey です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
 - `read` を渡したアプリがあるときだけ、`@binette/regie/build` を dynamic import してビルドします。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
 - 文字の表示や DOM は一切持ちません。`SystemUi` を差し替えれば、DOM なしでテストできます
@@ -76,7 +79,7 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 
 ## 開く・戻る・閉じる
 
-- 起動したらホームを開く。ホームには、ホーム候補以外のアプリを渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
+- `openHome()` でホームを開く（最初の 1 回も呼ぶ側が呼ぶ）。ホームには、ホーム候補以外のアプリを渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
 - ホームの `apps.open(i)` や `open(key)` で、そのアプリを前面に出す。元の前面は Pause にし、置き場とプロセスを残す（隠すのはシステム UI）。Pause なら Resume、Stop なら Start(Stop) → Resume。無ければインスタンスを作る
 - 同じアプリの Destroy が終わる前に次のインスタンスを作らない。起動の途中で離れたら、未完成のインスタンスを残さない
 - ホームも含め既定 3 インスタンスまで残す。超えたら前面以外で最後に前面に出た順に片付け、Stop → Destroy（System・Stack）を通す
@@ -119,6 +122,6 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 ページの知らせ（visibilitychange・freeze・resume）を受けるのはシステム UI です。システム UI は、知らせが来るたびに `document.visibilityState` を確かめ、`{ visible, frozen }` を `setPage` でシステムに渡します。どう移すかはシステムが決めます。
 
 - システムごとに crypto.randomUUID() で一つの識別子を作り、ホームを含む全アプリに同じ page を渡す。保存はしない
-- hidden なら前面のアプリを Pause にし、visible なら Resume にする。blur・focus だけでは移さない
+- 見えていて、しかも凍結していないときだけ、前面のアプリを Resume にする。hidden のときと凍結のときは Pause にする。blur・focus だけでは移さない
 - freeze で全インスタンスの Stop までの計時を止め、resume で残りから続ける。状態の Pause・Resume は前面だけを対象にする
 - 凍結が解けても見えていなければ Resume にしない（resume は前面に戻った知らせではないため）。Stop から戻るなら Start(Stop) → Resume。起動中にページが隠れた場合も、起動後に Pause にする

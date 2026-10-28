@@ -104,10 +104,10 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | `@binette/core` | `valibot@1.5.0`（npm） |
 | `@binette/regie` | `@binette/core`（型だけ） |
 | `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`（npm） |
-
-分け直したあとは、`assemblyscript` は `@binette/regie` の `build` の入口に移り、`@binette/scene` は `@binette/core` と `@binette/regie` だけになります（案）。
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
+
+分け直したあとは、`assemblyscript` は `@binette/regie` の `build` の入口に移り、`@binette/scene` は `@binette/core` と `@binette/regie` だけになります（案）。
 
 テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
 
