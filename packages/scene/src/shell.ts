@@ -1,5 +1,4 @@
 import { startSystem, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "@binette/regie";
-import { type BuildOptions, buildApp } from "./build.ts";
 import { mountApp } from "./mount.ts";
 import { mountLiveMode } from "./live.ts";
 
@@ -9,7 +8,7 @@ export interface ShellUiOptions {
   onError?: (error: unknown) => void;
 }
 /** 枠の設定 */
-export interface ShellOptions extends Omit<SystemOptions, "ui">, BuildOptions, ShellUiOptions {}
+export interface ShellOptions extends Omit<SystemOptions, "ui">, ShellUiOptions {}
 /** 描画した枠 */
 export interface MountedShell {
   requireInstall(reason: string): boolean;
@@ -153,7 +152,7 @@ export async function mountShell(element: HTMLElement, options: ShellOptions): P
   const previous = [...element.childNodes];
   const ui = createShellUi(element, options);
   try {
-    const system = await startSystem({ ...options, ui, build: options.build ?? (read => buildApp(read, options)) });
+    const system = await startSystem({ ...options, ui });
     ui.bind(system);
     await system.openHome();
     return { requireInstall: ui.requireInstall, stop() { system.stop(); ui.stop(); } };

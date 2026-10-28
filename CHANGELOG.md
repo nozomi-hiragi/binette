@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- `@binette/scene` の `buildApp`・`loadCompiler`・`BuildOptions`・`BuiltApp`・`Compiler`・`CompilerStream` を `@binette/regie/build` へ、`parsePrebuiltApp`・`stringifyPrebuiltApp`・`PrebuiltApp` を `@binette/regie` へ、`@binette/scene/cli` を `@binette/regie/cli` へ移す。`SystemOptions.build` を削除し、Scene は assemblyscript に依存しなくなる
+
 - Scene の `mountShell` が持っていたインストール・設定・ホーム選択・スタック・再起動・権限・ページ状態の判断を Régie の `startSystem` に移す。Scene に表示用の `createShellUi`・`ShellUi`・`ShellUiOptions` を追加し、`ShellApp` を Régie の `SystemApp` に変更。Régie に `SystemOptions`・`SystemUi`・`SystemView`・`BinetteSystem` を追加し、ビルドを移すまでは `SystemOptions.build` で渡す
 
 - Scene の `mountApp(element, built, options)`・`MountOptions`・`MountedApp` の形から、Régie の `startProcess`・`Process` と Scene の `mountApp(element, html, process, options)` に移す

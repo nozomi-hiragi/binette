@@ -45,7 +45,13 @@ jobs:
               [ "$branch" = main ] && label="main（現行）"
               links="$links<li><a href=\"./$branch/\">$label</a></li>"
             elif [ -f "$dir/deno.json" ]; then
-              (cd "$dir" && deno doc --html --name=Binette --output="$RUNNER_TEMP/site/$branch" packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
+              (
+                cd "$dir"
+                entries=(packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
+                [ ! -f packages/regie/src/build.ts ] || entries+=(packages/regie/src/build.ts)
+                [ ! -f packages/regie/src/cli.ts ] || entries+=(packages/regie/src/cli.ts)
+                deno doc --html --name=Binette --output="$RUNNER_TEMP/site/$branch" "${entries[@]}"
+              )
               label="$branch"
               [ "$branch" = main ] && label="main（現行）"
               links="$links<li><a href=\"./$branch/\">$label</a></li>"

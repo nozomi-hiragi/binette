@@ -1,6 +1,6 @@
 /// <reference path="./env.d.ts" />
-import { createIndexedDbAppStore } from "@binette/regie";
-import { mountShell, parsePrebuiltApp } from "@binette/scene";
+import { createIndexedDbAppStore, parsePrebuiltApp } from "@binette/regie";
+import { mountShell } from "@binette/scene";
 
 // Service Worker は本番の OS だけが持つ。アプリには登録する呼び出しを渡さない
 if (import.meta.env.PROD && "serviceWorker" in navigator) {

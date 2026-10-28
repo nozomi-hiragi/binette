@@ -13,7 +13,7 @@ type SystemApp = { source: string } & (
   | { read: (path: string) => Promise<string>; prebuilt?: never }
   | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string }; read?: never }
 );
-interface SystemOptions {
+interface SystemOptions extends BuildOptions {
   apps: SystemApp[];
   store: AppStore;
   callTimeout?: number; // ミリ秒、既定 5000
@@ -25,8 +25,6 @@ interface SystemOptions {
   createWorker?: ProcessOptions["createWorker"];
   /** 見せ方を受け持つ側。Scene のシステム UI が渡す */
   ui: SystemUi;
-  /** ビルドを Régie に移すまで Scene から渡す */
-  build?: (read: (path: string) => Promise<string>) => Promise<Pick<InstalledApp, "manifest" | "html" | "wasm">>;
 }
 /** Régie がシステム UI に頼むこと */
 interface SystemUi {
@@ -61,7 +59,7 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 
 - `startSystem` は、インストールと設定の読み込みとホームの選択までを済ませて解決します。ホームはまだ開きません。呼ぶ側はシステム UI をつなぎ（ボタンとページの知らせ）、今のページの様子を `setPage` で渡してから `openHome()` を呼びます。ホームの起動中に押されたボタンやページの知らせも、そのまま受けられるようにするためです
 - `instances` の `key` は installedAppKey です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
-- ビルドを Régie に移すまでは、`read` のアプリをビルドする関数を一時的に `build` で渡します。`SystemOptions` は `BuildOptions` を継承せず、Scene の `mountShell` がビルド設定を使った `buildApp` を渡し、必要なときだけ呼びます。`prebuilt` だけなら asc を読みません
+- `SystemOptions` は `BuildOptions` を継承し、`compiler` と `libraries` を受け取ります。`read` のアプリをビルドするときだけビルドの入口を dynamic import します。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
 - 文字の表示や DOM は一切持ちません。`SystemUi` を差し替えれば、DOM なしでテストできます
 

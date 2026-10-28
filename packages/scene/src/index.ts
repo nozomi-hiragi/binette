@@ -1,14 +1,10 @@
 /**
- * Scene。アプリのパッケージを読み、AS をビルドし、HTML を描いてアプリとつなぐ。
+ * Scene。HTML を描き、アプリとシステム UI をつなぐ。
  *
  * @packageDocumentation
  */
-export type { BuildOptions, BuiltApp, Compiler, CompilerStream } from "./build.ts";
-export { buildApp, loadCompiler } from "./build.ts";
 export type { MountedApp, MountOptions } from "./mount.ts";
 export { mountApp } from "./mount.ts";
 export type { ShellOptions, MountedShell, ShellUiOptions, ShellUi } from "./shell.ts";
 export { isInstalled } from "./live.ts";
 export { mountShell, createShellUi } from "./shell.ts";
-export type { PrebuiltApp } from "./prebuilt.ts";
-export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";

@@ -32,7 +32,7 @@ Deno.test("CLI build は .binapp を書き、manifest と SVG が一致する", 
   const root = new URL("../../..", import.meta.url);
   try {
     const out = `${dir}/apps/settings.binapp`;
-    const command = new Deno.Command(Deno.execPath(), { args: ["run", "-A", "packages/scene/src/cli.ts", "build", "apps/settings", "--out", out,
+    const command = new Deno.Command(Deno.execPath(), { args: ["run", "-A", "packages/regie/src/cli.ts", "build", "apps/settings", "--out", out,
       "--replique", "packages/replique/src/index.ts"], cwd: root });
     const result = await command.output();
     assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));

@@ -56,7 +56,8 @@ try {
           "@binette/core": "../packages/core/src/index.ts",
           "@binette/regie": "../packages/regie/src/index.ts",
           "@binette/scene": "../packages/scene/src/index.ts",
-          "@binette/scene/cli": "../packages/scene/src/cli.ts",
+          "@binette/regie/build": "../packages/regie/src/build.ts",
+          "@binette/regie/cli": "../packages/regie/src/cli.ts",
           "@std/path": "jsr:@std/path@^1.1.6",
           "@binette/coulisses": "../packages/coulisses/src/index.ts",
           "@binette/replique": "../packages/replique/src/index.ts",
@@ -75,7 +76,23 @@ try {
     `import { assertEquals, assertThrows } from "@std/assert";
 import { BINETTE_VERSION, BinetteError, State, DestroyKind, DestroyCause, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
 import { startSystem, createMemoryAppStore, type SystemUi, type SystemView, startProcess, type Process, type ProcessOptions, launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
-import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
+import { buildApp, loadCompiler, type BuildOptions, type BuiltApp, type Compiler, type CompilerStream } from "@binette/regie/build";
+import { writePrebuiltApp } from "@binette/regie/cli";
+import { parsePrebuiltApp, stringifyPrebuiltApp, type PrebuiltApp } from "@binette/regie";
+import { mountApp, type MountedApp } from "@binette/scene";
+import * as scene from "@binette/scene";
+
+for (const name of ["buildApp", "loadCompiler", "parsePrebuiltApp", "stringifyPrebuiltApp"]) assertEquals(name in scene, false);
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedBuildOptions = import("@binette/scene").BuildOptions;
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedBuiltApp = import("@binette/scene").BuiltApp;
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedCompiler = import("@binette/scene").Compiler;
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedCompilerStream = import("@binette/scene").CompilerStream;
+// @ts-expect-error Scene からプリビルドの型は公開しない
+type RemovedPrebuiltApp = import("@binette/scene").PrebuiltApp;
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
 const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
@@ -92,6 +109,12 @@ const files: Record<string, string> = {
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
 const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique } });
 assertEquals(built.manifest.id, "example.counter");
+const prebuilt: PrebuiltApp = parsePrebuiltApp(stringifyPrebuiltApp(built));
+assertEquals(prebuilt, built);
+const buildOptions: BuildOptions = {};
+const compiler: Promise<Compiler> = loadCompiler();
+const stream: CompilerStream = (await compiler).createMemoryStream();
+void [writePrebuiltApp, buildOptions, stream];
 
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();

@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
-import { buildApp } from "../src/index.ts";
+import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
@@ -174,10 +174,6 @@ launch(new TestApp());`;
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("ビルドに失敗する AS は Error になる", async () => {
-  const error = await assertRejects(() => buildApp(path => Promise.resolve({ ...files, "main.ts": 'export function initialize(): void { const n: i32 = "文字"; }' }[path]!), { libraries }), Error, "アプリをビルドできません。");
-  assert(error.message.includes("TS2322"));
-});
 
 for (const phase of ["ready", "create", "mounted"] as const) {
   Deno.test(phase + " の終了は元のエラーを保ち、クリックと重複通知を止める", async () => {

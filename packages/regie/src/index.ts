@@ -13,3 +13,5 @@ export type { ProcessOptions, Process } from "./process.ts";
 export { startProcess } from "./process.ts";
 export type { SystemApp, SystemOptions, SystemUi, SystemView, BinetteSystem } from "./system.ts";
 export { startSystem } from "./system.ts";
+export type { PrebuiltApp } from "./prebuilt.ts";
+export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";

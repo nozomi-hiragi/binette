@@ -1,4 +1,6 @@
 import { DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
+import type { BuildOptions } from "./build.ts";
+import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
 import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
@@ -9,15 +11,13 @@ export type SystemApp = { source: string } & (
 );
 
 /** システムの設定 */
-export interface SystemOptions extends Pick<ProcessOptions, "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout"> {
+export interface SystemOptions extends Pick<ProcessOptions, "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
   store: AppStore;
   ui: SystemUi;
   homeRetryWindow?: number;
   stackSize?: number;
   historyLimit?: number;
-  /** ビルドを Régie に移すまで、Scene から渡す一時的な入口 */
-  build?: (read: (path: string) => Promise<string>) => Promise<Pick<InstalledApp, "manifest" | "html" | "wasm">>;
 }
 
 /** システムが見せ方を受け持つ側に頼むこと */
@@ -49,10 +49,6 @@ const HOME_RESTART_MAX = 1000;
 
 /** インストールと設定とホームの選択を済ませる。ホームは openHome で開く */
 export async function startSystem(options: SystemOptions): Promise<BinetteSystem> {
-  const requireBuild = () => {
-    if (!options.build) throw new Error("read のアプリには build を指定してください。");
-    return options.build;
-  };
   const settings = { ...DEFAULT_SYSTEM_SETTINGS };
   for (const key of ["stackSize", "historyLimit", "callTimeout", "stopDelay", "destroyTimeout", "homeRetryWindow"] as const) {
     if (options[key] !== undefined) settings[key] = options[key];
@@ -123,7 +119,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       } else if (!installed || installed.manifest.version !== manifest.version) {
         const path = iconPath(manifest.icon);
         // app.json は最初に読んだものを使う
-        const built = await requireBuild()((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path));
+        const { buildApp } = await import("./build.ts");
+        const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), options);
         const icon = path === undefined ? undefined : await app.read(path);
         installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
@@ -369,29 +366,4 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       for (const session of sessions) cut(session);
     },
   };
-}
-
-/**
- * app.json のフォルダ内の相対パスに揃える。外に出るパスは受け付けない。
- * `%2e%2e` のようなエンコードは URL で読むと `..` になるので、`%` を含むパスも受け付けない
- */
-function appPath(path: string): string | null {
-  if (path.includes("%") || path.startsWith("/") || path.includes("\\") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path)) return null;
-  const parts: string[] = [];
-  for (const part of path.split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") {
-      if (!parts.length) return null;
-      parts.pop();
-    } else parts.push(part);
-  }
-  return parts.join("/");
-}
-
-/** アイコンのパスを整える。指定が無ければ読まない */
-function iconPath(icon?: string): string | undefined {
-  if (icon === undefined) return undefined;
-  const path = appPath(icon);
-  if (!path) throw new Error("アプリのアイコンは app.json のフォルダ内の相対パスにしてください。");
-  return path;
 }

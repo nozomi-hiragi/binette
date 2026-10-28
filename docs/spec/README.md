@@ -87,27 +87,17 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 ### 今のコードとの差
 
-分け直しは途中です。仕様は分け直したあとの形で書き、今の場所を各ファイルに書いています。
-
-| 仕様 | 今のコードの場所 |
-| --- | --- |
-| [regie/build.md](regie/build.md) | `packages/scene/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` |
-| [regie/process.md](regie/process.md) | `packages/regie/src/process.ts` の状態・時間・保存・イベントの判断 |
-| [regie/system.md](regie/system.md) | `packages/regie/src/system.ts` の判断。ビルドは一時的に呼び出し側から渡す |
-| [core.md のライフサイクルの番号と DomOp](core.md#ライフサイクルの番号案) | 実装済み。`packages/core/src/lifecycle.ts`・`dom.ts` |
-| [scene/mount.md](scene/mount.md)・[scene/shell.md](scene/shell.md) | 同じファイルの表示 |
+分け直しは実装済みです。
 
 ### 今の依存（実装済み）
 
 | パッケージ | 依存 |
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0`（npm） |
-| `@binette/regie` | `@binette/core`（型だけ） |
-| `@binette/scene` | `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`（npm） |
+| `@binette/regie` | `@binette/core`、`assemblyscript@0.28.20`（ビルドのみ）、`@std/path`（CLI のみ） |
+| `@binette/scene` | `@binette/core`、`@binette/regie` |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
-
-分け直したあとは、`assemblyscript` は `@binette/regie` の `build` の入口に移り、`@binette/scene` は `@binette/core` と `@binette/regie` だけになります（案）。
 
 テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
 

@@ -1,9 +1,10 @@
 # @binette/scene
 
-Binette のアプリを読み、AssemblyScript をブラウザの中で WASM にビルドし、HTML を描いてアプリとつなぎます。依存は `@binette/core`、`@binette/regie`、`assemblyscript` です。
+Binette のアプリの HTML を描き、アプリとシステム UI をつなぎます。依存は `@binette/core`、`@binette/regie` です。
 
 ```ts
-import { buildApp, mountApp } from "@binette/scene";
+import { mountApp } from "@binette/scene";
+import { buildApp } from "@binette/regie/build";
 import { startProcess } from "@binette/regie";
 
 // app.json からの相対パスを受けて、ファイルの中身を返す関数
@@ -31,10 +32,7 @@ await process.begin();
 
 | 名前 | 用途 |
 | --- | --- |
-| `buildApp` / `loadCompiler` | 開発用のブラウザ内ビルド |
 | `mountApp` / `createShellUi` / `mountShell` | アプリの描画とシステム UI、起動の枠 |
-| `PrebuiltApp` | manifest・HTML・任意の SVG・WASM |
-| `stringifyPrebuiltApp` / `parsePrebuiltApp` | `.binapp` の書き出しと読み込み |
 
 Régie の `SystemApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system` など）。
 
@@ -49,7 +47,7 @@ deno task start
 `deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを見つけ、`.binapp/<フォルダ名>.binapp` を生成します。フォルダを足すだけでシステムアプリが増えます。生成物はコミットしません。任意のアプリは次で書き出せます。
 
 ```sh
-deno run -A packages/scene/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス>
+deno run -A packages/regie/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス>
 ```
 
 Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` です。`deno task build` は `dist/` に、サブパスでも動く静的ファイルを書き出します。保存は IndexedDB を使います。
