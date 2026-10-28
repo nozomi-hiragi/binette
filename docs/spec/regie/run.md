@@ -1,20 +1,8 @@
-# @binette/regie
+# Régie: 実行
 
-[仕様の目次](README.md)
+[Régie の目次](README.md)
 
-Régie（レジ、操作室）はカーネルです。アプリの WASM を Worker で動かし、アプリからの呼び出しを受けます。画面は持ちません。`@binette/core` の型を使います。
-
-## 役割（案）
-
-- アプリの実行（Worker ＋ WASM）
-- 権限の判断。システムアプリ `apps/settings` から、アプリごとに権限を取り消せる
-- アプリごとのストレージ。ほかのアプリからは読めない。容量の上限を持つ
-- インストール済みアプリの保存（実装済み。下の `AppStore`）。ハッシュや権限の記録はまだ無い
-- アプリのデータは、アプリごとにまとめて書き出せる形で持つ。バックアップのときは、それを Coulisses に送る
-- 動いているアプリの数に上限を持ち、裏に回ったアプリは止められる。状態はストレージから戻す前提にする
-- アプリは Régie が渡した呼び出ししか使えない。ネットワークや DOM に直接は触れない
-
-今のコードには、アプリの実行、DOM 操作・ホーム用の呼び出しの受け口、インストール済みアプリの保存があります（実装済み、呼び出しの形は案）。
+アプリの WASM を Worker で動かし、アプリからの呼び出しを受ける部分です。1 つのアプリを動かす一番下の層で、状態の移り変わり（[process.md](process.md)）はこの上に載ります。今のコードでは `packages/regie/src/launch.ts`・`worker.ts` にあります（場所は変えません）。
 
 ## 実行の流れ（実装済み）
 
@@ -32,7 +20,7 @@ Régie（レジ、操作室）はカーネルです。アプリの WASM を Work
 ```
 
 - 1 つの Worker で 1 つのアプリを動かします
-- 状態の通知は Scene が HTML を描き終えてから `__bina_lifecycle` で呼びます（[scene/mount.md](scene/mount.md#mountapp)）
+- 状態の通知は、Scene が HTML を描き終えてから、プロセス（[process.md](process.md)）が `__bina_lifecycle` で呼びます
 - メッセージは届いた順に処理されます。呼び出し中の `dom` は、その呼び出しの `done` より先に届きます
 
 ## API（実装済み）
@@ -89,7 +77,7 @@ interface OsSnapshot {
 - `onDom` は `dom` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
 - `onExit` は起動後にアプリが終了したときだけ呼びます。`stop()` や `signal` では呼びません
 - `onError` は終了しない `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
-- `os` は設定アプリに渡す起動時の写しです。渡す条件は Scene が確認します。省略した場合の os.* は例外でアプリを終了します。API と範囲は [Réplique](replique.md#設定アプリの-os案実装済み) を参照してください。onSet はメッセージが来たとき、onSetHome は呼び出しの完了後に通知します。Scene はさらに状態の通知と起動の完了を待ってホームを変更します
+- `os` は設定アプリに渡す起動時の写しです。渡す条件はシステム（[system.md](system.md#権限)）が確かめます。省略した場合の os.* は例外でアプリを終了します。API と範囲は [Réplique](../replique.md#設定アプリの-os案実装済み) を参照してください。onSet はメッセージが来たとき、onSetHome は呼び出しの完了後に通知します。プロセスはさらに状態の通知と起動の完了を待って知らせ、システムがホームを変更します
 
 ### RegieWorker
 
@@ -192,14 +180,14 @@ Worker → メインスレッド:
 
 ### ビルドのしかた
 
-- AssemblyScript を `--exportStart _start --exportRuntime` でビルドします（Scene の `buildApp` がそうする。[scene/build.md](scene/build.md#buildapp)）
+- AssemblyScript を `--exportStart _start --exportRuntime` でビルドします（`buildApp` がそうする。[build.md](build.md#buildapp)）
 - `--exportStart` を付けると、トップレベルの初期化（グローバル変数の初期値、トップレベルの文）は WASM の start 節ではなく、export `_start` になります。Régie は instance を作り終えてから `_start` を呼びます。初期化の中で `document` の操作をしても文字列を読めるようにするためです
 - `_start` が無い WASM も起動できます（その場合は呼ばない）
 - メモリは `memory` という名前で export されている必要があります（AS の既定）
 
 ### import
 
-Régie が WASM に渡すのは `binette` の [Réplique の import](replique.md#wasm-import案実装済み) と `env.abort(message, fileName, line, column)` です（案・実装済み）。abort の文字列は AS のポインタで、0 なら無しです。ほかの import はリンクに失敗します。
+Régie が WASM に渡すのは `binette` の [Réplique の import](../replique.md#wasm-import案実装済み) と `env.abort(message, fileName, line, column)` です（案・実装済み）。abort の文字列は AS のポインタで、0 なら無しです。ほかの import はリンクに失敗します。
 
 ページの識別子は init で受け取り、`app.page` から返します。Last 用の `app.lastPage`・`app.lastKind`・`app.lastCause` は init の last から返します。省略時は空文字列・0・0 です。文字列は既存の `__new` で確保して返します。
 
@@ -209,7 +197,7 @@ Régie が WASM に渡すのは `binette` の [Réplique の import](replique.md
 
 `apps.open` と `app.finish` の import は即時にメッセージを送ります。メインは ready または待つ call の完了まで要求を保留し、DOM 操作が届いたあとに onOpen / onFinish を呼びます。同じ呼び出しの finish は open より優先します。
 
-公開する判別共用体 `DomOp`（案・実装済み）:
+公開する判別共用体 `DomOp`（案・実装済み。core へ移す予定。[core.md](../core.md#domop案)）:
 
 ```ts
 type DomOp =
@@ -224,7 +212,7 @@ type DomOp =
 
 ```
 
-`apps.icon` も apps が無ければ例外、番号の範囲外も例外でアプリを終了します。`__bina_event` と `__bina_lifecycle` は exports 一覧から除かれますが、call では呼べます。Scene は `call("__bina_event", listener)` でイベントを伝えます。
+`apps.icon` も apps が無ければ例外、番号の範囲外も例外でアプリを終了します。`__bina_event` と `__bina_lifecycle` は exports 一覧から除かれますが、call では呼べます。プロセスの `dispatch(listener)` が、届けてよいときだけ `call("__bina_event", listener)` でイベントを伝えます（[process.md](process.md#イベントを届けるか)）。
 
 ### 文字列の読み方
 
@@ -239,68 +227,3 @@ const text = new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, pt
 - `apps.name` と `apps.id` は文字列を返します。export の `__new(文字列のバイト数, 2)` で AS の文字列を確保し、メモリを取り直して UTF-16LE のコード単位を書き、ポインタを返します。クラス ID は 2 です
 - 読むたびに `memory.buffer` を取り直します（メモリが伸びると `buffer` が変わるため）
 
-## AppStore（実装済み）
-
-ビルド結果を保存します。アプリ自身が使うデータのストレージとは別です。
-
-```ts
-interface InstalledApp {
-  key: string;
-  source: string;
-  manifest: AppManifest;
-  icon: string | undefined;
-  html: string;
-  wasm: Uint8Array;
-  installedAt: number;
-}
-interface AppStore {
-  readonly system: SystemStore;
-  list(): Promise<InstalledApp[]>;
-  get(key: string): Promise<InstalledApp | undefined>;
-  put(app: InstalledApp): Promise<void>;
-}
-```
-
-- `installedAppKey(source, id)` は `JSON.stringify([source, id])` を返す。`key` はこれを使う。入手元と ID の区切りが衝突しない形にする
-- `icon` は SVG の文字列。無ければ `undefined`
-- `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ
-- `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
-- `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
-- `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
-
-版を比べてビルドするか決めるのは Scene の `mountShell` です。入手元の検証や権限の確認はまだしません。
-
-## SystemStore（案・実装済み）
-
-AppStore.system で同じ保存先の OS の記録を読み書きします。メモリ版は AppStore ごとに持ち、読み書きで値を写します。IndexedDB 版は同じ DB を v2 に上げ、既存の apps 表を残して system 表を追加します。system は last:<installedAppKey>、launches、settings のキーで最後の状態・履歴・設定を保存します。各書き込みはトランザクションの完了まで待ちます。
-
-```ts
-interface LifecycleRecord {
-  state: number; // Réplique / Scene の State と同じ番号
-  done: boolean;
-  page: string;
-  reason: { kind: number; cause: number }; // DestroyKind・DestroyCause
-}
-interface LaunchRecord { time: number; app: string } // Unix epoch ミリ秒、installedAppKey
-interface SystemSettings {
-  home: string; // installedAppKey。既定 "" は system のホーム
-  stackSize: number; // 既定 3
-  stopDelay: number; // 既定 10000 ミリ秒
-  callTimeout: number; // 既定 5000 ミリ秒
-  destroyTimeout: number; // 既定 5000 ミリ秒
-  historyLimit: number; // 既定 100
-  homeRetryWindow: number; // 既定 5000 ミリ秒
-}
-interface SystemStore {
-  getLast(key: string): Promise<LifecycleRecord | undefined>;
-  putLast(key: string, record: LifecycleRecord): Promise<void>;
-  listLaunches(): Promise<LaunchRecord[]>;
-  recordLaunch(record: LaunchRecord, limit?: number): Promise<void>;
-  getSettings(): Promise<Partial<SystemSettings> | undefined>;
-  putSettings(settings: Partial<SystemSettings>): Promise<void>;
-}
-```
-
-getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。IndexedDB では履歴の読み足しと書き込みを同じトランザクションにし、同時に起動しても失いません。
-
-putSettings は全体を置き換えます。部分的に保存でき、省いた項目は mountShell の既定を使います。home は文字列、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。

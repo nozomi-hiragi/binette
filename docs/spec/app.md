@@ -15,8 +15,8 @@ src/
   main.ts         動き。AS で書き、WASM にビルドする
 ```
 
-- ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Scene の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
-- AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[scene/build.md](scene/build.md#ファイルの解決)）
+- ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Régie の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
+- AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[regie/build.md](regie/build.md#ファイルの解決)）
 
 例: [apps/settings](../../apps/settings)
 
@@ -108,7 +108,7 @@ apps/settings/
 
 - 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜15）で誤りになる
 - パスの形（`..` を含む、絶対 URL など）はまだ確かめない
-- `entry.css` は検査するが、今の Scene は読まない
+- `entry.css` は検査するが、今は読まない
 
 ## Régie が記録するもの（案）
 
@@ -119,7 +119,7 @@ apps/settings/
 - ユーザーが許可した権限
 - 使用量、インストール日時
 
-今は `AppStore` に入手元・manifest・SVG・HTML・WASM・インストール日時を保存します（[regie.md](regie.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
+今は `AppStore` に入手元・manifest・SVG・HTML・WASM・インストール日時を保存します（[regie/store.md](regie/store.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
 
 ## システムアプリ（実装済み）
 
@@ -127,12 +127,12 @@ apps/settings/
 
 ## インストール（案）
 
-システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証はしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[scene/build.md](scene/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
+システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証はしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[regie/build.md](regie/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
 
 追加するアプリのインストールは、次の流れを予定しています。
 
 1. 入手元から `app.json` とソースを GET する
-2. Scene が AS を WASM にビルドする。Réplique は、`app.json` の `binette` の版に合うものを Scene が差し込む（アプリが自分で持ち込まない）
+2. Régie が AS を WASM にビルドする。Réplique は、`app.json` の `binette` の版に合うものを Régie が差し込む（アプリが自分で持ち込まない）
 3. 検証する
    - WASM が import している呼び出しを一覧にし、`permissions` と照合する。宣言にない権限を使っていたら止める
    - HTML に `<script>`・`on*` 属性・外部 URL が無いことを確かめる
@@ -140,15 +140,15 @@ apps/settings/
 5. Régie がビルド結果と記録を保存する
 
 - 更新は同じ入手元からだけ受け付ける。権限が増えていたら、もう一度許可を求める
-- 今の `mountShell` は、最初から渡されたアプリを読む。prebuilt は毎回その内容で `AppStore` に保存し直す（入れた日時は保つ）。開発用の read は、同じ入手元・ID・版が保存済みなら使い回し、無ければビルドして保存する。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う
+- 今のシステム（[regie/system.md](regie/system.md#インストール)。今のコードでは `mountShell`）は、最初から渡されたアプリを読む。prebuilt は毎回その内容で `AppStore` に保存し直す（入れた日時は保つ）。開発用の read は、同じ入手元・ID・版が保存済みなら使い回し、無ければビルドして保存する。2 の Réplique は `binette` の版を見ずに、呼ぶ側が渡したソースを使う
 - 3 の HTML や権限の検証、4 の許可の画面はまだ無い。5 はビルド結果の保存だけ
 - アプリの追加方法は未決。URL からの追加、更新、削除、並べ替えはまだ無い
 
 ## ホームのアイコン（実装済み）
 
-`icon` があれば、`entry` と同じくパスを整えて（`app.json` のフォルダの外は読まない。[scene/shell.md](scene/shell.md#保存とホームの選び方)）SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。
+`icon` があれば、`entry` と同じくパスを整えて（`app.json` のフォルダの外は読まない。[regie/system.md](regie/system.md#インストール)）SVG の文字列を読み、ビルド結果と一緒に保存します。ホームは `data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG を続け、`img.src` に入れます。SVG を `innerHTML` に入れません。名前は `textContent` に入れます。アイコンが無くても名前から開けます。
 
 
 画面は通常の id を document.getElementById で参照し、アプリ自身が変更とクリックを扱います（決定 2026-10-27）。bina 属性の解釈と bina.ts の生成は無くしました。API は [Réplique](replique.md)、まだしていない最初の HTML 検査・setAttribute・style・value・input / click 以外のイベントは [mount.md](scene/mount.md) を見てください。
 
-起動は AS のトップレベルで `App` の派生クラスを `launch` に一回渡します。Scene は `_start` → HTML → onCreate(Last) → onStart(Create) → onResume の順に進めます。最初の画面は onCreate で作り、従来の `export function start()` は呼びません。this.page でページの識別子を読み、this.finish() で自分を閉じられます（[lifecycle.md](lifecycle.md)、[replique.md](replique.md)）。
+起動は AS のトップレベルで `App` の派生クラスを `launch` に一回渡します。OS は `_start` → HTML → onCreate(Last) → onStart(Create) → onResume の順に進めます。最初の画面は onCreate で作り、従来の `export function start()` は呼びません。this.page でページの識別子を読み、this.finish() で自分を閉じられます（[lifecycle.md](lifecycle.md)、[replique.md](replique.md)）。

@@ -2,7 +2,9 @@
 
 [仕様の目次](README.md)
 
-形式の定義です。どの層も共有します。依存は `valibot@1.5.0`（npm）だけです。
+パッケージの共通物です。層ではなく、どのパッケージも参照する形式の定義と約束を置きます（のぞみ 2026-10-28）。動きは持ちません。依存は `valibot@1.5.0`（npm）だけです。
+
+置くのは、2 つ以上のパッケージ（または AS の Réplique）が同じものを使う必要がある型・数値・検査だけです。1 つのパッケージだけが使うものは、そのパッケージに置きます。
 
 ## 公開するもの（実装済み）
 
@@ -11,6 +13,8 @@
 | `AppManifest`・`AppEntry`・`AppPermission` | 型 | `app.json` の中身 |
 | `parseAppManifest` | 関数 | `app.json` を読んで検査する |
 | `BinetteError` | クラス | 形式の誤り |
+| `State`・`DestroyKind`・`DestroyCause` | enum | ライフサイクルの番号（案。今は Scene） |
+| `DomOp` | 型 | アプリの DOM 操作（案。今は Régie） |
 | `Binette` ほか（下の「v0.1 の `.bina`」） | 型 | v0.1 の `.bina` の中身 |
 | `parseBinette` | 関数 | v0.1 の `.bina` を読んで検査する |
 | `BINETTE_VERSION` | 定数 | v0.1 の `.bina` の形式の版。`"0.1"` |
@@ -73,6 +77,34 @@ class BinetteError extends Error {
 
 - 形式の誤りはすべて `code: "invalid_format"` です。`message` は日本語で、利用者に見せてよい文です
 - `app.json` と `.bina` の両方で使います
+
+## ライフサイクルの番号（案）
+
+状態と Destroy の理由の番号の正です。Régie（[process.md](regie/process.md)）が使い、AS の Réplique は同じ番号を自分で書きます（AS は TypeScript のパッケージを読めないため）。番号が合っているかは、Réplique のソースを読むテストで確かめます。今は Scene の `mount.ts` と Réplique に別々に書いてあり、core へ移す予定です。
+
+```ts
+enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
+enum DestroyKind { User, System }
+enum DestroyCause { Os, App, Stack, Update, Uninstall }
+```
+
+意味は [lifecycle.md](lifecycle.md) にあります。
+
+## DomOp（案）
+
+アプリの DOM 操作です。Régie が Worker から受け取り（[run.md](regie/run.md#dom-の配送案実装済み)）、Scene が置き場に反映します（[scene/mount.md](scene/mount.md)）。今は Régie にあり、core へ移す予定です。
+
+```ts
+type DomOp =
+  | { op: "byId"; handle: number; id: string }
+  | { op: "create"; handle: number; tag: string }
+  | { op: "text"; handle: number; value: string }
+  | { op: "class"; handle: number; value: string }
+  | { op: "append"; parent: number; child: number }
+  | { op: "remove"; handle: number }
+  | { op: "listen"; handle: number; type: string; listener: number }
+  | { op: "icon"; handle: number; app: number };
+```
 
 ## v0.1 の `.bina`（v0.1 のまま残しているもの）
 

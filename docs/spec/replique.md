@@ -33,7 +33,7 @@ const counter = new Counter();
 launch(counter);
 ```
 
-HTML は `<p id="count">0</p><button id="increment">+1</button>` とします。Scene は画面を用意してから `onCreate` → `onStart(State.Create)` → `onResume` を呼びます。トップレベルの初期化でも操作できます。`_start` は初期化用なのでアプリには使いません。
+HTML は `<p id="count">0</p><button id="increment">+1</button>` とします。OS は画面を用意してから `onCreate` → `onStart(State.Create)` → `onResume` を呼びます。トップレベルの初期化でも操作できます。`_start` は初期化用なのでアプリには使いません。
 
 ## アプリの状態（実装済み）
 
@@ -65,14 +65,14 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 
 `this.page` は今のページの識別子です。`finish()` は今の呼び出しの完了後、Pause → Stop → Destroy（User・App）でホームに戻します。`onStart` の引数は Create または Stop です。Last は OS が各メソッドの前後に保存した最後の記録です。初回だけ None・done=true・page=""・reason=User/Os です。途中で落ちたメソッドは done=false が残ります。
 
-`__bina_lifecycle` の kind は State、Create の a/b は last.state/last.done、Start の a は前の State、Destroy の a/b は kind/cause です。Last のページと理由は import で受け取ります。Scene が入口に再 export を足し、`__bina_event` と同じく OS から call します。
+`__bina_lifecycle` の kind は State、Create の a/b は last.state/last.done、Start の a は前の State、Destroy の a/b は kind/cause です。Last のページと理由は import で受け取ります。Régie のビルドが入口に再 export を足し、`__bina_event` と同じく OS から call します。
 
 ## API（案・実装済み）
 
 | API | 内容 |
 | --- | --- |
 | `document.getElementById(id: string): Element` | 画面に問い合わせず番号を返す。同じ id は Map から同じ Element オブジェクトを返す |
-| `document.createElement(tag: string): Element` | 呼ぶたびに新しい番号。許可タグは [mount.md](scene/mount.md) |
+| `document.createElement(tag: string): Element` | 呼ぶたびに新しい番号。許可タグは [scene/mount.md](scene/mount.md#要素と操作案実装済み) |
 | `Element.textContent: string` | 書くと子をすべて消して文字だけにする。読むとアプリが最後に書いた文字。まだなら空文字列 |
 | `Element.className: string` | 書くとクラスを変える。読むと最後に書いた値。まだなら空文字列 |
 | `Element.appendChild(child: Element): Element` | 子を追加し、その child を返す |
@@ -82,7 +82,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 | `Event.currentTarget: Element`（readonly） | リスナーを付けた Element |
 | `apps.count(): i32` / `apps.name(i: i32): string` / `apps.id(i: i32): string` / `apps.open(i: i32): void` | ホーム用のアプリ一覧と起動 |
 | `apps.icon(img: Element, i: i32): void` | img に OS が持つアプリアイコンを入れる |
-| `__bina_event(listener: i32): void` | リスナー番号で Event を作って呼ぶ。Scene が入口からの再 export を差し込む |
+| `__bina_event(listener: i32): void` | リスナー番号で Event を作って呼ぶ。Régie のビルドが入口からの再 export を差し込む |
 
 Element の中身は i32 の handle です。id の Map、リスナーと対象要素と種類の配列は Worker の生存中保持し、GC から守ります。`Map<Element, i32>` のキーに使えます。getter は画面に聞かず、HTML の初期値や子の変更から値を計算しません。
 
@@ -148,7 +148,7 @@ export namespace os {
 - async / await、Promise は無い
 - クロージャ（外の変数を使う無名関数）は使えない。コールバックにはトップレベルの関数を渡す
 - アプリから DOM、ネットワーク、`console` などには直接触れない。使えるのは Réplique の呼び出しだけ（Régie がほかの import を渡さないので、使うと起動できない）
-- 例外（`throw`）は、その呼び出しを止め、アプリを終了する。Régie はそれを `onExit` で Scene に知らせる（[regie.md](regie.md#メッセージ実装済み)）
+- 例外（`throw`）は、その呼び出しを止め、アプリを終了する。Régie はそれを受けてインスタンスを片付け、Scene に見せ方を知らせる（[regie/run.md](regie/run.md#メッセージ実装済み)、[regie/system.md](regie/system.md#落ちたとき)）
 
 ## 配布（実装済み）
 
