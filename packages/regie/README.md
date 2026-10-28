@@ -27,4 +27,6 @@ LaunchOptions は callTimeout（ミリ秒、既定 5000）、page（省略時は
 
 LaunchOptions.last で前回の page と Destroy の理由を Worker に渡せます。state・done は Process が Create の引数で渡します。createMemoryAppStore()・createIndexedDbAppStore() の戻り値の system は SystemStore です。getLast / putLast、listLaunches / recordLaunch、getSettings / putSettings で最後の状態・起動の履歴・OS の設定を読み書きできます。IndexedDB は同じ DB の v2 に system 表を追加し、既存の apps 表を残します。設定の既定値は DEFAULT_SYSTEM_SETTINGS です。
 
-`startSystem(options)` はアプリのインストール、設定とホームの選択を済ませ、`BinetteSystem` を返します。`SystemUi` に表示を依頼し、`openHome()`・`open(key)`・`close(id)`・`setPage()`・`stop()` で操作します。`SystemApp` は `{ source, prebuilt }` または `{ source, read }` です。ビルドを Régie に移すまでは、read のビルド関数を `SystemOptions.build` で渡します。
+`startSystem(options)` はアプリのインストール、設定とホームの選択を済ませ、`BinetteSystem` を返します。`SystemUi` に表示を依頼し、`openHome()`・`open(key)`・`close(id)`・`setPage()`・`stop()` で操作します。`SystemApp` は `{ source, prebuilt }` または `{ source, read }` です。read のビルド設定（`compiler`・`libraries`）は `SystemOptions` で渡します。必要なときだけビルドを読み込みます。
+
+`buildApp`・`loadCompiler` とビルドの型は `@binette/regie/build` から、`writePrebuiltApp` は `@binette/regie/cli` から公開します。`.binapp` の `parsePrebuiltApp`・`stringifyPrebuiltApp`・`PrebuiltApp` は `@binette/regie` から公開します。asc はビルド時だけ読みます。

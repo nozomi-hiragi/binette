@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, startProcess } from "../src/index.ts";
 import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
-import { buildApp } from "../../scene/src/build.ts";
+import { buildApp } from "../src/build.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

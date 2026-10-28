@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { buildSystem, systemApps } from "./build-system.ts";
-import { parsePrebuiltApp } from "../packages/scene/src/prebuilt.ts";
+import { parsePrebuiltApp } from "../packages/regie/src/prebuilt.ts";
 
 const replique = new URL("../packages/replique/src/index.ts", import.meta.url).pathname;
 async function app(root: string, name: string): Promise<void> {

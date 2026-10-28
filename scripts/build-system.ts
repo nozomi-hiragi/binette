@@ -1,5 +1,5 @@
 import { resolve } from "@std/path";
-import { writePrebuiltApp } from "../packages/scene/src/cli.ts";
+import { writePrebuiltApp } from "../packages/regie/src/cli.ts";
 
 /** app.json を持つ直下のフォルダを UTF-16 コード単位の辞書順で返す */
 export async function systemApps(root: string): Promise<string[]> {

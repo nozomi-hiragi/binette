@@ -23,7 +23,7 @@ Scene（システム UI）
 | アプリの置き場。HTML を描き、DOM 操作を反映し、クリックを Régie に渡す | 実装済み | [mount.md](mount.md) |
 | 大枠。ホームバー、Apps の一覧、エラー表示、ライブモード、CSS 変数。ページの知らせを Régie に渡す | 実装済み | [shell.md](shell.md) |
 
-今のコードの Scene には、ビルド（Régie へ移す。[regie/build.md](../regie/build.md)）も入っています。スタックやホームの選び方と状態の移り変わりは Régie にあります。
+ビルド、スタック、ホームの選び方と状態の移り変わりは Régie にあります（[regie/build.md](../regie/build.md)）。
 
 ## 公開するもの
 
@@ -37,7 +37,7 @@ Scene（システム UI）
 | `isInstalled` | 関数 | ページがインストール済みか | 同じ |
 | `ShellOptions`・`ShellUiOptions`・`MountedShell`・`ShellUi`・`MountedApp` | 型 | 上の設定と結果 | 同じ |
 
-ビルドと `.binapp` の関数（`buildApp`・`loadCompiler`・`parsePrebuiltApp`・`stringifyPrebuiltApp` と CLI）は Scene から外します。`State`・`DestroyKind`・`DestroyCause` はもう Scene から外し、`@binette/core` で公開しています。
+ビルドと `.binapp` の関数は Régie で公開しています。`State`・`DestroyKind`・`DestroyCause` はもう Scene から外し、`@binette/core` で公開しています。
 
 ## 依存
 

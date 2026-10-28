@@ -1,7 +1,8 @@
 import { assert, assertEquals } from "@std/assert";
 import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
-import { buildApp, mountShell, createShellUi } from "../src/index.ts";
+import { mountShell, createShellUi } from "../src/index.ts";
+import { buildApp } from "@binette/regie/build";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };

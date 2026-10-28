@@ -16,11 +16,11 @@
     ]
   },
   "tasks": {
-    "check": "deno check src/main.ts scripts/*.test.ts packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno check --no-config public/sw.js && deno run -A npm:assemblyscript@0.28.20/bin/asc.js packages/replique/src/index.ts --noEmit",
+    "check": "deno check src/main.ts scripts/*.test.ts packages/core/src/index.ts packages/regie/src/index.ts packages/regie/src/build.ts packages/regie/src/cli.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno check --no-config public/sw.js && deno run -A npm:assemblyscript@0.28.20/bin/asc.js packages/replique/src/index.ts --noEmit",
     "check-pack": "deno run -A scripts/check-pack.ts",
     "check-version": "deno run --allow-read scripts/check-version.ts",
     "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",
-    "docs": "deno doc --html --name=Binette --output=site packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts",
+    "docs": "deno doc --html --name=Binette --output=site packages/core/src/index.ts packages/regie/src/index.ts packages/regie/src/build.ts packages/regie/src/cli.ts packages/scene/src/index.ts packages/coulisses/src/index.ts",
     "test": "deno run --allow-read scripts/check-version.ts && deno test -A",
     "start": "deno task build:system && deno run -A --node-modules-dir=auto npm:vite@8.3.4 --port 5175",
     "build": "deno task build:system && deno run -A --node-modules-dir=auto npm:vite@8.3.4 build",

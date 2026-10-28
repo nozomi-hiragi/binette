@@ -14,6 +14,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@binette/core": `${here}/packages/core/src/index.ts`,
+      "@binette/regie/build": `${here}/packages/regie/src/build.ts`,
+      "@binette/regie/cli": `${here}/packages/regie/src/cli.ts`,
       "@binette/regie": `${here}/packages/regie/src/index.ts`,
       "@binette/scene": `${here}/packages/scene/src/index.ts`,
     },

@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { parseAppManifest, type DomOp } from "@binette/core";
 import { createMemoryAppStore, installedAppKey, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
 import asc from "assemblyscript/asc";
+import { loadCompiler, type Compiler } from "../src/build.ts";
 
 const replique = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -289,31 +290,45 @@ function heldWorker() {
 
 Deno.test("read は同じ版を再ビルドせず、版が変われば保存し直す", async () => {
   const element = output(); const store = await savedStore();
-  let builds = 0;
-  const build = async (read: (path: string) => Promise<string>) => {
-    builds++;
-    return { ...fixtures[0]!, manifest: parseAppManifest(await read("app.json")) };
-  };
+  const asc = await loadCompiler(); let builds = 0;
+  const compiler: Compiler = { ...asc, main(argv, options) { builds++; return asc.main(argv, options); } };
   const cached = apps.map((app) => ({ ...app, async read(path: string) { assertEquals(path, "app.json"); return await app.read(path); } }));
-  let shell = await startSystem({ ui: element.ui, apps: [homeApp, ...cached], store, build, createWorker });
+  let shell = await startSystem({ ui: element.ui, apps: [homeApp, ...cached], store, compiler, createWorker });
   try {
     await shell.openHome();
     assertEquals(builds, 0); assertEquals(element.homeApps!.map(app => app.name), ["設定", "設定の写し"]);
     shell.stop();
     const app = apps[0]!;
     shell = await startSystem({ ui: element.ui, apps: [homeApp, { ...app, async read(path) {
-      const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), version: "0.2.0" }) : text;
-    } }], store, build });
+      if (path === "app.json") return JSON.stringify({ ...JSON.parse(await app.read(path)), version: "0.2.0" });
+      return path === "main.ts" ? source : "";
+    } }], store, compiler, libraries: { "jsr:@binette/replique": replique } });
     assertEquals(builds, 1); assertEquals((await store.get(fixtures[0]!.key))!.manifest.version, "0.2.0");
   } finally { shell.stop(); }
 });
 
 
+Deno.test("startSystem の compiler と libraries を read のアプリのビルドに使う", async () => {
+  const element = output(); const store = await savedStore();
+  const asc = await loadCompiler(); let builds = 0;
+  const compiler: Compiler = { ...asc, main(argv, options) { builds++; return asc.main(argv, options); } };
+  const manifest = { ...fixtures[0]!.manifest, version: "0.2.0" };
+  const files: Record<string, string> = { "app.json": JSON.stringify(manifest), "index.html": "<p>更新</p>", "main.ts": source };
+  const shell = await startSystem({ ui: element.ui, store, apps: [homeApp, { source: fixtures[0]!.source, read: path => Promise.resolve(files[path]!) }],
+    compiler, libraries: { "jsr:@binette/replique": replique } });
+  try {
+    assertEquals(element.errors, []); assertEquals(builds, 1);
+    const saved = await store.get(fixtures[0]!.key);
+    assertEquals(saved!.manifest.version, "0.2.0"); assertEquals(saved!.html, "<p>更新</p>");
+    assert(WebAssembly.validate(saved!.wasm as Uint8Array<ArrayBuffer>));
+  } finally { shell.stop(); }
+});
+
 Deno.test("prebuilt は compiler を使わず毎回保存し、installedAt を保つ", async () => {
   const element = output(); const store = await savedStore();
-  const build = () => { throw new Error("ビルド不要"); };
+  const compiler: Compiler = { main() { throw new Error("ビルド不要"); }, createMemoryStream() { throw new Error("ビルド不要"); } };
   const fixture = fixtures[0]!; const changed = { ...fixture, html: "更新した HTML", manifest: { ...fixture.manifest, version: "0.3.0" } };
-  const shell = await startSystem({ ui: element.ui, apps: [homeApp, { source: fixture.source, prebuilt: changed }], store, build });
+  const shell = await startSystem({ ui: element.ui, apps: [homeApp, { source: fixture.source, prebuilt: changed }], store, compiler });
   try {
     const saved = (await store.get(fixture.key))!;
     assertEquals(saved.html, changed.html); assertEquals(saved.manifest.version, "0.3.0"); assertEquals(saved.installedAt, 1);

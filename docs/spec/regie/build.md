@@ -2,7 +2,7 @@
 
 [Régie の目次](README.md)
 
-アプリの AS を WASM にし、インストールできる形にする部分です。どのコードを動かしてよいかの検証もここに足していきます（今は検証をしていません。[下](#検証案)）。ビルドはカーネルの仕事とします（のぞみ 2026-10-28）。今のコードでは `packages/scene/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` にあり、Régie へ移す予定です。
+アプリの AS を WASM にし、インストールできる形にする部分です。どのコードを動かしてよいかの検証もここに足していきます（今は検証をしていません。[下](#検証案)）。ビルドはカーネルの仕事とします（のぞみ 2026-10-28）。実装は `packages/regie/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` にあります。
 
 ## loadCompiler
 
@@ -119,14 +119,14 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Régie 
 公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; icon?: string; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
 
 ```sh
-deno run -A packages/scene/src/cli.ts build apps/settings --out .binapp/settings.binapp --replique packages/replique/src/index.ts
+deno run -A packages/regie/src/cli.ts build apps/settings --out .binapp/settings.binapp --replique packages/replique/src/index.ts
 ```
 
-今の CLI は `packages/scene/src/cli.ts` にあり、移したあとは `packages/regie/src/cli.ts`（入口 `@binette/regie/cli`）になります。CLI は `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはインストールと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
+CLI は `packages/regie/src/cli.ts`（入口 `@binette/regie/cli`）にあります。CLI は `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはインストールと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
 
 `deno task build:system`（`scripts/build-system.ts`）は `apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/<フォルダ名>.binapp` に書き出します。app.json の無いフォルダは無視します。古い `.binapp` は書き出す前に消し、失敗時はフォルダ名を出して終了コード 1 にします。フォルダ名は UTF-16 コード単位の辞書順（`<`・`>`）で比べます。このフォルダは gitignore に入れ、生成物はコミットしません。`deno task start` と `deno task build` は先にこのタスクを実行します。Binette は Vite の `import.meta.glob` で同梱した `.binapp` を fetch し、ブラウザでは asc を読みません。
 
-## 入口（案）
+## 入口（実装済み）
 
 asc は大きいので、ビルドは `@binette/regie/build` という別の入口から公開します。CLI は `@binette/regie/cli` です。`@binette/regie` の本体だけを読む利用者（ビルド済みの `.binapp` だけを使う OS など）は asc を読みません。今も `loadCompiler` は初回だけ dynamic import するので、ビルドしなければ読み込みません。
 
