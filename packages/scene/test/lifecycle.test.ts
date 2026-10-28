@@ -1,8 +1,9 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
-import { DestroyCause, DestroyKind, State } from "@binette/core";
-import { buildApp, mountApp, mountShell } from "../src/index.ts";
+import { State } from "@binette/core";
+import { buildApp, mountShell } from "../src/index.ts";
+import { mountStartedApp } from "./mount-helper.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -65,55 +66,15 @@ const activeHost = (element: HTMLElement) => element.querySelector<HTMLElement>(
 const logOf = (element: HTMLElement | null) => (element?.querySelector(".bina-shell") ? activeHost(element) : element)?.querySelector("#log")?.textContent;
 const click = (element: HTMLElement, id: string) => (element.querySelector(".bina-shell") ? activeHost(element) : element).querySelector<HTMLButtonElement>(`#${id}`)!.click();
 
-Deno.test("起動の順と Last、Pause・Stop のクリック抑止、Stop から Start と Resume", async () => {
-  const window = new Window(); const element = host(window);
-  const mounted = await mountApp(element, await build(), { createWorker, stopDelay: 40, page: "ページ🏠" });
-  try {
-    assertEquals(mounted.state, State.Resume);
-    assertEquals(logOf(element), "create:0;start:1;resume;");
-    assertEquals(element.querySelector("#page")!.textContent, "ページ🏠");
-    await mounted.pause(); await mounted.pause();
-    click(element, "click"); await sleep(10);
-    assertEquals(logOf(element), "create:0;start:1;resume;pause;");
-    await mounted.resume();
-    assertEquals(logOf(element), "create:0;start:1;resume;pause;resume;");
-    await mounted.pause();
-    await waitFor(() => mounted.state === State.Stop && logOf(element)!.endsWith("stop;"));
-    click(element, "click"); await sleep(10);
-    assert(!logOf(element)!.includes("click;"));
-    await mounted.resume(); await mounted.resume();
-    assert(logOf(element)!.endsWith("stop;start:5;resume;"));
-    click(element, "click"); await waitFor(() => logOf(element)!.endsWith("click;"));
-    await mounted.destroy(DestroyKind.System, DestroyCause.Stack);
-    assert(logOf(element)!.endsWith("click;pause;stop;destroy:1:2;"));
-    assertEquals(mounted.state, State.Destroy);
-    const previous = logOf(element); click(element, "click"); await sleep(10); assertEquals(logOf(element), previous);
-  } finally { mounted.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("Stop までの残り時間は freeze の間は減らず、resume から続ける", async () => {
-  const window = new Window(); const element = host(window);
-  const mounted = await mountApp(element, await build(), { createWorker, stopDelay: 200 });
-  try {
-    await mounted.pause(); await sleep(50); mounted.setFrozen(true);
-    await sleep(250); assertEquals(mounted.state, State.Pause);
-    mounted.setFrozen(false); await sleep(80); assertEquals(mounted.state, State.Pause);
-    await waitFor(() => logOf(element)!.endsWith("stop;"));
-    assertEquals(mounted.state, State.Stop);
-    // stop は状態の通知を追加しない
-    mounted.stop(); assert(!logOf(element)!.includes("destroy:"));
-  } finally { mounted.stop(); await window.happyDOM.close(); }
-});
-
 Deno.test("launch が無くても初期化のリスナーとイベントは動き、二回の launch は起動に失敗する", async () => {
   const window = new Window(); const element = host(window);
   const built = await build(`import { document } from "jsr:@binette/replique";
 document.getElementById("click").addEventListener("click", () => { document.getElementById("log").textContent = "届いた"; });`);
-  const mounted = await mountApp(element, built, { createWorker });
+  const mounted = await mountStartedApp(element, built, { createWorker });
   try { click(element, "click"); await waitFor(() => logOf(element) === "届いた"); }
   finally { mounted.stop(); await window.happyDOM.close(); }
   const twice = await build('import { App, launch } from "jsr:@binette/replique"; launch(new App()); launch(new App());');
-  await assertRejects(() => mountApp(element, twice, { createWorker }), Error, "launch は一回だけ");
+  await assertRejects(() => mountStartedApp(element, twice, { createWorker }), Error, "launch は一回だけ");
 });
 
 Deno.test("hidden・visible・freeze・resume を反映し、blur だけでは Pause にしない", async () => {
@@ -200,19 +161,6 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
   });
 }
 
-Deno.test("onCreate の finish は続く起動通知をやめ、今の呼び出し後に閉じる", async () => {
-  const code = source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); this.finish(); record("after");');
-  const window = new Window(); const element = host(window);
-  let finishes = 0;
-  const mounted = await mountApp(element, await build(code), { createWorker, onFinish() { finishes++; } });
-  try {
-    await waitFor(() => finishes === 1);
-    assertEquals(logOf(element), "create:0;after;");
-    await mounted.destroy(DestroyKind.User, DestroyCause.App);
-    assertEquals(logOf(element), "create:0;after;pause;stop;destroy:0:1;");
-  } finally { mounted.stop(); await window.happyDOM.close(); }
-});
-
 for (const state of ["pause", "stop"] as const) {
   Deno.test(state + " の例外は続く終了通知を呼ばず、ホームへ一度だけエラーを出す", async () => {
     const code = source.replace(`record("${state}");`, `record("${state}"); throw new Error("終了前の例外");`);
@@ -230,21 +178,6 @@ for (const state of ["pause", "stop"] as const) {
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
 }
-
-Deno.test("onStart(Stop) で finish したら onResume を呼ばずに閉じる", async () => {
-  const built = await build(source.replace('onStart(last: State): void { record("start:" + last.toString()); }',
-    'onStart(last: State): void { record("start:" + last.toString()); if (last == State.Stop) this.finish(); }'));
-  const window = new Window(); const element = host(window); let finished = 0;
-  const mounted = await mountApp(element, built, { createWorker, stopDelay: 10, onFinish: () => finished++ });
-  try {
-    await mounted.pause();
-    await waitFor(() => mounted.state === State.Stop);
-    await mounted.resume();
-    await waitFor(() => finished === 1);
-    assertEquals(logOf(element), "create:0;start:1;resume;pause;stop;start:5;");
-    assertEquals(mounted.state, State.Start);
-  } finally { mounted.stop(); await window.happyDOM.close(); }
-});
 
 Deno.test("起動で固まるホームは、時間切れのあと開き直し続けない", async () => {
   const builtHome = await build("let spin: i32 = 0;\nwhile (true) { spin++; }", true);
@@ -361,76 +294,6 @@ Deno.test("隠れたインスタンスの Stop の例外はスタックから外
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-const lastSource = `import { App, Last, document, launch } from "jsr:@binette/replique";
-class TestApp extends App {
-  onCreate(last: Last): void {
-    document.getElementById("page").textContent = last.state.toString() + "," + last.done.toString() + "," + last.page + "," + last.reason.kind.toString() + "," + last.reason.cause.toString();
-  }
-}
-launch(new TestApp());`;
-
-Deno.test("6 メソッドの前後の保存を待ち、次の onCreate に state・done・page・reason を渡す", async () => {
-  const window = new Window(); const element = host(window); const system = createMemoryAppStore().system;
-  const records: import("@binette/regie").LifecycleRecord[] = [];
-  let latest: import("@binette/regie").LifecycleRecord | undefined;
-  const persistence = { key: "test", store: { ...system, async putLast(key: string, record: import("@binette/regie").LifecycleRecord) {
-    await sleep(1); await system.putLast(key, record); latest = structuredClone(record); records.push(latest);
-  } } };
-  const built = await build(lastSource);
-  const mounted = await mountApp(element, built, { page: "前のページ🏠", stopDelay: 20, persistence, createWorker() {
-    const worker = createWorker();
-    return { ...worker, postMessage(message: unknown, transfer?: Transferable[]) {
-      const data = message as { type: string; args?: number[] };
-      if (data.type === "call") { assertEquals(latest!.state, data.args![0]); assertEquals(latest!.done, false); }
-      worker.postMessage(message, transfer);
-    } };
-  } });
-  try {
-    assertEquals(element.querySelector("#page")!.textContent, "0,true,,0,0");
-    await mounted.pause(); await mounted.resume(); await mounted.pause();
-    await waitFor(() => records.at(-1)?.state === State.Stop && records.at(-1)?.done === true);
-    await mounted.resume(); await mounted.destroy(DestroyKind.System, DestroyCause.Stack);
-    const states = [State.Create, State.Start, State.Resume, State.Pause, State.Resume, State.Pause, State.Stop, State.Start, State.Resume, State.Pause, State.Stop, State.Destroy];
-    assertEquals(records.map(r => [r.state, r.done]), states.flatMap(state => [[state, false], [state, true]]));
-    assert(records.every(r => r.page === "前のページ🏠"));
-    assertEquals(await system.getLast("test"), { state: State.Destroy, done: true, page: "前のページ🏠", reason: { kind: DestroyKind.System, cause: DestroyCause.Stack } });
-    const second = await mountApp(element, built, { page: "次のページ", persistence, createWorker });
-    try {
-      assertEquals(element.querySelector("#page")!.textContent, "6,true,前のページ🏠,1,2");
-      assertEquals((await system.getLast("test"))!.reason, { kind: DestroyKind.System, cause: DestroyCause.Stack });
-      assertEquals((await system.listLaunches()).length, 2);
-    } finally { second.stop(); }
-  } finally { mounted.stop(); await window.happyDOM.close(); }
-});
-
-for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeout"] as const) {
-  Deno.test(phase + " の途中で落ちた記録は done=false のまま次の起動に届く", async () => {
-    const window = new Window(); const element = host(window); const system = createMemoryAppStore().system;
-    const state = phase.startsWith("Create") ? State.Create : phase === "Stop" ? State.Stop : State.Destroy;
-    const method = state === State.Create ? "Create" : state === State.Stop ? "Stop" : "Destroy";
-    const code = source.replace(`on${method}(${method === "Create" ? "last: Last" : method === "Destroy" ? "reason: DestroyReason" : ""}): void {`,
-      `on${method}(${method === "Create" ? "last: Last" : method === "Destroy" ? "reason: DestroyReason" : ""}): void { ${phase.endsWith("Timeout") ? "while (true) {}" : 'throw new Error("記録の途中");'}`);
-    const persistence = { store: system, key: "test" };
-    let mounted: Awaited<ReturnType<typeof mountApp>> | undefined;
-    let exits = 0;
-    try {
-      const mounting = () => mountApp(element, built, { page: "切れたページ", persistence, createWorker: phase.endsWith("Timeout") ? realWorker : createWorker, callTimeout: 100, destroyTimeout: 50, stopDelay: 10, onExit() { exits++; } });
-      const built = await build(code);
-      if (state === State.Create) await assertRejects(mounting);
-      else {
-        mounted = await mounting();
-        if (state === State.Stop) { await mounted.pause(); await waitFor(() => exits === 1); }
-        else await mounted.destroy(DestroyKind.System, DestroyCause.Stack);
-      }
-      const expectedReason = state === State.Destroy ? { kind: 1, cause: 2 } : { kind: 0, cause: 0 };
-      assertEquals(await system.getLast("test"), { state, done: false, page: "切れたページ", reason: expectedReason });
-      const next = await mountApp(element, await build(lastSource), { persistence, createWorker });
-      try { assertEquals(element.querySelector("#page")!.textContent, `${state},false,切れたページ,${expectedReason.kind},${expectedReason.cause}`); }
-      finally { next.stop(); }
-    } finally { mounted?.stop(); await window.happyDOM.close(); }
-  });
-}
-
 Deno.test("Pause を待つあいだに同じアプリへ戻っても、前面を失わない", async () => {
   // 一回だけ Pause の通知を止めておける Worker
   let holding = false; let release: (() => void) | undefined;
@@ -485,7 +348,7 @@ Deno.test("起動の途中のクリックは捨てずに Resume のあとに届�
     };
   };
   const window = new Window(); const element = host(window);
-  const mounting = mountApp(element, await build(), { createWorker: heldResume });
+  const mounting = mountStartedApp(element, await build(), { createWorker: heldResume });
   await waitFor(() => release !== undefined);
   click(element, "click");
   release!();

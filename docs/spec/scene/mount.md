@@ -25,7 +25,7 @@ function mountApp(element: HTMLElement, html: string, process: Process, options?
 3. `process.attach(ops => …)` で DOM 操作を受け始める。`_start` の間に溜まった操作が先に届く
 4. クリックを受けたら `process.dispatch(listener)` を呼ぶ
 
-`begin`（Create → Start → Resume）を呼ぶのは呼ぶ側（Régie のシステム）です。今のコードの `mountApp(element, built, options)` は、プロセスの起動と状態の移り変わりも自分でしています。その部分は Régie へ移します。
+`begin`（Create → Start → Resume）を呼ぶのは呼ぶ側（Régie のシステム）です。現在の `mountApp(element, html, process, options)` は、HTML を描いて DOM 操作を反映し、クリックをプロセスに渡します。プロセスの起動と状態の移り変わりは Régie の `startProcess` が受け持ちます。
 
 HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を OS が読まない方針は **決定 2026-10-27** です（[Réplique](../replique.md#画面を操作する方針決定-2026-10-27)）。
 
@@ -47,7 +47,7 @@ listen は click だけ本物のリスナーを付ける。それ以外は onErr
 
 リスナーは `process.dispatch(listener)` を呼ぶだけです。Pause・Stop・Destroy のクリックを捨てる、起動の途中のクリックを Resume まで待たせる、といった判断はプロセスがします（[regie/process.md](../regie/process.md#イベントを届けるか)）。
 
-`stop()` とアプリの終了で全リスナーを外す。stop は描いた HTML は消さない。DOM は element.ownerDocument から辿る。
+`stop()` で全リスナーを外す。mountApp はプロセスの終わりを見ないので、プロセスが終わる経路ではどれも、呼ぶ側が MountedApp の `stop()` も呼ぶ: `onExit` を受けたとき、`begin()` が reject したとき、`process.destroy()` が終わったとき、`process.stop()` を呼ぶとき。Binette のシステム UI は、置き場を消すときにプロセスと MountedApp の両方を止める。stop は描いた HTML は消さない。DOM は element.ownerDocument から辿る。
 
 ## まだしていないこと
 

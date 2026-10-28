@@ -3,15 +3,18 @@
 Binette のアプリの WASM を Worker で動かす Régie（カーネル）です。アプリの DOM 操作をまとめて外に知らせ、export された関数を呼びます。画面は持ちません。
 
 ```ts
-import { launchApp } from "@binette/regie";
+import { startProcess } from "@binette/regie";
 
-const app = await launchApp(wasm, { onDom: (ops) => console.log(ops) });
-await app.call("__bina_lifecycle", 1, 0, 1); // Create、前の記録なし
-app.stop();
+const process = await startProcess(wasm);
+process.attach((ops) => console.log(ops));
+await process.begin(); // Create → Start(Create) → Resume
+process.stop();
 ```
 
-- `launchApp(wasm, options)` は WASM を Worker に送り、export された関数名の一覧を受け取ったら解決します。状態の通知は Scene が行います
-- `app.call(name, ...args)` は関数を呼び、終わったら解決します。呼び出し中の DOM 操作は、解決より先に `onDom` に届きます。無い関数は reject と onError、アプリの例外は終了して reject と onExit で知らせます
+- `startProcess(wasm, options)` は WASM を Worker に送り、最後の状態を読み、`_start` を実行してから解決します。状態の通知は `begin()` まで行いません
+- `attach(sink)` は DOM 操作の受け先をつなぎ、接続前に溜まった操作を先に渡します。`begin()` は Create → Start(Create) → Resume を知らせます
+- `dispatch(listener)` はイベントを届けるか判断してアプリに渡します
+- `process.app.call(name, ...args)` は関数を呼び、終わったら解決します。呼び出し中の DOM 操作は、解決より先に `attach` でつないだ受け先に届きます。無い関数は reject と onError、アプリの例外は終了して reject と onExit で知らせます
 - Worker は、`serveApp` の `toString()` から作る Blob URL の Worker です。テストでは `createWorker` に同じスレッドの `MessageChannel` と `serveApp` をつないだものを渡せます
 
 テストは、ルートの `deno task test` で行います。

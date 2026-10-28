@@ -4,7 +4,7 @@
 
 起動したアプリ 1 つ分（インスタンスのうち、動いている側）の状態を進める部分です。[実行](run.md)の上に載り、状態の移り変わり、時間切れ、最後の状態と起動の履歴の保存、イベントを届けてよいかの判断を持ちます。DOM には触りません。画面は Scene が [アプリの置き場](../scene/mount.md) で受け持ちます。
 
-今のコードでは、これらは Scene の `mountApp`（`packages/scene/src/mount.ts`）の中にあり、Régie へ移す予定です。「API」の節は案、ほかの節の動きは実装済みで、移しても今のままにします。
+状態の移り変わり、時間切れ、保存、イベントの判断は Régie の `startProcess` が受け持ちます。Scene の `mountApp` は DOM とクリックを受け持ちます。「API」の節は案です。ほかの節は実装済みの動きを記し、移してもその動きは変えません。
 
 ## API（案）
 
@@ -51,7 +51,7 @@ function startProcess(wasm: Uint8Array | ArrayBuffer, options?: ProcessOptions):
 
 - `startProcess` は最後の状態を読み、`launchApp`（[run.md](run.md#launchapp)）で `_start` まで走らせてから解決します。この時点ではまだ状態を知らせません
 - 呼ぶ側（システム、または単独で使うなら利用者）は、画面を用意して `attach` し、`begin` を呼びます。HTML を描く前に `onCreate` が走らないようにするためです
-- 名前と形は案です。今の `MountOptions` と `MountedApp` から、DOM の部分を除いたものです
+- 名前と形は案です。`MountOptions` と `MountedApp` から DOM の部分を除いたものです
 
 ## 状態と時間
 

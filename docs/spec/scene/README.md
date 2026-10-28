@@ -20,10 +20,10 @@ Scene（システム UI）
 
 | 役割 | 状況 | ファイル |
 | --- | --- | --- |
-| アプリの置き場。HTML を描き、DOM 操作を反映し、クリックを Régie に渡す | 実装済み（Régie の判断と混ざっている。分ける） | [mount.md](mount.md) |
+| アプリの置き場。HTML を描き、DOM 操作を反映し、クリックを Régie に渡す | 実装済み | [mount.md](mount.md) |
 | 大枠。ホームバー、Apps の一覧、エラー表示、ライブモード、CSS 変数。ページの知らせを Régie に渡す | 実装済み（Régie の判断と混ざっている。分ける） | [shell.md](shell.md) |
 
-今のコードの Scene には、ビルド（Régie へ移す。[regie/build.md](../regie/build.md)）、状態の移り変わり（[regie/process.md](../regie/process.md)）、スタックやホームの選び方（[regie/system.md](../regie/system.md)）も入っています。移したあとに Scene に残るのは表示だけです。
+今のコードの Scene には、ビルド（Régie へ移す。[regie/build.md](../regie/build.md)）とスタックやホームの選び方（[regie/system.md](../regie/system.md)）も入っています。状態の移り変わりは Régie にあります。
 
 ## 公開するもの
 
@@ -33,7 +33,7 @@ Scene（システム UI）
 | --- | --- | --- | --- |
 | `mountShell` | 関数 | 大枠を描き、Régie のシステムを起動してつなぐ | 同じ名前（判断も持っている） |
 | `createShellUi` | 関数 | 大枠を描き、Régie に渡す `SystemUi` を作る | 無い |
-| `mountApp` | 関数 | 置き場に HTML を描き、プロセスとつなぐ | 同じ名前（状態の移り変わりも持っている） |
+| `mountApp` | 関数 | 置き場に HTML を描き、プロセスとつなぐ | 同じ名前（HTML を描き、DOM 操作とクリックを受け持つ） |
 | `isInstalled` | 関数 | ページがインストール済みか | 同じ |
 | `ShellOptions`・`MountedShell`・`ShellUi`・`MountedApp` | 型 | 上の設定と結果 | 一部同じ |
 

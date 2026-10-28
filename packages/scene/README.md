@@ -4,6 +4,7 @@ Binette のアプリを読み、AssemblyScript をブラウザの中で WASM に
 
 ```ts
 import { buildApp, mountApp } from "@binette/scene";
+import { startProcess } from "@binette/regie";
 
 // app.json からの相対パスを受けて、ファイルの中身を返す関数
 const read = async (path: string) => (await fetch(new URL(path, "https://example.com/settings/"))).text();
@@ -11,13 +12,15 @@ const built = await buildApp(read, {
   // Réplique は未公開なので、今は呼ぶ側がソースを渡す
   libraries: { "jsr:@binette/replique": repliqueSource },
 });
-const mounted = await mountApp(document.querySelector("#app")!, built, { onError: console.error });
-// 使い終わったら mounted.stop() を呼ぶ。
+const process = await startProcess(built.wasm, { onError: console.error });
+const mounted = mountApp(document.querySelector("#app")!, built.html, process, { onError: console.error });
+await process.begin();
+// 使い終わったら mounted.stop() と process.stop() を呼ぶ。
 ```
 
 - `loadCompiler()` は asc を読み込みます。初回だけ dynamic import し、結果を使い回します。`buildApp` が必要なときに呼ぶので、先に呼んで読み込み時間を測ることもできます
 - `buildApp(read, options)` は `app.json`・HTML・AS を読み、AS を WASM にビルドします。ビルドに失敗すると、asc の出力を含む `Error` になります
-- `mountApp(element, built, options)` は HTML を描き Régie を起動し、document API の DOM 操作を枠内に反映します。通常の id を参照し、click は登録したリスナーに届きます。onCreate → onStart(Create) → onResume を呼びます
+- `mountApp(element, html, process, options)` は HTML を描き、document API の DOM 操作を枠内に反映します。通常の id を参照し、click はプロセスに渡します。プロセスの起動は `startProcess` と `process.begin()` で行います
 - 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML の検査はまだありません
 
 ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は `binette:system` かつ `role: "home"` の最初のアプリを開き、ホームだけに `apps` の一覧を渡します。ホームが別のアプリを開くとホームを隠して Pause にし、OS のホームバーで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
@@ -55,6 +58,6 @@ Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` で�
 
 v0.2 の途中で bina 属性と bina.ts の生成、Bindings・BindingKind・HtmlParser・parseBindings・generateBindingsSource・writeBindings を廃止しました。BuiltApp.bindings と parser オプション、deno-dom も不要です。AS の入口末尾には __bina_event・__bina_lifecycle の再 export を差し込みます。AS の相対 import はアプリのフォルダ内で解決します。
 
-MountedApp は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen) を持ちます。State・DestroyKind・DestroyCause は `@binette/core` から import します。ShellOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。ホームに戻るときはインスタンスを残し、finish は User・App で捨ててホームへ戻ります。stop() は何も知らせずに止めます。
+`Process` は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen)・setStopDelay(delay)・stop() を持ちます。State・DestroyKind・DestroyCause は `@binette/core` から import します。ProcessOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。ホームに戻るときはインスタンスを残し、finish は User・App で捨ててホームへ戻ります。`process.stop()` は何も知らせずに止めます。
 
-AppStore.system に最後の状態・起動の履歴・OS の設定を保存します。ShellOptions の stackSize・historyLimit は既定の上限です。保存した設定を優先し、home の選択への反映は後続の作業です。単独の mountApp では MountOptions.persistence に保存先とキーを渡せます。
+AppStore.system に最後の状態・起動の履歴・OS の設定を保存します。ShellOptions の stackSize・historyLimit は既定の上限です。保存した設定を優先し、home の選択への反映は後続の作業です。単独の `startProcess` では ProcessOptions.persistence に保存先とキーを渡せます。
