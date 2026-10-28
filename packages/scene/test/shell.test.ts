@@ -424,12 +424,13 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     const rows = element.querySelectorAll<HTMLElement>(".settings-row");
     const value = (i: number) => rows[i]!.querySelector(".settings-value")!.textContent;
     const click = (i: number, direction: number) => rows[i]!.querySelectorAll<HTMLButtonElement>("button")[direction]!.click();
+    const minimum = ["1", "0 秒", "0", "1 秒", "1 秒", "0 秒"];
     for (let i = 0; i < 6; i++) click(i, 0);
-    // クリックは順に処理されるので、最後の行が変われば全部済んでいる
-    await waitFor(() => value(5) === "0 秒");
+    // 重いときは行ごとに反映が遅れるので、全部の行が下限になるまで待つ
+    await waitFor(() => minimum.every((text, i) => value(i) === text));
     for (let i = 0; i < 6; i++) click(i, 0);
     await new Promise(resolve => setTimeout(resolve, 20));
-    assertEquals([...rows].map((_, i) => value(i)), ["1", "0 秒", "0", "1 秒", "1 秒", "0 秒"]);
+    assertEquals([...rows].map((_, i) => value(i)), minimum);
     assertEquals(worker.live, 2);
     for (let i = 0; i < 6; i++) click(i, 1);
     await waitFor(() => value(5) === "1 秒");
