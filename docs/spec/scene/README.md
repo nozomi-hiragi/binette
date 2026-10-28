@@ -2,40 +2,46 @@
 
 [仕様の目次](../README.md)
 
-Scene（シーン、舞台）はアプリの解釈層です。アプリのパッケージを読み、AS をビルドし、HTML を描いてアプリとつなぎます。依存は `@binette/core`、`@binette/regie`、`assemblyscript@0.28.20`です。
+Scene（シーン、舞台）はシステム UI です。Binette の画面の大枠を描き、その中にアプリを置く DOM（置き場）を持ちます（のぞみ 2026-10-28）。何を見せるかは Régie が決め、Scene はそれを見せるだけです。判断は持ちません。
 
-## 役割（案）
+```
+Scene（システム UI）
+├── アプリの置き場（インスタンスごとに 1 つの DOM。前面以外は隠す）
+│     └── アプリの HTML を描き、アプリからの DOM 操作を反映する
+├── Apps の一覧（ホームが落ち続けたとき）
+├── エラー表示
+├── ライブモードの透かしとインストールの案内
+└── ホームバー（ホーム、開いているアプリ、×）
+```
 
-- アプリのパッケージを読む
-- AS のビルドと検証（[app.md のインストール](../app.md#インストール案)の 2 と 3）
-- HTML をフロントの画面の中に描き、アプリとつなぐ。アプリの領域は枠の外に出られないようにする
-- 起動すると、App の onCreate → onStart(Create) → onResume を呼ぶ
-- ホームを起動し、スタックとホームバーの枠を持つ（実装済み）
+ホームの画面もアプリの 1 つで、置き場に入ります。Scene の一部ではありません。
 
-読み込み・ビルド・描画・ホームは実装済みです。HTML や権限の検証はまだありません。
+## 役割
 
-## 公開するもの（実装済み）
-
-| 名前 | 種類 | 内容 |
+| 役割 | 状況 | ファイル |
 | --- | --- | --- |
-| `loadCompiler` | 関数 | asc を読み込む |
-| `buildApp` | 関数 | アプリを読んで WASM にビルドする |
-| `mountApp` | 関数 | HTML を描き、アプリを起動してつなぐ |
-| `mountShell` | 関数 | 保存し、ホームとアプリを開くホームバーの枠を描く |
-| `Compiler`・`CompilerStream` | 型 | asc のうち、Scene が使う分 |
-| `BuildOptions`・`BuiltApp` | 型 | `buildApp` の設定と結果 |
-| `MountOptions`・`MountedApp` | 型 | `mountApp` の設定と結果 |
-| `ShellApp`・`ShellOptions`・`MountedShell` | 型 | `mountShell` の設定と結果 |
+| アプリの置き場。HTML を描き、DOM 操作を反映し、クリックを Régie に渡す | 実装済み（Régie の判断と混ざっている。分ける） | [mount.md](mount.md) |
+| 大枠。ホームバー、Apps の一覧、エラー表示、ライブモード、CSS 変数。ページの知らせを Régie に渡す | 実装済み（Régie の判断と混ざっている。分ける） | [shell.md](shell.md) |
 
+今のコードの Scene には、ビルド（Régie へ移す。[regie/build.md](../regie/build.md)）、状態の移り変わり（[regie/process.md](../regie/process.md)）、スタックやホームの選び方（[regie/system.md](../regie/system.md)）も入っています。移したあとに Scene に残るのは表示だけです。
 
+## 公開するもの
 
-## ファイルの構成
+移したあとの形（案）です。
 
-| ファイル | 内容 |
-| --- | --- |
-| [build.md](build.md) | `loadCompiler`・`buildApp`。asc の呼び方と、ファイルの解決 |
-| [shell.md](shell.md) | `mountShell`。保存、ホームの選択、スタックとホームバー、CSS 変数 |
-| [mount.md](mount.md) | `mountApp`。HTML とアプリのつなぎ方、読める値、止める操作 |
+| 名前 | 種類 | 内容 | 今 |
+| --- | --- | --- | --- |
+| `mountShell` | 関数 | 大枠を描き、Régie のシステムを起動してつなぐ | 同じ名前（判断も持っている） |
+| `createShellUi` | 関数 | 大枠を描き、Régie に渡す `SystemUi` を作る | 無い |
+| `mountApp` | 関数 | 置き場に HTML を描き、プロセスとつなぐ | 同じ名前（状態の移り変わりも持っている） |
+| `isInstalled` | 関数 | ページがインストール済みか | 同じ |
+| `ShellOptions`・`MountedShell`・`ShellUi`・`MountedApp` | 型 | 上の設定と結果 | 一部同じ |
+
+ビルドと `.binapp` の関数（`buildApp`・`loadCompiler`・`parsePrebuiltApp`・`stringifyPrebuiltApp` と CLI）、`State`・`DestroyKind`・`DestroyCause` は Scene から外します。
+
+## 依存
+
+`@binette/core`、`@binette/regie`。asc には依存しません。
 
 ## 単独フロント（実装済み）
 
@@ -46,5 +52,4 @@ Scene を載せる Binette の入口はリポジトリ直下にあります（[�
 - 保存は IndexedDB を使い、ブラウザでは asc を読みません
 - Vite の `base: "./"` でサブパス配信に対応します
 
-
-v0.2 の途中で bina 属性と bina.ts の生成、bindings の API と仕様書を無くしました（決定 2026-10-27）。通常の id と document API に置き換えています。parser と deno-dom も不要になったため取り除きました（案・実装済み）。CLI は writePrebuiltApp による .binapp の書き出しだけを残します。
+v0.2 の途中で bina 属性と bina.ts の生成、bindings の API と仕様書を無くしました（決定 2026-10-27）。通常の id と document API に置き換えています。parser と deno-dom も不要になったため取り除きました（案・実装済み）。

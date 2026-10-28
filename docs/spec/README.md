@@ -12,10 +12,10 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | ファイル | 内容 |
 | --- | --- |
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
-| [core.md](core.md) | `@binette/core`。形式の型と読み込み |
+| [core.md](core.md) | `@binette/core`。パッケージの共通物（形式の型と検査、ライフサイクルの番号、DOM 操作の型） |
 | [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ、`App` クラス |
-| [regie.md](regie.md) | `@binette/regie`。アプリの実行（Worker ＋ WASM） |
-| [scene/](scene/README.md) | `@binette/scene`。アプリのビルド（[build.md](scene/build.md)）、画面への描画（[mount.md](scene/mount.md)） |
+| [regie/](regie/README.md) | `@binette/regie`。カーネル。ビルド（[build.md](regie/build.md)）、実行（[run.md](regie/run.md)）、プロセス（[process.md](regie/process.md)）、システム（[system.md](regie/system.md)）、保存（[store.md](regie/store.md)） |
+| [scene/](scene/README.md) | `@binette/scene`。システム UI。大枠（[shell.md](scene/shell.md)）、アプリの置き場（[mount.md](scene/mount.md)） |
 | [replique.md](replique.md) | `@binette/replique`。アプリが Régie を呼ぶためのライブラリ（AS） |
 | [apps/](apps/README.md) | システムアプリ（OS と一緒に配るアプリ）。ホーム（[home.md](apps/home.md)）、設定（[settings.md](apps/settings.md)） |
 | [coulisses.md](coulisses.md) | `@binette/coulisses`。サーバー側（今は v0.1 のまま） |
@@ -34,9 +34,9 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | 名前 | 役割 | パッケージ |
 | --- | --- | --- |
-| Binette | 形式の定義。どの層も共有する | `@binette/core` |
-| Régie（レジ、操作室） | カーネル。アプリの実行、権限、ストレージなど、土台の仕事をする | `@binette/regie` |
-| Scene（シーン、舞台） | アプリの解釈層。アプリを読み、画面にする | `@binette/scene` |
+| Binette | パッケージの共通物。層ではない | `@binette/core` |
+| Régie（レジ、操作室） | カーネル。中身を全部持つ（ビルド、実行、状態、スタック、権限、保存など） | `@binette/regie` |
+| Scene（シーン、舞台） | システム UI。大枠とアプリの置き場を描く | `@binette/scene` |
 | Coulisses（クーリス、舞台裏） | サーバー側。処理の逃がし先とバックアップ | `@binette/coulisses` |
 | Réplique（レプリク、セリフ） | アプリが Régie を呼ぶためのライブラリ（AS） | `@binette/replique` |
 
@@ -57,19 +57,45 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 ホームと設定は、OS と一緒に配るシステムアプリとして Binette が持ちます（決定）。置き場所はリポジトリ直下の `apps/` で、フォルダを足すだけで増えます。配り方と未決のことは [apps/](apps/README.md)、それぞれの仕様は [apps/home.md](apps/home.md) と [apps/settings.md](apps/settings.md) にあります。
 
-## 層の分担（案）
+## 層の分担（決定 2026-10-28）
 
-| 層 | 担当 |
+最初の構想から実装が進んで、パッケージの中身が呼び名とずれたので、分け直しました（のぞみ 2026-10-28）。**Régie は中身、Scene は表示** です。判断は全部 Régie が持ち、Scene は Régie が決めたことを見せるだけです。core は層ではなく、パッケージの共通物です。
+
+| パッケージ | 担当 |
 | --- | --- |
-| core | アプリの説明ファイル（`app.json`）や形式の型と読み込み、検査 |
-| Régie | アプリの実行（Worker ＋ WASM）、権限の判断、アプリごとのストレージ、インストール済みアプリの記録、アプリからの呼び出しの受け口、データの書き出し。画面は持たない |
-| Scene | アプリのパッケージを読む、AS のビルドと検証、HTML を描いてアプリとつなぐ、アプリを開いて戻る枠 |
-| Coulisses | アプリのサーバーサイド処理、バックアップの受け取り |
-| フロントの実装 | ダイアログ、インストール確認などの見た目。設定はシステムアプリ `apps/settings` が持つ。Régie と Coulisses の間の通信路を差し込む |
+| core | 共通物。`app.json` の型と検査、ライフサイクルの番号、DOM 操作の型。動きは持たない |
+| Régie | カーネル。アプリのビルドと検証、インストール、実行（Worker ＋ WASM）、状態の移り変わり、スタック、ホームの選び方、落ちたときの扱い、権限、OS の設定、保存。画面は持たず DOM に触らない |
+| Scene | システム UI。大枠（ホームバー、Apps の一覧、エラー表示、ライブモード）と、その中のアプリの置き場（HTML を描き、DOM 操作を反映し、クリックを Régie に渡す） |
+| Réplique | アプリが Régie を呼ぶためのライブラリ（AS） |
+| Coulisses | サーバー側。アプリのサーバーサイド処理、バックアップの受け取り |
+| フロントの実装 | Scene を載せる入口。Régie と Coulisses の間の通信路を差し込む。設定はシステムアプリ `apps/settings` が持つ |
 
-- 依存の向き: `core` ← `regie` ← `scene`（フロント側）、`core` ← `coulisses`（サーバー側）。`replique` は AS 用で、Régie とは「呼び出しの一覧」（[replique.md](replique.md)）という約束だけを共有する
+```
+          core（共通物）
+            ↑
+          regie（中身）  ← replique とは「呼び出しの一覧」と番号だけを共有する
+            ↑
+          scene（表示）
+            ↑
+     ルートの OS（src/main.ts）
+```
+
+- 依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
+- ビルドは Régie に置く（[regie/build.md](regie/build.md)）。何を動かしてよいかの判断と同じ所に置くため。asc は重いので `@binette/regie/build` という別の入口にし、ビルドしない利用者は読まない
 - Binette は WAKE に依存しない。Régie と Coulisses の間の通信路はフロントの実装が渡す。EbinaStation ではそこに WAKE が入る
-- ビルドと検証は Scene が行い、何を許すかの最終判断は Régie が持つ
+- 関数の名前と形（`startSystem`・`startProcess`・`SystemUi`・`createShellUi` など）は案
+
+### 今のコードとの差
+
+今のコードは、まだ分け直す前の形です。仕様は分け直したあとの形で書き、今の場所を各ファイルに書いています。
+
+| 仕様 | 今のコードの場所 |
+| --- | --- |
+| [regie/build.md](regie/build.md) | `packages/scene/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` |
+| [regie/process.md](regie/process.md) | `packages/scene/src/mount.ts` の状態・時間・保存・イベントの判断 |
+| [regie/system.md](regie/system.md) | `packages/scene/src/shell.ts` の判断 |
+| [core.md のライフサイクルの番号と DomOp](core.md#ライフサイクルの番号案) | `packages/scene/src/mount.ts`、`packages/regie/src/launch.ts` |
+| [scene/mount.md](scene/mount.md)・[scene/shell.md](scene/shell.md) | 同じファイルの表示の部分 |
 
 ### 今の依存（実装済み）
 
@@ -81,6 +107,8 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
 
+分け直したあとは、`assemblyscript` は `@binette/regie` の `build` の入口に移り、`@binette/scene` は `@binette/core` と `@binette/regie` だけになります（案）。
+
 テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
 
 - 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。今はすべて `0.1.0` で、v0.2 として公開するときに `0.2.0` にする
@@ -89,14 +117,14 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 ## v0.2 の最小限の土台（実装済み）
 
-ホームは Binette が持ちます（決定）。今は設定アプリを並べ、開いて戻れます（[scene/shell.md](scene/shell.md)）。設定は `apps/settings` が持ち、設定の項目と読み書きの呼び出しは未決です。
+ホームは Binette が持ちます（決定）。今は設定アプリを並べ、開いて戻れます（[regie/system.md](regie/system.md)、[scene/shell.md](scene/shell.md)）。設定は `apps/settings` が持ち、設定の項目と読み書きの呼び出しは未決です。
 
-シェルは同じ入手元・ID・版のビルド結果を保存して使い回します。Binette はシステムアプリのプリビルド結果を、入手元 `binette:system` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
+システムは同じ入手元・ID・版のビルド結果を保存して使い回します。Binette はシステムアプリのプリビルド結果を、入手元 `binette:system` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 
-1. Scene が `app.json`・HTML・AS を読む（[scene/build.md](scene/build.md) の `buildApp`）
-2. Scene がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
-3. Scene が HTML を描き、Régie が WASM を Worker で起動する（[regie.md](regie.md)）
-4. Scene が App の onCreate → onStart(Create) → onResume を呼ぶ。アプリは通常の id を document.getElementById で参照し、textContent などを変更する。addEventListener の click は Réplique の Event を受け取る（決定 2026-10-27）。
+1. Régie が `app.json`・HTML・AS を読む（[regie/build.md](regie/build.md) の `buildApp`）
+2. Régie がブラウザの中で asc を動かし、AS を WASM にビルドする。`jsr:@binette/replique` はワークスペースの Réplique のソースで解決する
+3. Régie が WASM を Worker で起動し（[regie/run.md](regie/run.md)）、Scene が置き場に HTML を描く
+4. Régie が App の onCreate → onStart(Create) → onResume を呼ぶ。アプリは通常の id を document.getElementById で参照し、textContent などを変更する。addEventListener の click は Réplique の Event を受け取る（決定 2026-10-27）。
 
 ビルド結果の保存は実装済みです。権限の確認・サーバー通信・HTML の検証はまだありません。
 
@@ -121,5 +149,5 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 - アプリのサーバーサイドの置き場所と動かし方
 - Réplique の呼び出しの形（終わったら呼ぶ関数を渡す形でよいか）
 - エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（`deno publish --dry-run` は通る。実際の公開と補完は未確認）
-- Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie.md](regie.md)）
+- Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie/run.md](regie/run.md#blob-url-の-worker)）
 - asc の読み込みの重さ（約 13.6 MB、gzip で約 2.9 MB）をどうするか

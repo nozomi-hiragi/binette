@@ -1,6 +1,8 @@
-# Scene: ビルド
+# Régie: ビルド
 
-[Scene の目次](README.md)
+[Régie の目次](README.md)
+
+アプリの AS を WASM にし、インストールできる形にする部分です。どのコードを動かしてよいかの検証もここに足していきます（今は検証をしていません。[下](#検証案)）。ビルドはカーネルの仕事とします（のぞみ 2026-10-28）。今のコードでは `packages/scene/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` にあり、Régie へ移す予定です。
 
 ## loadCompiler
 
@@ -30,7 +32,7 @@ interface Compiler {
 }
 ```
 
-`Compiler` は asc の型を使わず、Scene が使う分だけを自分で書いた型です。asc の型定義に頼ると、利用者の型検査に asc の大きな型定義が入るためです。
+`Compiler` は asc の型を使わず、Régie が使う分だけを自分で書いた型です。asc の型定義に頼ると、利用者の型検査に asc の大きな型定義が入るためです。
 
 ## buildApp
 
@@ -62,7 +64,7 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 - `read` が reject したら、そのまま reject します
 - `entry.css` は読みません
 - ビルドに失敗したら、`Error` を投げます。`message` は `アプリをビルドできません。` の次の行に asc の出力を続けたものです。出力は標準エラー、それが空なら標準出力、それも空なら asc の `error.message` で、前後の空白を除きます。AS の型の誤りなら `TS2322` などのコードを含みます
-- `app.json` の `binette`・`build` はまだ見ません。asc はいつも Scene が依存している版（`0.28.20`）です
+- `app.json` の `binette`・`build` はまだ見ません。asc はいつも Régie が依存している版（`0.28.20`）です
 
 ### asc の呼び方
 
@@ -73,7 +75,7 @@ await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--expo
 ```
 
 - 入口には、整えた `entry.as` のパス（例 `src/main.ts`）をそのまま渡します。asc の誤りの出力にも、そのパスが出ます
-- `--exportStart _start` は、トップレベルの初期化を Régie が instance を作ったあとに走らせるためです（[regie.md](../regie.md#ビルドのしかた)）
+- `--exportStart _start` は、トップレベルの初期化を Régie が instance を作ったあとに走らせるためです（[run.md](run.md#ビルドのしかた)）
 - `--exportRuntime` は、Régie が `__new` で AS の文字列を確保して返すためです
 - ランタイムは asc の既定（`incremental`）です
 - `writeFile` は `main.wasm` の中身（`Uint8Array`）だけを受け取り、ほかは捨てます
@@ -81,7 +83,7 @@ await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--expo
 
 ### ファイルの解決
 
-asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene は次のように返します。
+asc はファイルを `readFile(name, baseDir)` で読みに来ます。Régie は次のように返します。
 
 | `name` | 返すもの |
 | --- | --- |
@@ -99,7 +101,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 - サブパス（`jsr:@binette/replique/glue` など）も、指定子をそのままキーにして引けます
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）は `read` で読むので使えます
 - `libraries` に無い指定子は解決できず、ビルドの誤りになります
-- Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Scene が JSR から取って差し込む（案。[app.md](../app.md#インストール案)）
+- Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Régie が JSR から取って差し込む（案。[app.md](../app.md#インストール案)）
 
 ## 書き出し（実装済み）
 
@@ -120,6 +122,18 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Scene �
 deno run -A packages/scene/src/cli.ts build apps/settings --out .binapp/settings.binapp --replique packages/replique/src/index.ts
 ```
 
-CLI は `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはホームと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
+今の CLI は `packages/scene/src/cli.ts` にあり、移したあとは `packages/regie/src/cli.ts`（入口 `@binette/regie/cli`）になります。CLI は `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはインストールと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
 
 `deno task build:system`（`scripts/build-system.ts`）は `apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/<フォルダ名>.binapp` に書き出します。app.json の無いフォルダは無視します。古い `.binapp` は書き出す前に消し、失敗時はフォルダ名を出して終了コード 1 にします。フォルダ名は UTF-16 コード単位の辞書順（`<`・`>`）で比べます。このフォルダは gitignore に入れ、生成物はコミットしません。`deno task start` と `deno task build` は先にこのタスクを実行します。Binette は Vite の `import.meta.glob` で同梱した `.binapp` を fetch し、ブラウザでは asc を読みません。
+
+## 入口（案）
+
+asc は大きいので、ビルドは `@binette/regie/build` という別の入口から公開します。CLI は `@binette/regie/cli` です。`@binette/regie` の本体だけを読む利用者（ビルド済みの `.binapp` だけを使う OS など）は asc を読みません。今も `loadCompiler` は初回だけ dynamic import するので、ビルドしなければ読み込みません。
+
+## 検証（案）
+
+今のビルドは、AS をコンパイルして Réplique の入口を足すだけです。アプリの安全は、Worker の隔離と、Régie が渡す呼び出しの一覧（[run.md](run.md#import)）で守っています。次の検証は、ここに足します。どれも未着手です。
+
+- HTML: `script`、`on*` 属性、外の URL を含まないか。今は Scene が innerHTML に描くので `on*` 属性が動く
+- 権限: `app.json` の `permissions` と、使う呼び出しが合うか
+- 入手元: ハッシュやコミットの記録（[app.md](../app.md#régie-が記録するもの案)）

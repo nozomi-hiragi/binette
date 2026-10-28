@@ -11,9 +11,9 @@
 
 ## 配り方（実装済み）
 
-- `deno task build:system`（`scripts/build-system.ts`）が、`apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/<フォルダ名>.binapp` にビルドする。書き出す前に古い `.binapp` を消す。1 つでも失敗したら、どのアプリかを出して終わる。`.binapp` の形は [scene/build.md](../scene/build.md#書き出し実装済み)
+- `deno task build:system`（`scripts/build-system.ts`）が、`apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/<フォルダ名>.binapp` にビルドする。書き出す前に古い `.binapp` を消す。1 つでも失敗したら、どのアプリかを出して終わる。`.binapp` の形は [regie/build.md](../regie/build.md#書き出し実装済み)
 - `deno task start` と `deno task build` は、先にこれを走らせる。`.binapp/` は生成物で、コミットしない
-- 入口の `src/main.ts` は、書き出した `.binapp` を `import.meta.glob` で全部読み、`mountShell` に `prebuilt` として渡す（[scene/shell.md](../scene/shell.md)）
+- 入口の `src/main.ts` は、書き出した `.binapp` を `import.meta.glob` で全部読み、`mountShell` に `prebuilt` として渡す（[scene/shell.md](../scene/shell.md#api案)）
 - 入手元（`source`）は `binette:system` で固定する。配信の URL は中身のハッシュで変わるので使わない
 - 開くたびに、OS が持つ中身で保存し直す（版を上げ忘れた OS の更新でも古いものを残さない）。入れた日時 `installedAt` は最初のものを保つ
 - ブラウザではビルドも検証もしない（HTML や権限の検証、クリックの関数が export にあるかの確認）。OS と一緒にビルドして配るものなので、OS と同じだけ信頼する
