@@ -25,4 +25,6 @@ process.stop();
 
 LaunchOptions は callTimeout（ミリ秒、既定 5000）、page（省略時は空文字列）、onFinish を持ちます。起動と呼び出しの時間切れは、Worker を終了して reject し、起動後なら onExit で知らせます。
 
-LaunchOptions.last で前回の page と Destroy の理由を Worker に渡せます。state・done は Scene が Create の引数で渡します。createMemoryAppStore()・createIndexedDbAppStore() の戻り値の system は SystemStore です。getLast / putLast、listLaunches / recordLaunch、getSettings / putSettings で最後の状態・起動の履歴・OS の設定を読み書きできます。IndexedDB は同じ DB の v2 に system 表を追加し、既存の apps 表を残します。設定の既定値は DEFAULT_SYSTEM_SETTINGS です。
+LaunchOptions.last で前回の page と Destroy の理由を Worker に渡せます。state・done は Process が Create の引数で渡します。createMemoryAppStore()・createIndexedDbAppStore() の戻り値の system は SystemStore です。getLast / putLast、listLaunches / recordLaunch、getSettings / putSettings で最後の状態・起動の履歴・OS の設定を読み書きできます。IndexedDB は同じ DB の v2 に system 表を追加し、既存の apps 表を残します。設定の既定値は DEFAULT_SYSTEM_SETTINGS です。
+
+`startSystem(options)` はアプリのインストール、設定とホームの選択を済ませ、`BinetteSystem` を返します。`SystemUi` に表示を依頼し、`openHome()`・`open(key)`・`close(id)`・`setPage()`・`stop()` で操作します。`SystemApp` は `{ source, prebuilt }` または `{ source, read }` です。ビルドを Régie に移すまでは、read のビルド関数を `SystemOptions.build` で渡します。

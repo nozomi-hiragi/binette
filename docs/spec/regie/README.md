@@ -30,7 +30,7 @@ Régie（レジ、操作室）はカーネルです。Binette の中身を全部
 
 | 名前 | 種類 | 入口 | 今 |
 | --- | --- | --- | --- |
-| `startSystem`・`SystemOptions`・`SystemApp`・`SystemUi`・`SystemView`・`BinetteSystem` | 関数・型 | `@binette/regie` | 無い（Scene の `mountShell` の中） |
+| `startSystem`・`SystemOptions`・`SystemApp`・`SystemUi`・`SystemView`・`BinetteSystem` | 関数・型 | `@binette/regie` | `@binette/regie` |
 | `startProcess`・`ProcessOptions`・`Process` | 関数・型 | `@binette/regie` | `@binette/regie` |
 | `launchApp`・`serveApp`・`LaunchOptions`・`RegieApp`・`RegieWorker`・`WorkerScope`・`OsSnapshot` | 関数・型 | `@binette/regie` | 同じ |
 | `createMemoryAppStore`・`createIndexedDbAppStore`・`installedAppKey`・`DEFAULT_SYSTEM_SETTINGS`・`validateSystemSettings` と保存の型 | 関数・型 | `@binette/regie` | 同じ |

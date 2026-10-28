@@ -6,7 +6,7 @@
 
 ホームは Binette のシステムアプリ `apps/home` です（決定。[apps/home.md](../apps/home.md)）。タイルの並びと見た目はホームの HTML ＋ AS が持ち、置き場の 1 つに入ります。
 
-今のコードの `mountShell`（`packages/scene/src/shell.ts`）は、判断と表示を両方持っています。判断を Régie へ移し、ここに書いた表示だけを残します。「API」の節は案、ほかの節の見た目と動きは実装済み（形は案）です。
+今のコードの `packages/scene/src/shell.ts` は、ここに書いた表示を受け持ちます。判断は Régie の `startSystem` にあります。「API」の節は案、ほかの節の見た目と動きは実装済み（形は案）です。
 
 ## API（案）
 
@@ -27,7 +27,7 @@ interface ShellUi extends SystemUi {
 function createShellUi(element: HTMLElement, options?: ShellUiOptions): ShellUi
 
 /** createShellUi と Régie の startSystem をまとめて呼ぶ。ルートの OS はこれを使う */
-interface ShellOptions extends Omit<SystemOptions, "ui">, ShellUiOptions {}
+interface ShellOptions extends Omit<SystemOptions, "ui">, BuildOptions, ShellUiOptions {}
 interface MountedShell {
   requireInstall(reason: string): boolean;
   /** システムを止め、画面とイベントを消す */
@@ -38,6 +38,7 @@ function isInstalled(window: Window | null): boolean
 ```
 
 - `mountShell` は `createShellUi` → `startSystem({ ...options, ui })` → `ui.bind(system)` → `system.openHome()` の順に呼びます。startSystem はホームを開く前に解決するので、ホームの起動中のボタンとページの知らせも Régie に届きます（[regie/system.md](../regie/system.md#api案)）
+- ビルドを Régie に移すまでは、`BuildOptions` は Scene の `ShellOptions` にあり、`mountShell` はそれを使って `buildApp` を `startSystem` に渡します
 - `mountShell` の使い方は今と同じです。ルートの `src/main.ts` は変わりません
 - DOM は element から辿り、グローバルの document は使いません
 
