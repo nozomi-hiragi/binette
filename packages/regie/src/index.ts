@@ -11,3 +11,5 @@ export type { AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord,
 export { createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, installedAppKey, validateSystemSettings } from "./store.ts";
 export type { ProcessOptions, Process } from "./process.ts";
 export { startProcess } from "./process.ts";
+export type { SystemApp, SystemOptions, SystemUi, SystemView, BinetteSystem } from "./system.ts";
+export { startSystem } from "./system.ts";

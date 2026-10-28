@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
-import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, serveApp } from "@binette/regie";
+import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
-import { buildApp, type Compiler, loadCompiler, mountShell } from "../src/index.ts";
+import { buildApp, mountShell, createShellUi } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
@@ -116,53 +116,6 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("read は同じ版を再ビルドせず、版が変われば保存し直す", async () => {
-  const window = new Window(); const element = elementIn(window); const store = await savedStore(); const worker = workers();
-  const asc = await loadCompiler(); let builds = 0;
-  const compiler: Compiler = { ...asc, main(argv, options) { builds++; return asc.main(argv, options); } };
-  const cached = apps.map((app) => ({ ...app, async read(path: string) { assertEquals(path, "app.json"); return await app.read(path); } }));
-  let shell = await mountShell(element, { apps: [homeApp, ...cached], store, compiler, createWorker: worker.createWorker });
-  try {
-    assertEquals(builds, 0); assertEquals(element.querySelectorAll(".home-tile").length, 2);
-    shell.stop();
-    const app = apps[0]!;
-    shell = await mountShell(element, { apps: [homeApp, { ...app, async read(path) {
-      const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), version: "0.2.0" }) : text;
-    } }], store, compiler, libraries, createWorker: worker.createWorker });
-    assertEquals(builds, 1); assertEquals((await store.get(fixtures[0]!.key))!.manifest.version, "0.2.0");
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("prebuilt は compiler を使わず毎回保存し、installedAt を保つ", async () => {
-  const window = new Window(); const element = elementIn(window); const store = await savedStore(); const worker = workers();
-  const compiler: Compiler = { main() { throw new Error("ビルド不要"); }, createMemoryStream() { throw new Error("ビルド不要"); } };
-  const fixture = fixtures[0]!; const changed = { ...fixture, html: "更新した HTML", manifest: { ...fixture.manifest, version: "0.3.0" } };
-  const shell = await mountShell(element, { apps: [homeApp, { source: fixture.source, prebuilt: changed }], store, compiler, createWorker: worker.createWorker });
-  try {
-    const saved = (await store.get(fixture.key))!;
-    assertEquals(saved.html, changed.html); assertEquals(saved.manifest.version, "0.3.0"); assertEquals(saved.installedAt, 1);
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("読み込み・保存の失敗があっても残りを渡し、重複は並べない", async () => {
-  const window = new Window(); const element = elementIn(window); const store = await savedStore(); const worker = workers(); const errors: unknown[] = [];
-  const shell = await mountShell(element, { apps: [homeApp, { source: "bad", read: () => Promise.resolve("{") }, ...apps, apps[1]!],
-    store: { ...store, get(key) { return key === fixtures[0]!.key ? Promise.reject(new Error("保存失敗")) : store.get(key); } },
-    createWorker: worker.createWorker, onError: (e) => errors.push(e) });
-  try {
-    assertEquals(errors.length, 2); assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false); assertEquals(element.querySelectorAll(".home-tile").length, 1);
-    assertEquals(element.querySelector(".home-tile")!.textContent, "設定の写し");
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("ホームは system かつ role home の最初のもの。別のホームも一覧に含めない", async () => {
-  const window = new Window(); const element = elementIn(window); const worker = workers();
-  const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
-  const shell = await mountShell(element, { apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore(), createWorker: worker.createWorker });
-  try { assertEquals(element.querySelectorAll(".home-tile").length, 1); }
-  finally { shell.stop(); await window.happyDOM.close(); }
-});
-
 Deno.test("ホームが無い・system でないと画面と onError に知らせる", async () => {
   for (const source of ["elsewhere", "binette:system"]) {
     const window = new Window(); const element = elementIn(window); const errors: unknown[] = [];
@@ -171,15 +124,6 @@ Deno.test("ホームが無い・system でないと画面と onError に知ら�
     try { assertEquals(errors.length, 1); assertEquals(element.querySelector("[role=status]")!.textContent, "ホームのシステムアプリがありません。"); }
     finally { shell.stop(); await window.happyDOM.close(); }
   }
-});
-
-Deno.test("フォルダ外の icon は読まずに拒む", async () => {
-  const window = new Window(); const element = elementIn(window); const reads: string[] = []; const errors: unknown[] = []; const worker = workers(); const app = apps[0]!;
-  const shell = await mountShell(element, { apps: [homeApp, { source: app.source, async read(path) {
-    reads.push(path); const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
-  } }], store: createMemoryAppStore(), libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
-  try { assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.querySelectorAll(".home-tile").length, 0); }
-  finally { shell.stop(); await window.happyDOM.close(); }
 });
 
 Deno.test("名前と SVG は HTML として差し込まない", async () => {
@@ -563,14 +507,6 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("保存した home が無ければ system のホームを使う", async () => {
-  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
-  await store.system.putSettings({ home: "missing" });
-  const shell = await mountShell(element, { apps: [homeApp], store, createWorker: worker.createWorker });
-  try { assertEquals((await store.system.listLaunches())[0]!.app, installedAppKey(homeApp.source, builtHome.manifest.id)); }
-  finally { shell.stop(); await window.happyDOM.close(); }
-});
-
 Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で表示する", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
   const times = [-1, 0, Date.UTC(2000, 1, 29, 12, 34, 56), Date.UTC(2100, 2, 1)];
@@ -611,6 +547,73 @@ launch(new Settings());`,
     await waitFor(() => element.querySelector("#checked")?.textContent === "確認済み");
     assertEquals(writes, []); assertEquals(await store.system.getSettings(), undefined); assertEquals(errors, []);
   } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("設定の検査に失敗したら要素の中身を残す", async () => {
+  const window = new Window();
+  const element = elementIn(window);
+  element.textContent = "読み込み中";
+  const store = await savedStore();
+  store.system.getSettings = () => Promise.resolve({ stackSize: 0 });
+  let rejected = false;
+  try { await mountShell(element, { store, apps: [homeApp] }); } catch { rejected = true; }
+  assert(rejected);
+  assertEquals(element.textContent, "読み込み中");
+  await window.happyDOM.close();
+});
+
+Deno.test("createShellUi は bind 前のボタンを無視し、bind で現在のページを一度知らせる", async () => {
+  const window = new Window(); const element = elementIn(window);
+  Object.defineProperty(window.document, "visibilityState", { configurable: true, value: "hidden" });
+  const pages: { visible: boolean; frozen: boolean }[] = [];
+  let opened = 0;
+  const system: BinetteSystem = {
+    async openHome() { opened++; }, async open() {}, async close() {},
+    setPage(page) { pages.push(page); }, stop() {},
+  };
+  const ui = createShellUi(element, { installed: true });
+  try {
+    const home = () => element.querySelector<HTMLButtonElement>("[aria-label=ホームを開く]")!.click();
+    home();
+    assertEquals(opened, 0); assertEquals(pages, []);
+    window.document.dispatchEvent(new window.Event("freeze"));
+    ui.bind(system);
+    assertEquals(pages, [{ visible: false, frozen: true }]);
+    home(); assertEquals(opened, 1);
+    window.document.dispatchEvent(new window.Event("resume"));
+    assertEquals(pages.at(-1), { visible: false, frozen: false });
+    ui.stop();
+    window.document.dispatchEvent(new window.Event("visibilitychange"));
+    assertEquals(pages.length, 2); assertEquals(element.children.length, 0);
+  } finally { ui.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("読み込み・保存の失敗があっても残りを渡し、重複は並べない", async () => {
+  const window = new Window(); const element = elementIn(window); const store = await savedStore(); const worker = workers(); const errors: unknown[] = [];
+  const shell = await mountShell(element, { apps: [homeApp, { source: "bad", read: () => Promise.resolve("{") }, ...apps, apps[1]!],
+    store: { ...store, get(key) { return key === fixtures[0]!.key ? Promise.reject(new Error("保存失敗")) : store.get(key); } },
+    createWorker: worker.createWorker, onError: (e) => errors.push(e) });
+  try {
+    assertEquals(errors.length, 2); assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false); assertEquals(element.querySelectorAll(".home-tile").length, 1);
+    assertEquals(element.querySelector(".home-tile")!.textContent, "設定の写し");
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ホームは system かつ role home の最初のもの。別のホームも一覧に含めない", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
+  const shell = await mountShell(element, { apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore(), createWorker: worker.createWorker });
+  try { assertEquals(element.querySelectorAll(".home-tile").length, 1); }
+  finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("フォルダ外の icon は読まずに拒む", async () => {
+  const window = new Window(); const element = elementIn(window); const reads: string[] = []; const errors: unknown[] = []; const worker = workers(); const app = apps[0]!;
+  const shell = await mountShell(element, { apps: [homeApp, { source: app.source, async read(path) {
+    reads.push(path); const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
+  } }], store: createMemoryAppStore(), libraries, createWorker: worker.createWorker, onError: (e) => errors.push(e) });
+  try { assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.querySelectorAll(".home-tile").length, 0); }
+  finally { shell.stop(); await window.happyDOM.close(); }
 });
 
 Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭打ちになり、「ホーム」で最初に戻る", async () => {

@@ -87,15 +87,15 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 ### 今のコードとの差
 
-今のコードは、まだ分け直す前の形です。仕様は分け直したあとの形で書き、今の場所を各ファイルに書いています。
+分け直しは途中です。仕様は分け直したあとの形で書き、今の場所を各ファイルに書いています。
 
 | 仕様 | 今のコードの場所 |
 | --- | --- |
 | [regie/build.md](regie/build.md) | `packages/scene/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` |
 | [regie/process.md](regie/process.md) | `packages/regie/src/process.ts` の状態・時間・保存・イベントの判断 |
-| [regie/system.md](regie/system.md) | `packages/scene/src/shell.ts` の判断 |
+| [regie/system.md](regie/system.md) | `packages/regie/src/system.ts` の判断。ビルドは一時的に呼び出し側から渡す |
 | [core.md のライフサイクルの番号と DomOp](core.md#ライフサイクルの番号案) | 実装済み。`packages/core/src/lifecycle.ts`・`dom.ts` |
-| [scene/mount.md](scene/mount.md)・[scene/shell.md](scene/shell.md) | 同じファイルの表示の部分 |
+| [scene/mount.md](scene/mount.md)・[scene/shell.md](scene/shell.md) | 同じファイルの表示 |
 
 ### 今の依存（実装済み）
 

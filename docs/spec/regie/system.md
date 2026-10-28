@@ -4,16 +4,16 @@
 
 OS 全体の判断を持つ部分です。インストール、ホームの選び方、スタック、閉じる流れ、落ちたときの扱い、誰にどの呼び出しを渡すか（権限）、OS の設定、ページで起きたことの扱いを決めます。画面は持たず、何をどう見せるかは Scene の [システム UI](../scene/shell.md) に知らせるだけです。
 
-今のコードでは、これらは Scene の `mountShell`（`packages/scene/src/shell.ts`）の中に、表示と混ざってあります。Régie へ移す予定です。「API」の節は案、ほかの節の動きは実装済み（形は案）で、移しても今のままにします。
+今のコードでは、これらは `packages/regie/src/system.ts` にあります。「API」の節は案、ほかの節の動きは実装済み（形は案）です。
 
 ## API（案）
 
 ```ts
 type SystemApp = { source: string } & (
   | { read: (path: string) => Promise<string>; prebuilt?: never }
-  | { prebuilt: PrebuiltApp; read?: never }
+  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string }; read?: never }
 );
-interface SystemOptions extends BuildOptions {
+interface SystemOptions {
   apps: SystemApp[];
   store: AppStore;
   callTimeout?: number; // ミリ秒、既定 5000
@@ -25,6 +25,8 @@ interface SystemOptions extends BuildOptions {
   createWorker?: ProcessOptions["createWorker"];
   /** 見せ方を受け持つ側。Scene のシステム UI が渡す */
   ui: SystemUi;
+  /** ビルドを Régie に移すまで Scene から渡す */
+  build?: (read: (path: string) => Promise<string>) => Promise<Pick<InstalledApp, "manifest" | "html" | "wasm">>;
 }
 /** Régie がシステム UI に頼むこと */
 interface SystemUi {
@@ -32,7 +34,7 @@ interface SystemUi {
   present(instance: { id: number; app: InstalledApp; home: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
   /** 見せる状態が変わった */
   update(view: SystemView): void;
-  /** エラーを見せる */
+  /** エラーを見せる。同じエラーが何度か届くことがある（Pause の失敗など）。まとめるのは UI の役目 */
   report(error: unknown): void;
 }
 interface SystemView {
@@ -42,6 +44,8 @@ interface SystemView {
   front: number | "apps" | undefined;
   /** Apps に並べるアプリ（名前の順） */
   apps: { key: string; name: string }[];
+  /** show でエラー表示を消すときだけ true */
+  clearError: boolean;
 }
 interface BinetteSystem {
   /** ホームを開く。startSystem のあと、システム UI をつないでから呼ぶ。ホームが残っていなければ起動する */
@@ -57,7 +61,7 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 
 - `startSystem` は、インストールと設定の読み込みとホームの選択までを済ませて解決します。ホームはまだ開きません。呼ぶ側はシステム UI をつなぎ（ボタンとページの知らせ）、今のページの様子を `setPage` で渡してから `openHome()` を呼びます。ホームの起動中に押されたボタンやページの知らせも、そのまま受けられるようにするためです
 - `instances` の `key` は installedAppKey です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
-- `read` を渡したアプリがあるときだけ、`@binette/regie/build` を dynamic import してビルドします。`prebuilt` だけなら asc を読みません
+- ビルドを Régie に移すまでは、`read` のアプリをビルドする関数を一時的に `build` で渡します。`SystemOptions` は `BuildOptions` を継承せず、Scene の `mountShell` がビルド設定を使った `buildApp` を渡し、必要なときだけ呼びます。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
 - 文字の表示や DOM は一切持ちません。`SystemUi` を差し替えれば、DOM なしでテストできます
 

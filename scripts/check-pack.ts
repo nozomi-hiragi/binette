@@ -74,7 +74,7 @@ try {
     join(consumer, "consumer.ts"),
     `import { assertEquals, assertThrows } from "@std/assert";
 import { BINETTE_VERSION, BinetteError, State, DestroyKind, DestroyCause, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
-import { startProcess, type Process, type ProcessOptions, launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
+import { startSystem, createMemoryAppStore, type SystemUi, type SystemView, startProcess, type Process, type ProcessOptions, launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
 import { buildApp, mountApp, type BuiltApp, type MountedApp } from "@binette/scene";
 import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
 
@@ -136,6 +136,21 @@ assertEquals(process.state, State.Resume);
 assertEquals(processBatches, batches);
 const destroy = (process: Process): Promise<void> => process.destroy(DestroyKind.System, DestroyCause.Stack);
 await destroy(process);
+const views: SystemView[] = [];
+const ui: SystemUi = {
+  present(_instance, process) { process.attach(() => {}); return { remove() {} }; },
+  update(view) { views.push(view); },
+  report(error) { throw error; },
+};
+const system = await startSystem({
+  apps: [{ source: "binette:system", prebuilt: { ...built, manifest: { ...built.manifest, role: "home" } } }],
+  store: createMemoryAppStore(), ui, createWorker,
+});
+assertEquals(views.at(-1)?.instances.length, 0);
+await system.openHome();
+assertEquals(views.at(-1)?.instances.length, 1);
+system.setPage({ visible: false, frozen: true });
+system.stop();
 assertEquals(State.Resume, 3);
 const c: Coulisses = createCoulisses();
 void [manifest, launch, build, mount, destroy, c];

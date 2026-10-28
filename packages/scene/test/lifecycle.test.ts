@@ -99,38 +99,6 @@ Deno.test("hidden・visible・freeze・resume を反映し、blur だけでは P
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("ホームに戻っても画面を残し、finish は User・App で閉じる。ページの識別子は共有する", async () => {
-  const builtHome = await build(source, true), built = await build();
-  const window = new Window(); const element = host(window); const errors: unknown[] = [];
-  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "test", prebuilt: built }], store: createMemoryAppStore(), createWorker, onError: e => errors.push(e) });
-  const page = activeHost(element).querySelector("#page")!.textContent;
-  const home = activeHost(element);
-  try {
-    assert(page); click(home, "open");
-    await waitFor(() => activeHost(element) !== home && logOf(element) === "create:0;start:1;resume;");
-    const app = activeHost(element);
-    assertEquals(logOf(home), "create:0;start:1;resume;pause;");
-    assertEquals(app.querySelector("#page")!.textContent, page);
-    element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
-    await waitFor(() => activeHost(element) === home && logOf(home)!.endsWith("pause;resume;"));
-    assertEquals(logOf(app), "create:0;start:1;resume;pause;");
-    click(home, "open");
-    await waitFor(() => activeHost(element) === app && logOf(app)!.endsWith("pause;resume;"));
-    click(app, "finish");
-    await waitFor(() => activeHost(element) === home && !app.isConnected);
-    assert(logOf(app)!.endsWith("before;after;pause;stop;destroy:0:1;"));
-    click(home, "finish");
-    await waitFor(() => activeHost(element) !== home && !!logOf(element)?.includes("start:1;resume;"));
-    assert(logOf(home)!.endsWith("before;after;pause;stop;destroy:0:1;"));
-    assertEquals(activeHost(element).querySelector("#page")!.textContent, page);
-    assertEquals(errors, []);
-    const other = host(window);
-    const second = await mountShell(other, { apps: [{ source: "binette:system", prebuilt: builtHome }], store: createMemoryAppStore(), createWorker });
-    try { assert(other.querySelector("#page")!.textContent !== page); }
-    finally { second.stop(); }
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
 for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
   Deno.test(phase + " の無限ループを打ち切り、Destroy だけはエラーを出さない", async () => {
     const code = phase === "init" ? source + '\nwhile (true) {}' : phase === "call"
@@ -179,22 +147,6 @@ for (const state of ["pause", "stop"] as const) {
   });
 }
 
-Deno.test("起動で固まるホームは、時間切れのあと開き直し続けない", async () => {
-  const builtHome = await build("let spin: i32 = 0;\nwhile (true) { spin++; }", true);
-  const window = new Window(); const element = host(window); const errors: unknown[] = []; let count = 0;
-  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: builtHome }], store: createMemoryAppStore(),
-    callTimeout: 50, homeRetryWindow: 50, createWorker() { count++; return realWorker(); }, onError: e => errors.push(e) });
-  try {
-    await waitFor(() => count >= 2);
-    await sleep(400);
-    const settled = count;
-    await sleep(300);
-    assertEquals(count, settled);
-    assert(settled <= 3);
-    assert((errors.at(-1) as Error).message.includes("応答しない"));
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
 async function stackFixtures() {
   const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => apps.open(${i}));`).join("\n");
   const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
@@ -229,68 +181,6 @@ Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さ�
     assert(logOf(c)!.endsWith("pause;stop;destroy:0:0;"));
     assertEquals((await store.system.listLaunches()).length, 4);
     shell.stop(); assert(!logOf(home)!.includes("destroy:")); assertEquals(terminated, 4);
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("保存した設定は ShellOptions より優先し、スタック 1 ではホームも Destroy して戻ると起動", async () => {
-  const window = new Window(); const element = host(window); const store = createMemoryAppStore();
-  await store.system.putSettings({ home: "後続で使う設定", stackSize: 1, historyLimit: 2, stopDelay: 15 });
-  const shell = await mountShell(element, { apps: await stackFixtures(), store, createWorker, stackSize: 9, historyLimit: 9, stopDelay: 10000 });
-  const home = activeHost(element);
-  try {
-    click(home, "open"); await waitFor(() => !home.isConnected);
-    assert(logOf(home)!.endsWith("pause;stop;destroy:1:2;"));
-    const a = activeHost(element);
-    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) !== a && !a.isConnected && !!logOf(element)?.endsWith("resume;"));
-    assert(activeHost(element) !== home); assert(logOf(element)!.startsWith("create:6;"));
-    const history = await store.system.listLaunches();
-    assertEquals(history.map(r => JSON.parse(r.app)[1]), ["A", "home"]);
-    assert(history.every(r => r.time > 0));
-    assertEquals((await store.system.getSettings())!.home, "後続で使う設定");
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("スタック内では前面だけを Pause・Resume し、freeze は全インスタンスの計時を止める", async () => {
-  const window = new Window(); const element = host(window);
-  Object.defineProperty(window.document, "visibilityState", { configurable: true, value: "visible" });
-  const event = (type: string) => window.document.dispatchEvent(new window.Event(type));
-  const visibility = (value: string) => { Object.defineProperty(window.document, "visibilityState", { configurable: true, value }); event("visibilitychange"); };
-  const shell = await mountShell(element, { apps: await stackFixtures(), store: createMemoryAppStore(), createWorker, stopDelay: 150 });
-  const home = activeHost(element);
-  try {
-    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
-    const a = activeHost(element);
-    visibility("hidden"); await waitFor(() => logOf(a)!.endsWith("pause;"));
-    const homeLog = logOf(home), appLog = logOf(a);
-    event("freeze"); await sleep(200);
-    assertEquals(logOf(home), homeLog); assertEquals(logOf(a), appLog);
-    event("resume"); await sleep(30);
-    assertEquals(logOf(home), homeLog); assertEquals(logOf(a), appLog);
-    visibility("visible"); await waitFor(() => logOf(a)!.endsWith("pause;resume;"));
-    await waitFor(() => logOf(home)!.endsWith("stop;"));
-    assertEquals(logOf(a), appLog + "resume;");
-    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home && logOf(home)!.endsWith("stop;start:5;resume;"));
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
-  const window = new Window(); const element = host(window); const errors: unknown[] = [];
-  const fixtures = await stackFixtures();
-  fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
-  const shell = await mountShell(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, stopDelay: 60, onError: e => errors.push(e) });
-  const home = activeHost(element);
-  try {
-    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
-    const a = activeHost(element);
-    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
-    click(home, "open1"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
-    const b = activeHost(element);
-    await waitFor(() => errors.length === 1);
-    assertEquals(activeHost(element), b); assert(!a.isConnected);
-    assertEquals(element.querySelector('[aria-label="Aを開く"]'), null);
-    assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
-    assert((errors[0] as Error).message.includes("背面の失敗"));
-    assertEquals(element.querySelector<HTMLElement>('[role=status]')!.hidden, false);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
@@ -357,6 +247,27 @@ Deno.test("起動の途中のクリックは捨てずに Resume のあとに届�
   finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
+Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
+  const window = new Window(); const element = host(window); const errors: unknown[] = [];
+  const fixtures = await stackFixtures();
+  fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
+  const shell = await mountShell(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, stopDelay: 60, onError: e => errors.push(e) });
+  const home = activeHost(element);
+  try {
+    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    const a = activeHost(element);
+    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
+    click(home, "open1"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    const b = activeHost(element);
+    await waitFor(() => errors.length === 1);
+    assertEquals(activeHost(element), b); assert(!a.isConnected);
+    assertEquals(element.querySelector('[aria-label="Aを開く"]'), null);
+    assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
+    assert((errors[0] as Error).message.includes("背面の失敗"));
+    assertEquals(element.querySelector<HTMLElement>('[role=status]')!.hidden, false);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
 Deno.test("ホームが onPause で落ちても、開いたアプリから引き離さない", async () => {
   const fixtures = await stackFixtures();
   const home = fixtures[0]!.prebuilt;
@@ -373,5 +284,23 @@ Deno.test("ホームが onPause で落ちても、開いたアプリから引き
     assertEquals(activeHost(element), opened);
     assertEquals(element.querySelectorAll(".bina-shell-app:not([hidden])").length, 1);
     assertEquals(element.querySelector('[aria-label="Aを開く"]')!.getAttribute("aria-pressed"), "true");
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("mountApp のエラーは前面の更新では残り、次の show で消える", async () => {
+  const window = new Window(); const element = host(window); const errors: unknown[] = [];
+  const home = await build(source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.createElement("script");'), true);
+  const app = await build();
+  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "test", prebuilt: app }],
+    store: createMemoryAppStore(), createWorker, onError: error => errors.push(error) });
+  try {
+    const status = element.querySelector<HTMLElement>("[role=status]")!;
+    assertEquals(errors.length, 1);
+    assertEquals(status.textContent, "作れないタグです: script");
+    assertEquals(status.hidden, false);
+    const homeHost = activeHost(element);
+    click(element, "open");
+    await waitFor(() => activeHost(element) !== homeHost && activeHost(element)?.querySelector("#log")?.textContent?.endsWith("resume;") === true);
+    assertEquals(status.hidden, true);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });

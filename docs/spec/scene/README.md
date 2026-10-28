@@ -21,9 +21,9 @@ Scene（システム UI）
 | 役割 | 状況 | ファイル |
 | --- | --- | --- |
 | アプリの置き場。HTML を描き、DOM 操作を反映し、クリックを Régie に渡す | 実装済み | [mount.md](mount.md) |
-| 大枠。ホームバー、Apps の一覧、エラー表示、ライブモード、CSS 変数。ページの知らせを Régie に渡す | 実装済み（Régie の判断と混ざっている。分ける） | [shell.md](shell.md) |
+| 大枠。ホームバー、Apps の一覧、エラー表示、ライブモード、CSS 変数。ページの知らせを Régie に渡す | 実装済み | [shell.md](shell.md) |
 
-今のコードの Scene には、ビルド（Régie へ移す。[regie/build.md](../regie/build.md)）とスタックやホームの選び方（[regie/system.md](../regie/system.md)）も入っています。状態の移り変わりは Régie にあります。
+今のコードの Scene には、ビルド（Régie へ移す。[regie/build.md](../regie/build.md)）も入っています。スタックやホームの選び方と状態の移り変わりは Régie にあります。
 
 ## 公開するもの
 
@@ -31,11 +31,11 @@ Scene（システム UI）
 
 | 名前 | 種類 | 内容 | 今 |
 | --- | --- | --- | --- |
-| `mountShell` | 関数 | 大枠を描き、Régie のシステムを起動してつなぐ | 同じ名前（判断も持っている） |
-| `createShellUi` | 関数 | 大枠を描き、Régie に渡す `SystemUi` を作る | 無い |
+| `mountShell` | 関数 | 大枠を描き、Régie のシステムを起動してつなぐ | 同じ |
+| `createShellUi` | 関数 | 大枠を描き、Régie に渡す `SystemUi` を作る | 同じ |
 | `mountApp` | 関数 | 置き場に HTML を描き、プロセスとつなぐ | 同じ名前（HTML を描き、DOM 操作とクリックを受け持つ） |
 | `isInstalled` | 関数 | ページがインストール済みか | 同じ |
-| `ShellOptions`・`MountedShell`・`ShellUi`・`MountedApp` | 型 | 上の設定と結果 | 一部同じ |
+| `ShellOptions`・`ShellUiOptions`・`MountedShell`・`ShellUi`・`MountedApp` | 型 | 上の設定と結果 | 同じ |
 
 ビルドと `.binapp` の関数（`buildApp`・`loadCompiler`・`parsePrebuiltApp`・`stringifyPrebuiltApp` と CLI）は Scene から外します。`State`・`DestroyKind`・`DestroyCause` はもう Scene から外し、`@binette/core` で公開しています。
 

@@ -23,7 +23,7 @@ await process.begin();
 - `mountApp(element, html, process, options)` は HTML を描き、document API の DOM 操作を枠内に反映します。通常の id を参照し、click はプロセスに渡します。プロセスの起動は `startProcess` と `process.begin()` で行います
 - 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML の検査はまだありません
 
-ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は `binette:system` かつ `role: "home"` の最初のアプリを開き、ホームだけに `apps` の一覧を渡します。ホームが別のアプリを開くとホームを隠して Pause にし、OS のホームバーで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
+ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は Régie のシステムを起動し、保存された設定に従ってホームを開きます。ホームが別のアプリを開くとホームを隠して Pause にし、OS のホームバーで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
 
 動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene/README.md) にあります。
 
@@ -32,11 +32,11 @@ await process.begin();
 | 名前 | 用途 |
 | --- | --- |
 | `buildApp` / `loadCompiler` | 開発用のブラウザ内ビルド |
-| `mountApp` / `mountShell` | アプリの描画と起動の枠 |
+| `mountApp` / `createShellUi` / `mountShell` | アプリの描画とシステム UI、起動の枠 |
 | `PrebuiltApp` | manifest・HTML・任意の SVG・WASM |
 | `stringifyPrebuiltApp` / `parsePrebuiltApp` | `.binapp` の書き出しと読み込み |
 
-`ShellApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system` など）。
+Régie の `SystemApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system` など）。
 
 ## 単独フロント
 

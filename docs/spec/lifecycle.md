@@ -322,7 +322,7 @@ launch(memo);
 
 ### 値を変えたときに効く所（案・実装済み）
 
-その場でシステム（[regie/system.md](regie/system.md#os-の設定案)。今のコードでは mountShell）の設定を変え、SystemStore に保存します。
+その場でシステム（[regie/system.md](regie/system.md#os-の設定案)）の設定を変え、SystemStore に保存します。
 
 | 値 | いつから使うか |
 | --- | --- |
@@ -339,7 +339,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | 項目 | 今 |
 | --- | --- |
 | モードの見分け、透かし、インストールが要る操作のアラート | isInstalled と installed の上書き、display-mode の change、appinstalled、透かし、ホームバーのインストールボタン、prompt と手順の dialog、requireInstall を実装。保存はいつも IndexedDB で、これは決まりどおり。インストールを必須とする操作自体はまだ無い |
-| ページの識別子、ページで起きること | mountShell ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
+| ページの識別子、ページで起きること | startSystem ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
 | Service Worker | 本番の OS だけが登録。マニフェストと自作アイコンを同梱。版付きキャッシュ、navigate はネット優先、同じオリジンのほかの GET は stale-while-revalidate。開発では登録しない。プッシュ通知は未実装 |
 | アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない。起動の途中のクリックは Resume のあとに届ける（[scene/mount.md](scene/mount.md)） |
 | 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
@@ -349,8 +349,8 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | 落ちたとき | 状態を知らせずに捨て、前面ならホームに戻ってエラーを出す。隠れたアプリなら前面を変えずにエラーを出す。ホームの終了や起動失敗はホームを起動し直す。最初の落ちから 5 秒（`homeRetryWindow`）を過ぎても落ち続けたら Apps を出す |
 | Apps | OS が DOM を直接描く。ホームの一覧と同じアプリ（ホーム候補以外、設定を含む）の名前を文字コード順に縦に並べる。スタックやホームバーの一覧には入れない。開いたアプリを閉じたら Apps に戻り、ホームバーの「ホーム」で計時を消してホームを再試行する |
 | `App` クラス | launch で一回だけ渡し、6 つのメソッドを上書きできる。二回の launch はアプリの終了 |
-| デバッグメニュー | 設定アプリの − ＋ と os.* を実装。値は SystemStore に保存し、上の表の時点から使う。mountShell の作り直しでも残り、ShellOptions より優先する |
-| ホームの選び方 | installedAppKey を home に保存。保存済みの role home を入手元に関係なく選べる。空・見つからない場合は system のホーム。変更後は新しいホームに apps.* を渡し、前のホームは User・Os で Destroy。アプリの削除が無いので、削除時に home を空にする処理はまだ無い（[scene/shell.md](scene/shell.md)） |
+| デバッグメニュー | 設定アプリの − ＋ と os.* を実装。値は SystemStore に保存し、上の表の時点から使う。システムの作り直しでも残り、SystemOptions より優先する |
+| ホームの選び方 | installedAppKey を home に保存。保存済みの role home を入手元に関係なく選べる。空・見つからない場合は system のホーム。変更後は新しいホームに apps.* を渡し、前のホームは User・Os で Destroy。アプリの削除が無いので、削除時に home を空にする処理はまだ無い（[regie/system.md](regie/system.md)） |
 
 ## 今はやらないこと
 

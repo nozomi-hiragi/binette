@@ -7,8 +7,8 @@ export type { BuildOptions, BuiltApp, Compiler, CompilerStream } from "./build.t
 export { buildApp, loadCompiler } from "./build.ts";
 export type { MountedApp, MountOptions } from "./mount.ts";
 export { mountApp } from "./mount.ts";
-export type { ShellApp, ShellOptions, MountedShell } from "./shell.ts";
+export type { ShellOptions, MountedShell, ShellUiOptions, ShellUi } from "./shell.ts";
 export { isInstalled } from "./live.ts";
-export { mountShell } from "./shell.ts";
+export { mountShell, createShellUi } from "./shell.ts";
 export type { PrebuiltApp } from "./prebuilt.ts";
 export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";
