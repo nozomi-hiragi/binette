@@ -55,6 +55,6 @@ Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` で�
 
 v0.2 の途中で bina 属性と bina.ts の生成、Bindings・BindingKind・HtmlParser・parseBindings・generateBindingsSource・writeBindings を廃止しました。BuiltApp.bindings と parser オプション、deno-dom も不要です。AS の入口末尾には __bina_event・__bina_lifecycle の再 export を差し込みます。AS の相対 import はアプリのフォルダ内で解決します。
 
-MountedApp は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen) を持ちます。State・DestroyKind・DestroyCause は Scene からも export します。ShellOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。ホームに戻るときはインスタンスを残し、finish は User・App で捨ててホームへ戻ります。stop() は何も知らせずに止めます。
+MountedApp は state・pause()・resume()・destroy(kind, cause)・setFrozen(frozen) を持ちます。State・DestroyKind・DestroyCause は `@binette/core` から import します。ShellOptions の stopDelay は Pause から Stop までの時間（ミリ秒、既定 10000）、destroyTimeout は onDestroy の時間切れ（既定 5000）、callTimeout は起動と呼び出しの時間切れ（既定 5000）です。非表示で Pause、表示で Resume にし、凍結中は Stop の時間を数えません。ホームに戻るときはインスタンスを残し、finish は User・App で捨ててホームへ戻ります。stop() は何も知らせずに止めます。
 
 AppStore.system に最後の状態・起動の履歴・OS の設定を保存します。ShellOptions の stackSize・historyLimit は既定の上限です。保存した設定を優先し、home の選択への反映は後続の作業です。単独の mountApp では MountOptions.persistence に保存先とキーを渡せます。

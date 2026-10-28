@@ -1,7 +1,8 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
-import { buildApp, DestroyCause, DestroyKind, mountApp, mountShell, State } from "../src/index.ts";
+import { DestroyCause, DestroyKind, State } from "@binette/core";
+import { buildApp, mountApp, mountShell } from "../src/index.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

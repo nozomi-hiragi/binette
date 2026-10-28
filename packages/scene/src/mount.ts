@@ -1,10 +1,6 @@
-import { launchApp, type DomOp, type LaunchOptions, type RegieApp, type SystemStore, type LifecycleRecord } from "@binette/regie";
+import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
+import { launchApp, type LaunchOptions, type RegieApp, type SystemStore, type LifecycleRecord } from "@binette/regie";
 import type { BuiltApp } from "./build.ts";
-
-/** Réplique の State・DestroyKind・DestroyCause と同じ番号 */
-export enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
-export enum DestroyKind { User, System }
-export enum DestroyCause { Os, App, Stack, Update, Uninstall }
 
 /** {@link mountApp} の設定 */
 export interface MountOptions {

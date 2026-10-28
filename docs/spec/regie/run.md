@@ -197,7 +197,7 @@ Régie が WASM に渡すのは `binette` の [Réplique の import](../replique
 
 `apps.open` と `app.finish` の import は即時にメッセージを送ります。メインは ready または待つ call の完了まで要求を保留し、DOM 操作が届いたあとに onOpen / onFinish を呼びます。同じ呼び出しの finish は open より優先します。
 
-公開する判別共用体 `DomOp`（案・実装済み。core へ移す予定。[core.md](../core.md#domop案)）:
+公開する判別共用体 `DomOp`（案・実装済み。core で公開。[core.md](../core.md#domop案)）:
 
 ```ts
 type DomOp =

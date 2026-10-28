@@ -1,3 +1,4 @@
+import type { DomOp } from "@binette/core";
 import { serveApp } from "./worker.ts";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
@@ -14,17 +15,6 @@ export interface RegieWorker {
   addEventListener<K extends "message" | "error" | "messageerror">(type: K, listener: (event: K extends "error" ? ErrorEvent : MessageEvent) => void): void;
   terminate(): void;
 }
-
-/** アプリから届く DOM 操作 */
-export type DomOp =
-  | { op: "byId"; handle: number; id: string }
-  | { op: "create"; handle: number; tag: string }
-  | { op: "text"; handle: number; value: string }
-  | { op: "class"; handle: number; value: string }
-  | { op: "append"; parent: number; child: number }
-  | { op: "remove"; handle: number }
-  | { op: "listen"; handle: number; type: string; listener: number }
-  | { op: "icon"; handle: number; app: number };
 
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
