@@ -40,3 +40,16 @@ Deno.test("システムアプリの失敗はフォルダ名を示す", async () 
     assertEquals(result.code, 1);
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
+
+Deno.test("実際のシステムアプリは HTML なしで宣言 UI をビルドする", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const root = new URL("../apps", import.meta.url).pathname;
+    assertEquals(await buildSystem(root, dir, replique), ["home", "settings"]);
+    for (const name of ["home", "settings"]) {
+      const built = parsePrebuiltApp(await Deno.readTextFile(`${dir}/${name}.binapp`));
+      assertEquals(built.manifest.entry.html, undefined);
+      assertEquals(built.html, "");
+    }
+  } finally { await Deno.remove(dir, { recursive: true }); }
+});

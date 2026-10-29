@@ -1,4 +1,5 @@
-import { App, document, Element, Event, Last, launch, os } from "jsr:@binette/replique";
+import { App, launch, os } from "jsr:@binette/replique";
+import { View, button, column, row, show, text } from "jsr:@binette/replique/ui";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
 const labels = ["スタックできるアプリの数", "Stop までの時間", "起動の履歴の最大の行数", "呼び出しの時間切れ", "onDestroy の時間切れ", "Apps を出すまでの時間"];
@@ -29,86 +30,51 @@ function utc(time: f64): string {
   return pad(year, 4) + "-" + pad(month) + "-" + pad(day) + " " + pad(within / 3600) + ":" + pad(within / 60 % 60) + ":" + pad(within % 60);
 }
 
+let details = false;
+function showDetails(): void { details = true; }
+function chooseHome(index: i32): void { os.setHome(index); }
+function change(change: i32): void {
+  const i = change / 2;
+  const value = os.get(names[i]);
+  // i32 の上限を越える加算もしない
+  const next = <i64>value + (change % 2 == 0 ? -steps[i] : steps[i]);
+  if (next < minimums[i] || next > 2147483647) return;
+  os.set(names[i], <i32>next);
+}
+
 class Settings extends App {
-  private homeIndices: Map<Element, i32> = new Map<Element, i32>();
-  private changes: Map<Element, i32> = new Map<Element, i32>();
-  private homeButtons: Element[] = [];
-  private values: Element[] = [];
-
-  onCreate(_last: Last): void {
-    document.getElementById("details").addEventListener("click", () => settings.showDetails());
-    const homes = document.getElementById("homes");
+  build(): View {
+    const homes: View[] = [];
     for (let i: i32 = 0; i < os.homeCount(); i++) {
-      const button = document.createElement("button");
-      this.homeIndices.set(button, i);
-      this.homeButtons.push(button);
-      button.addEventListener("click", (event: Event) => settings.chooseHome(event));
-      homes.appendChild(button);
+      homes.push(button(os.homeName(i) + (os.homeId(i) == os.home() ? "（使用中）" : ""), chooseHome).arg(i).padding(12).key("home-" + i.toString()));
     }
-    this.updateHomes();
-    const debug = document.getElementById("debug");
+    const debug: View[] = [];
     for (let i: i32 = 0; i < names.length; i++) {
-      const row = document.createElement("div");
-      row.className = "settings-row";
-      const label = document.createElement("span");
-      label.className = "settings-label";
-      label.textContent = labels[i];
-      row.appendChild(label);
-      const value = document.createElement("span");
-      value.className = "settings-value";
-      this.values.push(value);
-      row.appendChild(value);
-      for (let direction: i32 = 0; direction < 2; direction++) {
-        const button = document.createElement("button");
-        button.textContent = direction == 0 ? "−" : "＋";
-        this.changes.set(button, i * 2 + direction);
-        button.addEventListener("click", (event: Event) => settings.change(event));
-        row.appendChild(button);
-      }
-      debug.appendChild(row);
-      this.updateValue(i);
+      const value = os.get(names[i]);
+      const seconds = value % 1000 == 0 ? (value / 1000).toString() : (<f64>value / 1000).toString();
+      debug.push(row([
+        text(labels[i]).grow(),
+        text(steps[i] == 1000 ? seconds + " 秒" : value.toString()).minWidth(80).key("settings-value-" + i.toString()),
+        button("−", change).arg(i * 2).label(labels[i] + "を減らす"),
+        button("＋", change).arg(i * 2 + 1).label(labels[i] + "を増やす"),
+      ]).gap(8).key("settings-row-" + i.toString()));
     }
-    const history = document.getElementById("history");
+    const history: View[] = [];
     for (let i: i32 = 0; i < os.launchCount(); i++) {
-      const line = document.createElement("li");
-      line.textContent = utc(os.launchTime(i)) + " " + os.launchName(i);
-      history.appendChild(line);
+      history.push(text(utc(os.launchTime(i)) + " " + os.launchName(i)).key("launch-" + i.toString()));
     }
-  }
-
-  updateHomes(): void {
-    for (let i: i32 = 0; i < this.homeButtons.length; i++) {
-      this.homeButtons[i].textContent = os.homeName(i) + (os.homeId(i) == os.home() ? "（使用中）" : "");
-    }
-  }
-
-  chooseHome(event: Event): void {
-    if (!this.homeIndices.has(event.currentTarget)) return;
-    os.setHome(this.homeIndices.get(event.currentTarget));
-    this.updateHomes();
-  }
-
-  updateValue(i: i32): void {
-    const value = os.get(names[i]);
-    const seconds = value % 1000 == 0 ? (value / 1000).toString() : (<f64>value / 1000).toString();
-    this.values[i].textContent = steps[i] == 1000 ? seconds + " 秒" : value.toString();
-  }
-
-  change(event: Event): void {
-    if (!this.changes.has(event.currentTarget)) return;
-    const change = this.changes.get(event.currentTarget);
-    const i = change / 2;
-    const value = os.get(names[i]);
-    // i32 の上限を越える加算もしない
-    const next = <i64>value + (change % 2 == 0 ? -steps[i] : steps[i]);
-    if (next < minimums[i] || next > 2147483647) return;
-    if (os.set(names[i], <i32>next)) this.updateValue(i);
-  }
-
-  showDetails(): void {
-    document.getElementById("description").textContent = "ブラウザだけで動く、アプリの土台です。";
+    return column([
+      text("設定").heading(1).key("settings-title"),
+      column([
+        text("Binette について").heading(2).key("about-title"), text("Binette — 仕様の版 0.2"),
+        button("詳しく", showDetails).key("details"),
+        column([show(details, text("ブラウザだけで動く、アプリの土台です。"))]).key("description"),
+      ]).gap(8),
+      column([text("ホーム").heading(2).key("home-title"), column(homes).gap(8).key("homes")]).gap(8),
+      column([text("デバッグ").heading(2).key("debug-title"), column(debug).gap(8).key("debug")]).gap(8),
+      column([text("起動の履歴").heading(2).key("history-title"), text("日時は UTC です。"), column(history).gap(8).list().key("history")]).gap(8),
+    ]).gap(16).key("settings-root");
   }
 }
 
-const settings = new Settings();
-launch(settings);
+launch(new Settings());

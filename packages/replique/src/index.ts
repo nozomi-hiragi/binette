@@ -301,12 +301,26 @@ export class View {
   // @ts-ignore: AssemblyScript の型・組み込み関数
   argValue: i32 = 0;
   callback: UiCallback | null = null;
+  textCallback: ((value: string) => void) | null = null;
+  minWidthValue: number = 0;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  headingValue: i32 = 0;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  listValue: bool = false;
+  shownValue: boolean = true;
+  appValue: number = -1;
   constructor(readonly kind: string) {}
   // @ts-ignore: AssemblyScript の型・組み込み関数
   padding(n: i32): View { this.paddingValue = n; return this; }
   // @ts-ignore: AssemblyScript の型・組み込み関数
   gap(n: i32): View { this.gapValue = n; return this; }
+  minWidth(n: number): View { this.minWidthValue = n; return this; }
   grow(): View { this.growValue = true; return this; }
+  /** 見出しにする。level は 1〜3（範囲外は丸める）。読み上げでも見出しになる */
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  heading(level: i32): View { this.headingValue = level < 1 ? 1 : level > 3 ? 3 : level; return this; }
+  /** 子を並びとして扱う。読み上げでも一覧と項目になる */
+  list(): View { this.listValue = true; return this; }
   key(s: string): View { this.keyValue = s; return this; }
   label(s: string): View { this.labelValue = s; return this; }
   // @ts-ignore: AssemblyScript の型・組み込み関数
@@ -331,13 +345,18 @@ class TypedUiCallback<T> extends UiCallback {
 }
 class UiHandler {
   // @ts-ignore: AssemblyScript の型・組み込み関数
-  constructor(readonly callback: UiCallback, readonly arg: i32) {}
+  constructor(readonly callback: UiCallback | null, readonly arg: i32, readonly textCallback: ((value: string) => void) | null) {}
 }
 let uiHandlers: Array<UiHandler> = [];
 // @ts-ignore: AssemblyScript の型・組み込み関数
 let uiBuild: i32 = 0;
 
 export function column(children: Array<View>): View { const v = new View("column"); v.children = children; return v; }
+export function grid(children: Array<View>): View { const v = new View("grid"); v.children = children; return v; }
+export function input(value: string, onText: (value: string) => void): View { const v = new View("input"); v.value = value; v.textCallback = onText; return v; }
+// @ts-ignore: AssemblyScript の整数型
+export function appIcon(index: i32): View { const v = new View("appIcon"); v.appValue = index; return v; }
+export function show(condition: boolean, view: View): View { view.shownValue = condition; return view; }
 export function row(children: Array<View>): View { const v = new View("row"); v.children = children; return v; }
 export function text(value: string): View { const v = new View("text"); v.value = value; return v; }
 export function button<T>(label: string, f: T): View { const v = new View("button"); v.value = label; v.callback = new TypedUiCallback<T>(f); return v; }
@@ -360,9 +379,9 @@ function serializeView(view: View): string {
   // @ts-ignore: AssemblyScript の型・組み込み関数
   let handler: i32 = -1;
   const callback = view.callback;
-  if (callback !== null) {
+  if (callback !== null || view.textCallback !== null) {
     handler = uiHandlers.length;
-    uiHandlers.push(new UiHandler(callback, view.argValue));
+    uiHandlers.push(new UiHandler(callback, view.argValue, view.textCallback));
   }
   let children = "[";
   for (let i = 0; i < view.children.length; i++) {
@@ -374,7 +393,7 @@ function serializeView(view: View): string {
     ',"text":' + jsonString(view.value) + ',"padding":' + view.paddingValue.toString() +
     ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
     ',"key":' + jsonString(view.keyValue) + ',"label":' + jsonString(view.labelValue) +
-    ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
+    ',"minWidth":' + view.minWidthValue.toString() + ',"heading":' + view.headingValue.toString() + ',"list":' + (view.listValue ? "true" : "false") + ',"shown":' + (view.shownValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
 }
 
 function rebuild(): void {
@@ -394,7 +413,18 @@ function rebuild(): void {
 export function __bina_ui_event(build: i32, handler: i32): void {
   if (build != uiBuild || handler < 0 || handler >= uiHandlers.length) return;
   const entry = uiHandlers[handler];
-  entry.callback.call(entry.arg);
+  const callback = entry.callback;
+  if (callback === null) return;
+  callback.call(entry.arg);
+  rebuild();
+}
+
+// @ts-ignore: AssemblyScript の整数型
+export function __bina_ui_text(build: i32, handler: i32, value: string): void {
+  if (build != uiBuild || handler < 0 || handler >= uiHandlers.length) return;
+  const callback = uiHandlers[handler].textCallback;
+  if (callback === null) return;
+  callback(value);
   rebuild();
 }
 

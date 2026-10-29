@@ -52,7 +52,7 @@ export interface RegieApp {
   /** アプリが export している関数の名前 */
   readonly exports: readonly string[];
   /** export した関数を呼ぶ。終わったら解決する。呼び出し中の DOM 操作は、解決より先に `onDom` に届く */
-  call(name: string, ...args: number[]): Promise<void>;
+  call(name: string, ...args: (number | string)[]): Promise<void>;
   /** Worker を止める */
   stop(): void;
 }

@@ -6,7 +6,6 @@
   "role": "settings",
   "icon": "icon.svg",
   "entry": {
-    "html": "src/index.html",
     "as": "src/main.ts"
   }
 }

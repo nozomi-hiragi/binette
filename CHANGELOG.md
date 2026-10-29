@@ -2,6 +2,9 @@
 
 ## v0.2.0（未リリース）
 
+- 宣言 UI に `.heading(level)` と `.list()` を追加（読み上げでも見出し・一覧になる）。OS の部品の CSS をアプリによらない汎用のものにし、テーマの変数を `--bina-ui-*` にそろえる。`--bina-home-*` は使わない
+- 宣言的 UI に input・grid・minWidth・appIcon・show を追加し、ホームと設定を宣言的 UI に移行する（案）
+
 - 宣言的 UI の部品と修飾、差分描画、要素ハンドルによるクリックの配送を追加し、app.json の entry.html を省略可能にする（案）
 
 - Réplique に `removeEventListener` を追加し、リスナー解除と要素・子孫の削除時に Réplique と Scene の参照と DOM リスナーを解放する（案）

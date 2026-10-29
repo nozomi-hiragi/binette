@@ -20,17 +20,17 @@
   "name": "設定",
   "role": "settings",
   "icon": "icon.svg",
-  "entry": { "html": "src/index.html", "as": "src/main.ts" }
+  "entry": { "as": "src/main.ts" }
 }
 ```
 
 - 入手元が `binette:system` かつ `role: "settings"` の場合だけ [os.*](../replique.md#設定アプリの-os案実装済み) を使える。role だけをまねた外部のアプリには渡さず、呼ぶとアプリを終了する
 - ホームの一覧にふつうのアプリとして並び、開くと OS のホームバーが下に出る（[home.md](home.md#os-の枠との分担)）
-- 通常の id と document API を使う。`Settings extends App` の onCreate でホームとデバッグ値のボタン、履歴の li を作る。click はグローバルの settings を通し、`Map<Element, i32>` と event.currentTarget でどのボタンかを区別する。`<style>` で行とボタンだけを整える
-- トップレベルで `launch(settings)` を一回呼ぶ。id="details" の click で id="description" の p に説明を書く
+- `Settings extends App` の `build()` でホームとデバッグ値のボタン、履歴を宣言的 UI の部品として作る。ボタンの `arg(i)` で操作対象を渡す（案）
+- トップレベルで `launch(settings)` を一回呼ぶ。「詳しく」の操作で説明を表示する
 - 値は Worker の写しも更新するので連続した − ＋ に反映する。変更は OS が SystemStore に保存し、[項目ごとの時点](../lifecycle.md#値を変えたときに効く所案実装済み)から使う。ホームを変えたときも設定画面は開いたままにする
 - 履歴はインスタンスを作る直前の写し。ホームから戻すだけでは更新せず、閉じて開き直すと新しくなる
-- 版の `0.2` は HTML に書いたもので、OS から読んではいない
+- 版の `0.2` はアプリに書いたもので、OS から読んではいない
 
 ## 未決のこと
 

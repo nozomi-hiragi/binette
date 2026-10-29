@@ -1,32 +1,16 @@
-import { App, apps, document, Element, Event, Last, launch } from "jsr:@binette/replique";
+import { App, apps, launch } from "jsr:@binette/replique";
+import { View, appIcon, buttonOf, column, grid, text } from "jsr:@binette/replique/ui";
+
+function openApp(index: i32): void { apps.open(index); }
 
 class Home extends App {
-  private indices: Map<Element, i32> = new Map<Element, i32>();
-
-  onCreate(_last: Last): void {
-    const tiles = document.getElementById("tiles");
-    tiles.textContent = "";
-    this.indices.clear();
+  build(): View {
+    const tiles: View[] = [];
     for (let i: i32 = 0; i < apps.count(); i++) {
-      const tile = document.createElement("button");
-      tile.className = "home-tile";
-      const img = document.createElement("img");
-      img.className = "home-icon";
-      apps.icon(img, i);
-      tile.appendChild(img);
-      const name = document.createElement("span");
-      name.textContent = apps.name(i);
-      tile.appendChild(name);
-      this.indices.set(tile, i);
-      tile.addEventListener("click", (event: Event) => home.openApp(event));
-      tiles.appendChild(tile);
+      tiles.push(buttonOf([column([appIcon(i), text(apps.name(i))]).gap(16)], openApp).arg(i).padding(12).key("home-tile-" + i.toString()));
     }
-  }
-
-  openApp(event: Event): void {
-    if (this.indices.has(event.currentTarget)) apps.open(this.indices.get(event.currentTarget));
+    return grid(tiles).minWidth(112).gap(16).padding(16).grow().label("アプリ").key("home-grid");
   }
 }
 
-const home = new Home();
-launch(home);
+launch(new Home());

@@ -34,3 +34,106 @@ Deno.test("宣言 UI の移動と更新は既存の要素を使い、イベン�
     assertEquals(events, [2, 2]);
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("入力は IME 中も毎回通知し、同値や変換中の value は書き換えない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  let apply: (ops: DomOp[]) => void = () => {};
+  const values: string[] = [];
+  const process = { attach(sink: typeof apply) { apply = sink; }, dispatchUiText(_handle: number, value: string) { values.push(value); } } as unknown as Process;
+  const mounted = mountApp(host, "", process);
+  const update = (text: string): Extract<DomOp, { op: "ui-update" }> => ({ op: "ui-update", handle: 1, text, clickable: true, padding: null, gap: null, grow: false, label: "入力", enabled: true });
+  try {
+    apply([{ op: "ui-create", handle: 1, kind: "input" }, update("hello"), { op: "ui-insert", parent: null, child: 1, before: null }]);
+    const input = host.querySelector("input")!;
+    input.setSelectionRange(2, 2);
+    apply([update("hello")]);
+    assertEquals(input.selectionStart, 2);
+    input.dispatchEvent(new window.Event("compositionstart") as unknown as Event);
+    input.value = "に";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    apply([update("stale")]);
+    assertEquals(input.value, "に");
+    input.value = "日本";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    input.dispatchEvent(new window.Event("compositionend") as unknown as Event);
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    assertEquals(values, ["に", "日本"]);
+    apply([{ ...update("古い応答"), inputVersion: 1 }]);
+    assertEquals(input.value, "日本");
+    apply([{ ...update("日本語"), inputVersion: 2 }]);
+    assertEquals(input.value, "日本語");
+    mounted.stop();
+    input.value = "後";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    assertEquals(values, ["に", "日本"]);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("見出しと一覧は役割で読み上げられ、OS の CSS はアプリの key を見ない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  let apply: (ops: DomOp[]) => void = () => {};
+  const process = { attach(sink: typeof apply) { apply = sink; }, dispatchUi() {} } as unknown as Process;
+  const mounted = mountApp(host, "", process);
+  const base = { padding: null, gap: null, grow: false, label: null, enabled: true, clickable: false };
+  try {
+    apply([
+      { op: "ui-create", handle: 1, kind: "column" }, { op: "ui-insert", parent: null, child: 1, before: null },
+      { op: "ui-create", handle: 2, kind: "text" }, { op: "ui-update", handle: 2, text: "設定", ...base, heading: 1, key: "settings-title" },
+      { op: "ui-insert", parent: 1, child: 2, before: null },
+      { op: "ui-create", handle: 3, kind: "column" }, { op: "ui-update", handle: 3, text: "", ...base, list: true },
+      { op: "ui-insert", parent: 1, child: 3, before: null },
+      { op: "ui-create", handle: 4, kind: "text" }, { op: "ui-update", handle: 4, text: "一", ...base, listItem: true, minWidth: 80 },
+      { op: "ui-insert", parent: 3, child: 4, before: null },
+    ]);
+    const title = host.querySelector<HTMLElement>(".bina-ui-text")!;
+    assertEquals([title.getAttribute("role"), title.getAttribute("aria-level")], ["heading", "1"]);
+    assertEquals(host.querySelectorAll(".bina-ui-column")[1]!.getAttribute("role"), "list");
+    const item = host.querySelectorAll<HTMLElement>(".bina-ui-text")[1]!;
+    assertEquals(item.getAttribute("role"), "listitem");
+    // text の minWidth は自分の幅で、子に受け継ぐ変数にはしない
+    assertEquals([item.style.minWidth, item.style.getPropertyValue("--bina-ui-minWidth")], ["80px", ""]);
+    apply([{ op: "ui-update", handle: 2, text: "設定", ...base }]);
+    assertEquals([title.hasAttribute("role"), title.hasAttribute("aria-level")], [false, false]);
+    const css = host.querySelector("style")?.textContent ?? "";
+    assertEquals([css.includes("data-bina-key"), css.includes("settings-"), css.includes("bina-home")], [false, false, false]);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("変換中に届いた今の入力への描き直しは、変換の終わりに反映する", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  let apply: (ops: DomOp[]) => void = () => {};
+  const values: string[] = [];
+  const process = { attach(sink: typeof apply) { apply = sink; }, dispatchUiText(_handle: number, value: string) { values.push(value); } } as unknown as Process;
+  const mounted = mountApp(host, "", process);
+  const update = (text: string, inputVersion: number): DomOp => ({ op: "ui-update", handle: 1, text, clickable: true, padding: null, gap: null, grow: false, label: null, enabled: true, inputVersion });
+  try {
+    apply([{ op: "ui-create", handle: 1, kind: "input" }, update("", 0), { op: "ui-insert", parent: null, child: 1, before: null }]);
+    const input = host.querySelector("input")!;
+    input.dispatchEvent(new window.Event("compositionstart") as unknown as Event);
+    input.value = "ABC";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    apply([update("abc", 1)]);
+    assertEquals(input.value, "ABC");
+    input.dispatchEvent(new window.Event("compositionend") as unknown as Event);
+    assertEquals([values, input.value], [["ABC"], "abc"]);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("minWidth を付けない grid は既定の列の幅を使う", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  let apply: (ops: DomOp[]) => void = () => {};
+  const process = { attach(sink: typeof apply) { apply = sink; } } as unknown as Process;
+  const mounted = mountApp(host, "", process);
+  const base = { text: "", padding: null, gap: null, grow: false, label: null, enabled: true, clickable: false };
+  try {
+    apply([{ op: "ui-create", handle: 1, kind: "grid" }, { op: "ui-update", handle: 1, ...base, minWidth: 0 }, { op: "ui-insert", parent: null, child: 1, before: null }]);
+    const grid = host.querySelector<HTMLElement>(".bina-ui-grid")!;
+    assertEquals(grid.style.getPropertyValue("--bina-ui-minWidth"), "");
+    apply([{ op: "ui-update", handle: 1, ...base, minWidth: 96 }]);
+    assertEquals(grid.style.getPropertyValue("--bina-ui-minWidth"), "96px");
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
