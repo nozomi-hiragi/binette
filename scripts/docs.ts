@@ -16,6 +16,7 @@ await run([
   "--name=Binette",
   `--output=${output}/api`,
   "packages/core/src/index.ts",
+  "packages/decor/src/index.ts",
   "packages/regie/src/index.ts",
   "packages/regie/src/build.ts",
   "packages/regie/src/cli.ts",

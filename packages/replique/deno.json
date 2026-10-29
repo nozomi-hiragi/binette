@@ -6,13 +6,14 @@
     "./ui": "./src/ui.ts"
   },
   "tasks": {
-    "check": "deno run -A npm:assemblyscript@0.28.20/bin/asc.js src/index.ts --noEmit"
+    "check": "deno run -A scripts/check.ts"
   },
   "publish": {
     "include": [
       "src",
       "README.md",
-      "LICENSE"
+      "LICENSE",
+      "scripts"
     ]
   }
 }

@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 export type { WorkerScope } from "./worker.ts";
-export { serveApp } from "./worker.ts";
+export { serveApp, workerSource } from "./worker.ts";
 export type { LaunchOptions, OsSnapshot, RegieApp, RegieWorker } from "./launch.ts";
 export { launchApp } from "./launch.ts";
 export type { AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord, LaunchRecord, SystemSettings, SystemStore } from "./store.ts";

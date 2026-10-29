@@ -54,6 +54,8 @@ try {
         },
         imports: {
           "@binette/core": "../packages/core/src/index.ts",
+          "@binette/decor": "../packages/decor/src/index.ts",
+          "@binette/decor/as": "../packages/decor/src/as.ts",
           "@binette/regie": "../packages/regie/src/index.ts",
           "@binette/scene": "../packages/scene/src/index.ts",
           "@binette/regie/build": "../packages/regie/src/build.ts",
@@ -81,6 +83,9 @@ import { writePrebuiltApp } from "@binette/regie/cli";
 import { parsePrebuiltApp, stringifyPrebuiltApp, type PrebuiltApp } from "@binette/regie";
 import { mountApp, type MountedApp } from "@binette/scene";
 import * as scene from "@binette/scene";
+import { mount as mountDecor, text } from "@binette/decor";
+const mountDeclarativeUi: typeof mountDecor = mountDecor;
+void [mountDeclarativeUi, text("公開物")];
 
 for (const name of ["buildApp", "loadCompiler", "parsePrebuiltApp", "stringifyPrebuiltApp"]) assertEquals(name in scene, false);
 // @ts-expect-error Scene からビルドの型は公開しない
@@ -107,8 +112,17 @@ const files: Record<string, string> = {
   "src/main.ts": 'import { App, Last, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last): void { document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
 };
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
-const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique } });
+const decorAs = await Deno.readTextFile(new URL("../packages/decor/src/as.ts", import.meta.url));
+const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique, "jsr:@binette/decor/as": decorAs } });
 assertEquals(built.manifest.id, "example.counter");
+// AS の新しい入口と Réplique の互換入口を、公開物だけで解決する。
+const uiFiles: Record<string, string> = {
+  ...files,
+  "src/main.ts": 'import { App, launch } from "jsr:@binette/replique"; import { View, column } from "jsr:@binette/decor/as"; import { text } from "jsr:@binette/replique/ui"; class Ui extends App { build(): View { return column([text("公開物")]); } } launch(new Ui());',
+};
+await buildApp(async (path) => uiFiles[path]!, {
+  libraries: { "jsr:@binette/replique": replique, "jsr:@binette/decor/as": decorAs },
+});
 const prebuilt: PrebuiltApp = parsePrebuiltApp(stringifyPrebuiltApp(built));
 assertEquals(prebuilt, built);
 const buildOptions: BuildOptions = {};
@@ -178,7 +192,7 @@ assertEquals(State.Resume, 3);
 const c: Coulisses = createCoulisses();
 void [manifest, launch, build, mount, destroy, c];
 
-console.log("Consumer passed (core, regie, scene, coulisses, replique)");
+console.log("Consumer passed (core, decor, regie, scene, coulisses, replique)");
 `,
   );
 

@@ -1,3 +1,4 @@
+import { workerSource } from "../../regie/src/worker.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
@@ -25,7 +26,7 @@ function createWorker(): RegieWorker {
 }
 /** 無限ループもメインを止めずに試せる、別スレッドの Worker */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([`(${serveApp.toString()})(self)`], { type: "text/javascript" }));
+  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
   try { return new Worker(url, { type: "module" }); }
   finally { URL.revokeObjectURL(url); }
 }

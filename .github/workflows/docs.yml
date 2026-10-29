@@ -51,6 +51,7 @@ jobs:
                   BINETTE_DOCS_OUT="$RUNNER_TEMP/site/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
                 else
                   entries=(packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
+                  [ ! -f packages/decor/src/index.ts ] || entries+=(packages/decor/src/index.ts)
                   [ ! -f packages/regie/src/build.ts ] || entries+=(packages/regie/src/build.ts)
                   [ ! -f packages/regie/src/cli.ts ] || entries+=(packages/regie/src/cli.ts)
                   deno doc --html --name=Binette --output="$RUNNER_TEMP/site/$branch" "${entries[@]}"

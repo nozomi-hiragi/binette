@@ -12,3 +12,17 @@ Deno.test("ビルドに失敗する AS は Error になる", async () => {
   assert(error.message.includes("TS2322"));
 });
 
+for (const entry of ["jsr:@binette/decor/as", "jsr:@binette/replique/ui", "jsr:@binette/replique"]) {
+  Deno.test(`宣言 UI の AS 入口 ${entry} を libraries の Réplique だけで解決する`, async () => {
+    const source = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button, input } from "${entry}";
+function click(): void {}
+function edit(value: string): void {}
+class Page extends App {
+  build(): View { return column([text("値"), button("押す", click), input("入力", edit)]); }
+}
+launch(new Page());`;
+    const built = await buildApp(path => Promise.resolve({ ...files, "main.ts": source }[path]!), { libraries });
+    assert(WebAssembly.validate(new Uint8Array(built.wasm)));
+  });
+}

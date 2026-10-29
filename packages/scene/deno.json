@@ -4,7 +4,8 @@
   "exports": "./src/index.ts",
   "imports": {
     "@binette/core": "jsr:@binette/core@0.1.0",
-    "@binette/regie": "jsr:@binette/regie@0.1.0"
+    "@binette/regie": "jsr:@binette/regie@0.1.0",
+    "@binette/decor": "jsr:@binette/decor@0.1.0"
   },
   "publish": {
     "include": [

@@ -1,3 +1,4 @@
+import { createUiDiffer } from "@binette/decor";
 import type { DomOp } from "@binette/core";
 import type { OsSnapshot } from "./launch.ts";
 
@@ -10,11 +11,12 @@ export interface WorkerScope {
 /**
  * Worker の中でアプリの WASM を動かす。メインスレッドの {@link launchApp} とやりとりする。
  *
- * 関数の `toString()` から Worker を作るので、外の import や関数は一切参照しない。補助の関数も中に書く。
+ * workerSource() が Décor の差分関数とこの関数を toString() で埋め込む。
+ * 差分関数を引数で渡すので、圧縮後の import の名前には依存しない。
  *
  * @param scope Worker の `self`、または同じスレッドで試すための `MessagePort`
  */
-export function serveApp(scope: WorkerScope): void {
+export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = createUiDiffer): void {
   let exited = false;
   let instance: WebAssembly.Instance | undefined;
   let apps: { id: string; name: string }[] | undefined;
@@ -23,80 +25,8 @@ export function serveApp(scope: WorkerScope): void {
   let declarative = false;
   let last = { page: "", reason: { kind: 0, cause: 0 } };
   let ops: DomOp[] = [];
-  type UiNode = { kind: "column" | "row" | "text" | "button" | "input" | "grid" | "appIcon"; children: UiNode[]; text: string; padding: number; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number };
-  type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
-  let uiRoot: Mounted | undefined;
-  let nextUiHandle = 1;
-  const inputVersions = new Map<number, number>();
-  const forgetInput = (mounted: Mounted): void => { inputVersions.delete(mounted.handle); for (const child of mounted.children) forgetInput(child); };
-  const uiUpdate = (handle: number, node: UiNode, listItem: boolean): DomOp => ({ op: "ui-update", handle, text: node.text, padding: node.padding, gap: node.gap,
-    grow: node.grow, label: node.label || null, enabled: node.enabled,
-    inputVersion: inputVersions.get(handle) ?? 0, key: node.key, minWidth: node.minWidth, heading: node.heading, list: node.list, listItem, shown: node.shown, app: node.app, clickable: node.handler !== -1 });
-  // 木の照合は Worker 内で行い、Scene には実際に変わった操作だけを渡す。
-  const updateUi = (node: UiNode, old: Mounted | undefined, build: number, listItem = false): Mounted => {
-    if (node.kind === "appIcon") appAt(node.app);
-    const mounted: Mounted = old ?? { handle: nextUiHandle++, node, children: [], build, listItem };
-    if (!old) ops.push({ op: "ui-create", handle: mounted.handle, kind: node.kind });
-    const prev = old?.node;
-    if (node.kind === "input" || !prev || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
-      prev.key !== node.key || prev.minWidth !== node.minWidth || prev.heading !== node.heading || prev.list !== node.list || old?.listItem !== listItem || prev.shown !== node.shown || prev.app !== node.app || prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
-      (prev.handler !== -1) !== (node.handler !== -1)) {
-      ops.push(uiUpdate(mounted.handle, node, listItem));
-    }
-    const previous = mounted.children;
-    const used = new Set<Mounted>();
-    const children = node.children.map((child, i) => {
-      const match = child.key
-        ? previous.find(item => !used.has(item) && item.node.key === child.key && item.node.kind === child.kind)
-        : previous[i] && !used.has(previous[i]!) && !previous[i]!.node.key && previous[i]!.node.kind === child.kind ? previous[i] : undefined;
-      if (match) used.add(match);
-      return updateUi(child, match, build, node.list);
-    });
-    for (const child of previous) if (!used.has(child)) { forgetInput(child); ops.push({ op: "ui-remove", handle: child.handle }); }
-    const order = previous.filter(child => used.has(child));
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i]!;
-      if (order[i] === child) continue;
-      const index = order.indexOf(child);
-      if (index !== -1) order.splice(index, 1);
-      ops.push({ op: "ui-insert", parent: mounted.handle, child: child.handle, before: order[i]?.handle ?? null });
-      order.splice(i, 0, child);
-    }
-    mounted.node = node;
-    mounted.children = children;
-    mounted.build = build;
-    mounted.listItem = listItem;
-    return mounted;
-  };
-  const renderUi = (value: string) => {
-    const { build, root } = JSON.parse(value) as { build: number; root: UiNode };
-    const old = uiRoot;
-    if (old && (old.node.kind !== root.kind || old.node.key !== root.key)) {
-      forgetInput(old);
-      ops.push({ op: "ui-remove", handle: old.handle });
-      uiRoot = undefined;
-    }
-    uiRoot = updateUi(root, uiRoot, build);
-    if (!old || old !== uiRoot) ops.push({ op: "ui-insert", parent: null, child: uiRoot.handle, before: null });
-  };
-  const findAnyUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
-    if (!mounted) return undefined;
-    if (mounted.handle === handle) return mounted;
-    for (const child of mounted.children) {
-      const found = findAnyUi(child, handle);
-      if (found) return found;
-    }
-    return undefined;
-  };
-  const findUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
-    if (!mounted || mounted.node.shown === false) return undefined;
-    if (mounted.handle === handle) return mounted;
-    for (const child of mounted.children) {
-      const found = findUi(child, handle);
-      if (found) return found;
-    }
-    return undefined;
-  };
+  const ui = differ(op => ops.push(op), index => appAt(index));
+  const renderUi = (value: string) => { const { root, build } = JSON.parse(value); ui.render(root, build); };
   const flush = () => {
     if (declarative) ops = ops.filter(op => op.op.startsWith("ui-"));
     if (ops.length) { scope.postMessage({ type: "dom", ops }); ops = []; }
@@ -237,10 +167,10 @@ export function serveApp(scope: WorkerScope): void {
         return;
       }
       if (data.name === "__bina_ui_text_ack") {
-        const target = findAnyUi(uiRoot, Number(data.args?.[0] ?? -1));
+        const target = ui.findAny(Number(data.args?.[0] ?? -1));
         if (target?.node.kind === "input") {
-          inputVersions.set(target.handle, Number(data.args?.[1] ?? 0));
-          ops.push(uiUpdate(target.handle, target.node, target.listItem));
+          ui.inputVersions.set(target.handle, Number(data.args?.[1] ?? 0));
+          ops.push(ui.update(target.handle, target.node, target.listItem));
           flush();
         }
         scope.postMessage({ type: "done", id: data.id });
@@ -248,12 +178,12 @@ export function serveApp(scope: WorkerScope): void {
       }
       const uiText = data.name === "__bina_ui_text_handle";
       const uiHandle = data.name === "__bina_ui_handle" || uiText;
-      const target = uiHandle ? findUi(uiRoot, Number(data.args?.[0] ?? -1)) : undefined;
+      const target = uiHandle ? ui.find(Number(data.args?.[0] ?? -1)) : undefined;
       if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown || (uiText ? target.node.kind !== "input" : target.node.kind !== "button"))) {
         // 捨てた入力にも版を進めた値を返し、Scene の表示をアプリの値に戻す
         if (uiText && target?.node.kind === "input") {
-          inputVersions.set(target.handle, Number(data.args?.[2] ?? 0));
-          ops.push(uiUpdate(target.handle, target.node, target.listItem));
+          ui.inputVersions.set(target.handle, Number(data.args?.[2] ?? 0));
+          ops.push(ui.update(target.handle, target.node, target.listItem));
           flush();
         }
         scope.postMessage({ type: "done", id: data.id });
@@ -266,7 +196,7 @@ export function serveApp(scope: WorkerScope): void {
         return;
       }
       try {
-        if (uiText) inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));
+        if (uiText) ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));
         fn(...(uiHandle ? [target!.build, target!.node.handler, ...(uiText ? [writeString(String(data.args?.[1] ?? ""))] : [])] : (data.args ?? [])));
         flush();
         scope.postMessage({ type: "done", id: data.id });
@@ -278,3 +208,7 @@ export function serveApp(scope: WorkerScope): void {
     }
   });
 }
+
+/** import を持たない Worker 用のソース。 */
+/** Worker のソース。serveApp と Décor の差分関数を埋め込み、`self` で動かす */
+export function workerSource(): string { return `(${serveApp.toString()})(self, ${createUiDiffer.toString()})`; }
