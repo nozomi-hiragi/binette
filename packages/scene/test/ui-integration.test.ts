@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStrictEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertStrictEquals } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
 import { buildApp } from "@binette/regie/build";
 import { Window } from "happy-dom";
@@ -67,4 +67,63 @@ launch(new Counter());`,
     await waitFor(() => count.textContent === "押した回数: 33");
     assertEquals(errors, []);
   } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("入力の連続イベントは Worker 越しに届き、show と grid を更新する", async () => {
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "ui-input", name: "入力", entry: { as: "main.ts" } }),
+    "main.ts": `import { App, launch } from "jsr:@binette/replique";
+import { View, column, grid, text, input, show } from "jsr:@binette/replique/ui";
+let value = "";
+function change(next: string): void { value = next; }
+class InputApp extends App {
+  build(): View { return column([input(value, change).key("input"), grid([text(value).key("result"), show(value.length > 0, text("表示").key("conditional"))]).minWidth(120)]); }
+}
+launch(new InputApp());`,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const errors: unknown[] = [];
+  const mounted = await mountStartedApp(host, built, { createWorker, declarative: true, onError: error => errors.push(error) });
+  try {
+    const input = host.querySelector("input")!;
+    const result = host.querySelector('[data-bina-key="result"]')!;
+    assertEquals((host.querySelector('[data-bina-key="conditional"]') as HTMLElement).hidden, true);
+    for (const value of ["a", "ab", "abc"]) {
+      input.value = value;
+      input.dispatchEvent(new window.Event("input") as unknown as Event);
+    }
+    await waitFor(() => result.textContent === "abc");
+    assertEquals(input.value, "abc");
+    assertStrictEquals(host.querySelector("input"), input);
+    assertEquals((host.querySelector('[data-bina-key="conditional"]') as HTMLElement).hidden, false);
+    assertEquals(host.querySelector<HTMLElement>(".bina-ui-grid")!.style.getPropertyValue("--bina-ui-minWidth"), "120px");
+    assertEquals(errors, []);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("appIcon はホームのアイコンを画像として表示し、権限のないアプリは終了する", async () => {
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "ui-icon", name: "アイコン", entry: { as: "main.ts" } }),
+    "main.ts": `import { App, launch } from "jsr:@binette/replique";
+import { View, appIcon } from "jsr:@binette/replique/ui";
+class IconApp extends App { build(): View { return appIcon(0); } }
+launch(new IconApp());`,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const icon = '<svg xmlns="http://www.w3.org/2000/svg"><script>bad()</script></svg>';
+  try {
+    const home = await mountStartedApp(host, built, { createWorker, declarative: true, apps: [{ id: "target", name: "対象", icon }] });
+    try {
+      assertEquals(host.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`);
+      assertEquals(host.querySelector("img")!.getAttribute("alt"), "");
+      assertEquals(host.querySelector("script"), null);
+    } finally { home.stop(); }
+    const errors: unknown[] = [];
+    await assertRejects(() => mountStartedApp(host, built, { createWorker, declarative: true, onError: error => errors.push(error) }), Error, "ホームのアプリだけ");
+    assertEquals(host.querySelector("img"), null);
+  } finally { await window.happyDOM.close(); }
 });

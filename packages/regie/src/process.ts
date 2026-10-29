@@ -47,6 +47,7 @@ export interface Process {
   dispatch(listener: number): void;
   /** 宣言的 UI の要素ハンドルでイベントを届ける */
   dispatchUi(handle: number): void;
+  dispatchUiText(handle: number, value: string, version?: number): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -214,6 +215,12 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
       void enqueue(async () => {
         if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_event", listener);
+      }).catch(reportCall);
+    },
+    dispatchUiText(handle, value, version = 0) {
+      if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
+      void enqueue(async () => {
+        if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_text_handle", handle, value, version);
       }).catch(reportCall);
     },
     dispatchUi(handle) {

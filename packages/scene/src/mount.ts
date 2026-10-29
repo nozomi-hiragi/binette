@@ -23,14 +23,27 @@ export function mountCounts(mounted: MountedApp): { ids: number; created: number
 }
 
 const uiCss = `
+:where([class^="bina-ui-"])[hidden] { display: none !important; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; }
-:where(.bina-ui-column, .bina-ui-row) { gap: var(--bina-ui-gap, 0px); }
-:where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button) { padding: var(--bina-ui-padding, 0px); }
+:where(.bina-ui-appIcon) { width: var(--bina-home-icon-size, 56px); height: var(--bina-home-icon-size, 56px); object-fit: contain; }
+:where(.bina-ui-input) { font: inherit; color: inherit; min-width: 0; }
+:where(.bina-ui-column, .bina-ui-row, .bina-ui-grid) { gap: var(--bina-ui-gap, 0px); }
+:where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input) { padding: var(--bina-ui-padding, 0px); }
 :where(.bina-ui-grow) { flex-grow: 1; }
 :where(.bina-ui-button) { font: inherit; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: var(--bina-ui-button-radius, 8px); cursor: pointer; }
 :where(.bina-ui-button):focus-visible { outline: 2px solid var(--bina-ui-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-ui-button):disabled { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
+:where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-home-tile-size, var(--bina-ui-minWidth, 112px))), 1fr)); align-content: start; gap: var(--bina-home-gap, var(--bina-ui-gap, 16px)); padding: var(--bina-home-padding, var(--bina-ui-padding, 16px)); background: var(--bina-home-background, #f3f5f8); color: var(--bina-home-color, #16181d); }
+:where(.bina-ui-grid > .bina-ui-button) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-home-gap, 16px); border-color: var(--bina-home-border, #d5dae1); background: var(--bina-home-surface, #fff); border-radius: var(--bina-home-radius, 12px); padding: var(--bina-home-button-padding, 12px); }
+:where(.bina-ui-grid > .bina-ui-button):focus-visible { outline-color: var(--bina-home-focus, #3273b9); }
+:where([data-bina-key="settings-root"] [data-bina-key="settings-title"]) { font-size: 2em; font-weight: bold; }
+:where([data-bina-key="settings-root"] [data-bina-key$="-title"]:not([data-bina-key="settings-title"])) { font-size: 1.5em; font-weight: bold; }
+:where([data-bina-key="settings-root"] [data-bina-key^="settings-row-"]) { align-items: center; }
+:where([data-bina-key="settings-root"] [data-bina-key^="settings-value-"]) { min-width: 5em; text-align: right; }
+:where([data-bina-key="settings-root"] [data-bina-key^="settings-row-"] button) { min-width: 44px; min-height: 44px; }
+:where([data-bina-key="settings-root"] [data-bina-key="homes"]) { align-items: start; }
+:where([data-bina-key="settings-root"] [data-bina-key="history"]) { padding-left: 1.5em; }
 `;
 
 /** HTML を描き、プロセスからの DOM 操作を反映する */
@@ -67,7 +80,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
     }
   };
   // 宣言 UI は document API のハンドルと独立して管理する。
-  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; remove: () => void }>();
+  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; inputVersion: number; composing: boolean; lastText: string | null; remove: () => void }>();
   let uiStyle: HTMLStyleElement | undefined;
   const removeUi = (root: HTMLElement) => {
     for (const [handle, entry] of uiNodes) {
@@ -88,15 +101,27 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
           uiStyle.textContent = uiCss;
           element.appendChild(uiStyle);
         }
-        const tag = op.kind === "button" ? "button" : op.kind === "text" ? "span" : "div";
+        const tag = op.kind === "input" ? "input" : op.kind === "appIcon" ? "img" : op.kind === "button" ? "button" : op.kind === "text" ? "span" : "div";
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${op.kind}`;
         if (tag === "button") node.setAttribute("type", "button");
-        const entry = { node, clickable: false, textNode: null as Text | null, remove: () => {} };
+        const entry = { node, clickable: false, textNode: null as Text | null, inputVersion: 0, composing: false, lastText: null as string | null, remove: () => {} };
         if (tag === "button") {
           const listener = () => { if (entry.clickable) process.dispatchUi(op.handle); };
           node.addEventListener("click", listener);
           entry.remove = () => node.removeEventListener("click", listener);
+        }
+        if (tag === "img") node.setAttribute("alt", "");
+        if (tag === "input") {
+          node.setAttribute("type", "text");
+          const notify = () => { const value = (node as HTMLInputElement).value; if (entry.clickable && !(node as HTMLInputElement).disabled && value !== entry.lastText) { entry.lastText = value; process.dispatchUiText(op.handle, value, ++entry.inputVersion); } };
+          const input = () => { notify(); };
+          const start = () => { entry.composing = true; };
+          const end = () => { entry.composing = false; notify(); };
+          node.addEventListener("input", input);
+          node.addEventListener("compositionstart", start);
+          node.addEventListener("compositionend", end);
+          entry.remove = () => { node.removeEventListener("input", input); node.removeEventListener("compositionstart", start); node.removeEventListener("compositionend", end); };
         }
         const previous = uiNodes.get(op.handle);
         if (previous) removeUi(previous.node);
@@ -107,6 +132,20 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         const entry = uiNodes.get(op.handle);
         if (!entry) continue;
         const node = entry.node;
+        if (node.tagName.toLowerCase() === "input") {
+          if (!entry.composing && (op.inputVersion ?? 0) >= entry.inputVersion && ((node as HTMLInputElement).value !== op.text)) { (node as HTMLInputElement).value = op.text; entry.lastText = op.text; }
+        }
+        if (node.tagName.toLowerCase() === "img") {
+          const icon = options.apps?.[op.app ?? -1]?.icon;
+          if (icon === undefined) node.removeAttribute("src");
+          else {
+            const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`;
+            if (node.getAttribute("src") !== src) node.setAttribute("src", src);
+          }
+        }
+        node.hidden = op.shown === false;
+        if (op.key) node.setAttribute("data-bina-key", op.key);
+        else node.removeAttribute("data-bina-key");
         // ラベルは独立したテキストノードにし、ボタンの子を消さずに更新する。
         if (node.classList.contains("bina-ui-text") || node.classList.contains("bina-ui-button")) {
           if (op.text && !entry.textNode) {
@@ -117,7 +156,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
             entry.textNode = null;
           } else if (entry.textNode && entry.textNode.data !== op.text) entry.textNode.data = op.text;
         }
-        for (const [name, value] of [["padding", op.padding], ["gap", op.gap]] as const) {
+        for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", op.minWidth ?? null]] as const) {
           const property = `--bina-ui-${name}`;
           const next = value === null ? "" : `${Math.max(0, value)}px`;
           if (node.style.getPropertyValue(property) !== next) {
@@ -129,7 +168,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         if (op.label === null || op.label === "") {
           if (node.hasAttribute("aria-label")) node.removeAttribute("aria-label");
         } else if (node.getAttribute("aria-label") !== op.label) node.setAttribute("aria-label", op.label);
-        if (node.tagName.toLowerCase() === "button" && (node as HTMLButtonElement).disabled === op.enabled) {
+        if (["button", "input"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
           (node as HTMLButtonElement).disabled = !op.enabled;
         }
         entry.clickable = op.clickable;

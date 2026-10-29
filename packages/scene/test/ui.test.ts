@@ -34,3 +34,38 @@ Deno.test("宣言 UI の移動と更新は既存の要素を使い、イベン�
     assertEquals(events, [2, 2]);
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("入力は IME 中も毎回通知し、同値や変換中の value は書き換えない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  let apply: (ops: DomOp[]) => void = () => {};
+  const values: string[] = [];
+  const process = { attach(sink: typeof apply) { apply = sink; }, dispatchUiText(_handle: number, value: string) { values.push(value); } } as unknown as Process;
+  const mounted = mountApp(host, "", process);
+  const update = (text: string): Extract<DomOp, { op: "ui-update" }> => ({ op: "ui-update", handle: 1, text, clickable: true, padding: null, gap: null, grow: false, label: "入力", enabled: true });
+  try {
+    apply([{ op: "ui-create", handle: 1, kind: "input" }, update("hello"), { op: "ui-insert", parent: null, child: 1, before: null }]);
+    const input = host.querySelector("input")!;
+    input.setSelectionRange(2, 2);
+    apply([update("hello")]);
+    assertEquals(input.selectionStart, 2);
+    input.dispatchEvent(new window.Event("compositionstart") as unknown as Event);
+    input.value = "に";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    apply([update("stale")]);
+    assertEquals(input.value, "に");
+    input.value = "日本";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    input.dispatchEvent(new window.Event("compositionend") as unknown as Event);
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    assertEquals(values, ["に", "日本"]);
+    apply([{ ...update("古い応答"), inputVersion: 1 }]);
+    assertEquals(input.value, "日本");
+    apply([{ ...update("日本語"), inputVersion: 2 }]);
+    assertEquals(input.value, "日本語");
+    mounted.stop();
+    input.value = "後";
+    input.dispatchEvent(new window.Event("input") as unknown as Event);
+    assertEquals(values, ["に", "日本"]);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});

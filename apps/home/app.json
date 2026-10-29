@@ -5,5 +5,7 @@
   "name": "ホーム",
   "role": "home",
   "icon": "icon.svg",
-  "entry": { "html": "src/index.html", "as": "src/main.ts" }
+  "entry": {
+    "as": "src/main.ts"
+  }
 }
