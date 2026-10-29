@@ -12,7 +12,11 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 - 無い id は何も起きないだけで、アプリを終了しない。AS で null に触ると終了するため、null は返さない
 - `bina.ts` の生成を無くす
 - DOM の動きは段階的に足す。今回は小さくし、危ない機能は用意しない
-- 本命はこのあとの宣言的 UI で、今回の `document` はその土台とする
+- 宣言的 UI を併用する案は [宣言的 UI](ui.md) に記載する
+
+## 宣言的 UI（案）
+
+`App.build(): View | null` と `jsr:@binette/replique/ui` の部品で画面を作れます。詳しくは [宣言的 UI](ui.md) を参照してください。既定の `build()` は `null` です。
 
 ## 使い方（実装済み）
 

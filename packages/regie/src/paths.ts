@@ -16,11 +16,11 @@ export function appPath(path: string): string | null {
 }
 
 /** app.json の入口をフォルダ内の相対パスに整える */
-export function entryPaths(entry: { html: string; as: string }): { html: string; as: string } {
-  const html = appPath(entry.html);
+export function entryPaths(entry: { html?: string; as: string }): { html?: string; as: string } {
+  const html = entry.html === undefined ? undefined : appPath(entry.html);
   const as = appPath(entry.as);
-  if (!html || !as) throw new Error("アプリの入口は app.json のフォルダ内の相対パスにしてください。");
-  return { html, as };
+  if ((entry.html !== undefined && !html) || !as) throw new Error("アプリの入口は app.json のフォルダ内の相対パスにしてください。");
+  return { html: html ?? undefined, as };
 }
 
 /** アイコンのパスを整える。指定が無ければ読まない */

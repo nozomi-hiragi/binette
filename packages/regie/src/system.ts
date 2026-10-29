@@ -265,6 +265,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       })) : [];
       if (!sessions.has(started) || stopped) return;
       const mounted = await startProcess(installed.wasm, {
+        declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,

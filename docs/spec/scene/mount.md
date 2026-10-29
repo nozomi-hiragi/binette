@@ -56,3 +56,7 @@ unlisten は対応する DOM リスナーを外して登録を消します。rem
 - 最初の HTML の検査（script・on* 属性・外部 URL など）。検査は Régie のビルドに足す（[regie/build.md](../regie/build.md#検証案)）。今は innerHTML に描くため on* 属性は動く
 - setAttribute・style・value・input イベント・click 以外のイベント
 - entry.css の読み込み、Shadow DOM などによる CSS の分離
+
+## 宣言的 UI（案）
+
+Scene は Régie から届く差分に従って部品を作り、更新、移動、削除します。部品の見た目は `bina-ui-` のクラスと `--bina-ui-` の変数で決めます。[宣言的 UI](../ui.md) を参照してください。

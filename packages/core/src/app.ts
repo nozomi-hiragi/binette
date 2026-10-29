@@ -8,13 +8,12 @@ const nonempty = (message: string) => v.pipe(v.string(message), v.nonEmpty(messa
 /** 必須の欄。欄が無いときも日本語のメッセージにするため、型の検査の前に確かめる */
 const required = (key: string, message: string) => v.check((value: Record<string, unknown>) => Object.hasOwn(value, key), message);
 
-/** `app.json` の入口の欄。`html` と `as` は必須 */
+/** `app.json` の入口の欄。`as` は必須 */
 const entrySchema = v.pipe(
   objectValue("entry はオブジェクトで指定してください。"),
-  required("html", "entry の html にはファイルのパスを指定してください。"),
   required("as", "entry の as にはファイルのパスを指定してください。"),
   v.looseObject({
-    html: nonempty("entry の html にはファイルのパスを指定してください。"),
+    html: v.optional(nonempty("entry の html にはファイルのパスを指定してください。")),
     css: v.optional(v.string("entry の css は文字列で指定してください。")),
     as: nonempty("entry の as にはファイルのパスを指定してください。"),
   }),
@@ -44,7 +43,7 @@ export interface AppPermission {
 /** `app.json` の入口。ファイルのパスは `app.json` からの相対 */
 export interface AppEntry {
   /** 見た目の HTML */
-  html: string;
+  html?: string;
   /** 見た目の CSS */
   css?: string;
   /** 動きの AssemblyScript */

@@ -12,7 +12,7 @@ declare function create(handle: i32, tag: string): void;
 // @ts-ignore: decorator
 @external("binette", "dom.text")
 // @ts-ignore: AssemblyScript の整数型
-declare function text(handle: i32, value: string): void;
+declare function domText(handle: i32, value: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.class")
@@ -101,7 +101,7 @@ export class Element {
     if (this.released) return;
     while (this.children.length > 0) this.children[this.children.length - 1].release();
     this.textValue = value;
-    text(this.handle, value);
+    domText(this.handle, value);
   }
   get className(): string { return this.classValue; }
   set className(value: string) {
@@ -171,6 +171,7 @@ export function __bina_event(listener: i32): void {
   if (!listeners.has(listener)) return;
   const entry = listeners.get(listener)!;
   entry.callback(new Event(entry.type, entry.target));
+  rebuild();
 }
 
 /** テスト用に保持中のリスナー数を返す */
@@ -279,8 +280,127 @@ declare function lastCauseImport(): DestroyCause;
 @external("binette", "app.finish")
 declare function finishImport(): void;
 
+// @ts-ignore: decorator
+@external("binette", "ui.render")
+declare function renderUi(value: string): void;
+
+/** 宣言的 UI の部品。修飾はこの部品を変更して返す。 */
+export class View {
+  children: Array<View> = [];
+  value: string = "";
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  paddingValue: i32 = 0;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  gapValue: i32 = 0;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  growValue: bool = false;
+  keyValue: string = "";
+  labelValue: string = "";
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  enabledValue: bool = true;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  argValue: i32 = 0;
+  callback: UiCallback | null = null;
+  constructor(readonly kind: string) {}
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  padding(n: i32): View { this.paddingValue = n; return this; }
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  gap(n: i32): View { this.gapValue = n; return this; }
+  grow(): View { this.growValue = true; return this; }
+  key(s: string): View { this.keyValue = s; return this; }
+  label(s: string): View { this.labelValue = s; return this; }
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  enabled(b: bool): View { this.enabledValue = b; return this; }
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  arg(i: i32): View { this.argValue = i; return this; }
+}
+
+abstract class UiCallback { abstract call(arg: number): void; }
+class TypedUiCallback<T> extends UiCallback {
+  constructor(private f: T) {
+    super();
+    // @ts-ignore: AssemblyScript のコンパイル時型検査
+    if (idof<T>() != idof<() => void>() && idof<T>() != idof<(i: i32) => void>()) ERROR("ハンドラーは () => void または (i32) => void です");
+  }
+  call(arg: number): void {
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+    if (idof<T>() == idof<() => void>()) changetype<() => void>(this.f)();
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+    else changetype<(i: i32) => void>(this.f)(<i32>arg);
+  }
+}
+class UiHandler {
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  constructor(readonly callback: UiCallback, readonly arg: i32) {}
+}
+let uiHandlers: Array<UiHandler> = [];
+// @ts-ignore: AssemblyScript の型・組み込み関数
+let uiBuild: i32 = 0;
+
+export function column(children: Array<View>): View { const v = new View("column"); v.children = children; return v; }
+export function row(children: Array<View>): View { const v = new View("row"); v.children = children; return v; }
+export function text(value: string): View { const v = new View("text"); v.value = value; return v; }
+export function button<T>(label: string, f: T): View { const v = new View("button"); v.value = label; v.callback = new TypedUiCallback<T>(f); return v; }
+export function buttonOf<T>(children: Array<View>, f: T): View { const v = new View("button"); v.children = children; v.callback = new TypedUiCallback<T>(f); return v; }
+
+function jsonString(value: string): string {
+  let result = '\"';
+  const hex = "0123456789abcdef";
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c == 34) result += '\\\"';
+    else if (c == 92) result += '\\\\';
+    else if (c < 32) result += "\\u00" + hex.charAt(c >> 4) + hex.charAt(c & 15);
+    else result += value.charAt(i);
+  }
+  return result + '\"';
+}
+
+function serializeView(view: View): string {
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  let handler: i32 = -1;
+  const callback = view.callback;
+  if (callback !== null) {
+    handler = uiHandlers.length;
+    uiHandlers.push(new UiHandler(callback, view.argValue));
+  }
+  let children = "[";
+  for (let i = 0; i < view.children.length; i++) {
+    if (i > 0) children += ",";
+    children += serializeView(view.children[i]);
+  }
+  children += "]";
+  return '{"kind":' + jsonString(view.kind) + ',"children":' + children +
+    ',"text":' + jsonString(view.value) + ',"padding":' + view.paddingValue.toString() +
+    ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
+    ',"key":' + jsonString(view.keyValue) + ',"label":' + jsonString(view.labelValue) +
+    ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
+}
+
+function rebuild(): void {
+  const app = application;
+  if (app === null) return;
+  const view = app.build();
+  if (view === null) return;
+  if (uiBuild == 2147483647) throw new Error("UI の build 番号を使い切りました");
+  uiBuild++;
+  uiHandlers = [];
+  const root = serializeView(view);
+  renderUi('{"build":' + uiBuild.toString() + ',"root":' + root + '}');
+}
+
+/** Régie が宣言的 UI のイベントを届ける */
+// @ts-ignore: AssemblyScript の型・組み込み関数
+export function __bina_ui_event(build: i32, handler: i32): void {
+  if (build != uiBuild || handler < 0 || handler >= uiHandlers.length) return;
+  const entry = uiHandlers[handler];
+  entry.callback.call(entry.arg);
+  rebuild();
+}
+
 /** アプリの大本。必要な知らせだけ上書きする */
 export class App {
+  build(): View | null { return null; }
   onCreate(last: Last): void {}
   onStart(last: State): void {}
   onResume(): void {}
@@ -313,4 +433,5 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
     case State.Stop: app.onStop(); break;
     case State.Destroy: app.onDestroy(new DestroyReason(a, b)); break;
   }
+  rebuild();
 }

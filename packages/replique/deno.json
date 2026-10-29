@@ -1,7 +1,10 @@
 {
   "name": "@binette/replique",
   "version": "0.1.0",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./src/ui.ts"
+  },
   "tasks": {
     "check": "deno run -A npm:assemblyscript@0.28.20/bin/asc.js src/index.ts --noEmit"
   },

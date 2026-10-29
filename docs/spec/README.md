@@ -141,3 +141,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 - エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（`deno publish --dry-run` は通る。実際の公開と補完は未確認）
 - Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie/run.md](regie/run.md#blob-url-の-worker)）
 - asc の読み込みの重さ（約 13.6 MB、gzip で約 2.9 MB）をどうするか
+
+## 宣言的 UI（案）
+
+[宣言的 UI](ui.md) は HTML 方式と並ぶ画面の書き方です。

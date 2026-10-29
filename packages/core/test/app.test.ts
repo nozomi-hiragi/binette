@@ -36,7 +36,7 @@ Deno.test("形式が正しくない app.json は BinetteError になる", () => 
     [JSON.stringify({ ...manifest, id: "" }), "id を指定してください。"],
     [JSON.stringify({ ...manifest, name: 1 }), "name を指定してください。"],
     [JSON.stringify({ id: manifest.id, name: manifest.name }), "entry はオブジェクトで指定してください。"],
-    [JSON.stringify({ ...manifest, entry: { as: "a.ts" } }), "entry の html にはファイルのパスを指定してください。"],
+    [JSON.stringify({ ...manifest, entry: { html: "", as: "a.ts" } }), "entry の html にはファイルのパスを指定してください。"],
     [JSON.stringify({ ...manifest, entry: { html: "a.html", as: "" } }), "entry の as にはファイルのパスを指定してください。"],
     [JSON.stringify({ ...manifest, entry: { ...manifest.entry, css: 1 } }), "entry の css は文字列で指定してください。"],
   ] as const) {
@@ -55,4 +55,8 @@ Deno.test("role は任意の文字列で、ほかの型は BinetteError にな�
     assertEquals(error.code, "invalid_format");
     assertEquals(error.message, "role は文字列で指定してください。");
   }
+});
+
+Deno.test("entry.html を省略できる", () => {
+  assertEquals(parseAppManifest(JSON.stringify({ ...manifest, entry: { as: "src/main.ts" } })).entry, { as: "src/main.ts" });
 });

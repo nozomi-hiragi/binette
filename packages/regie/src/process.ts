@@ -12,6 +12,8 @@ export interface ProcessOptions {
   destroyTimeout?: number;
   /** 今のページの識別子 */
   page?: string;
+  /** HTML を持たない宣言的 UI アプリ */
+  declarative?: boolean;
   /** 最後の状態と起動の履歴の保存先。key は installedAppKey */
   persistence?: { store: SystemStore; key: string; historyLimit?: number };
   /** 今の呼び出しが終わってから、自分を閉じる */
@@ -43,6 +45,8 @@ export interface Process {
   begin(): Promise<void>;
   /** イベントを届けるか判断する */
   dispatch(listener: number): void;
+  /** 宣言的 UI の要素ハンドルでイベントを届ける */
+  dispatchUi(handle: number): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -107,6 +111,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,
+    declarative: options.declarative,
     last,
     os: options.grants?.os,
     onSet: options.onSet,
@@ -209,6 +214,12 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
       void enqueue(async () => {
         if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_event", listener);
+      }).catch(reportCall);
+    },
+    dispatchUi(handle) {
+      if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
+      void enqueue(async () => {
+        if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_handle", handle);
       }).catch(reportCall);
     },
     async begin() {

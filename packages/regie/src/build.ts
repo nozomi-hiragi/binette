@@ -71,9 +71,12 @@ function findLibrary(libraries: Record<string, string>, name: string): string | 
 export async function buildApp(read: (path: string) => Promise<string>, options: BuildOptions = {}): Promise<BuiltApp> {
   const manifest = parseAppManifest(await read("app.json"));
   const { as: entry, html: htmlPath } = entryPaths(manifest.entry);
-  const [html, source] = await Promise.all([read(htmlPath), read(entry)]);
+  const [html, source] = await Promise.all([htmlPath === undefined ? Promise.resolve("") : read(htmlPath), read(entry)]);
   const asc = options.compiler ?? await loadCompiler();
-  const libraries = options.libraries ?? {};
+  const libraries = { ...options.libraries };
+  if (libraries["jsr:@binette/replique"] !== undefined && libraries["jsr:@binette/replique/ui"] === undefined) {
+    libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf } from "jsr:@binette/replique";';
+  }
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
   let wasm: Uint8Array | undefined;
@@ -82,7 +85,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
     readFile: async (name) => {
       const path = appPath(name);
       if (path === null) return null;
-      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";\n';
+      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event } from "jsr:@binette/replique";\n';
       if (path.startsWith(NODE_MODULES)) return findLibrary(libraries, path);
       if (!path.endsWith(".ts")) return null;
       try { return await read(path) ?? null; } catch { return null; }
