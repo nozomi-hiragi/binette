@@ -400,3 +400,29 @@ launch(new Demo());`;
     assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
   } finally { process.stop(); }
 });
+
+Deno.test("宣言 UI で押せなくしたボタンへの、待っているイベントは捨てる", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique/ui";
+let count = 0;
+function submit(): void { count++; }
+class Demo extends App {
+  build(): View { return column([text(count.toString()), button("submit", submit).enabled(count == 0)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const submit = batches.flat().find(op => op.op === "ui-update" && op.text === "submit");
+    assert(submit?.op === "ui-update" && submit.enabled);
+    batches.length = 0;
+    process.dispatchUi(submit.handle);
+    process.dispatchUi(submit.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
+    await sleep(50);
+    assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "2"));
+  } finally { process.stop(); }
+});

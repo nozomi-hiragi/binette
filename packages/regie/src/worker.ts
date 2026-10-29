@@ -223,7 +223,7 @@ export function serveApp(scope: WorkerScope): void {
       }
       const uiHandle = data.name === "__bina_ui_handle";
       const target = uiHandle ? findUi(uiRoot, data.args?.[0] ?? -1) : undefined;
-      if (uiHandle && (!target || target.node.handler === -1)) {
+      if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled)) {
         scope.postMessage({ type: "done", id: data.id });
         return;
       }
