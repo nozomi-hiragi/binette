@@ -103,6 +103,7 @@ type DomOp =
   | { op: "append"; parent: number; child: number }
   | { op: "remove"; handle: number }
   | { op: "listen"; handle: number; type: string; listener: number }
+  | { op: "unlisten"; handle: number; type: string; listener: number }
   | { op: "icon"; handle: number; app: number };
 ```
 

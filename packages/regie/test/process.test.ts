@@ -218,3 +218,72 @@ for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeo
   });
 }
 
+
+Deno.test("リスナーの解除と部分木の解放は Worker 越しに届き、古い番号を再利用しない", async () => {
+  const code = `import { App, Last, document, Element, Event, launch, __bina_listener_count, __bina_element_count } from "jsr:@binette/replique";
+let count = 0;
+let parent = document.createElement("div");
+let child = document.createElement("button");
+function clicked(_event: Event): void { count++; document.getElementById("log").textContent = count.toString(); }
+export function setup(): void {
+  parent = document.createElement("div"); child = document.createElement("button");
+  parent.appendChild(child); document.getElementById("page").appendChild(parent);
+  parent.addEventListener("click", clicked); child.addEventListener("click", clicked);
+}
+export function unbind(): void { child.removeEventListener("click", clicked); }
+export function rebind(): void { child.addEventListener("click", clicked); }
+export function removeTree(): void { parent.remove(); }
+export function clearTree(): void { document.getElementById("page").textContent = ""; }
+export function stress(): void {
+  const listenerCount = __bina_listener_count();
+  const elementCount = __bina_element_count();
+  for (let i = 0; i < 1000; i++) {
+    const p = document.createElement("div");
+    const c = document.createElement("button");
+    const known = document.getElementById("stress-" + i.toString());
+    p.appendChild(c); p.appendChild(known); document.getElementById("page").appendChild(p);
+    known.addEventListener("click", clicked);
+    p.addEventListener("click", clicked); c.addEventListener("click", clicked);
+    c.removeEventListener("click", clicked); c.addEventListener("click", clicked);
+    p.remove();
+  }
+  assert(__bina_listener_count() == listenerCount);
+  assert(__bina_element_count() == elementCount);
+}
+class TestApp extends App { onCreate(_last: Last): void { setup(); } }
+launch(new TestApp());`;
+  const ops: DomOp[] = [];
+  const mounted = await startProcess((await build(code)).wasm, { createWorker });
+  try {
+    mounted.attach(batch => ops.push(...batch));
+    await mounted.begin();
+    const listens = () => ops.filter((op): op is Extract<DomOp, { op: "listen" }> => op.op === "listen");
+    const texts = () => ops.filter((op): op is Extract<DomOp, { op: "text" }> => op.op === "text");
+    const first = listens();
+    assertEquals(first.length, 2);
+    mounted.dispatch(first[1]!.listener);
+    await waitFor(() => texts().some(op => op.value === "1"));
+    await mounted.app.call("unbind");
+    assert(ops.some(op => op.op === "unlisten" && op.listener === first[1]!.listener));
+    await mounted.app.call("rebind");
+    const next = listens()[2]!.listener;
+    assert(next > first[1]!.listener);
+    mounted.dispatch(first[1]!.listener);
+    mounted.dispatch(next);
+    await waitFor(() => texts().some(op => op.value === "2"));
+    assert(!texts().some(op => op.value === "3"));
+    await mounted.app.call("removeTree");
+    mounted.dispatch(first[0]!.listener); mounted.dispatch(next);
+    await mounted.app.call("setup");
+    const afterRemove = listens().slice(-2);
+    mounted.dispatch(afterRemove[1]!.listener);
+    await waitFor(() => texts().some(op => op.value === "3"));
+    await mounted.app.call("clearTree");
+    mounted.dispatch(afterRemove[0]!.listener); mounted.dispatch(afterRemove[1]!.listener);
+    await mounted.app.call("setup");
+    mounted.dispatch(listens().at(-1)!.listener);
+    await waitFor(() => texts().some(op => op.value === "4"));
+    assert(!texts().some(op => op.value === "5"));
+    await mounted.app.call("stress");
+  } finally { mounted.stop(); }
+});

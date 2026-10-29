@@ -38,12 +38,14 @@ HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を 
 - button は type="button"、img は装飾用に alt="" を付ける。属性 API を足すまでの小さな既定動作とする
 - text は textContent を書き、子をすべて消す。class は class 属性を書く（SVG の className は読み取り専用のため。案）。見つかった対象だけを変える
 - append の親と子、remove の対象は枠内か作った要素だけ。枠自体は消せず、子にもできない。自己参照や祖先を子にする操作は無視する
-- 作った要素は未接続でも操作・再追加できる。byId で参照した既存要素は取り除いたら検索できなくなる
+- 作った要素は未接続でも操作できる。remove または text により取り除いた部分木のハンドルは解放し、以後そのハンドルへの操作は無視する（案）
 - icon は img だけ。OS の SVG を `data:image/svg+xml;charset=utf-8,` ＋ encodeURIComponent(icon) で src に入れる。アイコンが無ければ src を消す。SVG は innerHTML に入れない
 
 ## イベント（案・実装済み）
 
 listen は click だけ本物のリスナーを付ける。それ以外は onError に知らせて何もしない。byId は listen の時点で見つかった要素に付けるので、あとから同じ id の要素に交換してもリスナーは移らない。
+
+unlisten は対応する DOM リスナーを外して登録を消します。remove と text は、取り除く DOM の部分木にある `created`・`ids` のハンドルとリスナーを忘れます。text の対象自身は残します（案）。
 
 リスナーは `process.dispatch(listener)` を呼ぶだけです。Pause・Stop・Destroy のクリックを捨てる、起動の途中のクリックを Resume まで待たせる、といった判断はプロセスがします（[regie/process.md](../regie/process.md#イベントを届けるか)）。
 
