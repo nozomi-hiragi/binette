@@ -78,7 +78,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
     }
   };
   // 宣言 UI は document API のハンドルと独立して管理する。
-  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; inputVersion: number; composing: boolean; lastText: string | null; remove: () => void }>();
+  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; inputVersion: number; composing: boolean; lastText: string | null; pending: { text: string; version: number } | null; remove: () => void }>();
   let uiStyle: HTMLStyleElement | undefined;
   const removeUi = (root: HTMLElement) => {
     for (const [handle, entry] of uiNodes) {
@@ -103,7 +103,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${op.kind}`;
         if (tag === "button") node.setAttribute("type", "button");
-        const entry = { node, clickable: false, textNode: null as Text | null, inputVersion: 0, composing: false, lastText: null as string | null, remove: () => {} };
+        const entry = { node, clickable: false, textNode: null as Text | null, inputVersion: 0, composing: false, lastText: null as string | null, pending: null as { text: string; version: number } | null, remove: () => {} };
         if (tag === "button") {
           const listener = () => { if (entry.clickable) process.dispatchUi(op.handle); };
           node.addEventListener("click", listener);
@@ -115,7 +115,14 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
           const notify = () => { const value = (node as HTMLInputElement).value; if (entry.clickable && !(node as HTMLInputElement).disabled && value !== entry.lastText) { entry.lastText = value; process.dispatchUiText(op.handle, value, ++entry.inputVersion); } };
           const input = () => { notify(); };
           const start = () => { entry.composing = true; };
-          const end = () => { entry.composing = false; notify(); };
+          const end = () => {
+            entry.composing = false;
+            notify();
+            // 変換中に届いた描き直しを、新しい入力が無ければここで反映する
+            const pending = entry.pending;
+            entry.pending = null;
+            if (pending && pending.version >= entry.inputVersion && (node as HTMLInputElement).value !== pending.text) { (node as HTMLInputElement).value = pending.text; entry.lastText = pending.text; }
+          };
           node.addEventListener("input", input);
           node.addEventListener("compositionstart", start);
           node.addEventListener("compositionend", end);
@@ -131,7 +138,11 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         if (!entry) continue;
         const node = entry.node;
         if (node.tagName.toLowerCase() === "input") {
-          if (!entry.composing && (op.inputVersion ?? 0) >= entry.inputVersion && ((node as HTMLInputElement).value !== op.text)) { (node as HTMLInputElement).value = op.text; entry.lastText = op.text; }
+          const version = op.inputVersion ?? 0;
+          if (version >= entry.inputVersion) {
+            if (entry.composing) entry.pending = { text: op.text, version };
+            else if ((node as HTMLInputElement).value !== op.text) { (node as HTMLInputElement).value = op.text; entry.lastText = op.text; }
+          }
         }
         if (node.tagName.toLowerCase() === "img") {
           const icon = options.apps?.[op.app ?? -1]?.icon;
@@ -167,7 +178,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         for (const n of [1, 2, 3]) if (node.classList.contains(`bina-ui-heading-${n}`) !== (level === n)) node.classList.toggle(`bina-ui-heading-${n}`, level === n);
         if (node.classList.contains("bina-ui-list") !== !!op.list) node.classList.toggle("bina-ui-list", !!op.list);
         if (node.classList.contains("bina-ui-listitem") !== !!op.listItem) node.classList.toggle("bina-ui-listitem", !!op.listItem);
-        for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid ? op.minWidth ?? null : null]] as const) {
+        for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid && op.minWidth ? op.minWidth : null]] as const) {
           const property = `--bina-ui-${name}`;
           const next = value === null ? "" : `${Math.max(0, value)}px`;
           if (node.style.getPropertyValue(property) !== next) {
