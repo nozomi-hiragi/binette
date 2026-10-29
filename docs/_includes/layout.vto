@@ -17,18 +17,29 @@ code { font-size: .9em; }
 table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 th, td { border: 1px solid light-dark(#aaa, #666); padding: .4rem .6rem; }
 img { max-width: 100%; height: auto; }
+summary { cursor: pointer; padding: .25rem 0; }
 @media (max-width: 48rem) { body { grid-template-columns: minmax(0, 1fr); gap: 1rem; } }
+/* Wide screens always show the list; browsers without ::details-content keep the toggle. */
+@supports selector(::details-content) {
+  @media (min-width: 48.01rem) {
+    summary { display: none; }
+    details::details-content { content-visibility: visible; height: auto; }
+  }
+}
 </style>
 </head>
 <body>
 <nav aria-label="ドキュメント一覧">
 <a href="/">Binette ドキュメント</a>
+<details>
+<summary>ページ一覧</summary>
 <ul>
-{{ for entry of search.pages("", "url=asc") }}
+{{ for entry of search.pages("url!=/", "url=asc") }}
 <li><a href="{{ entry.url }}">{{ entry.title }}</a></li>
 {{ /for }}
 <li><a href="/api/">API ドキュメント</a></li>
 </ul>
+</details>
 </nav>
 <main>{{ content |> safe }}</main>
 </body>
