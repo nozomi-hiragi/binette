@@ -5,3 +5,5 @@ site
 
 .binapp/
 dist/
+
+/_cache/
