@@ -17,8 +17,8 @@ draw();
 // 使い終わったら root.unmount();
 ```
 
-`mount(element)` が返す root の `render(view)` を呼ぶと描画します。次の呼び出しでは前の木との差分を反映し、`unmount()` で描画を解除します。状態を変えたあとの描画は明示的に呼びます。
+`mount(element)` が返す root の `render(view)` を呼ぶと描画します。次の呼び出しでは前の木との差分を反映し、`unmount()` で描画を解除します。普通の変数を変えたあとの描画は明示的に呼びます。`component` と `useState` を使うと、状態の更新後に自動で描き直せます。`useEffect` では描画後の処理と片付けを登録できます。
 
-AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique/ui` も互換の入口として使えます。関数の部品、useState、JSX は含みません。
+AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique/ui` も互換の入口として使えます。関数の部品とフックは TS の `mount` 向けです。JSX は含みません。
 
 API と分担の細部は案です。[仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/decor.md) を参照してください。
