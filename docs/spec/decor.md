@@ -30,11 +30,30 @@ draw();
 // 使い終わったら root.unmount();
 ```
 
-`mount(element)` は描画先に結び付いた root を返します。`root.render(view)` を明示的に呼んだときだけ描画し、次の呼び出しでは前の木との差分を当てます。`root.unmount()` は描画を解除します。イベントで値を変えただけでは自動で描き直しません。
+`mount(element)` は描画先に結び付いた root を返します。`root.render(view)` は木を描き、次の描画では前の木との差分を当てます。`root.unmount()` は描画と状態を解除します。普通の変数を変えた場合は明示的な `render` が必要です。
 
 View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す Scene の描画で使います。TS の `mount(element)` にはアプリ情報を渡す入口がないため、そこで作る `appIcon` は画像の `src` を持ちません。
 
-関数の部品、useState、JSX、自動の再描画は今回の対象に含めず、後で考えます。
+### 関数の部品とフック（案）
+
+```ts
+import { button, component, mount, useState, type View } from "@binette/decor";
+
+function Counter({ label }: { label: string }): View {
+  const [count, setCount] = useState(0);
+  return button(`${label}: ${count}`, () => setCount(n => n + 1));
+}
+const root = mount(document.getElementById("app")!);
+root.render(component(Counter, { label: "回数" }));
+```
+
+`component(fn, props)` は props を受け取り View を返す関数を木に入れます。部品は親の中の位置、関数の種類、指定した key で識別します。一覧の並べ替えで状態を保つには `component(...).key(id)` を使います。key は同じ親の子の間で一意にします。
+
+`useState(initial)` は状態と setter を返します。初期値には初期化関数も渡せます。setter は値または前の値から次の値を作る関数を受け取り、値が `Object.is` で異なるとき、その root の再描画を次のマイクロタスクに予約します。同じタイミングの更新はまとめます。
+
+`useEffect(effect, deps?)` は描画後に処理を実行します。依存値を省くと毎回、配列を渡すと各値が `Object.is` で変わったときに実行し、空配列では最初だけ実行します。処理が返した片付け関数は、次の実行前、部品が消えたとき、または unmount 時に呼びます。消えた部品の片付けは、新しい木を画面に反映したあと、その描画のエフェクトより前に一度だけ呼びます。部品が消えると状態も捨てます。消えた部品の setter は何もしません。
+
+フックは部品の描画中に毎回同じ順序と数で呼びます。部品の外で呼ぶとエラーになります。関数の部品とフックは TS の `mount` 用で、AS には追加しません。JSX は含みません。
 
 ## AS の入口（案）
 

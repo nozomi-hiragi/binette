@@ -2,7 +2,9 @@
 
 ## v0.2.0（未リリース）
 
-- 宣言 UI の木・差分・DOM への反映・AS の部品を `@binette/decor`（Décor）へ切り出す。`jsr:@binette/replique/ui` は互換の入口として再エクスポートする。普通の TS ページ向けに `mount(element)` と、返した root の `render(view)`・`unmount()` を追加する（案）。自動の再描画、関数の部品、useState、JSX は含めない
+- Décor の TS に関数の部品 `component`、状態の `useState`、片付け付きの `useEffect` を追加。状態の更新は root の再描画をマイクロタスクにまとめる（案）。AS と JSX は対象外
+
+- 宣言 UI の木・差分・DOM への反映・AS の部品を `@binette/decor`（Décor）へ切り出す。`jsr:@binette/replique/ui` は互換の入口として再エクスポートする。普通の TS ページ向けに `mount(element)` と、返した root の `render(view)`・`unmount()` を追加する（案）。JSX は含めない
 - Régie: `workerSource()` を公開する。`serveApp` は Décor の差分関数を引数で受け取るので、自分で Worker を作るときは `serveApp.toString()` ではなく `workerSource()` を使う
 
 - 宣言 UI に `.heading(level)` と `.list()` を追加（読み上げでも見出し・一覧になる）。OS の部品の CSS をアプリによらない汎用のものにし、テーマの変数を `--bina-ui-*` にそろえる。`--bina-home-*` は使わない
