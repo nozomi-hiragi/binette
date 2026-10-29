@@ -1,6 +1,6 @@
 import { type ProcessOptions, startProcess } from "@binette/regie";
 import { mountApp, type MountOptions } from "../src/index.ts";
-import { type BuiltApp } from "@binette/regie/build";
+import type { BuiltApp } from "@binette/regie/build";
 
 /** Process の起動と Scene の接続をまとめる、結合テスト用の準備。 */
 export async function mountStartedApp(element: HTMLElement, built: BuiltApp, options: ProcessOptions & MountOptions = {}) {

@@ -61,13 +61,13 @@ jobs:
       - run: deno task check
       - run: deno task test
       - run: deno task check-pack
-      - run: deno publish --dry-run
+      - run: deno publish --dry-run --no-check
       - name: Verify release tag
         run: deno run --allow-read scripts/check-version.ts "$RELEASE_TAG"
       - name: Prepare release notes
         run: deno run --allow-read --allow-write scripts/changelog.ts "$RELEASE_VERSION" "$RUNNER_TEMP/release-notes.md"
       - name: Publish workspace packages (including Décor)
-        run: deno publish
+        run: deno publish --no-check
 
   release:
     needs: [plan, publish]

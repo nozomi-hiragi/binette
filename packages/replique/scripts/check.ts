@@ -1,9 +1,8 @@
 // AssemblyScript の JSR 指定子を公開パッケージのソースへ解決して型検査する。
-import asc from "npm:assemblyscript@0.28.20/asc";
-import decorAs from "jsr:@binette/decor@0.1.0/as" with { type: "text" };
+import asc from "assemblyscript/asc";
+import decorAs from "@binette/decor/as" with { type: "text" };
 
-// deno-lint-ignore no-import-prefix
-import decorParts from "jsr:@binette/decor@0.1.0/parts" with { type: "text" };
+import decorParts from "@binette/decor/parts" with { type: "text" };
 
 const entry = new URL("../src/index.ts", import.meta.url).pathname;
 const { error } = await asc.main([entry, "--noEmit"], {

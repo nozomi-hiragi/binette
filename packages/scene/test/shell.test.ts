@@ -583,7 +583,7 @@ Deno.test("createShellUi は bind 前のボタンを無視し、bind で現在�
   const pages: { visible: boolean; frozen: boolean }[] = [];
   let opened = 0;
   const system: BinetteSystem = {
-    async openHome() { opened++; }, async open() {}, async close() {},
+    openHome() { opened++; return Promise.resolve(); }, open: () => Promise.resolve(), close: () => Promise.resolve(),
     setPage(page) { pages.push(page); }, stop() {},
   };
   const ui = createShellUi(element, { installed: true });

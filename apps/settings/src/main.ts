@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { App, launch, os } from "jsr:@binette/replique";
 import { View, button, column, row, show, text } from "jsr:@binette/replique/ui";
 
@@ -43,7 +44,7 @@ function change(change: i32): void {
 }
 
 class Settings extends App {
-  build(): View {
+  override build(): View {
     const homes: View[] = [];
     for (let i: i32 = 0; i < os.homeCount(); i++) {
       homes.push(button(os.homeName(i) + (os.homeId(i) == os.home() ? "（使用中）" : ""), chooseHome).arg(i).padding(12).key("home-" + i.toString()));

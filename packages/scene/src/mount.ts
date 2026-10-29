@@ -34,6 +34,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
   const removers = new Map<number, { handle: number; type: string; node: HTMLElement; remove: () => void }>();
   const allowed = new Set("div span p h1 h2 h3 h4 h5 h6 button ul ol li img section header footer nav main article label strong em small br hr".split(" "));
   // CSS の文字列として引用する。制御文字もエスケープし、任意の id を安全に探す
+  // deno-lint-ignore no-control-regex -- CSS の文字列から制御文字をエスケープするため、意図的に照合する。
   const escapeId = (id: string) => id.replace(/["\\\x00-\x1f\x7f]/g, (char) => `\\${char.charCodeAt(0).toString(16)} `);
   const target = (handle: number): HTMLElement | undefined => {
     const made = created.get(handle);
