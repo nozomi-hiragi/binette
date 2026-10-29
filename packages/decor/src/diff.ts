@@ -4,7 +4,7 @@ import type { DomOp } from "@binette/core";
 export type UiOp = Extract<DomOp, { op: `ui-${string}` }>;
 
 /** 描画する木。操作の kind は core の型を使う。 */
-export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; padding: number; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number };
+export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number };
 export type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
 
 /** 差分エンジンの状態と操作。 */
@@ -22,7 +22,7 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
   let nextUiHandle = 1;
   const inputVersions = new Map<number, number>();
   const forgetInput = (mounted: Mounted): void => { inputVersions.delete(mounted.handle); for (const child of mounted.children) forgetInput(child); };
-  const uiUpdate = (handle: number, node: UiNode, listItem: boolean): DomOp => ({ op: "ui-update", handle, text: node.text, padding: node.padding, gap: node.gap,
+  const uiUpdate = (handle: number, node: UiNode, listItem: boolean): DomOp => ({ op: "ui-update", handle, text: node.text, theme: node.theme, padding: node.padding, gap: node.gap,
     grow: node.grow, label: node.label || null, enabled: node.enabled,
     inputVersion: inputVersions.get(handle) ?? 0, key: node.key, minWidth: node.minWidth, heading: node.heading, list: node.list, listItem, shown: node.shown, app: node.app, clickable: node.handler !== -1 });
   // 木を照合し、実際に変わった操作だけを渡す。
@@ -31,7 +31,7 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
     const mounted: Mounted = old ?? { handle: nextUiHandle++, node, children: [], build, listItem };
     if (!old) emit({ op: "ui-create", handle: mounted.handle, kind: node.kind });
     const prev = old?.node;
-    if (node.kind === "input" || !prev || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
+    if (node.kind === "input" || !prev || prev.theme !== node.theme || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
       prev.key !== node.key || prev.minWidth !== node.minWidth || prev.heading !== node.heading || prev.list !== node.list || old?.listItem !== listItem || prev.shown !== node.shown || prev.app !== node.app || prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
       (prev.handler !== -1) !== (node.handler !== -1)) {
       emit(uiUpdate(mounted.handle, node, listItem));

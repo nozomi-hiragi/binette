@@ -1,5 +1,5 @@
 import { workerSource } from "../src/worker.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertStrictEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, startProcess } from "../src/index.ts";
 import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
 import { buildApp } from "../src/build.ts";
@@ -478,4 +478,46 @@ launch(new Demo());`;
     const last = batches.flat().filter(op => op.op === "ui-update" && op.handle === field.handle).at(-1);
     assert(last?.op === "ui-update" && last.text === "" && last.inputVersion === 1);
   } finally { process.stop(); }
+});
+
+Deno.test("AS の theme と段は WASM の描画・差分更新から Décor DOM に届く", async () => {
+  const { Window } = await import("happy-dom");
+  const { createUiDom } = await import("@binette/decor");
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button, theme, Theme, Scale, ComponentTheme, space, radius, fontSize } from "jsr:@binette/decor/as";
+let size: i32 = 20;
+function change(): void { size = 28; }
+class Demo extends App {
+  build(): View {
+    const config = new Theme();
+    const scale = new Scale(); scale.md = size; config.space = scale;
+    const part = new ComponentTheme(); part.padding = space.sm; part.radius = radius.md; part.fontSize = fontSize.lg; config.button = part;
+    const nested = new Theme(); const nestedScale = new Scale(); nestedScale.md = 30; nested.space = nestedScale;
+    return column([theme(config, column([button("更新", change), theme(nested, text("内側").padding(space.md))]).padding().gap()), text("外側").padding(8)]);
+  }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  const dom = createUiDom(host, { dispatchUi: handle => process.dispatchUi(handle), dispatchUiText() {} });
+  try {
+    process.attach(ops => { batches.push(ops); dom.apply(ops); });
+    await process.begin();
+    const scopes = host.querySelectorAll(".bina-ui-column");
+    const scope = scopes[1] as HTMLElement;
+    assertEquals(scope.style.getPropertyValue("--bina-ui-space-md"), "20px");
+    assertEquals(scope.style.getPropertyValue("--bina-ui-gap"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
+    assertEquals(scope.style.getPropertyValue("--bina-ui-padding"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
+    const spans = host.querySelectorAll("span");
+    assertEquals(spans[0].style.getPropertyValue("--bina-ui-space-md"), "30px");
+    assertEquals(spans[1].style.getPropertyValue("--bina-ui-padding"), "8px");
+    assertEquals(spans[1].style.getPropertyValue("--bina-ui-space-md"), "");
+    assert(host.querySelector("button")!.style.getPropertyValue("--bina-ui-padding").includes("--bina-ui-button-padding-md"));
+    host.querySelector("button")!.click();
+    await waitFor(() => scope.style.getPropertyValue("--bina-ui-space-md") === "28px");
+    assertStrictEquals(host.querySelectorAll(".bina-ui-column")[1], scope);
+  } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
 });

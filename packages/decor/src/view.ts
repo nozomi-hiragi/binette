@@ -4,8 +4,9 @@ import { createUiDom } from "./dom.ts";
 /** 宣言 UI の部品。修飾はこの部品を変更して返す。 */
 export class View {
   children: View[] = [];
+  themeValue = "";
   value = "";
-  paddingValue = 0;
+  paddingValue: number | null = null;
   gapValue = 0;
   growValue = false;
   keyValue = "";
@@ -22,8 +23,8 @@ export class View {
   componentFn: ((props: never) => View) | null = null;
   componentProps: unknown;
   constructor(readonly kind: UiNode["kind"]) {}
-  padding(n: number): View { this.paddingValue = n; return this; }
-  gap(n: number): View { this.gapValue = n; return this; }
+  padding(n: number = space.md): View { this.paddingValue = n; return this; }
+  gap(n: number = space.md): View { this.gapValue = n; return this; }
   minWidth(n: number): View { this.minWidthValue = n; return this; }
   grow(): View { this.growValue = true; return this; }
   heading(level: number): View { this.headingValue = Math.max(1, Math.min(3, level)); return this; }
@@ -192,7 +193,7 @@ export function mount(element: HTMLElement): Root {
       const [result, next] = node(output, match, effects);
       if (child && !match) dispose(child);
       fiber.children = [next];
-      return [{ ...result, key: view.keyValue || result.key, shown: view.shownValue && result.shown }, fiber];
+      return [{ ...result, theme: view.themeValue + (result.theme ?? ""), key: view.keyValue || result.key, shown: view.shownValue && result.shown }, fiber];
     }
     const previous = fiber.children;
     const used = new Set<Fiber>();
@@ -208,7 +209,7 @@ export function mount(element: HTMLElement): Root {
     fiber.children = children.map(child => child.next);
     const handler = view.callback || view.textCallback ? handlers.push(view) - 1 : -1;
     return [{ kind: view.kind, children: children.map(child => child.result), text: view.value,
-      padding: view.paddingValue, gap: view.gapValue, grow: view.growValue,
+      theme: view.themeValue, padding: view.paddingValue, gap: view.gapValue, grow: view.growValue,
       key: view.keyValue, label: view.labelValue, enabled: view.enabledValue,
       handler, minWidth: view.minWidthValue, heading: view.headingValue,
       list: view.listValue, shown: view.shownValue, app: view.appValue }, fiber];
@@ -233,4 +234,66 @@ export function mount(element: HTMLElement): Root {
     render(view) { if (!active) return; rootView = view; scheduled = false; draw(view); },
     unmount() { if (!active) return; active = false; scheduled = false; if (tree) dispose(tree); tree = undefined; rootView = undefined; dom.clear(); dom.stop(); handlers = []; flushCleanups(); },
   };
+}
+
+/** 名前付きの段。負の値は CSS 変数への参照を表す。 */
+export class Scale {
+  xs: number = -100;
+  sm: number = -100;
+  md: number = -100;
+  lg: number = -100;
+  xl: number = -100;
+}
+export const space: Scale = { xs: -1, sm: -2, md: -3, lg: -4, xl: -5 };
+export const radius: Scale = { xs: -1, sm: -2, md: -3, lg: -4, xl: -5 };
+export const fontSize: Scale = { xs: -1, sm: -2, md: -3, lg: -4, xl: -5 };
+/** 部品の既定値。-100 は上書きしない。 */
+export class ComponentTheme {
+  padding: number = -100;
+  radius: number = -100;
+  fontSize: number = -100;
+}
+/** 部分木に適用するテーマ。省略した値は親から受け継ぐ。 */
+export class Theme {
+  space: Scale | null = null;
+  radius: Scale | null = null;
+  fontSize: Scale | null = null;
+  button: ComponentTheme | null = null;
+  input: ComponentTheme | null = null;
+}
+function componentLength(kind: string, field: string, value: number): string {
+  const names = ["xs", "sm", "md", "lg", "xl"];
+  const token = value >= -5 && value <= -1 && value == Math.floor(value);
+  const prefix = "--bina-ui-" + kind + "-" + field;
+  let result = prefix + "-px:" + (token ? "0" : Math.max(0, value).toString()) + "px;";
+  for (let i = 0; i < names.length; i++) result += prefix + "-" + names[i] + ":" + (token && value == -i - 1 ? "1" : "0") + ";";
+  return result;
+}
+function scaleDeclarations(group: string, scale: Partial<Scale> | null | undefined): string {
+  if (scale == null) return "";
+  const names = ["xs", "sm", "md", "lg", "xl"];
+  const values = [scale.xs, scale.sm, scale.md, scale.lg, scale.xl];
+  let result = "";
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] !== undefined && values[i] != -100) result += "--bina-ui-" + group + "-" + names[i] + ":" + Math.max(0, values[i]!).toString() + "px;";
+  }
+  return result;
+}
+function componentDeclarations(kind: string, value: Partial<ComponentTheme> | null | undefined): string {
+  if (value == null) return "";
+  let result = "";
+  if (value.padding !== undefined && value.padding != -100) result += componentLength(kind, "padding", value.padding);
+  if (value.radius !== undefined && value.radius != -100) result += componentLength(kind, "radius", value.radius);
+  if (value.fontSize !== undefined && value.fontSize != -100) result += componentLength(kind, "font-size", value.fontSize);
+  return result;
+}
+export type ThemeConfig = {
+  space?: Partial<Scale> | null; radius?: Partial<Scale> | null; fontSize?: Partial<Scale> | null;
+  button?: Partial<ComponentTheme> | null; input?: Partial<ComponentTheme> | null;
+};
+/** 要素を増やさず、この View を根とする部分木のテーマを設定する。 */
+export function theme(config: ThemeConfig, view: View): View {
+  view.themeValue = scaleDeclarations("space", config.space) + scaleDeclarations("radius", config.radius) +
+    scaleDeclarations("font-size", config.fontSize) + componentDeclarations("button", config.button) + componentDeclarations("input", config.input) + view.themeValue;
+  return view;
 }
