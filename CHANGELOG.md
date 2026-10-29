@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- AS のフォルダ（apps・replique）に AS 公式の型定義を読ませ、型のための `@ts-ignore` を外した。`deno task check` に apps と `deno lint` を加え、lint の警告を 0 件にした。JSR の公開前チェックがメンバーの compilerOptions を見ないため、CI の `deno publish` は `--no-check` にした（型検査は `deno task check` で行う）
+
 - Décor の部品・修飾・段・テーマを `parts.ts` にまとめ、TS と AS で同じコードを使う（案）。`View.callback` は両方とも `UiCallback`。公開の名前は変えない。ハンドラーの包み方と TS のフック・mount はそれぞれのファイルに残す
 
 - Décor の TS・AS に名前付きの段 `space` / `radius` / `fontSize` と部分木の `theme(設定, view)` を追加（案）。button・input の padding・角丸・文字の大きさを宣言で設定できる。数は px のまま、引数なしの `.gap()` / `.padding()` は md。既存の Scene・home・settings の指定を維持する

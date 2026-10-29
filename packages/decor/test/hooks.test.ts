@@ -438,7 +438,7 @@ Deno.test("片付けの中の render で置き換えた部品の状態は生き�
   assertEquals(comingCleaned, 1);
 });
 
-Deno.test("片付けの中で前の値に描き戻すと、その値のエフェクトが残る", async () => {
+Deno.test("片付けの中で前の値に描き戻すと、その値のエフェクトが残る", () => {
   const window = new Window();
   const host = window.document.createElement("div") as unknown as HTMLElement;
   const root = mount(host);

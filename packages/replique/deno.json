@@ -15,5 +15,15 @@
       "LICENSE",
       "scripts"
     ]
+  },
+  "compilerOptions": {
+    "lib": [],
+    "types": [
+      "npm:assemblyscript@0.28.20/std/assembly/index.d.ts"
+    ]
+  },
+  "imports": {
+    "@binette/decor/as": "jsr:@binette/decor@0.1.0/as",
+    "@binette/decor/parts": "jsr:@binette/decor@0.1.0/parts"
   }
 }

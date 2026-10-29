@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 
 const source = await Deno.readTextFile(new URL("../public/sw.js", import.meta.url));
 const BASE = "https://example.test/binette/";
@@ -18,9 +18,9 @@ function setup() {
     if (!stored.has(name)) stored.set(name, new Map());
     const entries = stored.get(name)!;
     return {
-      async match(request: Request | URL | string) { return entries.get(key(request))?.clone(); },
-      async put(request: Request | URL | string, response: Response) { entries.set(key(request), response.clone()); },
-      async addAll(paths: string[]) { for (const path of paths) entries.set(key(path), new Response(`シェル:${path}`)); },
+      match(request: Request | URL | string) { return Promise.resolve(entries.get(key(request))?.clone()); },
+      put(request: Request | URL | string, response: Response) { entries.set(key(request), response.clone()); return Promise.resolve(); },
+      addAll(paths: string[]) { for (const path of paths) entries.set(key(path), new Response(`シェル:${path}`)); return Promise.resolve(); },
     };
   };
   const worker = {
@@ -30,9 +30,9 @@ function setup() {
     addEventListener(type: string, listener: (event: TestEvent) => void) { handlers.set(type, listener); },
   };
   const caches = {
-    async open(name: string) { return open(name); },
-    async keys() { return [...stored.keys()]; },
-    async delete(name: string) { return stored.delete(name); },
+    open(name: string) { return Promise.resolve(open(name)); },
+    keys() { return Promise.resolve([...stored.keys()]); },
+    delete(name: string) { return Promise.resolve(stored.delete(name)); },
   };
   // 実際に配る classic worker を、グローバルを共有せずに実行する
   new Function("self", "caches", "fetch", source)(worker, caches, (request: Request) => {

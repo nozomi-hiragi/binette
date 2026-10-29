@@ -95,6 +95,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   };
   const notifyRequests = () => {
     if (mounting || closing || !alive) return;
+    // deno-lint-ignore require-await -- キューが待つ Promise と、通知中の例外を拒否で返す契約を保つ。
     void enqueue(async () => {
       if (closing) return;
       for (const i of homes.splice(0)) options.onSetHome?.(i);

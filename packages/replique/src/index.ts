@@ -1,57 +1,46 @@
+// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
 /** アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。 */
 import { View, UiCallback } from "jsr:@binette/decor/as";
 export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme } from "jsr:@binette/decor/as";
 // @ts-ignore: decorator
 @external("binette", "dom.byId")
-// @ts-ignore: AssemblyScript の整数型
 declare function byId(handle: i32, id: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.create")
-// @ts-ignore: AssemblyScript の整数型
 declare function create(handle: i32, tag: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.text")
-// @ts-ignore: AssemblyScript の整数型
 declare function domText(handle: i32, value: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.class")
-// @ts-ignore: AssemblyScript の整数型
 declare function className(handle: i32, value: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.append")
-// @ts-ignore: AssemblyScript の整数型
 declare function append(parent: i32, child: i32): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.remove")
-// @ts-ignore: AssemblyScript の整数型
 declare function remove(handle: i32): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.listen")
-// @ts-ignore: AssemblyScript の整数型
 declare function listen(handle: i32, type: string, listener: i32): void;
 
 // @ts-ignore: decorator
 @external("binette", "dom.unlisten")
-// @ts-ignore: AssemblyScript の整数型
 declare function unlisten(handle: i32, type: string, listener: i32): void;
 
 // @ts-ignore: decorator
 @external("binette", "apps.icon")
-// @ts-ignore: AssemblyScript の整数型
 declare function iconImport(handle: i32, app: i32): void;
 
-// @ts-ignore: AssemblyScript の整数型
 let nextHandle: i32 = 1;
 const elements = new Map<string, Element>();
-// @ts-ignore: AssemblyScript の整数型
 let nextListener: i32 = 0;
-// @ts-ignore: AssemblyScript の整数型
 const listeners = new Map<i32, Listener>();
 
 class Listener {
@@ -69,13 +58,10 @@ export class Element {
   private classValue: string = "";
   private parent: Element | null = null;
   private children: Array<Element> = [];
-  // @ts-ignore: AssemblyScript の整数型
   private listenerIds: Array<i32> = [];
   private released: boolean = false;
   private id: string;
-  // @ts-ignore: AssemblyScript の整数型
   readonly handle: i32;
-  // @ts-ignore: AssemblyScript の整数型
   constructor(handle: i32, id: string = "") { this.handle = handle; this.id = id; }
 
   private detach(): void {
@@ -113,7 +99,8 @@ export class Element {
   }
   appendChild(child: Element): Element {
     if (this.released || child.released) return child;
-    let ancestor: Element | null = this;
+    if (this === child) return child;
+    let ancestor: Element | null = this.parent;
     while (ancestor !== null) {
       if (ancestor === child) return child;
       ancestor = ancestor.parent;
@@ -168,7 +155,6 @@ export namespace document {
 }
 
 /** Régie がイベントのときに呼ぶ */
-// @ts-ignore: AssemblyScript の整数型
 export function __bina_event(listener: i32): void {
   if (!listeners.has(listener)) return;
   const entry = listeners.get(listener)!;
@@ -177,33 +163,26 @@ export function __bina_event(listener: i32): void {
 }
 
 /** テスト用に保持中のリスナー数を返す */
-// @ts-ignore: AssemblyScript の整数型
 export function __bina_listener_count(): i32 { return listeners.size; }
 
 /** テスト用に ID で保持中の要素数を返す */
-// @ts-ignore: AssemblyScript の整数型
 export function __bina_element_count(): i32 { return elements.size; }
 
 /** ホームだけが使えるアプリの一覧と起動 */
 export namespace apps {
   /** img に OS のアプリアイコンを入れる */
-  // @ts-ignore: AssemblyScript の整数型
   export function icon(img: Element, i: i32): void { iconImport(img.handle, i); }
   // @ts-ignore: decorator
   @external("binette", "apps.count")
-  // @ts-ignore: AssemblyScript の整数型
   export declare function count(): i32;
   // @ts-ignore: decorator
   @external("binette", "apps.name")
-  // @ts-ignore: AssemblyScript の整数型
   export declare function name(i: i32): string;
   // @ts-ignore: decorator
   @external("binette", "apps.id")
-  // @ts-ignore: AssemblyScript の整数型
   export declare function id(i: i32): string;
   // @ts-ignore: decorator
   @external("binette", "apps.open")
-  // @ts-ignore: AssemblyScript の整数型
   export declare function open(i: i32): void;
 }
 
@@ -211,43 +190,33 @@ export namespace apps {
 export namespace os {
   // @ts-ignore: decorator
   @external("binette", "os.get")
-  // @ts-ignore: AssemblyScript の型
   export declare function get(name: string): i32;
   // @ts-ignore: decorator
   @external("binette", "os.set")
-  // @ts-ignore: AssemblyScript の型
   export declare function set(name: string, value: i32): bool;
   // @ts-ignore: decorator
   @external("binette", "os.home")
-  // @ts-ignore: AssemblyScript の型
   export declare function home(): string;
   // @ts-ignore: decorator
   @external("binette", "os.homeCount")
-  // @ts-ignore: AssemblyScript の型
   export declare function homeCount(): i32;
   // @ts-ignore: decorator
   @external("binette", "os.homeName")
-  // @ts-ignore: AssemblyScript の型
   export declare function homeName(i: i32): string;
   // @ts-ignore: decorator
   @external("binette", "os.homeId")
-  // @ts-ignore: AssemblyScript の型
   export declare function homeId(i: i32): string;
   // @ts-ignore: decorator
   @external("binette", "os.setHome")
-  // @ts-ignore: AssemblyScript の型
   export declare function setHome(i: i32): void;
   // @ts-ignore: decorator
   @external("binette", "os.launchCount")
-  // @ts-ignore: AssemblyScript の型
   export declare function launchCount(): i32;
   // @ts-ignore: decorator
   @external("binette", "os.launchTime")
-  // @ts-ignore: AssemblyScript の型
   export declare function launchTime(i: i32): f64;
   // @ts-ignore: decorator
   @external("binette", "os.launchName")
-  // @ts-ignore: AssemblyScript の型
   export declare function launchName(i: i32): string;
 }
 
@@ -290,7 +259,6 @@ class UiHandler {
   constructor(readonly callback: UiCallback | null, readonly arg: number, readonly textCallback: ((value: string) => void) | null) {}
 }
 let uiHandlers: Array<UiHandler> = [];
-// @ts-ignore: AssemblyScript の型・組み込み関数
 let uiBuild: i32 = 0;
 
 
@@ -308,7 +276,6 @@ function jsonString(value: string): string {
 }
 
 function serializeView(view: View): string {
-  // @ts-ignore: AssemblyScript の型・組み込み関数
   let handler: i32 = -1;
   const callback = view.callback;
   if (callback !== null || view.textCallback !== null) {
@@ -341,7 +308,6 @@ function rebuild(): void {
 }
 
 /** Régie が宣言的 UI のイベントを届ける */
-// @ts-ignore: AssemblyScript の型・組み込み関数
 export function __bina_ui_event(build: i32, handler: i32): void {
   if (build != uiBuild || handler < 0 || handler >= uiHandlers.length) return;
   const entry = uiHandlers[handler];
@@ -351,7 +317,6 @@ export function __bina_ui_event(build: i32, handler: i32): void {
   rebuild();
 }
 
-// @ts-ignore: AssemblyScript の整数型
 export function __bina_ui_text(build: i32, handler: i32, value: string): void {
   if (build != uiBuild || handler < 0 || handler >= uiHandlers.length) return;
   const callback = uiHandlers[handler].textCallback;
@@ -363,12 +328,12 @@ export function __bina_ui_text(build: i32, handler: i32, value: string): void {
 /** アプリの大本。必要な知らせだけ上書きする */
 export class App {
   build(): View | null { return null; }
-  onCreate(last: Last): void {}
-  onStart(last: State): void {}
+  onCreate(_last: Last): void {}
+  onStart(_last: State): void {}
   onResume(): void {}
   onPause(): void {}
   onStop(): void {}
-  onDestroy(reason: DestroyReason): void {}
+  onDestroy(_reason: DestroyReason): void {}
   get page(): string { return pageImport(); }
   finish(): void { finishImport(); }
 }
@@ -383,7 +348,6 @@ export function launch(app: App): void {
 }
 
 /** OS が状態を進める。launch が無いアプリには何もしない */
-// @ts-ignore: AssemblyScript の整数型
 export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
   const app = application;
   if (app === null) return;

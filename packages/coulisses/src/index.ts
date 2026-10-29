@@ -58,6 +58,7 @@ export function createCoulisses(options: CoulissesOptions = {}): Coulisses {
   Object.assign(panoplie.files, options.panoplie?.files);
   const { binettes, files } = panoplie;
   const encoder = new TextEncoder();
+  // deno-lint-ignore require-await -- Fetch API の非同期契約を保ち、応答生成の例外も Promise の拒否で返す。
   const fetch = async (request: Request): Promise<Response> => {
     const headers = new Headers();
     if (options.cors !== undefined) headers.set("Access-Control-Allow-Origin", options.cors);
