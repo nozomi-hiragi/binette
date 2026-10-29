@@ -105,6 +105,8 @@ export function useEffect(effect: () => void | (() => void), deps?: readonly unk
       const version = ++target.version;
       const previousCleanup = target.cleanup;
       target.cleanup = undefined;
+      // A render started by the cleanup must see this effect as changed and supersede it.
+      target.deps = undefined;
       previousCleanup?.();
       if (!fiber.live || target.version !== version) return;
       target.deps = deps?.slice();

@@ -437,3 +437,30 @@ Deno.test("片付けの中の render で置き換えた部品の状態は生き�
   }
   assertEquals(comingCleaned, 1);
 });
+
+Deno.test("片付けの中で前の値に描き戻すと、その値のエフェクトが残る", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  const active: string[] = [];
+  let revert = true;
+  function Watch({ value }: { value: string }): View {
+    useEffect(() => {
+      active.push(value);
+      return () => {
+        active.splice(active.indexOf(value), 1);
+        if (value === "A" && revert) { revert = false; root.render(component(Watch, { value: "A" })); }
+      };
+    }, [value]);
+    return text(value);
+  }
+  try {
+    root.render(component(Watch, { value: "A" }));
+    root.render(component(Watch, { value: "B" }));
+    assertEquals(host.querySelector(".bina-ui-text")?.textContent, "A");
+    assertEquals(active, ["A"]);
+  } finally {
+    root.unmount();
+  }
+  assertEquals(active, []);
+});
