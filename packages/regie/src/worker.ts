@@ -29,6 +29,9 @@ export function serveApp(scope: WorkerScope): void {
   let nextUiHandle = 1;
   const inputVersions = new Map<number, number>();
   const forgetInput = (mounted: Mounted): void => { inputVersions.delete(mounted.handle); for (const child of mounted.children) forgetInput(child); };
+  const uiUpdate = (handle: number, node: UiNode, listItem: boolean): DomOp => ({ op: "ui-update", handle, text: node.text, padding: node.padding, gap: node.gap,
+    grow: node.grow, label: node.label || null, enabled: node.enabled,
+    inputVersion: inputVersions.get(handle) ?? 0, key: node.key, minWidth: node.minWidth, heading: node.heading, list: node.list, listItem, shown: node.shown, app: node.app, clickable: node.handler !== -1 });
   // 木の照合は Worker 内で行い、Scene には実際に変わった操作だけを渡す。
   const updateUi = (node: UiNode, old: Mounted | undefined, build: number, listItem = false): Mounted => {
     if (node.kind === "appIcon") appAt(node.app);
@@ -38,9 +41,7 @@ export function serveApp(scope: WorkerScope): void {
     if (node.kind === "input" || !prev || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
       prev.key !== node.key || prev.minWidth !== node.minWidth || prev.heading !== node.heading || prev.list !== node.list || old?.listItem !== listItem || prev.shown !== node.shown || prev.app !== node.app || prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
       (prev.handler !== -1) !== (node.handler !== -1)) {
-      ops.push({ op: "ui-update", handle: mounted.handle, text: node.text, padding: node.padding, gap: node.gap,
-        grow: node.grow, label: node.label || null, enabled: node.enabled,
-        inputVersion: inputVersions.get(mounted.handle) ?? 0, key: node.key, minWidth: node.minWidth, heading: node.heading, list: node.list, listItem, shown: node.shown, app: node.app, clickable: node.handler !== -1 });
+      ops.push(uiUpdate(mounted.handle, node, listItem));
     }
     const previous = mounted.children;
     const used = new Set<Mounted>();
@@ -230,6 +231,12 @@ export function serveApp(scope: WorkerScope): void {
       const uiHandle = data.name === "__bina_ui_handle" || uiText;
       const target = uiHandle ? findUi(uiRoot, Number(data.args?.[0] ?? -1)) : undefined;
       if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown || (uiText ? target.node.kind !== "input" : target.node.kind !== "button"))) {
+        // 捨てた入力にも版を進めた値を返し、Scene の表示をアプリの値に戻す
+        if (uiText && target?.node.kind === "input") {
+          inputVersions.set(target.handle, Number(data.args?.[2] ?? 0));
+          ops.push(uiUpdate(target.handle, target.node, target.listItem));
+          flush();
+        }
         scope.postMessage({ type: "done", id: data.id });
         return;
       }
