@@ -22,6 +22,8 @@ export interface LaunchOptions {
   callTimeout?: number;
   /** 今のページの識別子 */
   page?: string;
+  /** HTML を持たない宣言的 UI アプリ */
+  declarative?: boolean;
   /** 前回の最後の記録 */
   last?: LifecycleRecord;
   /** アプリが自分を閉じたとき。今の呼び出しの完了後に届く */
@@ -176,7 +178,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

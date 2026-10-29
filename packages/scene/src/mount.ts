@@ -22,6 +22,17 @@ export function mountCounts(mounted: MountedApp): { ids: number; created: number
   return counts.get(mounted)?.();
 }
 
+const uiCss = `
+:where(.bina-ui-column) { display: flex; flex-direction: column; }
+:where(.bina-ui-row) { display: flex; flex-direction: row; }
+:where(.bina-ui-column, .bina-ui-row) { gap: var(--bina-ui-gap, 0px); }
+:where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button) { padding: var(--bina-ui-padding, 0px); }
+:where(.bina-ui-grow) { flex-grow: 1; }
+:where(.bina-ui-button) { font: inherit; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: var(--bina-ui-button-radius, 8px); cursor: pointer; }
+:where(.bina-ui-button):focus-visible { outline: 2px solid var(--bina-ui-focus, #3273b9); outline-offset: 2px; }
+:where(.bina-ui-button):disabled { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
+`;
+
 /** HTML を描き、プロセスからの DOM 操作を反映する */
 export function mountApp(element: HTMLElement, html: string, process: Process, options: MountOptions = {}): MountedApp {
   // アプリの領域が外に出ないようにする
@@ -55,10 +66,90 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
       if (handles.has(entry.handle) || includes(entry.node)) { entry.remove(); removers.delete(number); }
     }
   };
+  // 宣言 UI は document API のハンドルと独立して管理する。
+  const uiNodes = new Map<number, { node: HTMLElement; listener: number | null; build: number; textNode: Text | null; remove: () => void }>();
+  let uiStyle: HTMLStyleElement | undefined;
+  const removeUi = (root: HTMLElement) => {
+    for (const [handle, entry] of uiNodes) {
+      if (root === entry.node || root.contains(entry.node)) {
+        entry.remove();
+        uiNodes.delete(handle);
+      }
+    }
+    root.remove();
+  };
   let stopped = false;
   const applyDom = (ops: DomOp[]) => {
     if (stopped) return;
     for (const op of ops) {
+      if (op.op === "ui-create") {
+        if (!uiStyle) {
+          uiStyle = element.ownerDocument.createElement("style");
+          uiStyle.textContent = uiCss;
+          element.appendChild(uiStyle);
+        }
+        const tag = op.kind === "button" ? "button" : op.kind === "text" ? "span" : "div";
+        const node = element.ownerDocument.createElement(tag);
+        node.className = `bina-ui-${op.kind}`;
+        if (tag === "button") node.setAttribute("type", "button");
+        const entry = { node, listener: null as number | null, build: 0, textNode: null as Text | null, remove: () => {} };
+        if (tag === "button") {
+          const listener = () => { if (entry.listener !== null) process.dispatchUi(entry.listener, entry.build); };
+          node.addEventListener("click", listener);
+          entry.remove = () => node.removeEventListener("click", listener);
+        }
+        const previous = uiNodes.get(op.handle);
+        if (previous) removeUi(previous.node);
+        uiNodes.set(op.handle, entry);
+        continue;
+      }
+      if (op.op === "ui-update") {
+        const entry = uiNodes.get(op.handle);
+        if (!entry) continue;
+        const node = entry.node;
+        // ラベルは独立したテキストノードにし、ボタンの子を消さずに更新する。
+        if (node.classList.contains("bina-ui-text") || node.classList.contains("bina-ui-button")) {
+          if (op.text && !entry.textNode) {
+            entry.textNode = element.ownerDocument.createTextNode(op.text);
+            node.insertBefore(entry.textNode, node.firstChild);
+          } else if (!op.text && entry.textNode) {
+            entry.textNode.remove();
+            entry.textNode = null;
+          } else if (entry.textNode && entry.textNode.data !== op.text) entry.textNode.data = op.text;
+        }
+        for (const [name, value] of [["padding", op.padding], ["gap", op.gap]] as const) {
+          const property = `--bina-ui-${name}`;
+          const next = value === null ? "" : `${Math.max(0, value)}px`;
+          if (node.style.getPropertyValue(property) !== next) {
+            if (next) node.style.setProperty(property, next);
+            else node.style.removeProperty(property);
+          }
+        }
+        if (node.classList.contains("bina-ui-grow") !== op.grow) node.classList.toggle("bina-ui-grow", op.grow);
+        if (op.label === null || op.label === "") {
+          if (node.hasAttribute("aria-label")) node.removeAttribute("aria-label");
+        } else if (node.getAttribute("aria-label") !== op.label) node.setAttribute("aria-label", op.label);
+        if (node.tagName.toLowerCase() === "button" && (node as HTMLButtonElement).disabled === op.enabled) {
+          (node as HTMLButtonElement).disabled = !op.enabled;
+        }
+        entry.listener = op.listener;
+        entry.build = op.build;
+        continue;
+      }
+      if (op.op === "ui-insert") {
+        const parent = op.parent === null ? element : uiNodes.get(op.parent)?.node;
+        const child = uiNodes.get(op.child)?.node;
+        const before = op.before === null ? null : uiNodes.get(op.before)?.node;
+        if (parent && child && parent !== child && !child.contains(parent) && (before === null || before?.parentNode === parent)) {
+          parent.insertBefore(child, before);
+        }
+        continue;
+      }
+      if (op.op === "ui-remove") {
+        const entry = uiNodes.get(op.handle);
+        if (entry) removeUi(entry.node);
+        continue;
+      }
       if (op.op === "byId") { ids.set(op.handle, op.id); continue; }
       if (op.op === "create") {
         const tag = op.tag.toLowerCase();
@@ -119,7 +210,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
     }
   };
   process.attach(applyDom);
-  const mounted = { stop() { stopped = true; for (const entry of removers.values()) entry.remove(); removers.clear(); ids.clear(); created.clear(); } };
+  const mounted = { stop() { stopped = true; for (const entry of removers.values()) entry.remove(); for (const entry of uiNodes.values()) entry.remove(); uiNodes.clear(); removers.clear(); ids.clear(); created.clear(); } };
   counts.set(mounted, () => ({ ids: ids.size, created: created.size, removers: removers.size }));
   return mounted;
 }

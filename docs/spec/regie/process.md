@@ -81,3 +81,7 @@ Scene はクリックを受けたら、リスナーの番号を `dispatch` に�
 persistence を指定すると、起動前に store.getLast(key) を読みます。key は installedAppKey です。無ければ None・done=true・page=""・reason=User/Os を使います。前回の page と reason は LaunchOptions.last で Worker に渡します。
 
 Create の直前に日時と key を履歴に足します。historyLimit は既定 100。各メソッドの前に `{ state, done: false, page, reason }` の保存を待ち、呼び出しが正常に返ったら done=true の保存を待ちます。状態の通知と保存は直列です。reason は Destroy のときだけ更新し、ほかでは前の値を保ちます。例外・時間切れ・stop で途中で切れたら done=false が残ります。保存の失敗もアプリの終了として扱い、続くメソッドを呼びません。persistence を省いたプロセスは保存しません。
+
+## 宣言的 UI（案）
+
+Worker は画面の木を前回と比較して差分を Scene に渡します。クリックには build の番号を付け、古い build のイベントは捨てます。イベントを届ける状態の判断は HTML 方式と共通です。詳しくは [宣言的 UI](../ui.md) を参照してください。

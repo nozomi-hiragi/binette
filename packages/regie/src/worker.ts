@@ -20,9 +20,61 @@ export function serveApp(scope: WorkerScope): void {
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
   let page = "";
+  let declarative = false;
   let last = { page: "", reason: { kind: 0, cause: 0 } };
   let ops: DomOp[] = [];
+  type UiNode = { kind: "column" | "row" | "text" | "button"; children: UiNode[]; text: string; padding: number; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number };
+  type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number };
+  let uiRoot: Mounted | undefined;
+  let nextUiHandle = 1;
+  // 木の照合は Worker 内で行い、Scene には実際に変わった操作だけを渡す。
+  const updateUi = (node: UiNode, old: Mounted | undefined, build: number): Mounted => {
+    const mounted: Mounted = old ?? { handle: nextUiHandle++, node, children: [], build };
+    if (!old) ops.push({ op: "ui-create", handle: mounted.handle, kind: node.kind });
+    const prev = old?.node;
+    if (!prev || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
+      prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
+      prev.handler !== node.handler || (node.handler !== -1 && mounted.build !== build)) {
+      ops.push({ op: "ui-update", handle: mounted.handle, text: node.text, padding: node.padding, gap: node.gap,
+        grow: node.grow, label: node.label || null, enabled: node.enabled,
+        listener: node.handler === -1 ? null : node.handler, build });
+    }
+    const previous = mounted.children;
+    const used = new Set<Mounted>();
+    const children = node.children.map((child, i) => {
+      const match = child.key
+        ? previous.find(item => !used.has(item) && item.node.key === child.key && item.node.kind === child.kind)
+        : previous[i] && !used.has(previous[i]!) && !previous[i]!.node.key && previous[i]!.node.kind === child.kind ? previous[i] : undefined;
+      if (match) used.add(match);
+      return updateUi(child, match, build);
+    });
+    for (const child of previous) if (!used.has(child)) ops.push({ op: "ui-remove", handle: child.handle });
+    const order = previous.filter(child => used.has(child));
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!;
+      if (order[i] === child) continue;
+      const index = order.indexOf(child);
+      if (index !== -1) order.splice(index, 1);
+      ops.push({ op: "ui-insert", parent: mounted.handle, child: child.handle, before: order[i]?.handle ?? null });
+      order.splice(i, 0, child);
+    }
+    mounted.node = node;
+    mounted.children = children;
+    mounted.build = build;
+    return mounted;
+  };
+  const renderUi = (value: string) => {
+    const { build, root } = JSON.parse(value) as { build: number; root: UiNode };
+    const old = uiRoot;
+    if (old && (old.node.kind !== root.kind || old.node.key !== root.key)) {
+      ops.push({ op: "ui-remove", handle: old.handle });
+      uiRoot = undefined;
+    }
+    uiRoot = updateUi(root, uiRoot, build);
+    if (!old || old !== uiRoot) ops.push({ op: "ui-insert", parent: null, child: uiRoot.handle, before: null });
+  };
   const flush = () => {
+    if (declarative) ops = ops.filter(op => op.op.startsWith("ui-"));
     if (ops.length) { scope.postMessage({ type: "dom", ops }); ops = []; }
   };
   const homeApps = () => {
@@ -103,6 +155,7 @@ export function serveApp(scope: WorkerScope): void {
       "app.lastKind": () => last.reason.kind,
       "app.lastCause": () => last.reason.cause,
       "app.finish": () => scope.postMessage({ type: "finish" }),
+      "ui.render": (ptr: number) => renderUi(readString(ptr)),
       "dom.byId": (handle: number, id: number) => ops.push({ op: "byId", handle, id: readString(id) }),
       "dom.create": (handle: number, tag: number) => ops.push({ op: "create", handle, tag: readString(tag) }),
       "dom.text": (handle: number, value: number) => ops.push({ op: "text", handle, value: readString(value) }),
@@ -133,12 +186,13 @@ export function serveApp(scope: WorkerScope): void {
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: number[]; page?: string; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: number[]; page?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot };
     if (data.type === "init") {
       try {
         apps = data.apps;
         os = data.os;
         page = data.page ?? "";
+        declarative = data.declarative ?? false;
         last = data.last ?? last;
         ops = [];
         const result = await WebAssembly.instantiate(data.wasm!, imports);

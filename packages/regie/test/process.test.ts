@@ -287,3 +287,83 @@ launch(new TestApp());`;
     await mounted.app.call("stress");
   } finally { mounted.stop(); }
 });
+
+Deno.test("宣言 UI の再描画は差分だけを送り、古い build のイベントを捨てる", async () => {
+  const code = `import { App, Last, document, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique/ui";
+let count = 0;
+function increment(): void { count++; }
+function add(value: i32): void { count += value; }
+class Counter extends App {
+  onCreate(_last: Last): void { document.createElement("div").textContent = "ignored"; }
+  build(): View { return column([text("count:" + count.toString()), button("+1", increment), button("+5", add).arg(5), text("quote:\\" newline:\\n")]); }
+}
+launch(new Counter());`;
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "counter", name: "Counter", entry: { as: "main.ts" } }),
+    "main.ts": code,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  assertEquals(built.html, "");
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker, declarative: true });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const initial = batches.flat();
+    assert(initial.every(op => op.op.startsWith("ui-")));
+    const textCreate = initial.find(op => op.op === "ui-create" && op.kind === "text");
+    const buttonCreate = initial.find(op => op.op === "ui-create" && op.kind === "button");
+    assert(textCreate?.op === "ui-create" && buttonCreate?.op === "ui-create");
+    const button = initial.filter(op => op.op === "ui-update" && op.handle === buttonCreate.handle).at(-1);
+    assert(button?.op === "ui-update" && button.listener !== null);
+    batches.length = 0;
+    process.dispatchUi(button.listener, button.build);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:1"));
+    const changed = batches.flat();
+    assert(changed.some(op => op.op === "ui-update" && op.handle === textCreate.handle && op.text === "count:1"));
+    assert(!changed.some(op => op.op === "ui-create" || op.op === "ui-remove" || op.op === "ui-insert"));
+    assert(initial.some(op => op.op === "ui-update" && op.text === 'quote:" newline:\n'));
+    batches.length = 0;
+    process.dispatchUi(button.listener, button.build);
+    await sleep(50);
+    assertEquals(batches.flat(), []);
+    const addButton = changed.find(op => op.op === "ui-update" && op.text === "+5");
+    assert(addButton?.op === "ui-update" && addButton.listener !== null);
+    process.dispatchUi(addButton.listener, addButton.build);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:6"));
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI のキー付き並べ替えは要素を再利用する", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique/ui";
+let reversed = false;
+function swap(): void { reversed = !reversed; }
+class Demo extends App {
+  build(): View {
+    return column([button("swap", swap), reversed
+      ? column([text("B").key("b"), text("A").key("a")])
+      : column([text("A").key("a"), text("B").key("b")])]);
+  }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const initial = batches.flat();
+    const a = initial.find(op => op.op === "ui-update" && op.text === "A");
+    const b = initial.find(op => op.op === "ui-update" && op.text === "B");
+    const button = initial.filter(op => op.op === "ui-update" && op.text === "swap").at(-1);
+    assert(a?.op === "ui-update" && b?.op === "ui-update" && button?.op === "ui-update" && button.listener !== null);
+    batches.length = 0;
+    process.dispatchUi(button.listener, button.build);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-insert"));
+    const ops = batches.flat();
+    assert(ops.some(op => op.op === "ui-insert" && op.child === b.handle && op.before === a.handle));
+    assert(!ops.some(op => op.op === "ui-create" || op.op === "ui-remove"));
+  } finally { process.stop(); }
+});

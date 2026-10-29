@@ -55,8 +55,8 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 
 1. `read("app.json")` を parseAppManifest で読む（誤りは BinetteError）
 2. 入口のパスを整える。絶対パス・スキーム・バックスラッシュ・%・フォルダ外は拒む
-3. HTML と AS を読む
-4. AS の末尾に `\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
+3. `entry.html` があれば HTML と AS を読み、省略時は空の HTML と AS を使う（案）
+4. AS の末尾に `\nexport { __bina_event, __bina_lifecycle, __bina_ui_event } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
 5. asc でビルドし `{ manifest, html, wasm }` を返す
 
 `bina.ts` の生成を無くすのは決定 2026-10-27 です。HTML の解析、クリック関数の export 検査、BuiltApp.bindings、BuildOptions.parser と ShellOptions.parser、HtmlParser、deno-dom の依存を無くしました（案・実装済み）。入口に bina.ts というファイル名も使えます。
@@ -137,3 +137,7 @@ asc は大きいので、ビルドは `@binette/regie/build` という別の入�
 - HTML: `script`、`on*` 属性、外の URL を含まないか。今は Scene が innerHTML に描くので `on*` 属性が動く
 - 権限: `app.json` の `permissions` と、使う呼び出しが合うか
 - 入手元: ハッシュやコミットの記録（[app.md](../app.md#régie-が記録するもの案)）
+
+## 宣言的 UI（案）
+
+`entry.html` を省いたアプリは [宣言的 UI](../ui.md) を使います。`libraries` の `jsr:@binette/replique` があれば、`jsr:@binette/replique/ui` を省略しても自動的に解決します。明示した場合はそのソースを使います。
