@@ -303,6 +303,10 @@ export class View {
   callback: UiCallback | null = null;
   textCallback: ((value: string) => void) | null = null;
   minWidthValue: number = 0;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  headingValue: i32 = 0;
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  listValue: bool = false;
   shownValue: boolean = true;
   appValue: number = -1;
   constructor(readonly kind: string) {}
@@ -312,6 +316,11 @@ export class View {
   gap(n: i32): View { this.gapValue = n; return this; }
   minWidth(n: number): View { this.minWidthValue = n; return this; }
   grow(): View { this.growValue = true; return this; }
+  /** 見出しにする。level は 1〜3（範囲外は丸める）。読み上げでも見出しになる */
+  // @ts-ignore: AssemblyScript の型・組み込み関数
+  heading(level: i32): View { this.headingValue = level < 1 ? 1 : level > 3 ? 3 : level; return this; }
+  /** 子を並びとして扱う。読み上げでも一覧と項目になる */
+  list(): View { this.listValue = true; return this; }
   key(s: string): View { this.keyValue = s; return this; }
   label(s: string): View { this.labelValue = s; return this; }
   // @ts-ignore: AssemblyScript の型・組み込み関数
@@ -384,7 +393,7 @@ function serializeView(view: View): string {
     ',"text":' + jsonString(view.value) + ',"padding":' + view.paddingValue.toString() +
     ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
     ',"key":' + jsonString(view.keyValue) + ',"label":' + jsonString(view.labelValue) +
-    ',"minWidth":' + view.minWidthValue.toString() + ',"shown":' + (view.shownValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
+    ',"minWidth":' + view.minWidthValue.toString() + ',"heading":' + view.headingValue.toString() + ',"list":' + (view.listValue ? "true" : "false") + ',"shown":' + (view.shownValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
 }
 
 function rebuild(): void {

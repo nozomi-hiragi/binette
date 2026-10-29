@@ -26,25 +26,22 @@ const uiCss = `
 :where([class^="bina-ui-"])[hidden] { display: none !important; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
 :where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
-:where(.bina-ui-row) { display: flex; flex-direction: row; }
-:where(.bina-ui-appIcon) { width: var(--bina-home-icon-size, 56px); height: var(--bina-home-icon-size, 56px); object-fit: contain; }
+:where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
+:where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
+:where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }
 :where(.bina-ui-input) { font: inherit; color: inherit; min-width: 0; }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-grid) { gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input) { padding: var(--bina-ui-padding, 0px); }
 :where(.bina-ui-grow) { flex-grow: 1; }
-:where(.bina-ui-button) { font: inherit; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: var(--bina-ui-button-radius, 8px); cursor: pointer; }
+:where(.bina-ui-button) { font: inherit; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: var(--bina-ui-button-radius, 8px); cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
+:where(.bina-ui-button:has(> *)) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-button):focus-visible { outline: 2px solid var(--bina-ui-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-ui-button):disabled { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
-:where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-home-tile-size, var(--bina-ui-minWidth, 112px))), 1fr)); align-content: start; gap: var(--bina-home-gap, var(--bina-ui-gap, 16px)); padding: var(--bina-home-padding, var(--bina-ui-padding, 16px)); background: var(--bina-home-background, #f3f5f8); color: var(--bina-home-color, #16181d); }
-:where(.bina-ui-grid > .bina-ui-button) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-home-gap, 16px); border-color: var(--bina-home-border, #d5dae1); background: var(--bina-home-surface, #fff); border-radius: var(--bina-home-radius, 12px); padding: var(--bina-home-button-padding, 12px); }
-:where(.bina-ui-grid > .bina-ui-button):focus-visible { outline-color: var(--bina-home-focus, #3273b9); }
-:where([data-bina-key="settings-root"] [data-bina-key="settings-title"]) { font-size: 2em; font-weight: bold; }
-:where([data-bina-key="settings-root"] [data-bina-key$="-title"]:not([data-bina-key="settings-title"])) { font-size: 1.5em; font-weight: bold; }
-:where([data-bina-key="settings-root"] [data-bina-key^="settings-row-"]) { align-items: center; }
-:where([data-bina-key="settings-root"] [data-bina-key^="settings-value-"]) { min-width: 5em; text-align: right; }
-:where([data-bina-key="settings-root"] [data-bina-key^="settings-row-"] button) { min-width: 44px; min-height: 44px; }
-:where([data-bina-key="settings-root"] [data-bina-key="homes"]) { align-items: start; }
-:where([data-bina-key="settings-root"] [data-bina-key="history"]) { padding-left: 1.5em; }
+:where(.bina-ui-heading-1) { font-size: 2em; font-weight: bold; }
+:where(.bina-ui-heading-2) { font-size: 1.5em; font-weight: bold; }
+:where(.bina-ui-heading-3) { font-size: 1.17em; font-weight: bold; }
+:where(.bina-ui-list) { padding-inline-start: 1.5em; }
+:where(.bina-ui-listitem) { display: list-item; list-style: disc; }
 `;
 
 /** HTML を描き、プロセスからの DOM 操作を反映する */
@@ -157,7 +154,20 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
             entry.textNode = null;
           } else if (entry.textNode && entry.textNode.data !== op.text) entry.textNode.data = op.text;
         }
-        for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", op.minWidth ?? null]] as const) {
+        // grid は列の最小幅として変数で渡す。ほかの部品は自分の min-width にし、子に受け継がせない
+        const isGrid = node.classList.contains("bina-ui-grid");
+        const minWidth = op.minWidth ? `${Math.max(0, op.minWidth)}px` : "";
+        if (!isGrid && node.style.minWidth !== minWidth) node.style.minWidth = minWidth;
+        const level = op.heading ?? 0;
+        const role = level > 0 ? "heading" : op.list ? "list" : op.listItem ? "listitem" : null;
+        if (role === null) { if (node.hasAttribute("role")) node.removeAttribute("role"); }
+        else if (node.getAttribute("role") !== role) node.setAttribute("role", role);
+        if (level > 0) { if (node.getAttribute("aria-level") !== String(level)) node.setAttribute("aria-level", String(level)); }
+        else if (node.hasAttribute("aria-level")) node.removeAttribute("aria-level");
+        for (const n of [1, 2, 3]) if (node.classList.contains(`bina-ui-heading-${n}`) !== (level === n)) node.classList.toggle(`bina-ui-heading-${n}`, level === n);
+        if (node.classList.contains("bina-ui-list") !== !!op.list) node.classList.toggle("bina-ui-list", !!op.list);
+        if (node.classList.contains("bina-ui-listitem") !== !!op.listItem) node.classList.toggle("bina-ui-listitem", !!op.listItem);
+        for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid ? op.minWidth ?? null : null]] as const) {
           const property = `--bina-ui-${name}`;
           const next = value === null ? "" : `${Math.max(0, value)}px`;
           if (node.style.getPropertyValue(property) !== next) {

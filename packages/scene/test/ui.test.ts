@@ -69,3 +69,34 @@ Deno.test("入力は IME 中も毎回通知し、同値や変換中の value は
     assertEquals(values, ["に", "日本"]);
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("見出しと一覧は役割で読み上げられ、OS の CSS はアプリの key を見ない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  let apply: (ops: DomOp[]) => void = () => {};
+  const process = { attach(sink: typeof apply) { apply = sink; }, dispatchUi() {} } as unknown as Process;
+  const mounted = mountApp(host, "", process);
+  const base = { padding: null, gap: null, grow: false, label: null, enabled: true, clickable: false };
+  try {
+    apply([
+      { op: "ui-create", handle: 1, kind: "column" }, { op: "ui-insert", parent: null, child: 1, before: null },
+      { op: "ui-create", handle: 2, kind: "text" }, { op: "ui-update", handle: 2, text: "設定", ...base, heading: 1, key: "settings-title" },
+      { op: "ui-insert", parent: 1, child: 2, before: null },
+      { op: "ui-create", handle: 3, kind: "column" }, { op: "ui-update", handle: 3, text: "", ...base, list: true },
+      { op: "ui-insert", parent: 1, child: 3, before: null },
+      { op: "ui-create", handle: 4, kind: "text" }, { op: "ui-update", handle: 4, text: "一", ...base, listItem: true, minWidth: 80 },
+      { op: "ui-insert", parent: 3, child: 4, before: null },
+    ]);
+    const title = host.querySelector<HTMLElement>(".bina-ui-text")!;
+    assertEquals([title.getAttribute("role"), title.getAttribute("aria-level")], ["heading", "1"]);
+    assertEquals(host.querySelectorAll(".bina-ui-column")[1]!.getAttribute("role"), "list");
+    const item = host.querySelectorAll<HTMLElement>(".bina-ui-text")[1]!;
+    assertEquals(item.getAttribute("role"), "listitem");
+    // text の minWidth は自分の幅で、子に受け継ぐ変数にはしない
+    assertEquals([item.style.minWidth, item.style.getPropertyValue("--bina-ui-minWidth")], ["80px", ""]);
+    apply([{ op: "ui-update", handle: 2, text: "設定", ...base }]);
+    assertEquals([title.hasAttribute("role"), title.hasAttribute("aria-level")], [false, false]);
+    const css = host.querySelector("style")?.textContent ?? "";
+    assertEquals([css.includes("data-bina-key"), css.includes("settings-"), css.includes("bina-home")], [false, false, false]);
+  } finally { mounted.stop(); await window.happyDOM.close(); }
+});

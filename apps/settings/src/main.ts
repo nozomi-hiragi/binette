@@ -54,7 +54,7 @@ class Settings extends App {
       const seconds = value % 1000 == 0 ? (value / 1000).toString() : (<f64>value / 1000).toString();
       debug.push(row([
         text(labels[i]).grow(),
-        text(steps[i] == 1000 ? seconds + " 秒" : value.toString()).key("settings-value-" + i.toString()),
+        text(steps[i] == 1000 ? seconds + " 秒" : value.toString()).minWidth(80).key("settings-value-" + i.toString()),
         button("−", change).arg(i * 2).label(labels[i] + "を減らす"),
         button("＋", change).arg(i * 2 + 1).label(labels[i] + "を増やす"),
       ]).gap(8).key("settings-row-" + i.toString()));
@@ -64,15 +64,15 @@ class Settings extends App {
       history.push(text(utc(os.launchTime(i)) + " " + os.launchName(i)).key("launch-" + i.toString()));
     }
     return column([
-      text("設定").key("settings-title"),
+      text("設定").heading(1).key("settings-title"),
       column([
-        text("Binette について").key("about-title"), text("Binette — 仕様の版 0.2"),
+        text("Binette について").heading(2).key("about-title"), text("Binette — 仕様の版 0.2"),
         button("詳しく", showDetails).key("details"),
         column([show(details, text("ブラウザだけで動く、アプリの土台です。"))]).key("description"),
       ]).gap(8),
-      column([text("ホーム").key("home-title"), column(homes).gap(8).key("homes")]).gap(8),
-      column([text("デバッグ").key("debug-title"), column(debug).gap(8).key("debug")]).gap(8),
-      column([text("起動の履歴").key("history-title"), text("日時は UTC です。"), column(history).gap(8).key("history")]).gap(8),
+      column([text("ホーム").heading(2).key("home-title"), column(homes).gap(8).key("homes")]).gap(8),
+      column([text("デバッグ").heading(2).key("debug-title"), column(debug).gap(8).key("debug")]).gap(8),
+      column([text("起動の履歴").heading(2).key("history-title"), text("日時は UTC です。"), column(history).gap(8).list().key("history")]).gap(8),
     ]).gap(16).padding(16).key("settings-root");
   }
 }

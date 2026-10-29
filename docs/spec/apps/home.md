@@ -49,14 +49,14 @@
 
 | 名前 | 既定値 | 用途 |
 | --- | --- | --- |
-| `--bina-home-background` | `#f3f5f8` | 背景 |
+| `--bina-ui-grid-background` | `#f3f5f8` | 背景 |
 | `--bina-home-color` | `#16181d` | 文字 |
 | `--bina-home-padding` | `16px` | 一覧のまわりの余白 |
 | `--bina-home-tile-size` | `112px` | タイルの列の最小幅 |
 | `--bina-home-gap` | `16px` | タイルの間、アイコンと名前の間 |
-| `--bina-home-border` | `#d5dae1` | タイルの枠 |
-| `--bina-home-surface` | `#fff` | タイルの背景 |
-| `--bina-home-radius` | `12px` | タイルの角丸 |
+| `--bina-ui-button-border` | `#d5dae1` | タイルの枠 |
+| `--bina-ui-button-background` | `#fff` | タイルの背景 |
+| `--bina-ui-button-radius` | `12px` | タイルの角丸 |
 | `--bina-home-button-padding` | `12px` | タイルの内側の余白 |
 | `--bina-home-icon-size` | `56px` | アイコンの幅と高さ |
 | `--bina-home-focus` | `#3273b9` | フォーカスの枠 |

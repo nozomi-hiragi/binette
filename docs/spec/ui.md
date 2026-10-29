@@ -28,3 +28,12 @@ Réplique は build ごとにハンドラー番号を振り直し、画面の木
 `input` の `label` は読み上げ用の名前、`enabled(false)` は入力の無効化に使います。描き直しの値が DOM の値と同じなら value を書き直さず、入力中のカーソルと IME の変換を保ちます。`grid` は CSS grid の auto-fill と minmax で子を並べます。`appIcon(i)` は OS が持つアプリのアイコンを表示し、ホーム以外が使うとアプリを終了します。`show(cond, view)` は条件が false のとき非表示にし、DOM は保持します。入力中の古い描画結果は、後から打った文字を上書きしません。
 
 見た目は `:where(.bina-ui-…)` と `--bina-ui-…` の OS テーマ変数で決めます。
+
+## 見出し・一覧と OS の CSS（案）
+
+- `.heading(level)` は見出しにする（level は 1〜3）。DOM には `role="heading"` と `aria-level` を付け、読み上げでも見出しになる
+- `.list()` を付けた column は `role="list"`、その子は `role="listitem"` になる
+- `.minWidth(px)` は、grid では列の最小幅、text・button・input では自分の最小幅
+- OS の部品の CSS は、どのアプリにも同じに効く汎用のものだけにする。アプリの key（`data-bina-key`）を CSS の手がかりにしない。ボタンは最小 44px 角。row は縦の中央にそろえる
+- テーマの変数は `--bina-ui-*`（例 `--bina-ui-grid-background`、`--bina-ui-button-background`、`--bina-ui-button-border`、`--bina-ui-button-radius`、`--bina-ui-focus`、`--bina-ui-icon-size`）
+- `show(false, view)` は DOM を残して隠す。隠れている間は押せない・打てない（入力の中身などを保つため）
