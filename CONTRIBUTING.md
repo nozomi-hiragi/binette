@@ -7,6 +7,8 @@ Deno 2.9 以上で、ルートから実行します。npm と Node は使いま�
 ```sh
 deno task check          # 全パッケージの型検査（replique は asc で AS として検査）
 deno task build          # dist に静的フロントを書き出す
+deno task docs           # 仕様書と API ドキュメントを site に生成
+deno task docs:serve     # 仕様書をローカルでプレビュー
 deno task test           # バージョンの検査とテスト
 deno task check-pack     # JSR に出すファイルだけを写し、別の利用者として動かして試す
 deno publish --dry-run   # JSR への公開の予行

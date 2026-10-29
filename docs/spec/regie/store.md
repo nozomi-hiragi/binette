@@ -37,7 +37,7 @@ interface AppStore {
 
 ## SystemStore（案・実装済み）
 
-AppStore.system で同じ保存先の OS の記録を読み書きします。メモリ版は AppStore ごとに持ち、読み書きで値を写します。IndexedDB 版は同じ DB を v2 に上げ、既存の apps 表を残して system 表を追加します。system は last:<installedAppKey>、launches、settings のキーで最後の状態・履歴・設定を保存します。各書き込みはトランザクションの完了まで待ちます。
+AppStore.system で同じ保存先の OS の記録を読み書きします。メモリ版は AppStore ごとに持ち、読み書きで値を写します。IndexedDB 版は同じ DB を v2 に上げ、既存の apps 表を残して system 表を追加します。system は `last:<installedAppKey>`、launches、settings のキーで最後の状態・履歴・設定を保存します。各書き込みはトランザクションの完了まで待ちます。
 
 ```ts
 interface LifecycleRecord {

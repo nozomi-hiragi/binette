@@ -39,7 +39,7 @@ HTML（抜き出し）:
 
 `launch(home)` をトップレベルで一回呼びます。通常の id と document API を使う方針は決定 2026-10-27 です。`Home extends App` の onCreate で tiles の textContent を空にし、アプリごとに button.home-tile、img.home-icon、名前の span を createElement で作り appendChild します。img は Scene が alt="" を付ける装飾画像です。apps.icon(img, i) で OS の SVG を画像に入れ、名前は textContent に書きます。
 
-Home の Map<Element, i32> にボタンと番号を覚え、click リスナーはグローバルの home インスタンスを通し、Event.currentTarget から番号を引いて apps.open(i) を呼びます。ローカル変数を捕まえるクロージャは使いません。実際のソースは [main.ts](../../../apps/home/src/main.ts) にあります。
+Home の `Map<Element, i32>` にボタンと番号を覚え、click リスナーはグローバルの home インスタンスを通し、Event.currentTarget から番号を引いて apps.open(i) を呼びます。ローカル変数を捕まえるクロージャは使いません。実際のソースは [main.ts](../../../apps/home/src/main.ts) にあります。
 
 ## OS の枠との分担
 
