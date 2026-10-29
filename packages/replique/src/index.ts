@@ -35,6 +35,11 @@ declare function remove(handle: i32): void;
 declare function listen(handle: i32, type: string, listener: i32): void;
 
 // @ts-ignore: decorator
+@external("binette", "dom.unlisten")
+// @ts-ignore: AssemblyScript の整数型
+declare function unlisten(handle: i32, type: string, listener: i32): void;
+
+// @ts-ignore: decorator
 @external("binette", "apps.icon")
 // @ts-ignore: AssemblyScript の整数型
 declare function iconImport(handle: i32, app: i32): void;
@@ -42,9 +47,14 @@ declare function iconImport(handle: i32, app: i32): void;
 // @ts-ignore: AssemblyScript の整数型
 let nextHandle: i32 = 1;
 const elements = new Map<string, Element>();
-const listeners = new Array<(event: Event) => void>();
-const targets = new Array<Element>();
-const types = new Array<string>();
+// @ts-ignore: AssemblyScript の整数型
+let nextListener: i32 = 0;
+// @ts-ignore: AssemblyScript の整数型
+const listeners = new Map<i32, Listener>();
+
+class Listener {
+  constructor(readonly type: string, readonly target: Element, readonly callback: (event: Event) => void) {}
+}
 
 /** リスナーを付けた要素とイベントの種類 */
 export class Event {
@@ -55,31 +65,95 @@ export class Event {
 export class Element {
   private textValue: string = "";
   private classValue: string = "";
+  private parent: Element | null = null;
+  private children: Array<Element> = [];
+  // @ts-ignore: AssemblyScript の整数型
+  private listenerIds: Array<i32> = [];
+  private released: boolean = false;
+  private id: string;
   // @ts-ignore: AssemblyScript の整数型
   readonly handle: i32;
   // @ts-ignore: AssemblyScript の整数型
-  constructor(handle: i32) { this.handle = handle; }
+  constructor(handle: i32, id: string = "") { this.handle = handle; this.id = id; }
+
+  private detach(): void {
+    const parent = this.parent;
+    if (parent !== null) {
+      const index = parent.children.indexOf(this);
+      if (index >= 0) parent.children.splice(index, 1);
+      this.parent = null;
+    }
+  }
+
+  private release(): void {
+    if (this.released) return;
+    while (this.children.length > 0) this.children[this.children.length - 1].release();
+    for (let i = 0; i < this.listenerIds.length; i++) listeners.delete(this.listenerIds[i]);
+    this.listenerIds = [];
+    if (elements.has(this.id) && elements.get(this.id) === this) elements.delete(this.id);
+    this.detach();
+    this.released = true;
+  }
 
   get textContent(): string { return this.textValue; }
   /** 子をすべて消して文字だけにする */
-  set textContent(value: string) { this.textValue = value; text(this.handle, value); }
+  set textContent(value: string) {
+    if (this.released) return;
+    while (this.children.length > 0) this.children[this.children.length - 1].release();
+    this.textValue = value;
+    text(this.handle, value);
+  }
   get className(): string { return this.classValue; }
-  set className(value: string) { this.classValue = value; className(this.handle, value); }
-  appendChild(child: Element): Element { append(this.handle, child.handle); return child; }
-  remove(): void { remove(this.handle); }
+  set className(value: string) {
+    if (this.released) return;
+    this.classValue = value;
+    className(this.handle, value);
+  }
+  appendChild(child: Element): Element {
+    if (this.released || child.released) return child;
+    let ancestor: Element | null = this;
+    while (ancestor !== null) {
+      if (ancestor === child) return child;
+      ancestor = ancestor.parent;
+    }
+    child.detach();
+    child.parent = this;
+    this.children.push(child);
+    append(this.handle, child.handle);
+    return child;
+  }
+  remove(): void {
+    if (this.released) return;
+    this.release();
+    remove(this.handle);
+  }
   addEventListener(type: string, listener: (event: Event) => void): void {
-    const index = listeners.length;
-    listeners.push(listener);
-    targets.push(this);
-    types.push(type);
+    if (this.released) return;
+    if (nextListener == 2147483647) throw new Error("リスナー番号を使い切りました");
+    const index = nextListener++;
+    listeners.set(index, new Listener(type, this, listener));
+    this.listenerIds.push(index);
     listen(this.handle, type, index);
+  }
+  removeEventListener(type: string, listener: (event: Event) => void): void {
+    if (this.released) return;
+    for (let i = 0; i < this.listenerIds.length; i++) {
+      const index = this.listenerIds[i];
+      const entry = listeners.get(index)!;
+      if (entry.type === type && entry.callback === listener) {
+        listeners.delete(index);
+        this.listenerIds.splice(i, 1);
+        unlisten(this.handle, type, index);
+        return;
+      }
+    }
   }
 }
 
 export namespace document {
   export function getElementById(id: string): Element {
     if (elements.has(id)) return elements.get(id)!;
-    const element = new Element(nextHandle++);
+    const element = new Element(nextHandle++, id);
     elements.set(id, element);
     byId(element.handle, id);
     return element;
@@ -94,9 +168,18 @@ export namespace document {
 /** Régie がイベントのときに呼ぶ */
 // @ts-ignore: AssemblyScript の整数型
 export function __bina_event(listener: i32): void {
-  if (listener < 0 || listener >= listeners.length) return;
-  listeners[listener](new Event(types[listener], targets[listener]));
+  if (!listeners.has(listener)) return;
+  const entry = listeners.get(listener)!;
+  entry.callback(new Event(entry.type, entry.target));
 }
+
+/** テスト用に保持中のリスナー数を返す */
+// @ts-ignore: AssemblyScript の整数型
+export function __bina_listener_count(): i32 { return listeners.size; }
+
+/** テスト用に ID で保持中の要素数を返す */
+// @ts-ignore: AssemblyScript の整数型
+export function __bina_element_count(): i32 { return elements.size; }
 
 /** ホームだけが使えるアプリの一覧と起動 */
 export namespace apps {

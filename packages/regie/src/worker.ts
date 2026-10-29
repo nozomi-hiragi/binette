@@ -110,6 +110,7 @@ export function serveApp(scope: WorkerScope): void {
       "dom.append": (parent: number, child: number) => ops.push({ op: "append", parent, child }),
       "dom.remove": (handle: number) => ops.push({ op: "remove", handle }),
       "dom.listen": (handle: number, type: number, listener: number) => ops.push({ op: "listen", handle, type: readString(type), listener }),
+      "dom.unlisten": (handle: number, type: number, listener: number) => ops.push({ op: "unlisten", handle, type: readString(type), listener }),
       "apps.icon": (handle: number, app: number) => { appAt(app); ops.push({ op: "icon", handle, app }); },
       "apps.count": () => homeApps().length,
       "apps.name": (i: number) => writeString(appAt(i).name),

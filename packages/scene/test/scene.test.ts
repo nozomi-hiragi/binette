@@ -94,7 +94,7 @@ launch(new TestApp());
     assertEquals(element.querySelector("img")!.getAttribute("alt"), ""); assertEquals(element.querySelector("script"), null);
     button.querySelector<HTMLSpanElement>("span")!.click(); await waitFor(() => opened.length === 1); assertEquals(opened, [0]);
     await mounted.app.call("remove"); assertEquals(element.querySelector("button"), null);
-    await mounted.app.call("again"); assertEquals(button.textContent, "文字だけ"); assertEquals(button.children.length, 0);
+    await mounted.app.call("again"); assertEquals(element.querySelector("button"), null); assertEquals(button.textContent, "あ");
     await mounted.app.call("clearIcon"); assertEquals(element.querySelector("#old-icon")!.getAttribute("src"), null);
     assertEquals(element.querySelector("#tiles")!.hasAttribute("src"), false);
   } finally { mounted.stop(); await window.happyDOM.close(); }

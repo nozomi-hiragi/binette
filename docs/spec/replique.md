@@ -76,15 +76,25 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 | `Element.textContent: string` | 書くと子をすべて消して文字だけにする。読むとアプリが最後に書いた文字。まだなら空文字列 |
 | `Element.className: string` | 書くとクラスを変える。読むと最後に書いた値。まだなら空文字列 |
 | `Element.appendChild(child: Element): Element` | 子を追加し、その child を返す |
-| `Element.remove(): void` | 要素を取り除く |
-| `Element.addEventListener(type: string, listener: (event: Event) => void): void` | 今は click のみ。リスナーの配列番号を送る |
+| `Element.remove(): void` | 要素と既知の子孫を解放し、取り除く |
+| `Element.addEventListener(type: string, listener: (event: Event) => void): void` | 今は click のみ。リスナー番号を送る |
+| `Element.removeEventListener(type: string, listener: (event: Event) => void): void` | 同じ要素・種類・関数の登録を解除する |
 | `Event.type: string`（readonly） | イベントの種類 |
 | `Event.currentTarget: Element`（readonly） | リスナーを付けた Element |
 | `apps.count(): i32` / `apps.name(i: i32): string` / `apps.id(i: i32): string` / `apps.open(i: i32): void` | ホーム用のアプリ一覧と起動 |
 | `apps.icon(img: Element, i: i32): void` | img に OS が持つアプリアイコンを入れる |
 | `__bina_event(listener: i32): void` | リスナー番号で Event を作って呼ぶ。Régie のビルドが入口からの再 export を差し込む |
+| `__bina_listener_count(): i32` / `__bina_element_count(): i32` | テスト用に保持中のリスナー数・id の要素数を返す |
 
-Element の中身は i32 の handle です。id の Map、リスナーと対象要素と種類の配列は Worker の生存中保持し、GC から守ります。`Map<Element, i32>` のキーに使えます。getter は画面に聞かず、HTML の初期値や子の変更から値を計算しません。
+Element の中身は i32 の handle です。id とリスナーは Map で保持し、登録中は GC から守ります。`Map<Element, i32>` のキーに使えます。getter は画面に聞かず、HTML の初期値や子の変更から値を計算しません。
+
+### リスナーと要素の解放（案）
+
+リスナー番号は単調に増やして再利用せず、解除後の番号で届いたイベントは無視します。i32 の番号を使い切る前に追加を例外で止めます。`removeEventListener` は関数の同一性と種類を比べ、同じ登録が複数ある場合は一つ解除します。渡す関数は登録時と同じものを保持してください。
+
+`appendChild` で把握した親子関係を記録し、別の親へ移すと記録も移します。`remove` は要素自身と既知の子孫を、`textContent` の代入は既知の子孫だけを解放します。解放時にリスナーと id の登録を消し、解放済み要素への変更は無視します。同じ id を再取得すると新しいハンドルになります。自己参照や既知の祖先を子にする操作は無視します。
+
+最初の HTML の親子関係は Réplique には分かりません。その子孫を `getElementById` で取得してリスナーを付け、親を `remove` しても、Réplique 側にはそのクロージャが残ります。Scene 側は実際の DOM の部分木を解放します。
 
 `() => {}` もリスナー引数に書けます。asc 0.28.20 では引数なしの名前付き関数を直接渡すと型エラーになるため、`() => showDetails()` と包みます。無名関数から this やローカル変数は参照できず、グローバルのインスタンスを通します。
 
@@ -99,7 +109,7 @@ Element の中身は i32 の handle です。id の Map、リスナーと対象�
 | `dom.text` / `dom.class` | handle, value |
 | `dom.append` | parent, child |
 | `dom.remove` | handle |
-| `dom.listen` | handle, type, listener |
+| `dom.listen` / `dom.unlisten` | handle, type, listener |
 | `apps.icon` | handle, i |
 | `apps.count` | なし（i32 を返す） |
 | `apps.name` / `apps.id` | i（文字列ポインタを返す） |
