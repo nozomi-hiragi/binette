@@ -182,3 +182,19 @@ Deno.test("部品の角丸は theme を優先し、未指定時は既存 CSS 変
     assertEquals(host.style.getPropertyValue("--bina-ui-button-radius"), "12px");
   } finally { root.unmount(); await window.happyDOM.close(); }
 });
+
+Deno.test("theme の値は数だけを受け付け、ほかの CSS は書き込まない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    const view = column([]);
+    view.themeValue = "--bina-ui-space-md:url(https://example.com/x);--bina-ui-space-sm:6px;--bina-ui-button-padding-md:1;--color:red;";
+    root.render(view);
+    const node = host.querySelector(".bina-ui-column")! as HTMLElement;
+    assertEquals(node.style.getPropertyValue("--bina-ui-space-md"), "");
+    assertEquals(node.style.getPropertyValue("--bina-ui-space-sm"), "6px");
+    assertEquals(node.style.getPropertyValue("--bina-ui-button-padding-md"), "1");
+    assertEquals(node.style.getPropertyValue("--color"), "");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});

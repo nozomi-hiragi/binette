@@ -131,8 +131,11 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           const colon = declaration.indexOf(":");
           if (colon === -1) continue;
           const property = declaration.slice(0, colon);
+          const value = declaration.slice(colon + 1);
           if (!/^--bina-ui-(?:(?:space|radius|font-size)-(?:xs|sm|md|lg|xl)|(?:button|input)-(?:padding|radius|font-size)-(?:px|xs|sm|md|lg|xl))$/.test(property)) continue;
-          node.style.setProperty(property, declaration.slice(colon + 1));
+          // Only plain numbers reach the page, so a theme from the app cannot inject other CSS values.
+          if (!/^\d+(?:\.\d+)?(?:px)?$/.test(value)) continue;
+          node.style.setProperty(property, value);
           entry.theme.push(property);
         }
         node.hidden = op.shown === false;
