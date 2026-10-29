@@ -1,63 +1,28 @@
 import { createUiDiffer, type UiNode } from "./diff.ts";
 import { createUiDom } from "./dom.ts";
 
-/** 宣言 UI の部品。修飾はこの部品を変更して返す。 */
-export class View {
-  children: View[] = [];
-  themeValue = "";
-  value = "";
-  paddingValue: number | null = null;
-  gapValue = 0;
-  growValue = false;
-  keyValue = "";
-  labelValue = "";
-  enabledValue = true;
-  argValue = 0;
-  callback: ((arg: number) => void) | null = null;
-  textCallback: ((value: string) => void) | null = null;
-  minWidthValue = 0;
-  headingValue = 0;
-  listValue = false;
-  shownValue = true;
-  appValue = -1;
-  componentFn: ((props: never) => View) | null = null;
-  componentProps: unknown;
-  constructor(readonly kind: UiNode["kind"]) {}
-  padding(n: number = space.md): View { this.paddingValue = n; return this; }
-  gap(n: number = space.md): View { this.gapValue = n; return this; }
-  minWidth(n: number): View { this.minWidthValue = n; return this; }
-  grow(): View { this.growValue = true; return this; }
-  heading(level: number): View { this.headingValue = Math.max(1, Math.min(3, level)); return this; }
-  list(): View { this.listValue = true; return this; }
-  key(value: string): View { this.keyValue = value; return this; }
-  label(value: string): View { this.labelValue = value; return this; }
-  enabled(value: boolean): View { this.enabledValue = value; return this; }
-  arg(value: number): View { this.argValue = value; return this; }
+export * from "./parts.ts";
+import { View, UiCallback, Theme, Scale, ComponentTheme, theme as sharedTheme } from "./parts.ts";
+
+class FunctionUiCallback extends UiCallback {
+  constructor(private callback: (arg: number) => void) { super(); }
+  call(arg: number): void { this.callback(arg); }
 }
-/** 子を縦に並べる。 */
-export function column(children: View[]): View { const view = new View("column"); view.children = children; return view; }
-/** 子を横に並べる。 */
-export function row(children: View[]): View { const view = new View("row"); view.children = children; return view; }
-/** 子を格子に並べる。 */
-export function grid(children: View[]): View { const view = new View("grid"); view.children = children; return view; }
-/** 文字を描く。 */
-export function text(value: string): View { const view = new View("text"); view.value = value; return view; }
 /** ボタンを作る。 */
-export function button(label: string, callback: (arg: number) => void): View { const view = new View("button"); view.value = label; view.callback = callback; return view; }
+export function button(label: string, callback: (arg: number) => void): View {
+  const view = new View("button"); view.value = label; view.callback = new FunctionUiCallback(callback); return view;
+}
 /** 子を持つボタンを作る。 */
-export function buttonOf(children: View[], callback: (arg: number) => void): View { const view = new View("button"); view.children = children; view.callback = callback; return view; }
-/** 文字入力を作る。 */
-export function input(value: string, callback: (value: string) => void): View { const view = new View("input"); view.value = value; view.textCallback = callback; return view; }
-/** アプリのアイコンを描く。 */
-export function appIcon(index: number): View { const view = new View("appIcon"); view.appValue = index; return view; }
-/** 部品の表示を切り替える。 */
-export function show(condition: boolean, view: View): View { view.shownValue = condition; return view; }
+export function buttonOf(children: View[], callback: (arg: number) => void): View {
+  const view = new View("button"); view.children = children; view.callback = new FunctionUiCallback(callback); return view;
+}
+type Component = { fn: (props: never) => View; props: unknown };
+const components = new WeakMap<View, Component>();
 
 /** 関数の部品を木に入れる。key は返された View ではなくこの View に付ける。 */
 export function component<P>(fn: (props: P) => View, props: P): View {
   const view = new View("column");
-  view.componentFn = fn as (props: never) => View;
-  view.componentProps = props;
+  components.set(view, { fn: fn as (props: never) => View, props });
   return view;
 }
 
@@ -138,7 +103,7 @@ export function mount(element: HTMLElement): Root {
       const target = differ.find(handle);
       if (target?.node.enabled && target.node.handler !== -1) {
         const view = handlers[target.node.handler];
-        view?.callback?.(view.argValue);
+        view?.callback?.call(view.argValue);
       }
     },
     dispatchUiText(handle, value, version) {
@@ -175,17 +140,18 @@ export function mount(element: HTMLElement): Root {
     while (cleanups.length) cleanups.shift()!();
   }
   function same(fiber: Fiber, view: View): boolean {
-    return fiber.type === (view.componentFn ?? view.kind) && fiber.key === view.keyValue;
+    return fiber.type === (components.get(view)?.fn ?? view.kind as UiNode["kind"]) && fiber.key === view.keyValue;
   }
   function node(view: View, old: Fiber | undefined, effects: (() => void)[]): [UiNode, Fiber] {
-    const fiber: Fiber = old ?? { type: view.componentFn ?? view.kind, key: view.keyValue, children: [], hooks: [], live: true, schedule };
-    if (view.componentFn) {
+    const fiber: Fiber = old ?? { type: components.get(view)?.fn ?? view.kind as UiNode["kind"], key: view.keyValue, children: [], hooks: [], live: true, schedule };
+    const component = components.get(view);
+    if (component) {
       const previous = current;
       const previousHookCount = fiber.hooks.length;
       const context: HookContext = { fiber, index: 0, effects };
       current = context;
       let output: View;
-      try { output = view.componentFn(view.componentProps as never); }
+      try { output = component.fn(component.props as never); }
       finally { current = previous; }
       if (old && context.index !== previousHookCount) throw new Error("フックの呼び出し順序が変わりました");
       const child = fiber.children[0];
@@ -208,8 +174,8 @@ export function mount(element: HTMLElement): Root {
     for (const child of previous) if (!used.has(child)) dispose(child);
     fiber.children = children.map(child => child.next);
     const handler = view.callback || view.textCallback ? handlers.push(view) - 1 : -1;
-    return [{ kind: view.kind, children: children.map(child => child.result), text: view.value,
-      theme: view.themeValue, padding: view.paddingValue, gap: view.gapValue, grow: view.growValue,
+    return [{ kind: view.kind as UiNode["kind"], children: children.map(child => child.result), text: view.value,
+      theme: view.themeValue, padding: view.paddingValue === -100 ? null : view.paddingValue, gap: view.gapValue, grow: view.growValue,
       key: view.keyValue, label: view.labelValue, enabled: view.enabledValue,
       handler, minWidth: view.minWidthValue, heading: view.headingValue,
       list: view.listValue, shown: view.shownValue, app: view.appValue }, fiber];
@@ -236,64 +202,21 @@ export function mount(element: HTMLElement): Root {
   };
 }
 
-/** 名前付きの段。負の値は CSS 変数への参照を表す。 */
-export class Scale {
-  xs: number = -100;
-  sm: number = -100;
-  md: number = -100;
-  lg: number = -100;
-  xl: number = -100;
-}
-export const space: Scale = { xs: -1, sm: -2, md: -3, lg: -4, xl: -5 };
-export const radius: Scale = { xs: -1, sm: -2, md: -3, lg: -4, xl: -5 };
-export const fontSize: Scale = { xs: -1, sm: -2, md: -3, lg: -4, xl: -5 };
-/** 部品の既定値。-100 は上書きしない。 */
-export class ComponentTheme {
-  padding: number = -100;
-  radius: number = -100;
-  fontSize: number = -100;
-}
-/** 部分木に適用するテーマ。省略した値は親から受け継ぐ。 */
-export class Theme {
-  space: Scale | null = null;
-  radius: Scale | null = null;
-  fontSize: Scale | null = null;
-  button: ComponentTheme | null = null;
-  input: ComponentTheme | null = null;
-}
-function componentLength(kind: string, field: string, value: number): string {
-  const names = ["xs", "sm", "md", "lg", "xl"];
-  const token = value >= -5 && value <= -1 && value == Math.floor(value);
-  const prefix = "--bina-ui-" + kind + "-" + field;
-  let result = prefix + "-px:" + (token ? "0" : Math.max(0, value).toString()) + "px;";
-  for (let i = 0; i < names.length; i++) result += prefix + "-" + names[i] + ":" + (token && value == -i - 1 ? "1" : "0") + ";";
-  return result;
-}
-function scaleDeclarations(group: string, scale: Partial<Scale> | null | undefined): string {
-  if (scale == null) return "";
-  const names = ["xs", "sm", "md", "lg", "xl"];
-  const values = [scale.xs, scale.sm, scale.md, scale.lg, scale.xl];
-  let result = "";
-  for (let i = 0; i < values.length; i++) {
-    if (values[i] !== undefined && values[i] != -100) result += "--bina-ui-" + group + "-" + names[i] + ":" + Math.max(0, values[i]!).toString() + "px;";
-  }
-  return result;
-}
-function componentDeclarations(kind: string, value: Partial<ComponentTheme> | null | undefined): string {
-  if (value == null) return "";
-  let result = "";
-  if (value.padding !== undefined && value.padding != -100) result += componentLength(kind, "padding", value.padding);
-  if (value.radius !== undefined && value.radius != -100) result += componentLength(kind, "radius", value.radius);
-  if (value.fontSize !== undefined && value.fontSize != -100) result += componentLength(kind, "font-size", value.fontSize);
-  return result;
-}
 export type ThemeConfig = {
   space?: Partial<Scale> | null; radius?: Partial<Scale> | null; fontSize?: Partial<Scale> | null;
   button?: Partial<ComponentTheme> | null; input?: Partial<ComponentTheme> | null;
 };
-/** 要素を増やさず、この View を根とする部分木のテーマを設定する。 */
+function fill<T extends object>(base: T, config: Partial<T>): T {
+  for (const [field, value] of Object.entries(config)) if (value !== undefined) Object.assign(base, { [field]: value });
+  return base;
+}
+/** 要素を増やさず、この View を根とする部分木のテーマを設定する。省略した項目は親から受け継ぐ。 */
 export function theme(config: ThemeConfig, view: View): View {
-  view.themeValue = scaleDeclarations("space", config.space) + scaleDeclarations("radius", config.radius) +
-    scaleDeclarations("font-size", config.fontSize) + componentDeclarations("button", config.button) + componentDeclarations("input", config.input) + view.themeValue;
-  return view;
+  const full = new Theme();
+  if (config.space) full.space = fill(new Scale(), config.space);
+  if (config.radius) full.radius = fill(new Scale(), config.radius);
+  if (config.fontSize) full.fontSize = fill(new Scale(), config.fontSize);
+  if (config.button) full.button = fill(new ComponentTheme(), config.button);
+  if (config.input) full.input = fill(new ComponentTheme(), config.input);
+  return sharedTheme(full, view);
 }

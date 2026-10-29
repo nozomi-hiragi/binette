@@ -1,7 +1,7 @@
 {
   "name": "@binette/decor",
   "version": "0.1.0",
-  "exports": { ".": "./src/index.ts", "./as": "./src/as.ts" },
+  "exports": { ".": "./src/index.ts", "./as": "./src/as.ts", "./parts": "./src/parts.ts" },
   "imports": { "@binette/core": "jsr:@binette/core@0.1.0" },
   "publish": { "include": ["src", "README.md", "LICENSE"] }
 }
