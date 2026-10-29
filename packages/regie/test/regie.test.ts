@@ -1,8 +1,7 @@
-import { workerSource } from "../src/worker.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import type { DomOp } from "@binette/core";
-import { launchApp, serveApp, type RegieWorker } from "../src/index.ts";
+import { launchApp, serveApp, type RegieWorker, workerSource } from "../src/index.ts";
 
 const source = `
 @external("binette", "dom.text")

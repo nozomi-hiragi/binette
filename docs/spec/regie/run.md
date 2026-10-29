@@ -118,19 +118,21 @@ interface WorkerScope {
   postMessage(message: unknown, transfer?: Transferable[]): void;
   addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
 }
-function serveApp(scope: WorkerScope): void
+function serveApp(scope: WorkerScope, differ?: typeof createUiDiffer): void
+function workerSource(): string
 ```
 
 Worker の側の処理です。Worker の `self` か、テストでは `MessageChannel` の片方を渡します。
 
-- `serveApp` は、外の import や関数を一切参照しない自己完結の関数です。`toString()` で取り出して Worker のソースにするためです。中で使う補助の関数も、中に書きます
+- `serveApp` は、`toString()` で取り出して Worker のソースにします。宣言 UI の差分は Décor の `createUiDiffer` を引数 `differ` で受け取り、ほかの外の import や関数は参照しません
+- 自分で Worker を作るときは、`serveApp.toString()` ではなく `workerSource()` を使います。`workerSource()` は `serveApp` と `createUiDiffer` を埋め込み、`self` で動かすソースを返します（案）
 
 ### Blob URL の Worker
 
 `createWorker` を省略すると、次の Worker を作ります。
 
 ```ts
-const source = `(${serveApp.toString()})(self)`;
+const source = workerSource();
 const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
 const worker = new Worker(url); // classic Worker
 URL.revokeObjectURL(url);

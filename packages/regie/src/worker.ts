@@ -210,4 +210,5 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 }
 
 /** import を持たない Worker 用のソース。 */
+/** Worker のソース。serveApp と Décor の差分関数を埋め込み、`self` で動かす */
 export function workerSource(): string { return `(${serveApp.toString()})(self, ${createUiDiffer.toString()})`; }
