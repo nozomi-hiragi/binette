@@ -25,6 +25,7 @@ export function mountCounts(mounted: MountedApp): { ids: number; created: number
 const uiCss = `
 :where([class^="bina-ui-"])[hidden] { display: none !important; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
+:where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; }
 :where(.bina-ui-appIcon) { width: var(--bina-home-icon-size, 56px); height: var(--bina-home-icon-size, 56px); object-fit: contain; }
 :where(.bina-ui-input) { font: inherit; color: inherit; min-width: 0; }
