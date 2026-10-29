@@ -6,18 +6,34 @@ export interface UiEvents {
 }
 /** 宣言 UI の DOM 設定。 */
 export interface UiDomOptions { apps?: { icon?: string }[]; }
+const steps = ["xs", "sm", "md", "lg", "xl"];
+const length = (value: number): string => value <= -1 && value >= -5 && Number.isInteger(value)
+  ? `var(--bina-ui-space-${steps[-value - 1]}, var(--bina-ui-default-space-${steps[-value - 1]}))` : `${Math.max(0, value)}px`;
+const themeDefaults = [
+  ["space", [4, 8, 12, 16, 24]], ["radius", [2, 4, 8, 12, 16]], ["font-size", [12, 14, 16, 20, 24]],
+] as const;
+// 段の選択だけを継承し、長さの参照は使用する部品で解決する。
+function componentLength(kind: string, field: string, group: string, fallback: string): string {
+  const prefix = `--bina-ui-${kind}-${field}`;
+  const defaults = themeDefaults.find(([name]) => name === group)![1];
+  return `calc(var(${prefix}-px, ${fallback}) + ${steps.map((step, i) => `var(${prefix}-${step}, 0) * var(--bina-ui-${group}-${step}, ${defaults[i]}px)`).join(" + ")})`;
+}
 export const uiCss = `
+:where([class^="bina-ui-"]) { ${themeDefaults.flatMap(([group, values]) => values.map((value, i) => `--bina-ui-default-${group}-${steps[i]}: ${value}px;`)).join(" ")} }
+
 :where([class^="bina-ui-"])[hidden] { display: none !important; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
 :where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
 :where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
 :where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }
-:where(.bina-ui-input) { font: inherit; color: inherit; min-width: 0; }
+:where(.bina-ui-input) { font: inherit; font-size: ${componentLength("input", "font-size", "font-size", "1em")}; border-radius: ${componentLength("input", "radius", "radius", "var(--bina-ui-input-radius, 0px)")}; color: inherit; min-width: 0; }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-grid) { gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input) { padding: var(--bina-ui-padding, 0px); }
+:where(.bina-ui-button) { padding: var(--bina-ui-padding, ${componentLength("button", "padding", "space", "0px")}); }
+:where(.bina-ui-input) { padding: var(--bina-ui-padding, ${componentLength("input", "padding", "space", "0px")}); }
 :where(.bina-ui-grow) { flex-grow: 1; }
-:where(.bina-ui-button) { font: inherit; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: var(--bina-ui-button-radius, 8px); cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
+:where(.bina-ui-button) { font: inherit; font-size: ${componentLength("button", "font-size", "font-size", "1em")}; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: ${componentLength("button", "radius", "radius", "var(--bina-ui-button-radius, 8px)")}; cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
 :where(.bina-ui-button:has(> *)) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-button):focus-visible { outline: 2px solid var(--bina-ui-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-ui-button):disabled { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
@@ -37,7 +53,7 @@ export interface UiDom {
 /** 宣言 UI の操作を DOM に反映する。 */
 export function createUiDom(element: HTMLElement, process: UiEvents, options: UiDomOptions = {}): UiDom {
   // 宣言 UI は document API のハンドルと独立して管理する。
-  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; inputVersion: number; composing: boolean; lastText: string | null; pending: { text: string; version: number } | null; remove: () => void }>();
+  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; inputVersion: number; composing: boolean; theme: string[]; lastText: string | null; pending: { text: string; version: number } | null; remove: () => void }>();
   let uiStyle: HTMLStyleElement | undefined;
   const removeUi = (root: HTMLElement) => {
     for (const [handle, entry] of uiNodes) {
@@ -60,7 +76,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${op.kind}`;
         if (tag === "button") node.setAttribute("type", "button");
-        const entry = { node, clickable: false, textNode: null as Text | null, inputVersion: 0, composing: false, lastText: null as string | null, pending: null as { text: string; version: number } | null, remove: () => {} };
+        const entry = { node, clickable: false, textNode: null as Text | null, inputVersion: 0, composing: false, theme: [] as string[], lastText: null as string | null, pending: null as { text: string; version: number } | null, remove: () => {} };
         if (tag === "button") {
           const listener = () => { if (entry.clickable) process.dispatchUi(op.handle); };
           node.addEventListener("click", listener);
@@ -109,6 +125,19 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
             if (node.getAttribute("src") !== src) node.setAttribute("src", src);
           }
         }
+        for (const property of entry.theme) node.style.removeProperty(property);
+        entry.theme = [];
+        for (const declaration of (op.theme ?? "").split(";")) {
+          const colon = declaration.indexOf(":");
+          if (colon === -1) continue;
+          const property = declaration.slice(0, colon);
+          const value = declaration.slice(colon + 1);
+          if (!/^--bina-ui-(?:(?:space|radius|font-size)-(?:xs|sm|md|lg|xl)|(?:button|input)-(?:padding|radius|font-size)-(?:px|xs|sm|md|lg|xl))$/.test(property)) continue;
+          // Only plain numbers reach the page, so a theme from the app cannot inject other CSS values.
+          if (!/^\d+(?:\.\d+)?(?:px)?$/.test(value)) continue;
+          node.style.setProperty(property, value);
+          entry.theme.push(property);
+        }
         node.hidden = op.shown === false;
         if (op.key) node.setAttribute("data-bina-key", op.key);
         else node.removeAttribute("data-bina-key");
@@ -137,7 +166,8 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (node.classList.contains("bina-ui-listitem") !== !!op.listItem) node.classList.toggle("bina-ui-listitem", !!op.listItem);
         for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid && op.minWidth ? op.minWidth : null]] as const) {
           const property = `--bina-ui-${name}`;
-          const next = value === null ? "" : `${Math.max(0, value)}px`;
+          const fallback = name === "padding" ? node.classList.contains("bina-ui-button") ? componentLength("button", "padding", "space", "0px") : node.classList.contains("bina-ui-input") ? componentLength("input", "padding", "space", "0px") : "0px" : "";
+          const next = value === null ? fallback : name === "minWidth" ? `${Math.max(0, value)}px` : length(value);
           if (node.style.getPropertyValue(property) !== next) {
             if (next) node.style.setProperty(property, next);
             else node.style.removeProperty(property);

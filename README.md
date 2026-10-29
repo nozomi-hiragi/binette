@@ -55,3 +55,5 @@ http://localhost:5175/ を開くと、設定がホームに 1 つ並び、開い
 ## ライセンス
 
 [Apache License 2.0](LICENSE)
+
+Décor のテーマ（案）は、`theme({ space: { md: 16 }, button: { padding: space.md } }, view)` で部分木ごとの段と部品の既定を設定できます。`.gap()` / `.padding()` は標準の md、数の引数は引き続き px です。TS と AS の両方に対応し、アプリに CSS の記述は不要です。詳しくは [Décor の仕様](docs/spec/decor.md) を参照してください。

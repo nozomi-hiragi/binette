@@ -85,3 +85,116 @@ Deno.test("Décor mount は render 時だけ描き直し、key とイベント�
     assertEquals(host.childNodes.length, 0);
   } finally { root.unmount(); await window.happyDOM.close(); }
 });
+
+Deno.test("Décor の段・標準の段・px と部品の未指定 padding を CSS に渡す", async () => {
+  const { space } = await import("../src/index.ts");
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    root.render(column([text("px").padding(8), text("段").padding(space.xl), button("既定", () => {})]).gap().padding());
+    const outer = host.querySelector(".bina-ui-column")! as HTMLElement;
+    assertEquals(outer.style.getPropertyValue("--bina-ui-gap"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
+    assertEquals(outer.style.getPropertyValue("--bina-ui-padding"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
+    assertEquals((host.querySelectorAll("span")[0] as HTMLElement).style.getPropertyValue("--bina-ui-padding"), "8px");
+    assertEquals((host.querySelectorAll("span")[1] as HTMLElement).style.getPropertyValue("--bina-ui-padding"), "var(--bina-ui-space-xl, var(--bina-ui-default-space-xl))");
+    assert(host.querySelector("button")!.style.getPropertyValue("--bina-ui-padding").includes("--bina-ui-button-padding-md"));
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("Décor の theme は部分木だけに継承し、入れ子・合成・変更・削除を扱う", async () => {
+  const { theme, space, radius, fontSize, component } = await import("../src/index.ts");
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  const make = (value: number) => column([
+    theme({ space: { md: value }, button: { padding: space.md, radius: radius.sm, fontSize: fontSize.lg } }, column([
+      button("外側", () => {}).key("outer"),
+      theme({ space: { md: 30 }, button: { padding: 7 } }, column([button("内側", () => {})]).key("inner")),
+    ]).key("scope")),
+    button("範囲外", () => {}).key("sibling"),
+  ]);
+  try {
+    root.render(make(20));
+    const scope = host.querySelector('[data-bina-key="scope"]')! as HTMLElement;
+    const inner = host.querySelector('[data-bina-key="inner"]')! as HTMLElement;
+    const outside = host.querySelector('[data-bina-key="sibling"]')! as HTMLElement;
+    assertEquals(scope.style.getPropertyValue("--bina-ui-space-md"), "20px");
+    assertEquals(inner.style.getPropertyValue("--bina-ui-space-md"), "30px");
+    assertEquals(inner.style.getPropertyValue("--bina-ui-button-padding-px"), "7px");
+    assertEquals(outside.style.getPropertyValue("--bina-ui-space-md"), "");
+    assert(outside.style.getPropertyValue("--bina-ui-padding").startsWith("calc("));
+    assertEquals(scope.style.getPropertyValue("--bina-ui-button-radius-sm"), "1");
+    root.render(make(24));
+    assertStrictEquals(host.querySelector('[data-bina-key="scope"]'), scope);
+    assertEquals(scope.style.getPropertyValue("--bina-ui-space-md"), "24px");
+    root.render(column([column([]).key("scope")]));
+    assertEquals(scope.style.getPropertyValue("--bina-ui-space-md"), "");
+    root.render(theme({ space: { md: 18 } }, theme({ space: { sm: 6, md: 22 } }, component(() => text("関数"), {}))));
+    const span = host.querySelector("span")!;
+    assertEquals(span.style.getPropertyValue("--bina-ui-space-md"), "22px");
+    assertEquals(span.style.getPropertyValue("--bina-ui-space-sm"), "6px");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("親の padding は子に漏れず、部品の段は子のテーマで解決する", async () => {
+  const { theme, space } = await import("../src/index.ts");
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    root.render(theme({ button: { padding: space.md }, input: { padding: space.sm } }, column([
+      button("既定", () => {}), input("", () => {}), text("余白なし"),
+      theme({ space: { md: 30, sm: 18 } }, column([button("入れ子", () => {}), input("", () => {})])),
+      button("明示", () => {}).padding(3),
+    ]).padding(8)));
+    const outer = host.querySelector(".bina-ui-column")! as HTMLElement;
+    assertEquals(outer.style.getPropertyValue("--bina-ui-padding"), "8px");
+    assertEquals(outer.style.getPropertyValue("--bina-ui-button-padding-md"), "1");
+    assertEquals(outer.style.getPropertyValue("--bina-ui-input-padding-sm"), "1");
+    assertEquals(host.querySelector("span")!.style.getPropertyValue("--bina-ui-padding"), "0px");
+    const buttons = host.querySelectorAll("button");
+    assertEquals(buttons[0].style.getPropertyValue("--bina-ui-padding"), buttons[1].style.getPropertyValue("--bina-ui-padding"));
+    assert(buttons[1].style.getPropertyValue("--bina-ui-padding").includes("var(--bina-ui-space-md, 12px)"));
+    assertEquals(buttons[2].style.getPropertyValue("--bina-ui-padding"), "3px");
+    assertEquals((buttons[1].parentElement as HTMLElement).style.getPropertyValue("--bina-ui-space-md"), "30px");
+    assert(host.querySelector("input")!.style.getPropertyValue("--bina-ui-padding").includes("var(--bina-ui-space-sm, 8px)"));
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("部品の角丸は theme を優先し、未指定時は既存 CSS 変数を使う", async () => {
+  const { theme, radius, uiCss } = await import("../src/index.ts");
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  host.style.setProperty("--bina-ui-button-radius", "12px");
+  host.style.setProperty("--bina-ui-input-radius", "3px");
+  const root = mount(host);
+  try {
+    root.render(theme({ button: { radius: radius.sm }, input: { radius: 6 } }, column([button("テーマ", () => {}), input("", () => {})])));
+    const scope = host.querySelector(".bina-ui-column")! as HTMLElement;
+    assertEquals(scope.style.getPropertyValue("--bina-ui-button-radius-px"), "0px");
+    assertEquals(scope.style.getPropertyValue("--bina-ui-button-radius-sm"), "1");
+    assertEquals(scope.style.getPropertyValue("--bina-ui-input-radius-px"), "6px");
+    assert(uiCss.includes("calc(var(--bina-ui-button-radius-px, var(--bina-ui-button-radius, 8px))"));
+    assert(uiCss.includes("calc(var(--bina-ui-input-radius-px, var(--bina-ui-input-radius, 0px))"));
+    root.render(column([button("既定", () => {}), input("", () => {})]));
+    assertEquals(scope.style.getPropertyValue("--bina-ui-button-radius-px"), "");
+    assertEquals(host.style.getPropertyValue("--bina-ui-button-radius"), "12px");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("theme の値は数だけを受け付け、ほかの CSS は書き込まない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    const view = column([]);
+    view.themeValue = "--bina-ui-space-md:url(https://example.com/x);--bina-ui-space-sm:6px;--bina-ui-button-padding-md:1;--color:red;";
+    root.render(view);
+    const node = host.querySelector(".bina-ui-column")! as HTMLElement;
+    assertEquals(node.style.getPropertyValue("--bina-ui-space-md"), "");
+    assertEquals(node.style.getPropertyValue("--bina-ui-space-sm"), "6px");
+    assertEquals(node.style.getPropertyValue("--bina-ui-button-padding-md"), "1");
+    assertEquals(node.style.getPropertyValue("--color"), "");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});

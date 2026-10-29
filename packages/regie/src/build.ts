@@ -76,7 +76,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const asc = options.compiler ?? await loadCompiler();
   const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, ...options.libraries };
   if (libraries["jsr:@binette/replique"] !== undefined && libraries["jsr:@binette/replique/ui"] === undefined) {
-    libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, grid, appIcon, show } from "jsr:@binette/replique";';
+    libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme } from "jsr:@binette/replique";';
   }
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();

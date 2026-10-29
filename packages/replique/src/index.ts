@@ -1,6 +1,6 @@
 /** アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。 */
 import { View, UiCallback } from "jsr:@binette/decor/as";
-export { View, column, row, text, button, buttonOf, input, grid, appIcon, show } from "jsr:@binette/decor/as";
+export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme } from "jsr:@binette/decor/as";
 // @ts-ignore: decorator
 @external("binette", "dom.byId")
 // @ts-ignore: AssemblyScript の整数型
@@ -323,8 +323,8 @@ function serializeView(view: View): string {
   }
   children += "]";
   return '{"kind":' + jsonString(view.kind) + ',"children":' + children +
-    ',"text":' + jsonString(view.value) + ',"padding":' + view.paddingValue.toString() +
-    ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
+    ',"text":' + jsonString(view.value) + ',"padding":' + (view.paddingValue == -100 ? "null" : view.paddingValue.toString()) +
+    ',"theme":' + jsonString(view.themeValue) + ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
     ',"key":' + jsonString(view.keyValue) + ',"label":' + jsonString(view.labelValue) +
     ',"minWidth":' + view.minWidthValue.toString() + ',"heading":' + view.headingValue.toString() + ',"list":' + (view.listValue ? "true" : "false") + ',"shown":' + (view.shownValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
 }

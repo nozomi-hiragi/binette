@@ -62,3 +62,44 @@ AS の View と部品は `jsr:@binette/decor/as` に置きます。既存の `js
 ## 公開（案）
 
 ほかの Binette パッケージと同じ版で JSR に公開し、Apache-2.0 の LICENSE とソースを含めます。バージョン検査、公開物だけで動かす検査、公開の dry-run、API ドキュメントの対象に含めます。仕様のナビゲーションはこのページも自動で一覧に含めます。
+
+## テーマと段（案）
+
+数は引き続き px です。`.gap(8)` と `.padding(8)` は 8px、引数なしの `.gap()` と `.padding()` は `space.md` です。`space.xs/sm/md/lg/xl` は数の番兵値 -1〜-5 で、CSS の `--bina-ui-space-*` への参照になります。既定は順に 4 / 8 / 12 / 16 / 24px です。既存の引数付き宣言の意味は変わりません。
+
+```ts
+import { button, column, fontSize, input, radius, space, theme } from "@binette/decor";
+
+const view = theme({
+  space: { md: 16 },
+  button: { padding: space.md, radius: radius.sm, fontSize: fontSize.md },
+  input: { padding: space.sm, radius: radius.sm },
+}, column([
+  button("保存", () => {}),
+  input("", value => console.log(value)),
+]).gap().padding());
+```
+
+`theme(設定, view)` は View を修飾して返します。ラッパー要素を増やさず、その View の根に CSS 変数を置き、子孫だけに継承します。設定は呼び出し時に取り込むため、後から設定オブジェクトだけを変更しても描き直しません。次の render で新しい theme を渡すと既存要素の変数を更新し、theme を外すと古い変数を削除します。同じ View に重ねる場合は入れ子の内側を優先して合成します。関数部品では返された根に適用し、その根自身の指定を優先します。
+
+設定には `space`、`radius`、`fontSize` の各段と、`button`、`input` の部品既定があります。段の設定値は px（負数は 0）で、未指定の段は親から受け継ぎます。`radius` の既定は 2 / 4 / 8 / 12 / 16px、`fontSize` の既定は 12 / 14 / 16 / 20 / 24px です。部品既定の `padding` は `space`、`radius` は `radius`、`fontSize` は `fontSize` の段を参照でき、数なら px です。色名やアプリ独自の色は扱いません。
+
+部品の段参照は使用する要素で解決します。親が `button.padding = space.md` を指定し、内側の theme が `space.md` だけを変更した場合も、内側のボタンには内側の段が効きます。このため内部では段の選択係数と px の変数を継承し、部品の CSS が `calc()` で長さを組み立てます。CSS 変数の内部名は案です。アプリに CSS の記述は不要です。
+
+明示した `.padding(...)` は部品の既定より優先します。未指定の padding は親のレイアウトの padding を受け継ぎません。既定テーマでは padding は 0px、文字の大きさは親と同じ、button の角丸は従来どおり 8px、input は 0px です。Scene・home・settings の数値指定と既存の button の CSS 変数は保ちます。既存の `--bina-ui-button-radius` / `--bina-ui-input-radius` は部品テーマの radius が未指定の場合の既定値です（ホームの既存 12px を維持）。部品テーマを指定すれば、その値を優先します。
+
+### AssemblyScript（案）
+
+AS でも同じ `theme` と段を `jsr:@binette/decor/as` から使います。設定には `Theme`、`Scale`、`ComponentTheme` を使い、-100 は未指定を表す内部の予約値です。色や Binette のアプリ状態に依存しません。Décor の実行時コードに Régie・Scene・Réplique への依存はありません。
+
+```ts
+const config = new Theme();
+const sizes = new Scale();
+sizes.md = 16;
+config.space = sizes;
+const defaults = new ComponentTheme();
+defaults.padding = space.md;
+defaults.radius = radius.sm;
+config.button = defaults;
+return theme(config, column([button("保存", save)]).gap().padding());
+```

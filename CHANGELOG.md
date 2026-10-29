@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- Décor の TS・AS に名前付きの段 `space` / `radius` / `fontSize` と部分木の `theme(設定, view)` を追加（案）。button・input の padding・角丸・文字の大きさを宣言で設定できる。数は px のまま、引数なしの `.gap()` / `.padding()` は md。既存の Scene・home・settings の指定を維持する
+
 - Décor の TS に関数の部品 `component`、状態の `useState`、片付け付きの `useEffect` を追加。状態の更新は root の再描画をマイクロタスクにまとめる（案）。AS と JSX は対象外
 
 - 宣言 UI の木・差分・DOM への反映・AS の部品を `@binette/decor`（Décor）へ切り出す。`jsr:@binette/replique/ui` は互換の入口として再エクスポートする。普通の TS ページ向けに `mount(element)` と、返した root の `render(view)`・`unmount()` を追加する（案）。JSX は含めない
