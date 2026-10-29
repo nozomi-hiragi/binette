@@ -389,3 +389,51 @@ Deno.test("片付けの中の unmount はその描画を取りやめる", async 
   assertEquals(host.textContent, "");
   assertEquals(host.children.length, 0);
 });
+
+Deno.test("片付けの中の unmount でも片付けは一度だけ実行される", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  let cleaned = 0;
+  function Leaving(): View {
+    useEffect(() => () => { cleaned++; root.unmount(); }, []);
+    return text("leaving");
+  }
+  root.render(column([component(Leaving, {})]));
+  await Promise.resolve();
+  root.render(column([]));
+  assertEquals(cleaned, 1);
+  assertEquals(host.textContent, "");
+});
+
+Deno.test("片付けの中の render で置き換えた部品の状態は生きている", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  let cleaned = 0;
+  let comingCleaned = 0;
+  function Coming(): View {
+    const [count, setCount] = useState(0);
+    useEffect(() => () => { comingCleaned++; }, []);
+    return button(`coming: ${count}`, () => setCount((n) => n + 1));
+  }
+  const replacement = () => column([component(Coming, {})]);
+  function Leaving(): View {
+    useEffect(() => () => { cleaned++; root.render(replacement()); }, []);
+    return text("leaving");
+  }
+  try {
+    root.render(column([component(Leaving, {})]));
+    await Promise.resolve();
+    root.render(replacement());
+    assertEquals(cleaned, 1);
+    host.querySelector("button")!.click();
+    await Promise.resolve();
+    host.querySelector("button")!.click();
+    await Promise.resolve();
+    assertEquals(host.querySelector("button")!.textContent, "coming: 2");
+  } finally {
+    root.unmount();
+  }
+  assertEquals(comingCleaned, 1);
+});

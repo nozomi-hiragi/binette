@@ -158,10 +158,18 @@ export function mount(element: HTMLElement): Root {
       if (rootView) draw(rootView);
     });
   };
+  // Cleanups of removed fibers run after the commit, so user code never re-enters reconciliation.
+  const cleanups: (() => void)[] = [];
   function dispose(fiber: Fiber): void {
+    if (!fiber.live) return;
     fiber.live = false;
     for (const child of fiber.children) dispose(child);
-    for (const hook of fiber.hooks) if (hook.kind === "effect") hook.cleanup?.();
+    for (const hook of fiber.hooks) {
+      if (hook.kind === "effect" && hook.cleanup) { cleanups.push(hook.cleanup); hook.cleanup = undefined; }
+    }
+  }
+  function flushCleanups(): void {
+    while (cleanups.length) cleanups.shift()!();
   }
   function same(fiber: Fiber, view: View): boolean {
     return fiber.type === (view.componentFn ?? view.kind) && fiber.key === view.keyValue;
@@ -210,9 +218,10 @@ export function mount(element: HTMLElement): Root {
     const match = tree && same(tree, view) ? tree : undefined;
     const [result, next] = node(view, match, effects);
     if (tree && !match) dispose(tree);
-    if (!active || revision !== drawRevision) return;
+    if (!active || revision !== drawRevision) { flushCleanups(); return; }
     tree = next;
     differ.render(result, ++build);
+    flushCleanups();
     for (const effect of effects) {
       if (!active || revision !== drawRevision) break;
       effect();
@@ -220,6 +229,6 @@ export function mount(element: HTMLElement): Root {
   }
   return {
     render(view) { if (!active) return; rootView = view; scheduled = false; draw(view); },
-    unmount() { if (!active) return; active = false; scheduled = false; if (tree) dispose(tree); tree = undefined; rootView = undefined; dom.clear(); dom.stop(); handlers = []; },
+    unmount() { if (!active) return; active = false; scheduled = false; if (tree) dispose(tree); tree = undefined; rootView = undefined; dom.clear(); dom.stop(); handlers = []; flushCleanups(); },
   };
 }
