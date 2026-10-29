@@ -287,8 +287,7 @@ declare function finishImport(): void;
 declare function renderUi(value: string): void;
 
 class UiHandler {
-  // @ts-ignore: AssemblyScript の型・組み込み関数
-  constructor(readonly callback: UiCallback | null, readonly arg: i32, readonly textCallback: ((value: string) => void) | null) {}
+  constructor(readonly callback: UiCallback | null, readonly arg: number, readonly textCallback: ((value: string) => void) | null) {}
 }
 let uiHandlers: Array<UiHandler> = [];
 // @ts-ignore: AssemblyScript の型・組み込み関数

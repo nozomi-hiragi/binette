@@ -7,6 +7,7 @@ import { loadCompiler, type Compiler } from "../src/build.ts";
 
 const replique = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
 const decorAs = await Deno.readTextFile(new URL("../../decor/src/as.ts", import.meta.url));
+const decorParts = await Deno.readTextFile(new URL("../../decor/src/parts.ts", import.meta.url));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
@@ -58,6 +59,7 @@ async function build(code = source, home = false) {
       if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";';
       if (name === "node_modules/jsr:@binette/replique.ts") return replique;
       if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
+      if (name === "node_modules/jsr:@binette/decor/parts.ts") return decorParts;
       return null;
     },
     writeFile(name: string, contents: string | Uint8Array) { if (name === "main.wasm" && typeof contents !== "string") wasm = contents; },

@@ -1,3 +1,4 @@
+import decorParts from "@binette/decor/parts" with { type: "text" };
 import decorAs from "@binette/decor/as" with { type: "text" };
 import { parseAppManifest, type AppManifest } from "@binette/core";
 import { appPath, entryPaths } from "./paths.ts";
@@ -74,7 +75,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const { as: entry, html: htmlPath } = entryPaths(manifest.entry);
   const [html, source] = await Promise.all([htmlPath === undefined ? Promise.resolve("") : read(htmlPath), read(entry)]);
   const asc = options.compiler ?? await loadCompiler();
-  const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, ...options.libraries };
+  const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, "jsr:@binette/decor/parts": decorParts, ...options.libraries };
   if (libraries["jsr:@binette/replique"] !== undefined && libraries["jsr:@binette/replique/ui"] === undefined) {
     libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme } from "jsr:@binette/replique";';
   }

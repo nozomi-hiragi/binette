@@ -36,3 +36,7 @@ const view = theme({
 ```
 
 `theme(設定, view)` は要素を増やさず、その部分木の段と button / input の padding・radius・fontSize の既定を変えます。入れ子の theme は指定した項目だけを上書きし、明示した `.padding(...)` を優先します。色の名前は扱いません。`radius` の段は 2 / 4 / 8 / 12 / 16px、`fontSize` は 12 / 14 / 16 / 20 / 24px です。AS 版は `jsr:@binette/decor/as` の `Theme` / `Scale` / `ComponentTheme` で設定します。詳しくは [仕様](../../docs/spec/decor.md) を参照してください。
+
+## TS と AS で共通の部品（案）
+
+`src/parts.ts` は Deno と asc の両方で、そのままコンパイルします。型は `number`・`boolean`・`string`・クラス・配列だけにし、数を文字列にするときは `intString()` を使います（AS の f64 の `toString()` は `3.0` になるため）。AS の組み込みや `<i32>` などの変換、外側の変数をつかむクロージャ、`import type`、オプショナルチェーン、スプレッド、`@ts-ignore` は使いません。ハンドラーの包み方は `as.ts`（AS）と `view.ts`（TS）が持ち、TS のフックと `mount` は `view.ts` にあります。Régie は `as.ts` と、そこから読む `parts.ts` を asc に渡します。
