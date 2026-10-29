@@ -210,6 +210,7 @@ export function mount(element: HTMLElement): Root {
     const match = tree && same(tree, view) ? tree : undefined;
     const [result, next] = node(view, match, effects);
     if (tree && !match) dispose(tree);
+    if (!active || revision !== drawRevision) return;
     tree = next;
     differ.render(result, ++build);
     for (const effect of effects) {

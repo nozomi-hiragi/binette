@@ -371,3 +371,21 @@ Deno.test("エフェクト内の render で残りのエフェクトが二重実�
     await window.happyDOM.close();
   }
 });
+
+Deno.test("片付けの中の unmount はその描画を取りやめる", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  function Leaving(): View {
+    useEffect(() => () => root.unmount(), []);
+    return text("leaving");
+  }
+  function Coming(): View {
+    return column([text("coming")]);
+  }
+  root.render(component(Leaving, {}));
+  await Promise.resolve();
+  root.render(component(Coming, {}));
+  assertEquals(host.textContent, "");
+  assertEquals(host.children.length, 0);
+});
