@@ -218,9 +218,12 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       }).catch(reportCall);
     },
     dispatchUiText(handle, value, version = 0) {
-      if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
+      // 捨てる入力も版だけは Worker に知らせ、Scene の表示をアプリの値に戻す
+      const acknowledge = () => running?.call("__bina_ui_text_ack", handle, version);
+      if (closing || state === State.Stop || state === State.Destroy) return;
       void enqueue(async () => {
         if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_text_handle", handle, value, version);
+        else if (!closing && state !== State.Stop && state !== State.Destroy) await acknowledge();
       }).catch(reportCall);
     },
     dispatchUi(handle) {

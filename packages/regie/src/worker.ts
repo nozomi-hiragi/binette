@@ -79,6 +79,15 @@ export function serveApp(scope: WorkerScope): void {
     uiRoot = updateUi(root, uiRoot, build);
     if (!old || old !== uiRoot) ops.push({ op: "ui-insert", parent: null, child: uiRoot.handle, before: null });
   };
+  const findAnyUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
+    if (!mounted) return undefined;
+    if (mounted.handle === handle) return mounted;
+    for (const child of mounted.children) {
+      const found = findAnyUi(child, handle);
+      if (found) return found;
+    }
+    return undefined;
+  };
   const findUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
     if (!mounted || mounted.node.shown === false) return undefined;
     if (mounted.handle === handle) return mounted;
@@ -225,6 +234,16 @@ export function serveApp(scope: WorkerScope): void {
     } else if (data.type === "call") {
       if (!instance) {
         scope.postMessage({ type: "fail", id: data.id, message: "アプリがまだ起動していません。" });
+        return;
+      }
+      if (data.name === "__bina_ui_text_ack") {
+        const target = findAnyUi(uiRoot, Number(data.args?.[0] ?? -1));
+        if (target?.node.kind === "input") {
+          inputVersions.set(target.handle, Number(data.args?.[1] ?? 0));
+          ops.push(uiUpdate(target.handle, target.node, target.listItem));
+          flush();
+        }
+        scope.postMessage({ type: "done", id: data.id });
         return;
       }
       const uiText = data.name === "__bina_ui_text_handle";

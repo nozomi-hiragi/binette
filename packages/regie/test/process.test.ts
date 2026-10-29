@@ -452,3 +452,29 @@ launch(new Demo());`;
     assert(last?.op === "ui-update" && last.text === "a" && last.inputVersion === 2 && !last.enabled);
   } finally { process.stop(); }
 });
+
+Deno.test("宣言 UI で Pause のために捨てた入力も、版を進めてアプリの値を返す", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, input } from "jsr:@binette/replique/ui";
+let value = "";
+function typed(s: string): void { value = s; }
+class Demo extends App {
+  build(): View { return column([input(value, typed)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const field = batches.flat().find(op => op.op === "ui-create" && op.kind === "input");
+    assert(field?.op === "ui-create");
+    batches.length = 0;
+    process.dispatchUiText(field.handle, "x", 1);
+    await process.pause();
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.handle === field.handle && op.inputVersion === 1));
+    const last = batches.flat().filter(op => op.op === "ui-update" && op.handle === field.handle).at(-1);
+    assert(last?.op === "ui-update" && last.text === "" && last.inputVersion === 1);
+  } finally { process.stop(); }
+});
