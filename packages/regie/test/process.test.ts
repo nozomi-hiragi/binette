@@ -288,7 +288,7 @@ launch(new TestApp());`;
   } finally { mounted.stop(); }
 });
 
-Deno.test("宣言 UI の再描画は差分だけを送り、古い build のイベントを捨てる", async () => {
+Deno.test("宣言 UI の連続クリックはすべて届き、再描画は差分だけを送る", async () => {
   const code = `import { App, Last, document, launch } from "jsr:@binette/replique";
 import { View, column, text, button } from "jsr:@binette/replique/ui";
 let count = 0;
@@ -315,23 +315,21 @@ launch(new Counter());`;
     const textCreate = initial.find(op => op.op === "ui-create" && op.kind === "text");
     const buttonCreate = initial.find(op => op.op === "ui-create" && op.kind === "button");
     assert(textCreate?.op === "ui-create" && buttonCreate?.op === "ui-create");
-    const button = initial.filter(op => op.op === "ui-update" && op.handle === buttonCreate.handle).at(-1);
-    assert(button?.op === "ui-update" && button.listener !== null);
-    batches.length = 0;
-    process.dispatchUi(button.listener, button.build);
-    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:1"));
-    const changed = batches.flat();
-    assert(changed.some(op => op.op === "ui-update" && op.handle === textCreate.handle && op.text === "count:1"));
-    assert(!changed.some(op => op.op === "ui-create" || op.op === "ui-remove" || op.op === "ui-insert"));
+    const button = initial.find(op => op.op === "ui-update" && op.handle === buttonCreate.handle);
+    const addButton = initial.find(op => op.op === "ui-update" && op.text === "+5");
+    assert(button?.op === "ui-update" && button.clickable && addButton?.op === "ui-update" && addButton.clickable);
     assert(initial.some(op => op.op === "ui-update" && op.text === 'quote:" newline:\n'));
     batches.length = 0;
-    process.dispatchUi(button.listener, button.build);
-    await sleep(50);
-    assertEquals(batches.flat(), []);
-    const addButton = changed.find(op => op.op === "ui-update" && op.text === "+5");
-    assert(addButton?.op === "ui-update" && addButton.listener !== null);
-    process.dispatchUi(addButton.listener, addButton.build);
-    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:6"));
+    process.dispatchUi(button.handle);
+    process.dispatchUi(button.handle);
+    process.dispatchUi(button.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:3"));
+    const changed = batches.flat();
+    assert(changed.some(op => op.op === "ui-update" && op.handle === textCreate.handle && op.text === "count:3"));
+    assert(changed.every(op => op.op === "ui-update" && op.handle === textCreate.handle));
+    batches.length = 0;
+    process.dispatchUi(addButton.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:8"));
   } finally { process.stop(); }
 });
 
@@ -339,12 +337,15 @@ Deno.test("宣言 UI のキー付き並べ替えは要素を再利用する", as
   const code = `import { App, launch } from "jsr:@binette/replique";
 import { View, column, text, button } from "jsr:@binette/replique/ui";
 let reversed = false;
+let total = 0;
 function swap(): void { reversed = !reversed; }
+function add(i: i32): void { total += i; }
 class Demo extends App {
   build(): View {
-    return column([button("swap", swap), reversed
-      ? column([text("B").key("b"), text("A").key("a")])
-      : column([text("A").key("a"), text("B").key("b")])]);
+    const a = button("A", add).arg(1).key("a");
+    const b = button("B", add).arg(10).key("b");
+    return column([text(total.toString()), button("swap", swap), reversed
+      ? column([b, a]) : column([a, b])]);
   }
 }
 launch(new Demo());`;
@@ -358,12 +359,44 @@ launch(new Demo());`;
     const a = initial.find(op => op.op === "ui-update" && op.text === "A");
     const b = initial.find(op => op.op === "ui-update" && op.text === "B");
     const button = initial.filter(op => op.op === "ui-update" && op.text === "swap").at(-1);
-    assert(a?.op === "ui-update" && b?.op === "ui-update" && button?.op === "ui-update" && button.listener !== null);
+    assert(a?.op === "ui-update" && b?.op === "ui-update" && button?.op === "ui-update" && button.clickable);
     batches.length = 0;
-    process.dispatchUi(button.listener, button.build);
+    process.dispatchUi(button.handle);
     await waitFor(() => batches.flat().some(op => op.op === "ui-insert"));
     const ops = batches.flat();
     assert(ops.some(op => op.op === "ui-insert" && op.child === b.handle && op.before === a.handle));
     assert(!ops.some(op => op.op === "ui-create" || op.op === "ui-remove"));
+    batches.length = 0;
+    process.dispatchUi(a.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI で取り除いたボタンへのイベントは捨てる", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique/ui";
+let visible = true;
+let count = 0;
+function hide(): void { visible = false; }
+function increment(): void { count++; }
+class Demo extends App {
+  build(): View { return column(visible ? [text(count.toString()), button("hide", hide), button("add", increment)] : [text(count.toString()), button("hide", hide)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const hide = batches.flat().find(op => op.op === "ui-update" && op.text === "hide");
+    const add = batches.flat().find(op => op.op === "ui-update" && op.text === "add");
+    assert(hide?.op === "ui-update" && add?.op === "ui-update");
+    batches.length = 0;
+    process.dispatchUi(hide.handle);
+    process.dispatchUi(add.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-remove" && op.handle === add.handle));
+    await sleep(50);
+    assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
   } finally { process.stop(); }
 });

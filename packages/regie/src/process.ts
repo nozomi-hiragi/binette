@@ -45,8 +45,8 @@ export interface Process {
   begin(): Promise<void>;
   /** イベントを届けるか判断する */
   dispatch(listener: number): void;
-  /** 宣言的 UI の build に属するイベントを届ける */
-  dispatchUi(listener: number, build: number): void;
+  /** 宣言的 UI の要素ハンドルでイベントを届ける */
+  dispatchUi(handle: number): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -216,10 +216,10 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
         if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_event", listener);
       }).catch(reportCall);
     },
-    dispatchUi(listener, build) {
+    dispatchUi(handle) {
       if (closing || state === State.Pause || state === State.Stop || state === State.Destroy) return;
       void enqueue(async () => {
-        if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_event", build, listener);
+        if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_handle", handle);
       }).catch(reportCall);
     },
     async begin() {

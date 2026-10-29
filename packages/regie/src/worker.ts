@@ -34,10 +34,10 @@ export function serveApp(scope: WorkerScope): void {
     const prev = old?.node;
     if (!prev || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
       prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
-      prev.handler !== node.handler || (node.handler !== -1 && mounted.build !== build)) {
+      (prev.handler !== -1) !== (node.handler !== -1)) {
       ops.push({ op: "ui-update", handle: mounted.handle, text: node.text, padding: node.padding, gap: node.gap,
         grow: node.grow, label: node.label || null, enabled: node.enabled,
-        listener: node.handler === -1 ? null : node.handler, build });
+        clickable: node.handler !== -1 });
     }
     const previous = mounted.children;
     const used = new Set<Mounted>();
@@ -72,6 +72,15 @@ export function serveApp(scope: WorkerScope): void {
     }
     uiRoot = updateUi(root, uiRoot, build);
     if (!old || old !== uiRoot) ops.push({ op: "ui-insert", parent: null, child: uiRoot.handle, before: null });
+  };
+  const findUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
+    if (!mounted) return undefined;
+    if (mounted.handle === handle) return mounted;
+    for (const child of mounted.children) {
+      const found = findUi(child, handle);
+      if (found) return found;
+    }
+    return undefined;
   };
   const flush = () => {
     if (declarative) ops = ops.filter(op => op.op.startsWith("ui-"));
@@ -212,13 +221,20 @@ export function serveApp(scope: WorkerScope): void {
         scope.postMessage({ type: "fail", id: data.id, message: "アプリがまだ起動していません。" });
         return;
       }
-      const fn = Object.hasOwn(instance.exports, data.name!) ? instance.exports[data.name!] : undefined;
+      const uiHandle = data.name === "__bina_ui_handle";
+      const target = uiHandle ? findUi(uiRoot, data.args?.[0] ?? -1) : undefined;
+      if (uiHandle && (!target || target.node.handler === -1)) {
+        scope.postMessage({ type: "done", id: data.id });
+        return;
+      }
+      const name = uiHandle ? "__bina_ui_event" : data.name!;
+      const fn = Object.hasOwn(instance.exports, name) ? instance.exports[name] : undefined;
       if (typeof fn !== "function") {
         scope.postMessage({ type: "fail", id: data.id, message: `アプリに関数 ${data.name} がありません。` });
         return;
       }
       try {
-        fn(...(data.args ?? []));
+        fn(...(uiHandle ? [target!.build, target!.node.handler] : (data.args ?? [])));
         flush();
         scope.postMessage({ type: "done", id: data.id });
       } catch (error) {

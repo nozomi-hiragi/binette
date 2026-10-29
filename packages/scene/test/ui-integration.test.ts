@@ -34,7 +34,7 @@ function swap(): void { reversed = !reversed; }
 function add(i: i32): void { count += i; }
 class Counter extends App {
   build(): View {
-    const a = button("A", add).arg(3).key("a");
+    const a = button("A", add).arg(reversed ? 30 : 3).key("a");
     const b = button("B", add).arg(7).key("b");
     return column([text("押した回数: " + count.toString()), row([button("+1", increment), button("順序", swap)]), row(reversed ? [b, a] : [a, b])]).gap(8).padding(16);
   }
@@ -55,14 +55,16 @@ launch(new Counter());`,
     const [increment, swap, a, b] = [...host.querySelectorAll<HTMLButtonElement>("button")];
     assertEquals(count.textContent, "押した回数: 0");
     increment!.click();
-    await waitFor(() => count.textContent === "押した回数: 1");
+    increment!.click();
+    increment!.click();
+    await waitFor(() => count.textContent === "押した回数: 3");
     assertStrictEquals(host.querySelector(".bina-ui-text"), count);
     assertStrictEquals(host.querySelectorAll("button")[0], increment);
     swap!.click();
+    a!.click();
     await waitFor(() => host.querySelectorAll("button")[2] === b);
     assertStrictEquals(host.querySelectorAll("button")[3], a);
-    a!.click();
-    await waitFor(() => count.textContent === "押した回数: 4");
+    await waitFor(() => count.textContent === "押した回数: 33");
     assertEquals(errors, []);
   } finally { mounted.stop(); await window.happyDOM.close(); }
 });

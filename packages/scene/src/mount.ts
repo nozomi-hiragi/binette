@@ -67,7 +67,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
     }
   };
   // 宣言 UI は document API のハンドルと独立して管理する。
-  const uiNodes = new Map<number, { node: HTMLElement; listener: number | null; build: number; textNode: Text | null; remove: () => void }>();
+  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; remove: () => void }>();
   let uiStyle: HTMLStyleElement | undefined;
   const removeUi = (root: HTMLElement) => {
     for (const [handle, entry] of uiNodes) {
@@ -92,9 +92,9 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${op.kind}`;
         if (tag === "button") node.setAttribute("type", "button");
-        const entry = { node, listener: null as number | null, build: 0, textNode: null as Text | null, remove: () => {} };
+        const entry = { node, clickable: false, textNode: null as Text | null, remove: () => {} };
         if (tag === "button") {
-          const listener = () => { if (entry.listener !== null) process.dispatchUi(entry.listener, entry.build); };
+          const listener = () => { if (entry.clickable) process.dispatchUi(op.handle); };
           node.addEventListener("click", listener);
           entry.remove = () => node.removeEventListener("click", listener);
         }
@@ -132,8 +132,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
         if (node.tagName.toLowerCase() === "button" && (node as HTMLButtonElement).disabled === op.enabled) {
           (node as HTMLButtonElement).disabled = !op.enabled;
         }
-        entry.listener = op.listener;
-        entry.build = op.build;
+        entry.clickable = op.clickable;
         continue;
       }
       if (op.op === "ui-insert") {

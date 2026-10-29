@@ -2,7 +2,7 @@
 
 ## v0.2.0（未リリース）
 
-- 宣言的 UI の部品と修飾、差分描画、build ごとのイベントを追加し、app.json の entry.html を省略可能にする（案）
+- 宣言的 UI の部品と修飾、差分描画、要素ハンドルによるクリックの配送を追加し、app.json の entry.html を省略可能にする（案）
 
 - Réplique に `removeEventListener` を追加し、リスナー解除と要素・子孫の削除時に Réplique と Scene の参照と DOM リスナーを解放する（案）
 
