@@ -1,3 +1,4 @@
+import { workerSource } from "../src/worker.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import type { DomOp } from "@binette/core";
@@ -15,7 +16,7 @@ async function build(code: string, runtime = false): Promise<Uint8Array> {
   let wasm: Uint8Array | undefined;
   let stderr = "";
   const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", ...(runtime ? ["--exportRuntime"] : [])], {
-    readFile: (name) => name === "main.ts" ? code : name === "replique.ts" ? Deno.readTextFileSync(new URL("../../replique/src/index.ts", import.meta.url)) : null,
+    readFile: (name) => name === "main.ts" ? code : name === "replique.ts" ? Deno.readTextFileSync(new URL("../../replique/src/index.ts", import.meta.url)) : name === "node_modules/jsr:@binette/decor/as.ts" ? Deno.readTextFileSync(new URL("../../decor/src/as.ts", import.meta.url)) : null,
     writeFile: (name, contents) => { if (name === "main.wasm") wasm = contents as Uint8Array; },
     listFiles: () => [],
     stderr: { write: (chunk: string) => { stderr += chunk; return true; } } as never,
@@ -292,7 +293,7 @@ export function empty(): void {}`;
 
 /** 無限ループをメインとは別のスレッドで実行する */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([`(${serveApp.toString()})(self)`], { type: "text/javascript" }));
+  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
   try { return new Worker(url, { type: "module" }); }
   finally { URL.revokeObjectURL(url); }
 }

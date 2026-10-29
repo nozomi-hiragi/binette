@@ -9,7 +9,8 @@
   "imports": {
     "@binette/core": "jsr:@binette/core@0.1.0",
     "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
-    "@std/path": "jsr:@std/path@^1.1.6"
+    "@std/path": "jsr:@std/path@^1.1.6",
+    "@binette/decor": "jsr:@binette/decor@0.1.0"
   },
   "publish": {
     "include": [

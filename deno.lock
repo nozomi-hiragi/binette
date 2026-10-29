@@ -1551,9 +1551,15 @@
           "jsr:@std/path@^1.1.6"
         ]
       },
+      "packages/decor": {
+        "dependencies": [
+          "jsr:@binette/core@0.1.0"
+        ]
+      },
       "packages/regie": {
         "dependencies": [
           "jsr:@binette/core@0.1.0",
+          "jsr:@binette/decor@0.1.0",
           "jsr:@std/path@^1.1.6",
           "npm:assemblyscript@0.28.20"
         ]
@@ -1561,6 +1567,7 @@
       "packages/scene": {
         "dependencies": [
           "jsr:@binette/core@0.1.0",
+          "jsr:@binette/decor@0.1.0",
           "jsr:@binette/regie@0.1.0"
         ]
       }

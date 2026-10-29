@@ -1,3 +1,4 @@
+import { workerSource } from "../src/worker.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, startProcess } from "../src/index.ts";
 import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
@@ -22,7 +23,7 @@ function createWorker(): RegieWorker {
 }
 /** 無限ループもメインを止めずに試せる、別スレッドの Worker */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([`(${serveApp.toString()})(self)`], { type: "text/javascript" }));
+  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
   try { return new Worker(url, { type: "module" }); }
   finally { URL.revokeObjectURL(url); }
 }

@@ -16,6 +16,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ、`App` クラス |
 | [regie/](regie/README.md) | `@binette/regie`。カーネル。ビルド（[build.md](regie/build.md)）、実行（[run.md](regie/run.md)）、プロセス（[process.md](regie/process.md)）、システム（[system.md](regie/system.md)）、保存（[store.md](regie/store.md)） |
 | [scene/](scene/README.md) | `@binette/scene`。システム UI。大枠（[shell.md](scene/shell.md)）、アプリの置き場（[mount.md](scene/mount.md)） |
+| [decor.md](decor.md) | `@binette/decor`。宣言 UI の木、差分、DOM への反映、TS と AS の入口 |
 | [replique.md](replique.md) | `@binette/replique`。アプリが Régie を呼ぶためのライブラリ（AS） |
 | [apps/](apps/README.md) | システムアプリ（OS と一緒に配るアプリ）。ホーム（[home.md](apps/home.md)）、設定（[settings.md](apps/settings.md)） |
 | [coulisses.md](coulisses.md) | `@binette/coulisses`。サーバー側（今は v0.1 のまま） |
@@ -36,6 +37,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | --- | --- | --- |
 | Binette | パッケージの共通物。層ではない | `@binette/core` |
 | Régie（レジ、操作室） | カーネル。中身を全部持つ（ビルド、実行、状態、スタック、権限、保存など） | `@binette/regie` |
+| Décor（デコール、舞台装置） | 宣言 UI の木と描画 | `@binette/decor` |
 | Scene（シーン、舞台） | システム UI。大枠とアプリの置き場を描く | `@binette/scene` |
 | Coulisses（クーリス、舞台裏） | サーバー側。処理の逃がし先とバックアップ | `@binette/coulisses` |
 | Réplique（レプリク、セリフ） | アプリが Régie を呼ぶためのライブラリ（AS） | `@binette/replique` |
@@ -65,6 +67,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | --- | --- |
 | core | 共通物。`app.json` の型と検査、ライフサイクルの番号、DOM 操作の型。動きは持たない |
 | Régie | カーネル。アプリのビルドと検証、インストール、実行（Worker ＋ WASM）、状態の移り変わり、スタック、ホームの選び方、落ちたときの扱い、権限、OS の設定、保存。画面は持たず DOM に触らない |
+| Décor | 宣言 UI の木、差分の計算、DOM への反映。Régie と Scene に依存しない（案） |
 | Scene | システム UI。大枠（ホームバー、Apps の一覧、エラー表示、ライブモード）と、その中のアプリの置き場（HTML を描き、DOM 操作を反映し、クリックを Régie に渡す） |
 | Réplique | アプリが Régie を呼ぶためのライブラリ（AS） |
 | Coulisses | サーバー側。アプリのサーバーサイド処理、バックアップの受け取り |
@@ -80,7 +83,8 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
      ルートの OS（src/main.ts）
 ```
 
-- 依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
+- 宣言 UI の共通部分は Décor に置く（[decor.md](decor.md)、案）。Décor は core だけに依存し、Régie と Scene がそれぞれ差分と DOM への反映を使う。
+- システムの依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
 - ビルドは Régie に置く（[regie/build.md](regie/build.md)）。何を動かしてよいかの判断と同じ所に置くため。asc は重いので `@binette/regie/build` という別の入口にし、ビルドしない利用者は読まない
 - Binette は WAKE に依存しない。Régie と Coulisses の間の通信路はフロントの実装が渡す。EbinaStation ではそこに WAKE が入る
 - 関数の名前と形（`startSystem`・`startProcess`・`SystemUi`・`createShellUi` など）は案
@@ -94,8 +98,9 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | パッケージ | 依存 |
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0`（npm） |
-| `@binette/regie` | `@binette/core`、`assemblyscript@0.28.20`（ビルドのみ）、`@std/path`（CLI のみ） |
-| `@binette/scene` | `@binette/core`、`@binette/regie` |
+| `@binette/decor` | `@binette/core` |
+| `@binette/regie` | `@binette/core`、`@binette/decor`、`assemblyscript@0.28.20`（ビルドのみ）、`@std/path`（CLI のみ） |
+| `@binette/scene` | `@binette/core`、`@binette/decor`、`@binette/regie` |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | なし（AS のソースだけ） |
 

@@ -13,6 +13,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@binette/decor/as": `${here}/packages/decor/src/as.ts?raw`,
+      "@binette/decor": `${here}/packages/decor/src/index.ts`,
       "@binette/core": `${here}/packages/core/src/index.ts`,
       "@binette/regie/build": `${here}/packages/regie/src/build.ts`,
       "@binette/regie/cli": `${here}/packages/regie/src/cli.ts`,

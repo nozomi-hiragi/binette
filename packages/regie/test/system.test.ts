@@ -1,3 +1,4 @@
+import { workerSource } from "../src/worker.ts";
 import { assert, assertEquals } from "@std/assert";
 import { parseAppManifest, type DomOp } from "@binette/core";
 import { createMemoryAppStore, installedAppKey, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
@@ -5,6 +6,7 @@ import asc from "assemblyscript/asc";
 import { loadCompiler, type Compiler } from "../src/build.ts";
 
 const replique = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
+const decorAs = await Deno.readTextFile(new URL("../../decor/src/as.ts", import.meta.url));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
@@ -22,7 +24,7 @@ function createWorker(): RegieWorker {
 }
 /** 無限ループもメインを止めずに試せる、別スレッドの Worker */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([`(${serveApp.toString()})(self)`], { type: "text/javascript" }));
+  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
   try { return new Worker(url, { type: "module" }); }
   finally { URL.revokeObjectURL(url); }
 }
@@ -55,6 +57,7 @@ async function build(code = source, home = false) {
     readFile(name: string) {
       if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";';
       if (name === "node_modules/jsr:@binette/replique.ts") return replique;
+      if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
       return null;
     },
     writeFile(name: string, contents: string | Uint8Array) { if (name === "main.wasm" && typeof contents !== "string") wasm = contents; },

@@ -1,0 +1,93 @@
+import type { DomOp } from "@binette/core";
+
+/** core と共有する宣言 UI の操作。 */
+export type UiOp = Extract<DomOp, { op: `ui-${string}` }>;
+
+/** 描画する木。操作の kind は core の型を使う。 */
+export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; padding: number; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number };
+export type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
+
+/** 差分エンジンの状態と操作。 */
+export interface UiDiffer {
+  render(root: UiNode, build: number): void;
+  find(handle: number): Mounted | undefined;
+  findAny(handle: number): Mounted | undefined;
+  inputVersions: Map<number, number>;
+  update(handle: number, node: UiNode, listItem: boolean): DomOp;
+}
+
+/** 差分エンジン。DOM や Worker に依存せず、操作を emit に渡す。 */
+export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: number) => void = () => {}): UiDiffer {
+  let uiRoot: Mounted | undefined;
+  let nextUiHandle = 1;
+  const inputVersions = new Map<number, number>();
+  const forgetInput = (mounted: Mounted): void => { inputVersions.delete(mounted.handle); for (const child of mounted.children) forgetInput(child); };
+  const uiUpdate = (handle: number, node: UiNode, listItem: boolean): DomOp => ({ op: "ui-update", handle, text: node.text, padding: node.padding, gap: node.gap,
+    grow: node.grow, label: node.label || null, enabled: node.enabled,
+    inputVersion: inputVersions.get(handle) ?? 0, key: node.key, minWidth: node.minWidth, heading: node.heading, list: node.list, listItem, shown: node.shown, app: node.app, clickable: node.handler !== -1 });
+  // 木を照合し、実際に変わった操作だけを渡す。
+  const updateUi = (node: UiNode, old: Mounted | undefined, build: number, listItem = false): Mounted => {
+    if (node.kind === "appIcon") validateApp(node.app);
+    const mounted: Mounted = old ?? { handle: nextUiHandle++, node, children: [], build, listItem };
+    if (!old) emit({ op: "ui-create", handle: mounted.handle, kind: node.kind });
+    const prev = old?.node;
+    if (node.kind === "input" || !prev || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
+      prev.key !== node.key || prev.minWidth !== node.minWidth || prev.heading !== node.heading || prev.list !== node.list || old?.listItem !== listItem || prev.shown !== node.shown || prev.app !== node.app || prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
+      (prev.handler !== -1) !== (node.handler !== -1)) {
+      emit(uiUpdate(mounted.handle, node, listItem));
+    }
+    const previous = mounted.children;
+    const used = new Set<Mounted>();
+    const children = node.children.map((child, i) => {
+      const match = child.key
+        ? previous.find(item => !used.has(item) && item.node.key === child.key && item.node.kind === child.kind)
+        : previous[i] && !used.has(previous[i]!) && !previous[i]!.node.key && previous[i]!.node.kind === child.kind ? previous[i] : undefined;
+      if (match) used.add(match);
+      return updateUi(child, match, build, node.list);
+    });
+    for (const child of previous) if (!used.has(child)) { forgetInput(child); emit({ op: "ui-remove", handle: child.handle }); }
+    const order = previous.filter(child => used.has(child));
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i]!;
+      if (order[i] === child) continue;
+      const index = order.indexOf(child);
+      if (index !== -1) order.splice(index, 1);
+      emit({ op: "ui-insert", parent: mounted.handle, child: child.handle, before: order[i]?.handle ?? null });
+      order.splice(i, 0, child);
+    }
+    mounted.node = node;
+    mounted.children = children;
+    mounted.build = build;
+    mounted.listItem = listItem;
+    return mounted;
+  };
+  const renderUi = (root: UiNode, build: number) => {
+    const old = uiRoot;
+    if (old && (old.node.kind !== root.kind || old.node.key !== root.key)) {
+      forgetInput(old);
+      emit({ op: "ui-remove", handle: old.handle });
+      uiRoot = undefined;
+    }
+    uiRoot = updateUi(root, uiRoot, build);
+    if (!old || old !== uiRoot) emit({ op: "ui-insert", parent: null, child: uiRoot.handle, before: null });
+  };
+  const findAnyUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
+    if (!mounted) return undefined;
+    if (mounted.handle === handle) return mounted;
+    for (const child of mounted.children) {
+      const found = findAnyUi(child, handle);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const findUi = (mounted: Mounted | undefined, handle: number): Mounted | undefined => {
+    if (!mounted || mounted.node.shown === false) return undefined;
+    if (mounted.handle === handle) return mounted;
+    for (const child of mounted.children) {
+      const found = findUi(child, handle);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return { render: renderUi, find: (handle: number) => findUi(uiRoot, handle), findAny: (handle: number) => findAnyUi(uiRoot, handle), inputVersions, update: uiUpdate };
+}

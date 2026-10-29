@@ -66,7 +66,7 @@ jobs:
         run: deno run --allow-read scripts/check-version.ts "$RELEASE_TAG"
       - name: Prepare release notes
         run: deno run --allow-read --allow-write scripts/changelog.ts "$RELEASE_VERSION" "$RUNNER_TEMP/release-notes.md"
-      - name: Publish to JSR
+      - name: Publish workspace packages (including Décor)
         run: deno publish
 
   release:

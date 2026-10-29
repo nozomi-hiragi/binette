@@ -1,5 +1,5 @@
 import type { DomOp } from "@binette/core";
-import { serveApp } from "./worker.ts";
+import { workerSource } from "./worker.ts";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
 /** 設定アプリの起動時に渡す写し。ホームの id は installedAppKey */
@@ -59,7 +59,7 @@ export interface RegieApp {
 
 /** 関数の `toString()` から Blob URL の Worker を作る。ワーカーのファイルの場所に頼らない */
 function createBlobWorker(): RegieWorker {
-  const source = `(${serveApp.toString()})(self)`;
+  const source = workerSource();
   const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
   const worker = new Worker(url);
   URL.revokeObjectURL(url);

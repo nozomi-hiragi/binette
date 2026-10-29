@@ -4,6 +4,7 @@ import { join } from "@std/path";
 
 export const PUBLISHED: Record<string, string> = {
   "packages/core": "@binette/core",
+  "packages/decor": "@binette/decor",
   "packages/regie": "@binette/regie",
   "packages/scene": "@binette/scene",
   "packages/coulisses": "@binette/coulisses",
