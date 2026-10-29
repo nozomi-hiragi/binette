@@ -73,7 +73,7 @@ class Settings extends App {
       column([text("ホーム").heading(2).key("home-title"), column(homes).gap(8).key("homes")]).gap(8),
       column([text("デバッグ").heading(2).key("debug-title"), column(debug).gap(8).key("debug")]).gap(8),
       column([text("起動の履歴").heading(2).key("history-title"), text("日時は UTC です。"), column(history).gap(8).list().key("history")]).gap(8),
-    ]).gap(16).padding(16).key("settings-root");
+    ]).gap(16).key("settings-root");
   }
 }
 
