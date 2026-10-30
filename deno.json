@@ -7,7 +7,9 @@
     "./packages/coulisses",
     "./packages/replique",
     "./apps/home",
-    "./apps/settings"
+    "./apps/settings",
+    "./bundled/designer",
+    "./bundled/designer/test"
   ],
   "nodeModulesDir": "auto",
   "compilerOptions": {
@@ -19,7 +21,7 @@
     ]
   },
   "tasks": {
-    "check": "deno check apps/home/src/main.ts apps/settings/src/main.ts src/main.ts scripts/*.test.ts packages/core/src/index.ts packages/decor/src/index.ts packages/regie/src/index.ts packages/regie/src/build.ts packages/regie/src/cli.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/decor/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno check --no-config public/sw.js && deno task --cwd packages/replique check && deno lint",
+    "check": "deno check apps/home/src/main.ts apps/settings/src/main.ts bundled/designer/src/main.ts bundled/designer/test/*.ts src/main.ts scripts/*.test.ts packages/core/src/index.ts packages/decor/src/index.ts packages/regie/src/index.ts packages/regie/src/build.ts packages/regie/src/cli.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/decor/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno check --no-config public/sw.js && deno task --cwd packages/replique check && deno lint",
     "check-pack": "deno run -A scripts/check-pack.ts",
     "check-version": "deno run --allow-read scripts/check-version.ts",
     "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",

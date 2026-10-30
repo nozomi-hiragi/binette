@@ -26,6 +26,8 @@
 | `apps/home` | ホーム | `role: "home"`。ほかのアプリを並べて開く | [home.md](home.md) |
 | `apps/settings` | 設定 | 設定画面。今は骨組み | [settings.md](settings.md) |
 
+通常の同梱アプリとしてデザイナーを `bundled/designer/` に置く構成です。ルートの Deno workspace と `deno task check` の入口にも含めます。通常の同梱アプリなので、システムアプリの権限は持ちません。
+
 ## 未決のこと
 
 - システムアプリに、ふつうのアプリより強い権限を持たせるか。今は、ホームだけが `apps.*` を使える（入手元と `role` だけで判断する）。権限の仕組みそのものが未決
