@@ -134,7 +134,7 @@ asc は大きいので、ビルドは `@binette/regie/build` という別の入�
 
 今のビルドは、AS をコンパイルして Réplique の入口を足すだけです。アプリの安全は、Worker の隔離と、Régie が渡す呼び出しの一覧（[run.md](run.md#import)）で守っています。次の検証は、ここに足します。どれも未着手です。
 
-- HTML: `script`、`on*` 属性、外の URL を含まないか。今は Scene が innerHTML に描くので `on*` 属性が動く
+- HTML: `script`、`on*` 属性、外の URL を含む場合にビルド時に警告するか。描画時には Scene が取り除く（[mount.md](../scene/mount.md#最初の-html案実装済み)）
 - 権限: `app.json` の `permissions` と、使う呼び出しが合うか
 - 入手元: ハッシュやコミットの記録（[app.md](../app.md#régie-が記録するもの案)）
 

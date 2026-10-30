@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- Scene は document 方式の最初の HTML を描く直前に許可リストで検査し、危険な要素・属性や外部 URL を取り除く（案）
+
 - AS のフォルダ（apps・replique）に AS 公式の型定義を読ませ、型のための `@ts-ignore` を外した。`deno task check` に apps と `deno lint` を加え、lint の警告を 0 件にした。JSR の公開前チェックがメンバーの compilerOptions を見ないため、CI の `deno publish` は `--no-check` にした（型検査は `deno task check` で行う）
 
 - Décor の部品・修飾・段・テーマを `parts.ts` にまとめ、TS と AS で同じコードを使う（案）。`View.callback` は両方とも `UiCallback`。公開の名前は変えない。ハンドラーの包み方と TS のフック・mount はそれぞれのファイルに残す

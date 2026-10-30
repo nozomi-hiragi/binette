@@ -1,4 +1,5 @@
 import { createUiDom } from "@binette/decor";
+import { sanitizeHtml } from "./sanitize.ts";
 import type { DomOp } from "@binette/core";
 import type { Process } from "@binette/regie";
 
@@ -27,7 +28,7 @@ export function mountCounts(mounted: MountedApp): { ids: number; created: number
 export function mountApp(element: HTMLElement, html: string, process: Process, options: MountOptions = {}): MountedApp {
   // アプリの領域が外に出ないようにする
   element.style.contain = "paint";
-  element.innerHTML = html;
+  element.replaceChildren(sanitizeHtml(element.ownerDocument, html));
   const report = (error: unknown) => options.onError?.(error);
   const ids = new Map<number, string>();
   const created = new Map<number, HTMLElement>();

@@ -22,7 +22,7 @@ await process.begin();
 - `loadCompiler()` は asc を読み込みます。初回だけ dynamic import し、結果を使い回します。`buildApp` が必要なときに呼ぶので、先に呼んで読み込み時間を測ることもできます
 - `buildApp(read, options)` は `app.json`・HTML・AS を読み、AS を WASM にビルドします。ビルドに失敗すると、asc の出力を含む `Error` になります
 - `mountApp(element, html, process, options)` は HTML を描き、document API の DOM 操作を枠内に反映します。通常の id を参照し、click はプロセスに渡します。プロセスの起動は `startProcess` と `process.begin()` で行います
-- 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML の検査はまだありません
+- 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML は描画前に許可リストで検査し、許可しないものを取り除きます
 
 ホームはシステムアプリ `apps/home` が持ちます。`mountShell(element, options)` は Régie のシステムを起動し、保存された設定に従ってホームを開きます。ホームが別のアプリを開くとホームを隠して Pause にし、OS のホームバーで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの HTML にあります。
 

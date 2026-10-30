@@ -21,13 +21,23 @@ function mountApp(element: HTMLElement, html: string, process: Process, options?
 ```
 
 1. `element.style.contain = "paint"` で描画を枠に収める
-2. `element.innerHTML = html` で描く
+2. HTML を解析して許可した要素と属性だけを枠に描く（[最初の HTML](#最初の-html案実装済み)）
 3. `process.attach(ops => …)` で DOM 操作を受け始める。`_start` の間に溜まった操作が先に届く
 4. クリックを受けたら `process.dispatch(listener)` を呼ぶ
 
 `begin`（Create → Start → Resume）を呼ぶのは呼ぶ側（Régie のシステム）です。現在の `mountApp(element, html, process, options)` は、HTML を描いて DOM 操作を反映し、クリックをプロセスに渡します。プロセスの起動と状態の移り変わりは Régie の `startProcess` が受け持ちます。
 
 HTML ＋ AS → WASM、通常の id と document API を使い、bina 属性を OS が読まない方針は **決定 2026-10-27** です（[Réplique](../replique.md#画面を操作する方針決定-2026-10-27)）。
+
+## 最初の HTML（案・実装済み）
+
+Document 方式は、宣言的 UI で未対応のときの逃げ道として残します。Scene は保存済みのアプリや外から来た `.binapp` も含め、描く直前に HTML を解析し、許可した要素と属性だけを枠に入れます。取り除いたものは黙って捨て、アプリを終了しません。
+
+- 要素は create で許すタグに加え、`a`・`table`・`caption`・`colgroup`・`col`・`thead`・`tbody`・`tfoot`・`tr`・`th`・`td`・`code`・`pre`・`blockquote`・`dl`・`dt`・`dd`・`b`・`i`・`u`・`s`・`sub`・`sup`・`time`・`figure`・`figcaption`・`details`・`summary` を許します
+- `script`・`style`・`iframe`・`object`・`embed`・`link`・`meta`・`base`・`form`・`template`・`svg`・`math` などの危険な要素は中身ごと捨てます。そのほかの許可しない要素はタグだけを除き、子を残します
+- 属性は `id`・`class`・`title`・`alt`・`role`・`aria-*`・`bina`・`bina-*`・`data-*` などに限ります。`on*` と `style` は捨てます
+- URL を持つ属性は、`img` の `src` の PNG・JPEG・GIF・WebP の base64 形式の data URL を除き捨てます。`a` の `href` や SVG の data URL も残しません
+- `button` の `type` は `button` にそろえます
 
 ## 要素と操作（案・実装済み）
 
@@ -53,7 +63,6 @@ unlisten は対応する DOM リスナーを外して登録を消します。rem
 
 ## まだしていないこと
 
-- 最初の HTML の検査（script・on* 属性・外部 URL など）。検査は Régie のビルドに足す（[regie/build.md](../regie/build.md#検証案)）。今は innerHTML に描くため on* 属性は動く
 - setAttribute・style・value・input イベント・click 以外のイベント
 - entry.css の読み込み、Shadow DOM などによる CSS の分離
 
