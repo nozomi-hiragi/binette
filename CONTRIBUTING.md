@@ -20,9 +20,11 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 ## Binette の開発
 
-`deno task start` で設定アプリの `.binapp` を生成してから Vite を http://localhost:5175/ に起動します。`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを自動で見つけ、`.binapp/` に書き出します。フォルダを足すだけで増え、消すと古い `.binapp` も消えます。`.binapp` と `dist/` はソースから再生成できる生成物なのでコミットしません。`deno task build` は相対 URL で動く静的ファイルを生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、asc を配布しません。
+`deno task start` でシステムアプリと同梱アプリの `.binapp` を生成してから Vite を http://localhost:5175/ に起動します。`deno task build:system` は `apps/`（システムアプリ）と `bundled/`（通常の同梱アプリ）の直下で `app.json` を持つフォルダを自動で見つけ、それぞれ `.binapp/system/` と `.binapp/bundled/` に書き出します。`bundled/` が空でもビルドできます。フォルダを足すだけで増え、消すと各出力先の古い `.binapp` も消えます。移行前の `.binapp/` 直下の生成物も削除します。`.binapp` と `dist/` はソースから再生成できる生成物なのでコミットしません。`deno task build` は相対 URL で動く静的ファイルを生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、asc を配布しません。
 
-入口は直下の `index.html`・`vite.config.ts` と `src/main.ts` です。書き出しとホームの表示は、フォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。並び順と並べ替えの仕様は未決です。`deno task check` は生成物が無くても通り、`deno task test` は `dist/` と `.binapp/` を除外します。
+同梱アプリを追加するときは、`apps/home/deno.json` と同じ AS の型設定をそのアプリの `deno.json` に置き、ルートの `workspace` と `check` の入口にも追加します。生成物は `.binapp/` 全体がテスト対象から除外されます。
+
+入口は直下の `index.html`・`vite.config.ts` と `src/main.ts` です。書き出しとホームの表示は、システムアプリ、同梱アプリの順に、それぞれフォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。並び順と並べ替えの仕様は未決です。`deno task check` は生成物が無くても通り、`deno task test` は `dist/` と `.binapp/` を除外します。
 
 `public/` は Vite の publicDir です。手書きの `sw.js`・`manifest.webmanifest`・自作の `icon.svg` をそのまま `dist/` の直下へ写します。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。SW を更新するときは、古いキャッシュを消せるよう `binette-v0.2.0-1` の版も変えてください。
 
