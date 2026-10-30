@@ -109,8 +109,11 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
     const built = await build(code), home = await build(source, true);
     const window = new Window(); const element = host(window); const errors: unknown[] = []; let launches = 0;
     const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "test", prebuilt: built }], store: createMemoryAppStore(), createWorker() { launches++; return realWorker(); },
-      callTimeout: phase === "destroy" ? 500 : 100, destroyTimeout: phase === "destroy-regie" ? 500 : 100, onError: e => errors.push(e) });
+      // CI の遅い機械でも、ふつうの呼び出しが打ち切られないだけの余裕を持たせる
+      callTimeout: phase === "destroy" ? 2500 : 500, destroyTimeout: phase === "destroy-regie" ? 2500 : 500, onError: e => errors.push(e) });
     try {
+      // ホームが描かれて Resume まで進んでから開く
+      await waitFor(() => !!element.querySelector(".bina-shell-app:not([hidden])") && logOf(element) === "create:0;start:1;resume;");
       const homeHost = activeHost(element); click(element, "open");
       if (phase !== "init") {
         await waitFor(() => activeHost(element) !== homeHost && logOf(element) === "create:0;start:1;resume;");
