@@ -34,7 +34,7 @@ await process.begin();
 | --- | --- |
 | `mountApp` / `createShellUi` / `mountShell` | アプリの描画とシステム UI、起動の枠 |
 
-Régie の `SystemApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system` など）。
+Régie の `SystemApp` は `{ source, prebuilt }` か開発用の `{ source, read }` です。prebuilt は毎回その内容で保存し直し（入れた日時は保つ）、コンパイラは呼びません。read は同じ入手元・ID・版の保存結果があれば使い回します。`source` は配信の URL ではなく、変わらない入手元の名前にします（システムアプリは `binette:system`、通常の同梱アプリは `binette:bundled`）。
 
 ## 単独フロント
 
@@ -44,7 +44,7 @@ Régie の `SystemApp` は `{ source, prebuilt }` か開発用の `{ source, rea
 deno task start
 ```
 
-`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを見つけ、`.binapp/<フォルダ名>.binapp` を生成します。フォルダを足すだけでシステムアプリが増えます。生成物はコミットしません。任意のアプリは次で書き出せます。
+`deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを見つけ、`.binapp/system/<フォルダ名>.binapp` を生成します。`bundled/` のアプリも `.binapp/bundled/<フォルダ名>.binapp` に生成します。フォルダを足すだけでそれぞれのアプリが増え、空の `bundled/` でもビルドできます。生成物はコミットしません。任意のアプリは次で書き出せます。
 
 ```sh
 deno run -A packages/regie/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス>

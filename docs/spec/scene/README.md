@@ -48,7 +48,7 @@ Scene（システム UI）
 Scene を載せる Binette の入口はリポジトリ直下にあります（[全体の方針](../README.md#単独で起動できるフロント決定)）。`deno task start` で http://localhost:5175/ に起動し、`deno task build` で静的ファイルを書き出します。
 
 - ワークスペースのパッケージは Vite の `resolve.alias` でソースを読みます
-- `apps/` のシステムアプリを `.binapp/` に書き出し、`src/main.ts` の `import.meta.glob("../.binapp/*.binapp", { query: "?url", import: "default", eager: true })` で同梱し、`mountShell` に `prebuilt` として渡します
+- `apps/` のシステムアプリを `.binapp/system/`、`bundled/` の通常の同梱アプリを `.binapp/bundled/` に書き出し、`src/main.ts` の `import.meta.glob` で別々に同梱し、`mountShell` に `prebuilt` として渡します
 - 保存は IndexedDB を使い、ブラウザでは asc を読みません
 - Vite の `base: "./"` でサブパス配信に対応します
 
