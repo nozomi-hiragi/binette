@@ -178,7 +178,11 @@ export function mount(element: HTMLElement): Root {
       theme: view.themeValue, padding: view.paddingValue === -100 ? null : view.paddingValue, gap: view.gapValue, grow: view.growValue,
       key: view.keyValue, label: view.labelValue, enabled: view.enabledValue,
       handler, minWidth: view.minWidthValue, heading: view.headingValue,
-      list: view.listValue, shown: view.shownValue, app: view.appValue, multiline: view.multilineValue }, fiber];
+      list: view.listValue, shown: view.shownValue, app: view.appValue, multiline: view.multilineValue,
+      tone: view.toneValue, divider: view.dividerValue, mono: view.monoValue, small: view.smallValue, bold: view.boldValue, truncate: view.truncateValue,
+      width: view.widthValue, center: view.centerValue, selected: view.selectedValue, toggle: view.toggleValue,
+      scroll: view.scrollValue, fill: view.fillValue, collapse: view.collapseValue,
+      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue }, fiber];
   }
   function draw(view: View): void {
     const drawRevision = ++revision;

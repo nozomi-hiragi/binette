@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import asc from "assemblyscript/asc";
-import { tree, integers, multiline } from "./fixtures/parts.ts";
+import { tree, integers, multiline, looks } from "./fixtures/parts.ts";
 import { View, intString } from "../src/parts.ts";
 import { theme, text } from "../src/view.ts";
 
@@ -20,7 +20,7 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   });
   assertEquals(result.error, null, stderr.toString());
   const { instance } = await WebAssembly.instantiate(new Uint8Array(wasm!), { env: { abort() { throw new Error("AS aborted"); } } });
-  const exports = instance.exports as { memory: WebAssembly.Memory; themeValue(): number; integers(): number; multiline(): number };
+  const exports = instance.exports as { memory: WebAssembly.Memory; themeValue(): number; integers(): number; multiline(): number; looks(): number };
   function string(pointer: number): string {
     const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true) / 2;
     return String.fromCharCode(...new Uint16Array(exports.memory.buffer, pointer, length));
@@ -30,6 +30,8 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   assertEquals(string(exports.integers()), integers());
   assertEquals(string(exports.multiline()), multiline());
   assertEquals(multiline(), "input:true:-1:first\nsecond");
+  assertEquals(string(exports.looks()), looks());
+  assertEquals(looks(), "card|top left|111111111|240,0,420|1,0|なし;||000000000|0,0,0|0,-1|;||000000000|0,0,0|-1,-1|");
   const view = new View("text");
   assertEquals(view.multilineValue, false);
   assertEquals(view.multiline(), view);
