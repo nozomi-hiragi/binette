@@ -44,12 +44,12 @@ function lookString(view: View): string {
   return view.variantValue + "|" + view.toneValue + "|" + view.surfaceValue + "|" + view.dividerValue + "|" + flag(view.monoValue) + flag(view.smallValue) + flag(view.boldValue) + flag(view.truncateValue) +
     flag(view.centerValue) + flag(view.scrollValue) + flag(view.fillValue) + flag(view.collapseValue) + flag(view.wrapValue) + "|" +
     intString(view.widthValue) + "," + intString(view.heightValue) + "," + intString(view.minHeightValue) + "|" +
-    intString(view.selectedValue) + "," + intString(view.toggleValue) + "|" + view.placeholderValue;
+    intString(view.selectedValue) + "," + intString(view.toggleValue) + "|" + view.placeholderValue + "|" + flag(view.highlightValue);
 }
 
 export function looks(): string {
   const all = row([]).variant("ghost").tone("muted").surface("card").divider("left").divider("top").divider("left").divider("middle").mono().small().bold().truncate()
-    .center().scroll().fill().collapse().wrap().width(240).height(-3).minHeight(420).selected(true).toggle(false).placeholder("なし");
-  const reset = text("x").variant("dashed").variant("unknown").tone("accent").tone("card").surface("dark").surface("primary").width(Infinity).selected(false);
+    .center().scroll().fill().collapse().wrap().width(240).height(-3).minHeight(420).selected(true).toggle(false).placeholder("なし").highlight(true);
+  const reset = text("x").variant("dashed").variant("unknown").tone("accent").tone("card").surface("dark").surface("primary").width(Infinity).selected(false).highlight(true).highlight(false);
   return lookString(all) + ";" + lookString(reset) + ";" + lookString(text("default"));
 }

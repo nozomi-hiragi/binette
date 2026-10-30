@@ -38,6 +38,10 @@ const colors: Record<string, string> = {
 // variant 付きのボタンは小さめの道具の形にする。角丸は theme を優先する
 const controlRadius: string = componentLength("button", "radius", "radius", "var(--bina-ui-control-radius, 6px)");
 const variantPadding = (block: string, inline: string): string => `${componentLength("button", "padding", "space", block)} ${componentLength("button", "padding", "space", inline)}`;
+// surface("dark") と surface("field") の中の入力欄は、それぞれの面の見た目にする
+const plainInput = ".bina-ui-input:not(.bina-ui-surface-dark *, .bina-ui-surface-field > *)";
+/** 入力欄の未指定の padding。既定の入力欄は CSS の変数で余白を持ち、theme の値があればそちらを使う */
+const inputPadding = `var(--bina-ui-input-default-padding, ${componentLength("input", "padding", "space", "0px")})`;
 const lookCss: string = `
 :where(.bina-ui-button[class*="bina-ui-variant-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${controlRadius}; }
 :where(.bina-ui-button.bina-ui-variant-ghost:has(> *), .bina-ui-button.bina-ui-variant-subtle:has(> *)) { align-items: stretch; text-align: start; }
@@ -92,7 +96,10 @@ const lookCss: string = `
 :where(.bina-ui-center) { justify-content: safe center; align-items: safe center; }
 :where(.bina-ui-scroll) { overflow: auto; min-height: 0; min-width: 0; }
 :where(.bina-ui-button.bina-ui-selected) { background: ${colors.accentSoft}; color: inherit; }
-:where(.bina-ui-selected:not(.bina-ui-button)) { outline: 2px solid ${colors.accent}; outline-offset: 2px; }
+:where(.bina-ui-highlight:not(:focus-visible), .bina-ui-selected:not(.bina-ui-button):not(:focus-visible)) { outline: 1.5px solid ${colors.accent}; outline-offset: 2px; }
+:where(${plainInput}) { border: 1px solid ${colors.line}; border-radius: ${componentLength("input", "radius", "radius", "var(--bina-ui-input-radius, var(--bina-ui-control-radius, 6px))")}; background: ${colors.surface}; --bina-ui-input-default-padding: ${componentLength("input", "padding", "space", "6px")} ${componentLength("input", "padding", "space", "8px")}; }
+:where(${plainInput}:focus) { outline: 2px solid ${colors.focus}; outline-offset: -1px; }
+:where(${plainInput}:disabled) { opacity: var(--bina-ui-disabled-opacity, 0.5); }
 :where(.bina-ui-toggle) { position: relative; flex: none; box-sizing: border-box; width: 32px; height: 18px; min-width: 32px; min-height: 18px; padding: 0; border: 0; border-radius: 9px; background: color-mix(in srgb, ${colors.muted} 55%, transparent); }
 :where(.bina-ui-toggle)::before { content: ""; position: absolute; inset: -13px -6px; }
 :where(.bina-ui-toggle)::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 20%); transition: transform 0.15s; }
@@ -103,13 +110,19 @@ const lookCss: string = `
 @container bina-ui (width < 720px) {
   :where(.bina-ui-collapse) { flex-direction: column; align-items: stretch; }
   :where(.bina-ui-collapse > *) { width: auto; align-self: stretch; }
+  :where(.bina-ui-collapse > .bina-ui-divider-left, .bina-ui-collapse > .bina-ui-divider-right) { border-left: 0; border-right: 0; }
+  :where(.bina-ui-collapse > .bina-ui-divider-right) { border-bottom: 1px solid ${colors.line}; }
+  :where(.bina-ui-collapse > .bina-ui-divider-left) { border-top: 1px solid ${colors.line}; }
+  :where(.bina-ui-collapse > .bina-ui-divider-right + .bina-ui-divider-left:not(.bina-ui-divider-top)) { border-top: 0; }
   :where(.bina-ui-fill:has(.bina-ui-collapse), .bina-ui-collapse, .bina-ui-collapse .bina-ui-fill, .bina-ui-collapse .bina-ui-scroll) { flex: none; min-height: auto; overflow: visible; }
 }
 `;
+// highlight と button 以外の selected の角丸 4px は先頭に置き、角丸を持つ部品（button・input・card など）は自分の角丸を保つ
 export const uiCss = `
 :where([class^="bina-ui-"]) { ${themeDefaults.flatMap(([group, values]) => values.map((value, i) => `--bina-ui-default-${group}-${steps[i]}: ${value}px;`)).join(" ")} }
 
 :where([class^="bina-ui-"])[hidden] { display: none !important; }
+:where(.bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button)) { border-radius: 4px; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
 :where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
@@ -119,7 +132,7 @@ export const uiCss = `
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-grid) { gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input) { padding: var(--bina-ui-padding, 0px); }
 :where(.bina-ui-button) { padding: var(--bina-ui-padding, ${componentLength("button", "padding", "space", "0px")}); }
-:where(.bina-ui-input) { padding: var(--bina-ui-padding, ${componentLength("input", "padding", "space", "0px")}); }
+:where(.bina-ui-input) { padding: var(--bina-ui-padding, ${inputPadding}); }
 :where(.bina-ui-fill) { flex: 1 1 0; min-height: 0; align-self: stretch; }
 :where(.bina-ui-row > .bina-ui-fill) { flex: 0 1 auto; }
 :where(.bina-ui-grow) { flex-grow: 1; }
@@ -135,7 +148,7 @@ export const uiCss = `
 ${lookCss}`;
 
 type UiUpdate = Extract<DomOp, { op: "ui-update" }>;
-const lookFlags = ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap"] as const;
+const lookFlags = ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap", "highlight"] as const;
 // 値が変わるときだけ書き換え、描き直しで DOM を無駄に触らない
 function setClass(node: HTMLElement, name: string, on: boolean): void {
   if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
@@ -304,7 +317,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (node.classList.contains("bina-ui-listitem") !== !!op.listItem) node.classList.toggle("bina-ui-listitem", !!op.listItem);
         for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid && op.minWidth ? op.minWidth : null]] as const) {
           const property = `--bina-ui-${name}`;
-          const fallback = name === "padding" ? isButton ? buttonPadding(op) : node.classList.contains("bina-ui-input") ? componentLength("input", "padding", "space", "0px") : "0px" : "";
+          const fallback = name === "padding" ? isButton ? buttonPadding(op) : node.classList.contains("bina-ui-input") ? inputPadding : "0px" : "";
           const next = value === null ? fallback : name === "minWidth" ? `${Math.max(0, value)}px` : length(value);
           if (node.style.getPropertyValue(property) !== next) {
             if (next) node.style.setProperty(property, next);

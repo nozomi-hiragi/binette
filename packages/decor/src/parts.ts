@@ -55,6 +55,8 @@ export class View {
   /** 最小の高さ（px）。0 は指定なし */
   minHeightValue: number = 0;
   wrapValue: boolean = false;
+  /** 印の枠を付けるか。状態は表さない */
+  highlightValue: boolean = false;
   constructor(readonly kind: string) {}
   padding(n: number = space.md): View { this.paddingValue = n; return this; }
   gap(n: number = space.md): View { this.gapValue = n; return this; }
@@ -107,8 +109,10 @@ export class View {
   wrap(): View { this.wrapValue = true; return this; }
   /** 子を縦横の中央に置く */
   center(): View { this.centerValue = true; return this; }
-  /** 選ばれている状態を表す。ボタンは押された状態、ほかの部品はアクセントの枠線になる */
+  /** 選ばれている状態を表す。ボタンは押された状態、ほかの部品はアクセントの細い枠になる */
   selected(b: boolean): View { this.selectedValue = b ? 1 : 0; return this; }
+  /** 部品の種類によらず、アクセントの細い枠で印を付ける。状態は変えず、読み上げにも出ない */
+  highlight(b: boolean): View { this.highlightValue = b; return this; }
   /** ボタンを入・切のスイッチにする。ボタンの文字は見せず、読み上げの名前に使う */
   toggle(on: boolean): View { this.toggleValue = on ? 1 : 0; return this; }
   /** この部品の中だけをスクロールする */

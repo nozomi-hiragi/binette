@@ -21,7 +21,7 @@ draw();
 
 複数行の入力欄は `input(value, onText).multiline()` で作ります。HTML の `textarea` として描画され、改行を含む値を受け取れます。通常の input と同じく、IME の変換中や古い入力の版による描き直しで、入力中の値を上書きしません。TS と AS の両方で使えます。
 
-見た目は役割の名前で選び、色の値は OS の CSS 変数（`--bina-ui-accent` など）が決めます。役割は効く部品ごとに、ボタンの種類の `variant("primary")`・`variant("ghost")`、文字の色の `tone("muted")`、面の `surface("card")`・`surface("dark")` などに分かれます。ほかに区切り線の `divider(side)`、字体の `mono()`・`small()`・`bold()`・`truncate()`、大きさの `width(px)`・`height(px)`・`minHeight(px)`、配置の `center()`・`wrap()`、状態の `selected(b)`・`toggle(on)`、区画の `scroll()`・`fill()`・`collapse()`、入力の `placeholder(s)` があります。TS と AS の両方で使えます。
+見た目は役割の名前で選び、色の値は OS の CSS 変数（`--bina-ui-accent` など）が決めます。役割は効く部品ごとに、ボタンの種類の `variant("primary")`・`variant("ghost")`、文字の色の `tone("muted")`、面の `surface("card")`・`surface("dark")` などに分かれます。ほかに区切り線の `divider(side)`、字体の `mono()`・`small()`・`bold()`・`truncate()`、大きさの `width(px)`・`height(px)`・`minHeight(px)`、配置の `center()`・`wrap()`、状態の `selected(b)`・`toggle(on)`、印の `highlight(b)`、区画の `scroll()`・`fill()`・`collapse()`、入力の `placeholder(s)` があります。TS と AS の両方で使えます。
 
 AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique/ui` も互換の入口として使えます。関数の部品とフックは TS の `mount` 向けです。JSX は含みません。
 

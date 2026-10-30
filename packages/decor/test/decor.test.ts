@@ -376,15 +376,19 @@ Deno.test("見た目の修飾は既定でないものだけを操作に載せ、
   const ui = createUiDiffer(op => ops.push(op));
   ui.render(node("button", "a"), 1);
   const plain = ops.find(op => op.op === "ui-update")!;
-  for (const name of ["variant", "tone", "surface", "divider", "mono", "width", "selected", "toggle", "placeholder", "height", "minHeight", "wrap"]) assertEquals(name in plain, false, name);
+  for (const name of ["variant", "tone", "surface", "divider", "mono", "width", "selected", "toggle", "placeholder", "height", "minHeight", "wrap", "highlight"]) assertEquals(name in plain, false, name);
   ops = [];
   ui.render(node("button", "a"), 2);
   assertEquals(ops, []);
-  ui.render({ ...node("button", "a"), variant: "ghost", selected: 0, toggle: -1, width: 0, wrap: false }, 3);
+  ui.render({ ...node("button", "a"), variant: "ghost", selected: 0, toggle: -1, width: 0, wrap: false, highlight: false }, 3);
   assertEquals(ops.length, 1);
   const update = ops[0]!;
   assert(update.op === "ui-update");
-  assertEquals([update.variant, "tone" in update, "surface" in update, update.selected, "toggle" in update, "width" in update, "wrap" in update], ["ghost", false, false, false, false, false, false]);
+  assertEquals([update.variant, "tone" in update, "surface" in update, update.selected, "toggle" in update, "width" in update, "wrap" in update, "highlight" in update], ["ghost", false, false, false, false, false, false, false]);
+  ops = [];
+  ui.render({ ...node("button", "a"), variant: "ghost", selected: 0, highlight: true }, 4);
+  assertEquals(ops.length, 1);
+  assert(ops[0]!.op === "ui-update" && ops[0]!.highlight === true);
 });
 
 Deno.test("variant 付きのボタンは未指定の padding を小さめの道具の余白にし、スイッチは 0 にする", async () => {
@@ -410,5 +414,72 @@ Deno.test("見た目の CSS は :where で詳細度 0 を保つ", async () => {
     if (!trimmed.includes("{") || trimmed.startsWith("@")) continue;
     assert(trimmed.startsWith(":where("), trimmed);
   }
-  for (const name of ["variant-primary", "variant-ghost", "tone-muted", "surface-dark", "surface-field", "toggle", "collapse", "divider-top", "height", "wrap"]) assert(uiCss.includes(`.bina-ui-${name}`), name);
+  for (const name of ["variant-primary", "variant-ghost", "tone-muted", "surface-dark", "surface-field", "toggle", "collapse", "divider-top", "height", "wrap", "highlight"]) assert(uiCss.includes(`.bina-ui-${name}`), name);
+});
+
+Deno.test("highlight と button 以外の selected は同じ細い枠になり、collapse は左右の区切りを上下にする", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  const rule = (selector: string) => uiCss.split("\n").find(line => line.trim().startsWith(`:where(${selector}`)) ?? "";
+  const mark = rule(".bina-ui-highlight:not(:focus-visible)");
+  assert(mark.includes(".bina-ui-selected:not(.bina-ui-button)") && mark.includes("outline: 1.5px solid") && mark.includes("outline-offset: 2px"), mark);
+  assert(rule(".bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button))").includes("border-radius: 4px"));
+  // 角丸を持つ部品が自分の角丸を保つよう、4px の角丸は button と input の規則より前に置く
+  assert(uiCss.indexOf("border-radius: 4px") < uiCss.indexOf(":where(.bina-ui-button) {"));
+  assert(uiCss.indexOf("border-radius: 4px") < uiCss.indexOf(":where(.bina-ui-input) {"));
+  const narrow = uiCss.slice(uiCss.indexOf("@container bina-ui (width < 720px)"));
+  assert(narrow.includes(":where(.bina-ui-collapse > .bina-ui-divider-left, .bina-ui-collapse > .bina-ui-divider-right) { border-left: 0; border-right: 0; }"));
+  assert(narrow.includes(":where(.bina-ui-collapse > .bina-ui-divider-right) { border-bottom: 1px solid"));
+  assert(narrow.includes(":where(.bina-ui-collapse > .bina-ui-divider-left) { border-top: 1px solid"));
+});
+
+Deno.test("既定の入力欄は線の色の枠と余白を持ち、dark と field の中は今の見た目を保つ", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  const plain = ".bina-ui-input:not(.bina-ui-surface-dark *, .bina-ui-surface-field > *)";
+  const rule = (suffix: string) => uiCss.split("\n").find(line => line.startsWith(`:where(${plain}${suffix})`)) ?? "";
+  const look = rule("");
+  assert(look.includes("border: 1px solid var(--bina-ui-line") && look.includes("background: var(--bina-ui-surface"), look);
+  assert(look.includes("var(--bina-ui-input-radius-px, var(--bina-ui-input-radius, var(--bina-ui-control-radius, 6px)))"), look);
+  assert(look.includes("var(--bina-ui-input-padding-px, 6px)") && look.includes("var(--bina-ui-input-padding-px, 8px)"), look);
+  // focus-visible だけでなく、フォーカス中はずっとアクセントの枠にする
+  assert(rule(":focus").includes("outline: 2px solid var(--bina-ui-focus"));
+  // dark と field の中の規則はそのまま残す
+  assert(uiCss.includes(":where(.bina-ui-surface-dark .bina-ui-input) { background: transparent; border: 0; color: inherit; }"));
+  assert(uiCss.includes(":where(.bina-ui-surface-field > .bina-ui-input) { flex: 1 1 0; min-width: 0; border: 0; border-radius: 0; background: transparent; outline: none; }"));
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    root.render(column([input("", () => {}), input("", () => {}).padding(3)]));
+    const [fallback, explicit] = [...host.querySelectorAll("input")].map(field => field.style.getPropertyValue("--bina-ui-padding"));
+    // 未指定の padding は CSS の既定の余白に任せ、明示した padding はそれより優先する
+    assert(fallback!.startsWith("var(--bina-ui-input-default-padding, calc("), fallback);
+    assertEquals(explicit, "3px");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("highlight はクラスだけを付け、button でも押された状態にしない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  const noop = () => {};
+  const view = (on: boolean) => column([
+    button("印", noop).highlight(on).key("button"),
+    button("選択", noop).selected(true).highlight(on).key("selected"),
+    text("文字").highlight(on).key("text"),
+    input("", noop).highlight(on).key("input"),
+    row([]).highlight(on).key("row"),
+  ]).highlight(on);
+  const at = (key: string) => host.querySelector(`[data-bina-key="${key}"]`)! as HTMLElement;
+  try {
+    root.render(view(true));
+    for (const key of ["button", "selected", "text", "input", "row"]) assert(at(key).classList.contains("bina-ui-highlight"), key);
+    assert(host.querySelector(".bina-ui-column")!.classList.contains("bina-ui-highlight"));
+    assertEquals(at("button").hasAttribute("aria-pressed"), false);
+    assertEquals(at("button").classList.contains("bina-ui-selected"), false);
+    assertEquals(at("selected").getAttribute("aria-pressed"), "true");
+    for (const name of ["aria-current", "aria-selected", "aria-checked"]) assertEquals(host.querySelector(`[${name}]`), null, name);
+    root.render(view(false));
+    assertEquals(host.querySelector(".bina-ui-highlight"), null);
+    assertEquals(at("selected").getAttribute("aria-pressed"), "true");
+  } finally { root.unmount(); await window.happyDOM.close(); }
 });
