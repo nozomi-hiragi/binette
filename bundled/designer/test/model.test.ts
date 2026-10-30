@@ -3,7 +3,7 @@ import asc from "assemblyscript/asc";
 
 // 純粋ロジックを実際の AssemblyScript コンパイラーと Wasm で検証する。
 const fixture = `
-import { parse, write, Node, example, validNumber, formatNumber, validModifierNumber, stepNumber } from "./model";
+import { parse, write, Node, example, validNumber, formatNumber, validModifierNumber, stepNumber, applicable, summary } from "./model";
 export function roundTrip(): i32 {
   const first = parse(example);
   if (first.root === null) return 1;
@@ -89,6 +89,25 @@ export function integerModifiers(): i32 {
   return validModifierNumber("padding", "") && validModifierNumber("gap", "") &&
     validModifierNumber("minWidth", "1.5") && validModifierNumber("gap", "space.md") ? 0 : 5;
 }
+export function inspectorRows(): string {
+  const kinds = ["column", "row", "grid", "buttonOf", "text", "button", "input", "appIcon"];
+  const names = ["padding", "gap", "minWidth", "grow", "heading", "key", "label", "list", "enabled", "multiline", "arg"];
+  const out: string[] = [];
+  for (let i = 0; i < kinds.length; i++) {
+    let line = kinds[i] + ":";
+    for (let j = 0; j < names.length; j++) if (applicable(kinds[i], names[j])) line += names[j] + " ";
+    out.push(line.trim());
+  }
+  return out.join("|");
+}
+export function summaries(): string {
+  const r = parse('column([text("一行"), input("複数\\\\n行", (s: string) => {}), appIcon(3), row([])])');
+  if (r.root === null) return r.error;
+  const root = changetype<Node>(r.root);
+  const out = [summary(root)];
+  for (let i = 0; i < root.children.length; i++) out.push(summary(root.children[i]));
+  return out.join(",");
+}
 `;
 
 Deno.test("デザイナーの木と式の往復・全パーツ・修飾・日本語を AS で確認する", async () => {
@@ -119,6 +138,8 @@ Deno.test("デザイナーの木と式の往復・全パーツ・修飾・日本
     numberFormatting(): number;
     numberSteps(): number;
     integerModifiers(): number;
+    inspectorRows(): number;
+    summaries(): number;
   };
   function string(pointer: number): string {
     const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true) / 2;
@@ -140,4 +161,16 @@ Deno.test("デザイナーの木と式の往復・全パーツ・修飾・日本
   assertEquals(string(exports.numberFormatting()), "1,-2,0,1.25,-0.5,1e+21");
   assertEquals(string(exports.numberSteps()), "11,9.5,space.xs,space.xl,radius.md,fontSize.md,space.xs,space.xl,space.md,space.md,2,1,3,2,2,1,-3,1");
   assertEquals(exports.integerModifiers(), 0);
+  // インスペクターは部品に効く修飾だけを出し、木の行は値の 1 行目だけを見せる。
+  assertEquals(string(exports.inspectorRows()).split("|"), [
+    "column:padding gap minWidth grow key label list",
+    "row:padding gap minWidth grow key label list",
+    "grid:padding gap minWidth grow key label list",
+    "buttonOf:padding gap minWidth grow key label enabled arg",
+    "text:padding minWidth grow heading key label",
+    "button:padding minWidth grow key label enabled arg",
+    "input:padding minWidth grow key label enabled multiline",
+    "appIcon:padding minWidth grow key label",
+  ]);
+  assertEquals(string(exports.summaries()), ",一行,複数…,3,");
 });

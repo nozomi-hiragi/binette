@@ -6,10 +6,12 @@ interface PreviewNode {
   text: string;
   label: string;
   handler: number;
+  enabled: boolean;
   children: PreviewNode[];
 }
 
-Deno.test("通常アプリの appIcon は説明をプレビューし、木とコードを保持する", async () => {
+/** デザイナーを実際の asc でコンパイルし、描いた部品の木を読み書きできるようにする。 */
+async function start() {
   const sources: Record<string, string> = {
     "main.ts": await Deno.readTextFile(new URL("../src/main.ts", import.meta.url)) + '\nexport { __bina_lifecycle, __bina_ui_event, __bina_ui_text } from "jsr:@binette/replique";',
     "model.ts": await Deno.readTextFile(new URL("../src/model.ts", import.meta.url)),
@@ -51,33 +53,116 @@ Deno.test("通常アプリの appIcon は説明をプレビューし、木とコ
   exports._start();
   exports.__bina_lifecycle(2, 0, 0);
   function flatten(node: PreviewNode): PreviewNode[] { return [node, ...node.children.flatMap(flatten)]; }
-  function find(predicate: (node: PreviewNode) => boolean): PreviewNode {
-    const node = flatten(frame.root).find(predicate);
-    assert(node, "対象の部品がありません");
-    return node;
-  }
-  function click(text: string) {
-    exports.__bina_ui_event(frame.build, find((node) => node.kind === "button" && node.text === text).handler);
-  }
+  const ui = {
+    nodes: () => flatten(frame.root),
+    find(predicate: (node: PreviewNode) => boolean): PreviewNode {
+      const node = ui.nodes().find(predicate);
+      assert(node, "対象の部品がありません");
+      return node;
+    },
+    /** ラベルか文字で探したボタンを押す。 */
+    click(name: string) {
+      exports.__bina_ui_event(frame.build, ui.find((node) => node.kind === "button" && (node.label === name || node.text === name)).handler);
+    },
+    type(label: string, value: string) {
+      const field = ui.find((node) => node.label === label);
+      const pointer = exports.__new(value.length * 2, 2);
+      new Uint16Array(exports.memory.buffer, pointer, value.length).set(Array.from(value, (c) => c.charCodeAt(0)));
+      exports.__bina_ui_text(frame.build, field.handler, pointer);
+    },
+    code: () => ui.find((node) => node.label === "Décor のコード").text,
+    status: () => ui.find((node) => node.kind === "text" && node.text.startsWith("● ")).text,
+    has: (label: string) => ui.nodes().some((node) => node.label === label),
+    texts: () => ui.nodes().filter((node) => node.kind === "text").map((node) => node.text),
+    /** 木の行は buttonOf なので、中の文字を集めて返す。 */
+    rowText: (node: PreviewNode) => flatten(node).map((child) => child.text).join(" "),
+  };
+  return ui;
+}
+
+Deno.test("通常アプリの appIcon は説明をプレビューし、木とコードを保持する", async () => {
+  const ui = await start();
   function checkIcon(value: string) {
-    const nodes = flatten(frame.root);
+    const nodes = ui.nodes();
     assertEquals(nodes.some((node) => node.kind === "appIcon"), false);
     assert(nodes.some((node) => node.kind === "text" && node.text.includes("appIcon(" + value + ")") && node.text.includes("ホーム専用")));
-    assert(find((node) => node.label === "Décor のコード").text.includes("appIcon(" + value + ")"));
-    assert(nodes.some((node) => node.label === "部品を選択 appIcon" && node.text.includes(value)));
+    assert(ui.code().includes("appIcon(" + value + ")"));
+    const item = ui.find((node) => node.label.startsWith("部品を選択 appIcon"));
+    assert(ui.rowText(item).includes(value));
   }
-  click("＋ appIcon");
+  ui.click("appIcon を追加");
   checkIcon("0");
 
   // 入れ子と根の appIcon を読み込んでも、ホーム専用 View を送らない。
   for (const code of ['buttonOf([appIcon(7).label("見本")], () => {})', 'appIcon(2)']) {
-    const field = find((node) => node.label === "Décor のコード");
-    const pointer = exports.__new(code.length * 2, 2);
-    new Uint16Array(exports.memory.buffer, pointer, code.length).set(Array.from(code, (c) => c.charCodeAt(0)));
-    exports.__bina_ui_text(frame.build, field.handler, pointer);
-    click("コードを読み込む");
+    ui.type("Décor のコード", code);
+    ui.click("コードから反映");
     checkIcon(code.includes("7") ? "7" : "2");
   }
-  click("見本に戻す");
-  assertEquals(flatten(frame.root).some((node) => node.label === "部品を選択 appIcon"), false);
+  // 根が appIcon のときは子を足せないので、追加のチップを押せない。
+  assertEquals(ui.find((node) => node.label === "column を追加").enabled, false);
+  ui.click("見本に戻す");
+  assertEquals(ui.has("部品を選択 appIcon"), false);
+});
+
+Deno.test("インスペクターは選んだ部品に効く修飾だけをグループに分けて出す", async () => {
+  const ui = await start();
+  // 根の column: 余白・サイズ・識別・そのほか（list）。文字の中身や heading は出さない。
+  for (const title of ["インスペクター", "余白", "サイズ", "識別", "そのほか", "3 個の子"]) assert(ui.texts().includes(title), title);
+  for (const title of ["内容", "文字"]) assertEquals(ui.texts().includes(title), false, title);
+  assert(ui.has("gap を増やす") && ui.has("list を切り替える"));
+  assertEquals(ui.has("heading を増やす") || ui.has("multiline を切り替える") || ui.has("enabled を切り替える"), false);
+
+  ui.click("部品を選択 text こんにちは");
+  for (const title of ["内容", "文字", "余白"]) assert(ui.texts().includes(title), title);
+  assert(ui.has("部品の文字または番号") && ui.has("heading を増やす"));
+  assertEquals(ui.has("gap を増やす") || ui.has("コールバック式"), false);
+
+  ui.click("部品を選択 button 押す");
+  assert(ui.has("コールバック式") && ui.has("enabled を切り替える") && ui.has("arg を増やす"));
+  assertEquals(ui.has("heading を増やす"), false);
+
+  // コードで付けた効かない修飾も、消せるように出す。
+  ui.type("Décor のコード", 'text("x").gap(4)');
+  ui.click("コードから反映");
+  assert(ui.has("gap の修飾を削除"));
+  ui.click("gap の修飾を削除");
+  assertEquals(ui.code(), 'text("x")');
+  assertEquals(ui.has("gap を増やす"), false);
+});
+
+Deno.test("数値の ＋、木の操作、コードの状態と反映", async () => {
+  const ui = await start();
+  assertEquals(ui.status(), "● 木と一致");
+  assertEquals(ui.find((node) => node.label === "コードから反映" || node.text === "コードから反映").enabled, false);
+  // 根は消せず、先頭は上へ動かせない。
+  assertEquals(ui.find((node) => node.label === "選択した部品を削除").enabled, false);
+  assertEquals(ui.find((node) => node.label === "選択した部品を上へ移動").enabled, false);
+
+  ui.click("padding を増やす");
+  assert(ui.code().endsWith(".padding(17)"), ui.code());
+  assertEquals(ui.status(), "● 木と一致");
+  ui.click("padding の修飾を削除");
+  assert(ui.code().endsWith("]).gap(16)"), ui.code());
+  assertEquals(ui.find((node) => node.label === "padding の数値").text, "");
+
+  ui.click("部品を選択 input 複数行…");
+  ui.click("選択した部品を上へ移動");
+  assert(ui.code().indexOf("input(") < ui.code().indexOf("row(["), ui.code());
+
+  // 読めないコードは入力のうちに位置と理由を出し、反映しても木を変えない。
+  const before = ui.code();
+  ui.type("Décor のコード", 'column([\n  text("よい"),\n  unknown("悪い")\n])');
+  assertEquals(ui.status(), "● 3 行 10 列: 対応していない部品です: unknown");
+  ui.click("コードから反映");
+  assertEquals(ui.status(), "● 3 行 10 列: 対応していない部品です: unknown");
+  assert(ui.has("部品を選択 input 複数行…"));
+
+  ui.type("Décor のコード", 'row([text("新しい")])');
+  assertEquals(ui.status(), "● 未反映の変更があります");
+  ui.click("コードから反映");
+  assertEquals(ui.status(), "● 木と一致");
+  assert(ui.has("部品を選択 text 新しい"));
+  assertEquals(ui.has("部品を選択 input 複数行…"), false);
+  assert(before !== ui.code());
 });

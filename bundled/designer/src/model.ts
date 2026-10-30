@@ -18,6 +18,22 @@ export function numeric(name: string): boolean {
 export function flag(name: string): boolean {
   return name == "grow" || name == "list" || name == "multiline";
 }
+/** 修飾がその部品の見た目や振る舞いに効くか。インスペクターに出す行を選ぶのに使う。 */
+export function applicable(kind: string, name: string): boolean {
+  if (name == "gap") return container(kind);
+  if (name == "heading") return kind == "text";
+  if (name == "list") return kind == "column" || kind == "row" || kind == "grid";
+  if (name == "enabled") return kind == "button" || kind == "buttonOf" || kind == "input";
+  if (name == "multiline") return kind == "input";
+  if (name == "arg") return kind == "button" || kind == "buttonOf";
+  return name == "padding" || name == "minWidth" || name == "grow" || name == "key" || name == "label";
+}
+/** 木の行に出す値の要約。複数行は 1 行目だけにして「…」を付ける。 */
+export function summary(node: Node): string {
+  if (container(node.kind)) return "";
+  const end = node.value.indexOf("\n");
+  return end < 0 ? node.value : node.value.substring(0, end) + "…";
+}
 export function numberValue(value: string): f64 {
   const names = ["xs", "sm", "md", "lg", "xl"];
   for (let i = 0; i < names.length; i++) {
