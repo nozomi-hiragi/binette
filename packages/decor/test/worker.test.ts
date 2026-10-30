@@ -32,7 +32,7 @@ class Demo extends App {
     const stepper = row([button("−", flip).variant("subtle"), input("16", typed).mono().placeholder("なし"), button("＋", flip)]).surface("field").width(160);
     const body = row([column([button("木", flip).variant("ghost").selected(on).grow()]).scroll().fill().width(240), column([stepper]).fill().grow().center().surface("sunken")]).fill().collapse();
     const code = column([input("column([])", typed).multiline().mono().height(120)]).surface("dark").minHeight(130);
-    return column([header, body, code, button("grow", flip).toggle(on).label("伸ばす")]).fill();
+    return column([header, body, code, button("grow", flip).toggle(on).label("伸ばす"), button("印", flip).highlight(!on).key("mark")]).fill();
   }
 }
 launch(new Demo());`;
@@ -65,6 +65,8 @@ launch(new Demo());`;
     const tree = host.querySelector(".bina-ui-variant-ghost")!;
     assertEquals([tree.getAttribute("aria-pressed"), tree.classList.contains("bina-ui-selected")], ["false", false]);
     assert(host.querySelector(".bina-ui-collapse.bina-ui-fill"));
+    const mark = host.querySelector('[data-bina-key="mark"]')!;
+    assertEquals([mark.classList.contains("bina-ui-highlight"), mark.hasAttribute("aria-pressed")], [true, false]);
     assert(host.querySelector(".bina-ui-scroll.bina-ui-fill.bina-ui-width"));
     assert(host.querySelector(".bina-ui-surface-sunken.bina-ui-center.bina-ui-grow"));
     const textarea = host.querySelector("textarea")!;
@@ -74,6 +76,7 @@ launch(new Demo());`;
     toggle.click();
     await waitFor(() => toggle.getAttribute("aria-checked") === "true");
     assertEquals([tree.getAttribute("aria-pressed"), tree.classList.contains("bina-ui-selected")], ["true", true]);
+    assertEquals([mark.classList.contains("bina-ui-highlight"), mark.hasAttribute("aria-pressed")], [false, false]);
     assertEquals(muted.classList.contains("bina-ui-tone-muted"), false);
     assert(muted.classList.contains("bina-ui-small"));
     assertEquals(host.querySelector('[role="switch"]'), toggle);

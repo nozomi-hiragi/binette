@@ -4,7 +4,7 @@
 
 - Décor の宣言 UI を部品の木として編集し、コールバック式を保ったままコードに戻せるデザイナーを追加
 
-- Décor の TS・AS に見た目の修飾（ボタンの種類の `variant`・文字の色の `tone`・面の `surface`、`divider`・`mono`・`small`・`bold`・`truncate`・`width`・`height`・`minHeight`・`center`・`wrap`・`selected`・`toggle`・`scroll`・`fill`・`collapse`・`placeholder`）を追加し、色は OS の役割の CSS 変数で決める（案）
+- Décor の TS・AS に見た目の修飾（ボタンの種類の `variant`・文字の色の `tone`・面の `surface`、`divider`・`mono`・`small`・`bold`・`truncate`・`width`・`height`・`minHeight`・`center`・`wrap`・`selected`・`highlight`・`toggle`・`scroll`・`fill`・`collapse`・`placeholder`）を追加し、色は OS の役割の CSS 変数で決める。既定の入力欄は線の色の枠と角丸と余白を持つ（案）
 
 - Décor の TS・AS に `input(...).multiline()` を追加し、複数行の入力を textarea で扱う（案）
 

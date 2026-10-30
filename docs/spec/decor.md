@@ -68,7 +68,7 @@ column([
 ]).fill();
 ```
 
-色はアプリが値を書かず、OS の役割を選びます。役割は効く部品ごとに、ボタンの種類の `variant(name)`、文字の色の `tone(name)`、面の `surface(name)` に分けます。ほかに `divider(side)`、`mono()`、`small()`、`bold()`、`truncate()`、`width(px)`、`height(px)`、`minHeight(px)`、`center()`、`wrap()`、`selected(b)`、`toggle(on)`、`scroll()`、`fill()`、`collapse()`、入力の `placeholder(s)` があります。TS と AS で共通の `parts.ts` にあり、View から UiNode、`ui-update` の操作を経て DOM のクラスと属性になります。古いアプリは送らないので、操作では既定でない値だけを載せます。名前と効果の一覧と役割の色の変数は [宣言的 UI](ui.md#見た目の修飾案) を参照してください。
+色はアプリが値を書かず、OS の役割を選びます。役割は効く部品ごとに、ボタンの種類の `variant(name)`、文字の色の `tone(name)`、面の `surface(name)` に分けます。ほかに `divider(side)`、`mono()`、`small()`、`bold()`、`truncate()`、`width(px)`、`height(px)`、`minHeight(px)`、`center()`、`wrap()`、`selected(b)`、印の `highlight(b)`、`toggle(on)`、`scroll()`、`fill()`、`collapse()`、入力の `placeholder(s)` があります。TS と AS で共通の `parts.ts` にあり、View から UiNode、`ui-update` の操作を経て DOM のクラスと属性になります。古いアプリは送らないので、操作では既定でない値だけを載せます。名前と効果の一覧と役割の色の変数は [宣言的 UI](ui.md#見た目の修飾案) を参照してください。
 
 ## AS の入口（案）
 
@@ -101,7 +101,7 @@ const view = theme({
 
 部品の段参照は使用する要素で解決します。親が `button.padding = space.md` を指定し、内側の theme が `space.md` だけを変更した場合も、内側のボタンには内側の段が効きます。このため内部では段の選択係数と px の変数を継承し、部品の CSS が `calc()` で長さを組み立てます。CSS 変数の内部名は案です。アプリに CSS の記述は不要です。
 
-明示した `.padding(...)` は部品の既定より優先します。未指定の padding は親のレイアウトの padding を受け継ぎません。既定テーマでは padding は 0px、文字の大きさは親と同じ、button の角丸は従来どおり 8px、input は 0px です。Scene・home・settings の数値指定と既存の button の CSS 変数は保ちます。既存の `--bina-ui-button-radius` / `--bina-ui-input-radius` は部品テーマの radius が未指定の場合の既定値です（ホームの既存 12px を維持）。部品テーマを指定すれば、その値を優先します。
+明示した `.padding(...)` は部品の既定より優先します。未指定の padding は親のレイアウトの padding を受け継ぎません。既定テーマでは padding は 0px、文字の大きさは親と同じ、button の角丸は従来どおり 8px です。input は既定の入力欄の見た目として上下 6px・左右 8px の余白と角丸 6px（`--bina-ui-control-radius`）を持ち、`surface("dark")` と `surface("field")` の中では余白と角丸が 0px です。Scene・home・settings の数値指定と既存の button の CSS 変数は保ちます。既存の `--bina-ui-button-radius` / `--bina-ui-input-radius` は部品テーマの radius が未指定の場合の既定値です（ホームの既存 12px を維持）。部品テーマを指定すれば、その値を優先します。
 
 ### AssemblyScript（案）
 

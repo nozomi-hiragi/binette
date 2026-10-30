@@ -183,7 +183,7 @@ export function mount(element: HTMLElement): Root {
       divider: view.dividerValue, mono: view.monoValue, small: view.smallValue, bold: view.boldValue, truncate: view.truncateValue,
       width: view.widthValue, center: view.centerValue, selected: view.selectedValue, toggle: view.toggleValue,
       scroll: view.scrollValue, fill: view.fillValue, collapse: view.collapseValue,
-      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue }, fiber];
+      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue, highlight: view.highlightValue }, fiber];
   }
   function draw(view: View): void {
     const drawRevision = ++revision;
