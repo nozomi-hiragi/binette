@@ -32,7 +32,7 @@ draw();
 
 `mount(element)` は描画先に結び付いた root を返します。`root.render(view)` は木を描き、次の描画では前の木との差分を当てます。`root.unmount()` は描画と状態を解除します。普通の変数を変えた場合は明示的な `render` が必要です。
 
-View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す Scene の描画で使います。TS の `mount(element)` にはアプリ情報を渡す入口がないため、そこで作る `appIcon` は画像の `src` を持ちません。
+View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。`input(value, handler).multiline()` は改行を含む値を扱う textarea を描画します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す Scene の描画で使います。TS の `mount(element)` にはアプリ情報を渡す入口がないため、そこで作る `appIcon` は画像の `src` を持ちません。
 
 ### 関数の部品とフック（案）
 

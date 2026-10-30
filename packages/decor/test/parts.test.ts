@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import asc from "assemblyscript/asc";
-import { tree, integers } from "./fixtures/parts.ts";
-import { intString } from "../src/parts.ts";
+import { tree, integers, multiline } from "./fixtures/parts.ts";
+import { View, intString } from "../src/parts.ts";
 import { theme, text } from "../src/view.ts";
 
 Deno.test("shared parts produce identical themes and integer strings in Deno and asc", async () => {
@@ -20,7 +20,7 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   });
   assertEquals(result.error, null, stderr.toString());
   const { instance } = await WebAssembly.instantiate(new Uint8Array(wasm!), { env: { abort() { throw new Error("AS aborted"); } } });
-  const exports = instance.exports as { memory: WebAssembly.Memory; themeValue(): number; integers(): number };
+  const exports = instance.exports as { memory: WebAssembly.Memory; themeValue(): number; integers(): number; multiline(): number };
   function string(pointer: number): string {
     const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true) / 2;
     return String.fromCharCode(...new Uint16Array(exports.memory.buffer, pointer, length));
@@ -28,6 +28,13 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   await checkNonFinite(new Uint8Array(wasm!));
   assertEquals(string(exports.themeValue()), tree().themeValue);
   assertEquals(string(exports.integers()), integers());
+  assertEquals(string(exports.multiline()), multiline());
+  assertEquals(multiline(), "input:true:-1:first\nsecond");
+  const view = new View("text");
+  assertEquals(view.multilineValue, false);
+  assertEquals(view.multiline(), view);
+  assertEquals(view.multilineValue, true);
+  assertEquals(view.appValue, -1);
   assertEquals(integers(), "0,0,-42,1234567890123,9007199254740991");
   assertEquals(intString(-3.8), "-3");
   assertEquals(tree().children[0]!.children[0]!.headingValue, 3);

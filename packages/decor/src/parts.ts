@@ -25,6 +25,7 @@ export class View {
   listValue: boolean = false;
   shownValue: boolean = true;
   appValue: number = -1;
+  multilineValue: boolean = false;
   constructor(readonly kind: string) {}
   padding(n: number = space.md): View { this.paddingValue = n; return this; }
   gap(n: number = space.md): View { this.gapValue = n; return this; }
@@ -37,6 +38,8 @@ export class View {
   key(s: string): View { this.keyValue = s; return this; }
   label(s: string): View { this.labelValue = s; return this; }
   enabled(b: boolean): View { this.enabledValue = b; return this; }
+  /** 複数行の入力欄にする。 */
+  multiline(): View { this.multilineValue = true; return this; }
   arg(i: number): View { this.argValue = i; return this; }
 }
 export abstract class UiCallback { abstract call(arg: number): void; }

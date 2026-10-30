@@ -6,6 +6,7 @@ export interface UiEvents {
 }
 /** 宣言 UI の DOM 設定。 */
 export interface UiDomOptions { apps?: { icon?: string }[]; }
+type TextField = HTMLInputElement | HTMLTextAreaElement;
 const steps = ["xs", "sm", "md", "lg", "xl"];
 const length = (value: number): string => value <= -1 && value >= -5 && Number.isInteger(value)
   ? `var(--bina-ui-space-${steps[-value - 1]}, var(--bina-ui-default-space-${steps[-value - 1]}))` : `${Math.max(0, value)}px`;
@@ -72,7 +73,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           uiStyle.textContent = uiCss;
           element.appendChild(uiStyle);
         }
-        const tag = op.kind === "input" ? "input" : op.kind === "appIcon" ? "img" : op.kind === "button" ? "button" : op.kind === "text" ? "span" : "div";
+        const tag = op.kind === "input" ? (op.multiline ? "textarea" : "input") : op.kind === "appIcon" ? "img" : op.kind === "button" ? "button" : op.kind === "text" ? "span" : "div";
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${op.kind}`;
         if (tag === "button") node.setAttribute("type", "button");
@@ -83,9 +84,10 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           entry.remove = () => node.removeEventListener("click", listener);
         }
         if (tag === "img") node.setAttribute("alt", "");
-        if (tag === "input") {
-          node.setAttribute("type", "text");
-          const notify = () => { const value = (node as HTMLInputElement).value; if (entry.clickable && !(node as HTMLInputElement).disabled && value !== entry.lastText) { entry.lastText = value; process.dispatchUiText(op.handle, value, ++entry.inputVersion); } };
+        if (tag === "input" || tag === "textarea") {
+          if (tag === "input") node.setAttribute("type", "text");
+          const field = node as TextField;
+          const notify = () => { const value = field.value; if (entry.clickable && !field.disabled && value !== entry.lastText) { entry.lastText = value; process.dispatchUiText(op.handle, value, ++entry.inputVersion); } };
           const input = () => { notify(); };
           const start = () => { entry.composing = true; };
           const end = () => {
@@ -94,7 +96,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
             // 変換中に届いた描き直しを、新しい入力が無ければここで反映する
             const pending = entry.pending;
             entry.pending = null;
-            if (pending && pending.version >= entry.inputVersion && (node as HTMLInputElement).value !== pending.text) { (node as HTMLInputElement).value = pending.text; entry.lastText = pending.text; }
+            if (pending && pending.version >= entry.inputVersion && field.value !== pending.text) { field.value = pending.text; entry.lastText = pending.text; }
           };
           node.addEventListener("input", input);
           node.addEventListener("compositionstart", start);
@@ -110,11 +112,12 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         const entry = uiNodes.get(op.handle);
         if (!entry) continue;
         const node = entry.node;
-        if (node.tagName.toLowerCase() === "input") {
+        if (["input", "textarea"].includes(node.tagName.toLowerCase())) {
+          const field = node as TextField;
           const version = op.inputVersion ?? 0;
           if (version >= entry.inputVersion) {
             if (entry.composing) entry.pending = { text: op.text, version };
-            else if ((node as HTMLInputElement).value !== op.text) { (node as HTMLInputElement).value = op.text; entry.lastText = op.text; }
+            else if (field.value !== op.text) { field.value = op.text; entry.lastText = op.text; }
           }
         }
         if (node.tagName.toLowerCase() === "img") {
@@ -177,7 +180,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (op.label === null || op.label === "") {
           if (node.hasAttribute("aria-label")) node.removeAttribute("aria-label");
         } else if (node.getAttribute("aria-label") !== op.label) node.setAttribute("aria-label", op.label);
-        if (["button", "input"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
+        if (["button", "input", "textarea"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
           (node as HTMLButtonElement).disabled = !op.enabled;
         }
         entry.clickable = op.clickable;

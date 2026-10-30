@@ -4,7 +4,7 @@ import { Window } from "happy-dom";
 import { button, column, createUiDiffer, createUiDom, input, mount, row, show, text, type UiNode } from "../src/index.ts";
 
 function node(kind: UiNode["kind"] = "text", key = "", children: UiNode[] = []): UiNode {
-  return { kind, key, children, text: key, padding: 0, gap: 0, grow: false, label: "", enabled: true, handler: -1, minWidth: 0, heading: 0, list: false, shown: true, app: -1 };
+  return { kind, key, children, text: key, padding: 0, gap: 0, grow: false, label: "", enabled: true, handler: -1, minWidth: 0, heading: 0, list: false, shown: true, app: -1, multiline: false };
 }
 Deno.test("Décor の差分は作成・更新・key による並べ替え・削除を最小限の操作で表す", () => {
   let ops: DomOp[] = [];
@@ -198,3 +198,77 @@ Deno.test("theme の値は数だけを受け付け、ほかの CSS は書き込�
     assertEquals(node.style.getPropertyValue("--color"), "");
   } finally { root.unmount(); await window.happyDOM.close(); }
 });
+
+Deno.test("複数行入力は textarea を描画し、改行を往復して入力モードを切り替える", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  let value = "first\nsecond";
+  const draw = () => input(value, next => { value = next; }).multiline().label("Code");
+  try {
+    root.render(draw());
+    const field = host.querySelector("textarea")!;
+    assert(field);
+    assertEquals(field.value, value);
+    assertEquals(field.getAttribute("aria-label"), "Code");
+    field.value = "edited\nvalue\n";
+    field.dispatchEvent(new window.Event("input") as unknown as Event);
+    assertEquals(value, "edited\nvalue\n");
+    root.render(draw());
+    assertStrictEquals(host.querySelector("textarea"), field);
+    assertEquals(field.value, value);
+    root.render(input("single", () => {}));
+    assertEquals(host.querySelector("textarea"), null);
+    assertEquals(host.querySelector("input")!.value, "single");
+    root.render(draw().enabled(false));
+    assertEquals(host.querySelector("input"), null);
+    assertEquals(host.querySelector("textarea")!.disabled, true);
+    field.value = "detached";
+    field.dispatchEvent(new window.Event("input") as unknown as Event);
+    assertEquals(value, "edited\nvalue\n");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+for (const multiline of [false, true]) {
+  Deno.test(`入力欄は IME と版の扱いを共有する (multiline=${multiline})`, async () => {
+    const window = new Window();
+    const host = window.document.createElement("div") as unknown as HTMLElement;
+    const events: [number, string, number][] = [];
+    const dom = createUiDom(host, { dispatchUi() {}, dispatchUiText(handle, value, version) { events.push([handle, value, version]); } });
+    const ui = createUiDiffer(op => dom.apply([op]));
+    const model = { ...node("input"), multiline, text: "initial", handler: 0 };
+    try {
+      ui.render(model, 1);
+      const field = host.querySelector(multiline ? "textarea" : "input")!;
+      field.dispatchEvent(new window.Event("compositionstart") as unknown as Event);
+      field.value = "composing";
+      field.dispatchEvent(new window.Event("input") as unknown as Event);
+      assertEquals(events, [[1, "composing", 1]]);
+      ui.inputVersions.set(1, 1);
+      ui.render({ ...model, text: "accepted" }, 2);
+      assertEquals(field.value, "composing");
+      field.dispatchEvent(new window.Event("compositionend") as unknown as Event);
+      assertEquals(field.value, "accepted");
+      assertEquals(events.length, 1);
+      field.value = "newer";
+      field.dispatchEvent(new window.Event("input") as unknown as Event);
+      assertEquals(events[1], [1, "newer", 2]);
+      ui.render({ ...model, text: "stale" }, 3);
+      assertEquals(field.value, "newer");
+      field.dispatchEvent(new window.Event("compositionstart") as unknown as Event);
+      ui.inputVersions.set(1, 2);
+      ui.render({ ...model, text: "pending" }, 4);
+      field.value = "final";
+      field.dispatchEvent(new window.Event("compositionend") as unknown as Event);
+      assertEquals(field.value, "final");
+      assertEquals(events[2], [1, "final", 3]);
+      ui.inputVersions.set(1, 3);
+      ui.render({ ...model, text: "final" }, 5);
+      assertEquals(field.value, "final");
+      dom.stop();
+      field.value = "stopped";
+      field.dispatchEvent(new window.Event("input") as unknown as Event);
+      assertEquals(events.length, 3);
+    } finally { dom.clear(); await window.happyDOM.close(); }
+  });
+}

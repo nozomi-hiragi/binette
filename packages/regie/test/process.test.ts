@@ -521,3 +521,37 @@ launch(new Demo());`;
     assertStrictEquals(host.querySelectorAll(".bina-ui-column")[1], scope);
   } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("AS の複数行入力は Worker を経て textarea を描画し、改行を往復する", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, input } from "jsr:@binette/replique/ui";
+let value = "first\\nsecond";
+function typed(s: string): void { value = s; }
+class Demo extends App {
+  build(): View { return input(value, typed).multiline(); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const { Window } = await import("happy-dom");
+  const { createUiDom } = await import("@binette/decor");
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const process = await startProcess(built.wasm, { createWorker: realWorker });
+  const dom = createUiDom(host, process);
+  const batches: DomOp[][] = [];
+  try {
+    process.attach(ops => { batches.push(ops); dom.apply(ops); });
+    await process.begin();
+    const field = host.querySelector("textarea");
+    assert(field);
+    assertEquals(field.value, "first\nsecond");
+    field.value = "edited\nvalue\n";
+    field.dispatchEvent(new window.Event("input") as unknown as Event);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "edited\nvalue\n" && op.inputVersion === 1));
+    field.value = "final\nvalue";
+    field.dispatchEvent(new window.Event("input") as unknown as Event);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "final\nvalue" && op.inputVersion === 2));
+    assertEquals(host.querySelector("textarea"), field);
+    assertEquals(field.value, "final\nvalue");
+  } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
+});

@@ -33,3 +33,8 @@ export function integers(): string {
 export function nonFinite(): string {
   return intString(NaN) + "," + intString(Infinity) + "," + intString(-Infinity);
 }
+
+export function multiline(): string {
+  const view = input("first\nsecond", edit).multiline();
+  return view.kind + ":" + (view.multilineValue ? "true" : "false") + ":" + intString(view.appValue) + ":" + view.value;
+}
