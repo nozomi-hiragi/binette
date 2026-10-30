@@ -19,6 +19,8 @@ draw();
 
 `mount(element)` が返す root の `render(view)` を呼ぶと描画します。次の呼び出しでは前の木との差分を反映し、`unmount()` で描画を解除します。普通の変数を変えたあとの描画は明示的に呼びます。`component` と `useState` を使うと、状態の更新後に自動で描き直せます。`useEffect` では描画後の処理と片付けを登録できます。
 
+複数行の入力欄は `input(value, onText).multiline()` で作ります。HTML の `textarea` として描画され、改行を含む値を受け取れます。通常の input と同じく、IME の変換中や古い入力の版による描き直しで、入力中の値を上書きしません。TS と AS の両方で使えます。
+
 AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique/ui` も互換の入口として使えます。関数の部品とフックは TS の `mount` 向けです。JSX は含みません。
 
 API と分担の細部は案です。[仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/decor.md) を参照してください。

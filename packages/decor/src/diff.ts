@@ -4,7 +4,7 @@ import type { DomOp } from "@binette/core";
 export type UiOp = Extract<DomOp, { op: `ui-${string}` }>;
 
 /** 描画する木。操作の kind は core の型を使う。 */
-export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number };
+export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number; multiline: boolean };
 export type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
 
 /** 差分エンジンの状態と操作。 */
@@ -18,6 +18,9 @@ export interface UiDiffer {
 
 /** 差分エンジン。DOM や Worker に依存せず、操作を emit に渡す。 */
 export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: number) => void = () => {}): UiDiffer {
+  function sameInputMode(a: UiNode, b: UiNode): boolean {
+    return a.kind !== "input" || a.multiline === b.multiline;
+  }
   let uiRoot: Mounted | undefined;
   let nextUiHandle = 1;
   const inputVersions = new Map<number, number>();
@@ -29,7 +32,9 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
   const updateUi = (node: UiNode, old: Mounted | undefined, build: number, listItem = false): Mounted => {
     if (node.kind === "appIcon") validateApp(node.app);
     const mounted: Mounted = old ?? { handle: nextUiHandle++, node, children: [], build, listItem };
-    if (!old) emit({ op: "ui-create", handle: mounted.handle, kind: node.kind });
+    if (!old) {
+      emit({ op: "ui-create", handle: mounted.handle, kind: node.kind, multiline: node.multiline });
+    }
     const prev = old?.node;
     if (node.kind === "input" || !prev || prev.theme !== node.theme || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
       prev.key !== node.key || prev.minWidth !== node.minWidth || prev.heading !== node.heading || prev.list !== node.list || old?.listItem !== listItem || prev.shown !== node.shown || prev.app !== node.app || prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
@@ -40,8 +45,8 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
     const used = new Set<Mounted>();
     const children = node.children.map((child, i) => {
       const match = child.key
-        ? previous.find(item => !used.has(item) && item.node.key === child.key && item.node.kind === child.kind)
-        : previous[i] && !used.has(previous[i]!) && !previous[i]!.node.key && previous[i]!.node.kind === child.kind ? previous[i] : undefined;
+        ? previous.find(item => !used.has(item) && item.node.key === child.key && item.node.kind === child.kind && sameInputMode(item.node, child))
+        : previous[i] && !used.has(previous[i]!) && !previous[i]!.node.key && previous[i]!.node.kind === child.kind && sameInputMode(previous[i]!.node, child) ? previous[i] : undefined;
       if (match) used.add(match);
       return updateUi(child, match, build, node.list);
     });
@@ -63,7 +68,7 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
   };
   const renderUi = (root: UiNode, build: number) => {
     const old = uiRoot;
-    if (old && (old.node.kind !== root.kind || old.node.key !== root.key)) {
+    if (old && (old.node.kind !== root.kind || old.node.key !== root.key || !sameInputMode(old.node, root))) {
       forgetInput(old);
       emit({ op: "ui-remove", handle: old.handle });
       uiRoot = undefined;
