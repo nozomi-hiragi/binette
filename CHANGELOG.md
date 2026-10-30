@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- システム UI（Scene の枠）を画面の高さに固定し、アプリやアプリ一覧が大きいときはアプリの領域の中だけでスクロールする
+
 - Scene は document 方式の最初の HTML を描く直前に許可リストで検査し、危険な要素・属性や外部 URL を取り除く（案）
 
 - AS のフォルダ（apps・replique）に AS 公式の型定義を読ませ、型のための `@ts-ignore` を外した。`deno task check` に apps と `deno lint` を加え、lint の警告を 0 件にした。JSR の公開前チェックがメンバーの compilerOptions を見ないため、CI の `deno publish` は `--no-check` にした（型検査は `deno task check` で行う）
