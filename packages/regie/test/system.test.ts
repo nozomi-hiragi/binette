@@ -1,5 +1,5 @@
 import { workerSource } from "../src/worker.ts";
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { parseAppManifest, type DomOp } from "@binette/core";
 import { createMemoryAppStore, installedAppKey, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
 import asc from "assemblyscript/asc";
@@ -420,3 +420,61 @@ Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭
   } finally { shell.stop(); }
 });
 
+const permissionApp = await build(source + `
+import { os } from "jsr:@binette/replique";
+export function writeSetting(): void { os.set("historyLimit", 7); }
+export function selectHome(): void { os.setHome(0); }
+export function readHomes(): void { document.getElementById("homes").textContent = os.homeCount().toString(); }
+`);
+
+Deno.test("OS の権限はシステムの設定アプリだけが持ち、同梱の設定アプリや通常のシステムアプリは使えない", async () => {
+  for (const [source, role] of [["binette:system", "settings"], ["binette:bundled", "settings"], ["binette:system", undefined]] as const) {
+    for (const action of ["writeSetting", "selectHome", "readHomes"]) {
+      const element = output(); const store = createMemoryAppStore();
+      let writes = 0;
+      const putSettings = store.system.putSettings.bind(store.system);
+      store.system.putSettings = async settings => { await putSettings(settings); writes++; };
+      const app = { source, prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, role } } };
+      const bundledHome = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
+      const bundledHomeKey = installedAppKey(bundledHome.source, bundledHome.prebuilt.manifest.id);
+      const shell = await mountSystem(element, { apps: [bundledHome, homeApp, app], store, createWorker });
+      try {
+        await shell.open(installedAppKey(source, app.prebuilt.manifest.id));
+        const process = element.active.process;
+        if (source === "binette:system" && role === "settings") {
+          await process.app.call(action);
+          if (action !== "readHomes") await waitFor(() => writes === 1);
+          if (action === "writeSetting") {
+            assertEquals((await store.system.getSettings())!.historyLimit, 7);
+          } else if (action === "selectHome") {
+            assertEquals((await store.system.getSettings())!.home, bundledHomeKey);
+            await shell.openHome();
+            assertEquals(element.view.instances.find(instance => instance.home)!.key, bundledHomeKey);
+          } else assertEquals(element.active.text.get("homes"), "2");
+          assertEquals(element.errors, []);
+        } else {
+          await assertRejects(() => process.app.call(action), Error, "システムの設定アプリだけ");
+          assertEquals(await store.system.getSettings(), undefined);
+          await shell.openHome();
+          assertEquals(element.view.instances.find(instance => instance.home)!.key, installedAppKey(homeApp.source, builtHome.manifest.id));
+        }
+      } finally { shell.stop(); }
+    }
+  }
+});
+
+Deno.test("同梱ホームは既定のホームにならず、明示的に選ぶと使える", async () => {
+  const bundled = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
+  const bundledKey = installedAppKey(bundled.source, bundled.prebuilt.manifest.id);
+  for (const selected of [false, true]) {
+    const element = output(); const store = createMemoryAppStore();
+    if (selected) await store.system.putSettings({ home: bundledKey });
+    const shell = await mountSystem(element, { apps: [bundled, homeApp], store, createWorker });
+    try {
+      assertEquals(element.view.instances.find(instance => instance.home)!.key,
+        selected ? bundledKey : installedAppKey(homeApp.source, builtHome.manifest.id));
+      assertEquals(element.homeApps, []);
+      assertEquals(element.errors, []);
+    } finally { shell.stop(); }
+  }
+});
