@@ -1,4 +1,5 @@
 import type { DomOp } from "@binette/core";
+import { dividerSides, tones } from "./parts.ts";
 /** DOM からアプリに届くイベント。 */
 export interface UiEvents {
   dispatchUi(handle: number): void;
@@ -19,6 +20,92 @@ function componentLength(kind: string, field: string, group: string, fallback: s
   const defaults = themeDefaults.find(([name]) => name === group)![1];
   return `calc(var(${prefix}-px, ${fallback}) + ${steps.map((step, i) => `var(${prefix}-${step}, 0) * var(--bina-ui-${group}-${step}, ${defaults[i]}px)`).join(" + ")})`;
 }
+// OS の役割の色。ホストが変数を与えないときは白地のライトテーマの値を使う
+const colors: Record<string, string> = {
+  accent: "var(--bina-ui-accent, #3273b9)",
+  accentContent: "var(--bina-ui-accent-content, #fff)",
+  accentSoft: "var(--bina-ui-accent-soft, #e6eef8)",
+  accentText: "var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9))",
+  surface: "var(--bina-ui-surface, #fff)",
+  sunken: "var(--bina-ui-sunken, #eceef1)",
+  subtle: "var(--bina-ui-subtle, #f3f5f8)",
+  line: "var(--bina-ui-line, #e3e6ea)",
+  muted: "var(--bina-ui-muted, #6b7280)",
+  danger: "var(--bina-ui-danger, #c4352b)",
+  success: "var(--bina-ui-success, #2e7d4f)",
+  focus: "var(--bina-ui-focus, #3273b9)",
+};
+// tone 付きのボタンは小さめの道具の形にする。角丸は theme を優先する
+const toneRadius: string = componentLength("button", "radius", "radius", "var(--bina-ui-control-radius, 6px)");
+const tonePadding = (block: string, inline: string): string => `${componentLength("button", "padding", "space", block)} ${componentLength("button", "padding", "space", inline)}`;
+const lookCss: string = `
+:where(.bina-ui-button[class*="bina-ui-tone-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${toneRadius}; }
+:where(.bina-ui-button.bina-ui-tone-ghost:has(> *), .bina-ui-button.bina-ui-tone-subtle:has(> *)) { align-items: stretch; text-align: start; }
+:where(.bina-ui-button.bina-ui-tone-primary) { background: ${colors.accent}; border-color: ${colors.accent}; color: ${colors.accentContent}; }
+:where(.bina-ui-button.bina-ui-tone-primary:not(:disabled):hover) { background: color-mix(in srgb, ${colors.accent} 86%, #000); }
+:where(.bina-ui-button.bina-ui-tone-ghost, .bina-ui-button.bina-ui-tone-danger) { background: transparent; border-color: transparent; color: ${colors.muted}; }
+:where(.bina-ui-button.bina-ui-tone-ghost:not(:disabled):hover) { background: ${colors.subtle}; color: inherit; }
+:where(.bina-ui-button.bina-ui-tone-danger) { color: ${colors.danger}; }
+:where(.bina-ui-button.bina-ui-tone-danger:not(:disabled):hover) { background: color-mix(in srgb, ${colors.danger} 12%, transparent); }
+:where(.bina-ui-button.bina-ui-tone-subtle) { background: ${colors.subtle}; border-color: transparent; }
+:where(.bina-ui-button.bina-ui-tone-subtle:not(:disabled):hover) { background: color-mix(in srgb, ${colors.subtle} 90%, currentColor); }
+:where(.bina-ui-button.bina-ui-tone-dashed) { background: transparent; border: 1px dashed color-mix(in srgb, ${colors.muted} 50%, transparent); }
+:where(.bina-ui-button.bina-ui-tone-dashed:not(:disabled):hover) { background: ${colors.subtle}; border-color: ${colors.accent}; }
+:where(.bina-ui-text.bina-ui-tone-muted) { color: ${colors.muted}; }
+:where(.bina-ui-text.bina-ui-tone-accent) { color: ${colors.accentText}; }
+:where(.bina-ui-text.bina-ui-tone-danger) { color: ${colors.danger}; }
+:where(.bina-ui-text.bina-ui-tone-success) { color: ${colors.success}; }
+:where(.bina-ui-tone-surface) { background: ${colors.surface}; }
+:where(.bina-ui-tone-sunken) { background: ${colors.sunken}; }
+:where(.bina-ui-tone-card) { background: ${colors.surface}; border-radius: var(--bina-ui-card-radius, 14px); box-shadow: var(--bina-ui-shadow, 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 8%)); }
+:where(.bina-ui-tone-dark) {
+  background: var(--bina-ui-dark, #16181d); color: var(--bina-ui-dark-content, #d7dae0); color-scheme: dark;
+  --bina-ui-muted: var(--bina-ui-dark-muted, #9aa0aa); --bina-ui-line: var(--bina-ui-dark-line, #2e323a);
+  --bina-ui-subtle: var(--bina-ui-dark-subtle, rgb(255 255 255 / 8%)); --bina-ui-surface: rgb(255 255 255 / 4%);
+  --bina-ui-accent-text: var(--bina-ui-dark-accent, #82aaff); --bina-ui-accent-soft: rgb(130 170 255 / 16%);
+  --bina-ui-danger: var(--bina-ui-dark-danger, #ff8a80); --bina-ui-success: var(--bina-ui-dark-success, #7ec699);
+  --bina-ui-button-background: rgb(255 255 255 / 6%); --bina-ui-button-border: var(--bina-ui-dark-line, #2e323a);
+}
+:where(.bina-ui-tone-dark .bina-ui-input) { background: transparent; border: 0; color: inherit; }
+:where(.bina-ui-tone-dark .bina-ui-input:focus-visible) { outline: 1px solid ${colors.line}; outline-offset: 0; }
+:where(.bina-ui-tone-field) { align-items: stretch; border: 1px solid ${colors.line}; border-radius: ${toneRadius}; background: ${colors.surface}; overflow: hidden; }
+:where(.bina-ui-tone-field > .bina-ui-input) { flex: 1 1 0; min-width: 0; border: 0; border-radius: 0; background: transparent; outline: none; }
+:where(.bina-ui-tone-field > .bina-ui-button + .bina-ui-input) { text-align: center; }
+:where(.bina-ui-tone-field > .bina-ui-button) { border: 0; border-radius: 0; }
+:where(.bina-ui-tone-field > .bina-ui-button:not([class*="bina-ui-tone-"])) { background: ${colors.subtle}; }
+:where(.bina-ui-tone-field > .bina-ui-button):focus-visible { outline-offset: -2px; }
+:where(.bina-ui-tone-field > * + *) { border-inline-start: 1px solid ${colors.line}; }
+:where(.bina-ui-tone-field:has(> .bina-ui-input:focus-visible)) { outline: 2px solid ${colors.focus}; outline-offset: -1px; }
+:where(.bina-ui-divider-top) { border-top: 1px solid ${colors.line}; }
+:where(.bina-ui-divider-right) { border-right: 1px solid ${colors.line}; }
+:where(.bina-ui-divider-bottom) { border-bottom: 1px solid ${colors.line}; }
+:where(.bina-ui-divider-left) { border-left: 1px solid ${colors.line}; }
+:where(.bina-ui-mono) { font-family: var(--bina-ui-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); }
+:where(.bina-ui-small) { font-size: var(--bina-ui-small, 12.5px); }
+:where(.bina-ui-bold) { font-weight: 600; }
+:where(.bina-ui-text.bina-ui-truncate) { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+:where(.bina-ui-button.bina-ui-tone-ghost, .bina-ui-button.bina-ui-tone-subtle, .bina-ui-button.bina-ui-tone-dashed, .bina-ui-tone-field > .bina-ui-button, .bina-ui-button.bina-ui-small) { min-width: 0; min-height: 0; }
+:where(.bina-ui-column > .bina-ui-button.bina-ui-grow) { flex-grow: 0; align-self: stretch; }
+:where(.bina-ui-width) { box-sizing: border-box; width: var(--bina-ui-width); max-width: 100%; flex-shrink: 0; }
+:where(.bina-ui-height) { box-sizing: border-box; height: var(--bina-ui-height); min-height: 0; flex-shrink: 0; }
+:where(.bina-ui-wrap) { flex-wrap: wrap; }
+:where(.bina-ui-center) { justify-content: safe center; align-items: safe center; }
+:where(.bina-ui-scroll) { overflow: auto; min-height: 0; min-width: 0; }
+:where(.bina-ui-button.bina-ui-selected) { background: ${colors.accentSoft}; color: inherit; }
+:where(.bina-ui-selected:not(.bina-ui-button)) { outline: 2px solid ${colors.accent}; outline-offset: 2px; }
+:where(.bina-ui-toggle) { position: relative; flex: none; box-sizing: border-box; width: 32px; height: 18px; min-width: 32px; min-height: 18px; padding: 0; border: 0; border-radius: 9px; background: color-mix(in srgb, ${colors.muted} 55%, transparent); }
+:where(.bina-ui-toggle)::before { content: ""; position: absolute; inset: -13px -6px; }
+:where(.bina-ui-toggle)::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 20%); transition: transform 0.15s; }
+:where(.bina-ui-toggle[aria-checked="true"]) { background: ${colors.accent}; }
+:where(.bina-ui-toggle[aria-checked="true"])::after { transform: translateX(14px); }
+@media (prefers-reduced-motion: reduce) { :where(.bina-ui-toggle)::after { transition: none; } }
+:where(:not([class^="bina-ui-"]):has(> .bina-ui-collapse, > [class^="bina-ui-"] .bina-ui-collapse)) { container: bina-ui / inline-size; }
+@container bina-ui (width < 720px) {
+  :where(.bina-ui-collapse) { flex-direction: column; align-items: stretch; }
+  :where(.bina-ui-collapse > *) { width: auto; align-self: stretch; }
+  :where(.bina-ui-fill:has(.bina-ui-collapse), .bina-ui-collapse, .bina-ui-collapse .bina-ui-fill, .bina-ui-collapse .bina-ui-scroll) { flex: none; min-height: auto; overflow: visible; }
+}
+`;
 export const uiCss = `
 :where([class^="bina-ui-"]) { ${themeDefaults.flatMap(([group, values]) => values.map((value, i) => `--bina-ui-default-${group}-${steps[i]}: ${value}px;`)).join(" ")} }
 
@@ -33,6 +120,8 @@ export const uiCss = `
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input) { padding: var(--bina-ui-padding, 0px); }
 :where(.bina-ui-button) { padding: var(--bina-ui-padding, ${componentLength("button", "padding", "space", "0px")}); }
 :where(.bina-ui-input) { padding: var(--bina-ui-padding, ${componentLength("input", "padding", "space", "0px")}); }
+:where(.bina-ui-fill) { flex: 1 1 0; min-height: 0; align-self: stretch; }
+:where(.bina-ui-row > .bina-ui-fill) { flex: 0 1 auto; }
 :where(.bina-ui-grow) { flex-grow: 1; }
 :where(.bina-ui-button) { font: inherit; font-size: ${componentLength("button", "font-size", "font-size", "1em")}; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: ${componentLength("button", "radius", "radius", "var(--bina-ui-button-radius, 8px)")}; cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
 :where(.bina-ui-button:has(> *)) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-ui-gap, 0px); }
@@ -43,7 +132,47 @@ export const uiCss = `
 :where(.bina-ui-heading-3) { font-size: 1.17em; font-weight: bold; }
 :where(.bina-ui-list) { padding-inline-start: 1.5em; }
 :where(.bina-ui-listitem) { display: list-item; list-style: disc; }
-`;
+${lookCss}`;
+
+type UiUpdate = Extract<DomOp, { op: "ui-update" }>;
+const lookFlags = ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap"] as const;
+// 値が変わるときだけ書き換え、描き直しで DOM を無駄に触らない
+function setClass(node: HTMLElement, name: string, on: boolean): void {
+  if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
+}
+function setAttribute(node: HTMLElement, name: string, value: string | null): void {
+  if (value === null) { if (node.hasAttribute(name)) node.removeAttribute(name); }
+  else if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+}
+function setLength(node: HTMLElement, property: string, value: number | undefined): boolean {
+  const next = value !== undefined && Number.isFinite(value) && value > 0 ? `${value}px` : "";
+  if (node.style.getPropertyValue(property) !== next) {
+    if (next) node.style.setProperty(property, next);
+    else node.style.removeProperty(property);
+  }
+  return next !== "";
+}
+/** 未指定の padding。tone 付きのボタンは小さめの道具の余白にし、theme の値があればそちらを使う */
+function buttonPadding(op: UiUpdate): string {
+  if (!op.tone || !tones.includes(op.tone) || op.toggle !== undefined) return componentLength("button", "padding", "space", "0px");
+  return op.tone === "dashed" ? tonePadding("2px", "8px") : tonePadding("4px", "10px");
+}
+/** 見た目の修飾をクラスと属性にする。名前はアプリから届くので、知っているものだけをクラスにする */
+function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: boolean): void {
+  for (const name of tones) setClass(node, `bina-ui-tone-${name}`, op.tone === name);
+  const sides = (op.divider ?? "").split(" ");
+  for (const side of dividerSides) setClass(node, `bina-ui-divider-${side}`, sides.includes(side));
+  for (const name of lookFlags) setClass(node, `bina-ui-${name}`, op[name] === true);
+  setClass(node, "bina-ui-width", setLength(node, "--bina-ui-width", op.width));
+  setClass(node, "bina-ui-height", setLength(node, "--bina-ui-height", op.height));
+  setLength(node, "min-height", op.minHeight);
+  setClass(node, "bina-ui-selected", op.selected === true);
+  setAttribute(node, "aria-pressed", isButton && !toggle && op.selected !== undefined ? String(op.selected) : null);
+  setClass(node, "bina-ui-toggle", toggle);
+  setAttribute(node, "aria-checked", toggle ? String(op.toggle) : null);
+  const field = ["INPUT", "TEXTAREA"].includes(node.tagName.toUpperCase());
+  setAttribute(node, "placeholder", field && op.placeholder ? op.placeholder : null);
+}
 
 /** 宣言 UI の DOM 操作の適用先。 */
 export interface UiDom {
@@ -145,21 +274,25 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (op.key) node.setAttribute("data-bina-key", op.key);
         else node.removeAttribute("data-bina-key");
         // ラベルは独立したテキストノードにし、ボタンの子を消さずに更新する。
-        if (node.classList.contains("bina-ui-text") || node.classList.contains("bina-ui-button")) {
-          if (op.text && !entry.textNode) {
-            entry.textNode = element.ownerDocument.createTextNode(op.text);
+        const isButton = node.classList.contains("bina-ui-button");
+        // スイッチは文字を見せず、読み上げの名前にだけ使う
+        const toggle = isButton && op.toggle !== undefined;
+        const shownText = toggle ? "" : op.text;
+        if (node.classList.contains("bina-ui-text") || isButton) {
+          if (shownText && !entry.textNode) {
+            entry.textNode = element.ownerDocument.createTextNode(shownText);
             node.insertBefore(entry.textNode, node.firstChild);
-          } else if (!op.text && entry.textNode) {
+          } else if (!shownText && entry.textNode) {
             entry.textNode.remove();
             entry.textNode = null;
-          } else if (entry.textNode && entry.textNode.data !== op.text) entry.textNode.data = op.text;
+          } else if (entry.textNode && entry.textNode.data !== shownText) entry.textNode.data = shownText;
         }
         // grid は列の最小幅として変数で渡す。ほかの部品は自分の min-width にし、子に受け継がせない
         const isGrid = node.classList.contains("bina-ui-grid");
         const minWidth = op.minWidth ? `${Math.max(0, op.minWidth)}px` : "";
         if (!isGrid && node.style.minWidth !== minWidth) node.style.minWidth = minWidth;
         const level = op.heading ?? 0;
-        const role = level > 0 ? "heading" : op.list ? "list" : op.listItem ? "listitem" : null;
+        const role = toggle ? "switch" : level > 0 ? "heading" : op.list ? "list" : op.listItem ? "listitem" : null;
         if (role === null) { if (node.hasAttribute("role")) node.removeAttribute("role"); }
         else if (node.getAttribute("role") !== role) node.setAttribute("role", role);
         if (level > 0) { if (node.getAttribute("aria-level") !== String(level)) node.setAttribute("aria-level", String(level)); }
@@ -169,7 +302,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (node.classList.contains("bina-ui-listitem") !== !!op.listItem) node.classList.toggle("bina-ui-listitem", !!op.listItem);
         for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid && op.minWidth ? op.minWidth : null]] as const) {
           const property = `--bina-ui-${name}`;
-          const fallback = name === "padding" ? node.classList.contains("bina-ui-button") ? componentLength("button", "padding", "space", "0px") : node.classList.contains("bina-ui-input") ? componentLength("input", "padding", "space", "0px") : "0px" : "";
+          const fallback = name === "padding" ? isButton ? buttonPadding(op) : node.classList.contains("bina-ui-input") ? componentLength("input", "padding", "space", "0px") : "0px" : "";
           const next = value === null ? fallback : name === "minWidth" ? `${Math.max(0, value)}px` : length(value);
           if (node.style.getPropertyValue(property) !== next) {
             if (next) node.style.setProperty(property, next);
@@ -177,9 +310,8 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           }
         }
         if (node.classList.contains("bina-ui-grow") !== op.grow) node.classList.toggle("bina-ui-grow", op.grow);
-        if (op.label === null || op.label === "") {
-          if (node.hasAttribute("aria-label")) node.removeAttribute("aria-label");
-        } else if (node.getAttribute("aria-label") !== op.label) node.setAttribute("aria-label", op.label);
+        setAttribute(node, "aria-label", op.label || (toggle && op.text) || null);
+        applyLook(node, op, isButton, toggle);
         if (["button", "input", "textarea"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
           (node as HTMLButtonElement).disabled = !op.enabled;
         }

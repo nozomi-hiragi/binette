@@ -292,7 +292,13 @@ function serializeView(view: View): string {
     ',"text":' + jsonString(view.value) + ',"padding":' + (view.paddingValue == -100 ? "null" : view.paddingValue.toString()) +
     ',"theme":' + jsonString(view.themeValue) + ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
     ',"key":' + jsonString(view.keyValue) + ',"label":' + jsonString(view.labelValue) +
-    ',"minWidth":' + view.minWidthValue.toString() + ',"heading":' + view.headingValue.toString() + ',"list":' + (view.listValue ? "true" : "false") + ',"shown":' + (view.shownValue ? "true" : "false") + ',"multiline":' + (view.multilineValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() + '}';
+    ',"minWidth":' + view.minWidthValue.toString() + ',"heading":' + view.headingValue.toString() + ',"list":' + (view.listValue ? "true" : "false") + ',"shown":' + (view.shownValue ? "true" : "false") + ',"multiline":' + (view.multilineValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() +
+    ',"tone":' + jsonString(view.toneValue) + ',"divider":' + jsonString(view.dividerValue) + ',"mono":' + (view.monoValue ? "true" : "false") +
+    ',"small":' + (view.smallValue ? "true" : "false") + ',"bold":' + (view.boldValue ? "true" : "false") + ',"truncate":' + (view.truncateValue ? "true" : "false") +
+    ',"width":' + view.widthValue.toString() + ',"center":' + (view.centerValue ? "true" : "false") + ',"selected":' + view.selectedValue.toString() +
+    ',"toggle":' + view.toggleValue.toString() + ',"scroll":' + (view.scrollValue ? "true" : "false") + ',"fill":' + (view.fillValue ? "true" : "false") +
+    ',"collapse":' + (view.collapseValue ? "true" : "false") + ',"placeholder":' + jsonString(view.placeholderValue) +
+    ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + '}';
 }
 
 function rebuild(): void {

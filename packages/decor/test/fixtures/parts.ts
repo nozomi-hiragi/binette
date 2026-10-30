@@ -38,3 +38,18 @@ export function multiline(): string {
   const view = input("first\nsecond", edit).multiline();
   return view.kind + ":" + (view.multilineValue ? "true" : "false") + ":" + intString(view.appValue) + ":" + view.value;
 }
+
+function flag(value: boolean): string { return value ? "1" : "0"; }
+function lookString(view: View): string {
+  return view.toneValue + "|" + view.dividerValue + "|" + flag(view.monoValue) + flag(view.smallValue) + flag(view.boldValue) + flag(view.truncateValue) +
+    flag(view.centerValue) + flag(view.scrollValue) + flag(view.fillValue) + flag(view.collapseValue) + flag(view.wrapValue) + "|" +
+    intString(view.widthValue) + "," + intString(view.heightValue) + "," + intString(view.minHeightValue) + "|" +
+    intString(view.selectedValue) + "," + intString(view.toggleValue) + "|" + view.placeholderValue;
+}
+
+export function looks(): string {
+  const all = row([]).tone("card").divider("left").divider("top").divider("left").divider("middle").mono().small().bold().truncate()
+    .center().scroll().fill().collapse().wrap().width(240).height(-3).minHeight(420).selected(true).toggle(false).placeholder("なし");
+  const reset = text("x").tone("primary").tone("unknown").width(Infinity).selected(false);
+  return lookString(all) + ";" + lookString(reset) + ";" + lookString(text("default"));
+}

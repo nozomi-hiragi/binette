@@ -55,6 +55,21 @@ root.render(component(Counter, { label: "回数" }));
 
 フックは部品の描画中に毎回同じ順序と数で呼びます。部品の外で呼ぶとエラーになります。関数の部品とフックは TS の `mount` 用で、AS には追加しません。JSX は含みません。
 
+### 見た目の修飾（案）
+
+```ts
+column([
+  row([text("デザイナー").bold(), text("保存しません").small().tone("muted").truncate()]).tone("surface").divider("bottom"),
+  row([
+    column([button("row", select).tone("ghost").selected(true).grow()]).width(240).scroll().fill().divider("right"),
+    column([column([text("こんにちは")]).tone("card").width(360).minHeight(420)]).tone("sunken").center().grow().fill(),
+  ]).fill().collapse(),
+  column([input(code, edit).multiline().mono().height(120)]).tone("dark"),
+]).fill();
+```
+
+色はアプリが値を書かず、`tone(name)` で OS の役割を選びます。ほかに `divider(side)`、`mono()`、`small()`、`bold()`、`truncate()`、`width(px)`、`height(px)`、`minHeight(px)`、`center()`、`wrap()`、`selected(b)`、`toggle(on)`、`scroll()`、`fill()`、`collapse()`、入力の `placeholder(s)` があります。TS と AS で共通の `parts.ts` にあり、View から UiNode、`ui-update` の操作を経て DOM のクラスと属性になります。古いアプリは送らないので、操作では既定でない値だけを載せます。名前と効果の一覧と役割の色の変数は [宣言的 UI](ui.md#見た目の修飾案) を参照してください。
+
 ## AS の入口（案）
 
 AS の View と部品は `jsr:@binette/decor/as` に置きます。既存の `jsr:@binette/replique/ui` はそれを再エクスポートする互換の入口で、アプリの import は変えずに使えます。`App.build()` を呼ぶタイミング、イベントのハンドラー番号、入力の版、HTML 方式との切り替えは変えません。Régie のビルドで両方の入口を解決します。
