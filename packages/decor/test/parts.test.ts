@@ -31,7 +31,7 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   assertEquals(string(exports.multiline()), multiline());
   assertEquals(multiline(), "input:true:-1:first\nsecond");
   assertEquals(string(exports.looks()), looks());
-  assertEquals(looks(), "card|top left|111111111|240,0,420|1,0|なし;||000000000|0,0,0|0,-1|;||000000000|0,0,0|-1,-1|");
+  assertEquals(looks(), "ghost|muted|card|top left|111111111|240,0,420|1,0|なし;||||000000000|0,0,0|0,-1|;||||000000000|0,0,0|-1,-1|");
   const view = new View("text");
   assertEquals(view.multilineValue, false);
   assertEquals(view.multiline(), view);

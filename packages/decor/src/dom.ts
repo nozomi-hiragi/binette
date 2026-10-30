@@ -1,5 +1,5 @@
 import type { DomOp } from "@binette/core";
-import { dividerSides, tones } from "./parts.ts";
+import { dividerSides, surfaces, tones, variants } from "./parts.ts";
 /** DOM からアプリに届くイベント。 */
 export interface UiEvents {
   dispatchUi(handle: number): void;
@@ -35,30 +35,30 @@ const colors: Record<string, string> = {
   success: "var(--bina-ui-success, #2e7d4f)",
   focus: "var(--bina-ui-focus, #3273b9)",
 };
-// tone 付きのボタンは小さめの道具の形にする。角丸は theme を優先する
-const toneRadius: string = componentLength("button", "radius", "radius", "var(--bina-ui-control-radius, 6px)");
-const tonePadding = (block: string, inline: string): string => `${componentLength("button", "padding", "space", block)} ${componentLength("button", "padding", "space", inline)}`;
+// variant 付きのボタンは小さめの道具の形にする。角丸は theme を優先する
+const controlRadius: string = componentLength("button", "radius", "radius", "var(--bina-ui-control-radius, 6px)");
+const variantPadding = (block: string, inline: string): string => `${componentLength("button", "padding", "space", block)} ${componentLength("button", "padding", "space", inline)}`;
 const lookCss: string = `
-:where(.bina-ui-button[class*="bina-ui-tone-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${toneRadius}; }
-:where(.bina-ui-button.bina-ui-tone-ghost:has(> *), .bina-ui-button.bina-ui-tone-subtle:has(> *)) { align-items: stretch; text-align: start; }
-:where(.bina-ui-button.bina-ui-tone-primary) { background: ${colors.accent}; border-color: ${colors.accent}; color: ${colors.accentContent}; }
-:where(.bina-ui-button.bina-ui-tone-primary:not(:disabled):hover) { background: color-mix(in srgb, ${colors.accent} 86%, #000); }
-:where(.bina-ui-button.bina-ui-tone-ghost, .bina-ui-button.bina-ui-tone-danger) { background: transparent; border-color: transparent; color: ${colors.muted}; }
-:where(.bina-ui-button.bina-ui-tone-ghost:not(:disabled):hover) { background: ${colors.subtle}; color: inherit; }
-:where(.bina-ui-button.bina-ui-tone-danger) { color: ${colors.danger}; }
-:where(.bina-ui-button.bina-ui-tone-danger:not(:disabled):hover) { background: color-mix(in srgb, ${colors.danger} 12%, transparent); }
-:where(.bina-ui-button.bina-ui-tone-subtle) { background: ${colors.subtle}; border-color: transparent; }
-:where(.bina-ui-button.bina-ui-tone-subtle:not(:disabled):hover) { background: color-mix(in srgb, ${colors.subtle} 90%, currentColor); }
-:where(.bina-ui-button.bina-ui-tone-dashed) { background: transparent; border: 1px dashed color-mix(in srgb, ${colors.muted} 50%, transparent); }
-:where(.bina-ui-button.bina-ui-tone-dashed:not(:disabled):hover) { background: ${colors.subtle}; border-color: ${colors.accent}; }
+:where(.bina-ui-button[class*="bina-ui-variant-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${controlRadius}; }
+:where(.bina-ui-button.bina-ui-variant-ghost:has(> *), .bina-ui-button.bina-ui-variant-subtle:has(> *)) { align-items: stretch; text-align: start; }
+:where(.bina-ui-button.bina-ui-variant-primary) { background: ${colors.accent}; border-color: ${colors.accent}; color: ${colors.accentContent}; }
+:where(.bina-ui-button.bina-ui-variant-primary:not(:disabled):hover) { background: color-mix(in srgb, ${colors.accent} 86%, #000); }
+:where(.bina-ui-button.bina-ui-variant-ghost, .bina-ui-button.bina-ui-variant-danger) { background: transparent; border-color: transparent; color: ${colors.muted}; }
+:where(.bina-ui-button.bina-ui-variant-ghost:not(:disabled):hover) { background: ${colors.subtle}; color: inherit; }
+:where(.bina-ui-button.bina-ui-variant-danger) { color: ${colors.danger}; }
+:where(.bina-ui-button.bina-ui-variant-danger:not(:disabled):hover) { background: color-mix(in srgb, ${colors.danger} 12%, transparent); }
+:where(.bina-ui-button.bina-ui-variant-subtle) { background: ${colors.subtle}; border-color: transparent; }
+:where(.bina-ui-button.bina-ui-variant-subtle:not(:disabled):hover) { background: color-mix(in srgb, ${colors.subtle} 90%, currentColor); }
+:where(.bina-ui-button.bina-ui-variant-dashed) { background: transparent; border: 1px dashed color-mix(in srgb, ${colors.muted} 50%, transparent); }
+:where(.bina-ui-button.bina-ui-variant-dashed:not(:disabled):hover) { background: ${colors.subtle}; border-color: ${colors.accent}; }
 :where(.bina-ui-text.bina-ui-tone-muted) { color: ${colors.muted}; }
 :where(.bina-ui-text.bina-ui-tone-accent) { color: ${colors.accentText}; }
 :where(.bina-ui-text.bina-ui-tone-danger) { color: ${colors.danger}; }
 :where(.bina-ui-text.bina-ui-tone-success) { color: ${colors.success}; }
-:where(.bina-ui-tone-surface) { background: ${colors.surface}; }
-:where(.bina-ui-tone-sunken) { background: ${colors.sunken}; }
-:where(.bina-ui-tone-card) { background: ${colors.surface}; border-radius: var(--bina-ui-card-radius, 14px); box-shadow: var(--bina-ui-shadow, 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 8%)); }
-:where(.bina-ui-tone-dark) {
+:where(.bina-ui-surface-surface) { background: ${colors.surface}; }
+:where(.bina-ui-surface-sunken) { background: ${colors.sunken}; }
+:where(.bina-ui-surface-card) { background: ${colors.surface}; border-radius: var(--bina-ui-card-radius, 14px); box-shadow: var(--bina-ui-shadow, 0 1px 2px rgb(0 0 0 / 6%), 0 8px 24px rgb(0 0 0 / 8%)); }
+:where(.bina-ui-surface-dark) {
   background: var(--bina-ui-dark, #16181d); color: var(--bina-ui-dark-content, #d7dae0); color-scheme: dark;
   --bina-ui-muted: var(--bina-ui-dark-muted, #9aa0aa); --bina-ui-line: var(--bina-ui-dark-line, #2e323a);
   --bina-ui-subtle: var(--bina-ui-dark-subtle, rgb(255 255 255 / 8%)); --bina-ui-surface: rgb(255 255 255 / 4%);
@@ -66,16 +66,16 @@ const lookCss: string = `
   --bina-ui-danger: var(--bina-ui-dark-danger, #ff8a80); --bina-ui-success: var(--bina-ui-dark-success, #7ec699);
   --bina-ui-button-background: rgb(255 255 255 / 6%); --bina-ui-button-border: var(--bina-ui-dark-line, #2e323a);
 }
-:where(.bina-ui-tone-dark .bina-ui-input) { background: transparent; border: 0; color: inherit; }
-:where(.bina-ui-tone-dark .bina-ui-input:focus-visible) { outline: 1px solid ${colors.line}; outline-offset: 0; }
-:where(.bina-ui-tone-field) { align-items: stretch; border: 1px solid ${colors.line}; border-radius: ${toneRadius}; background: ${colors.surface}; overflow: hidden; }
-:where(.bina-ui-tone-field > .bina-ui-input) { flex: 1 1 0; min-width: 0; border: 0; border-radius: 0; background: transparent; outline: none; }
-:where(.bina-ui-tone-field > .bina-ui-button + .bina-ui-input) { text-align: center; }
-:where(.bina-ui-tone-field > .bina-ui-button) { border: 0; border-radius: 0; }
-:where(.bina-ui-tone-field > .bina-ui-button:not([class*="bina-ui-tone-"])) { background: ${colors.subtle}; }
-:where(.bina-ui-tone-field > .bina-ui-button):focus-visible { outline-offset: -2px; }
-:where(.bina-ui-tone-field > * + *) { border-inline-start: 1px solid ${colors.line}; }
-:where(.bina-ui-tone-field:has(> .bina-ui-input:focus-visible)) { outline: 2px solid ${colors.focus}; outline-offset: -1px; }
+:where(.bina-ui-surface-dark .bina-ui-input) { background: transparent; border: 0; color: inherit; }
+:where(.bina-ui-surface-dark .bina-ui-input:focus-visible) { outline: 1px solid ${colors.line}; outline-offset: 0; }
+:where(.bina-ui-surface-field) { align-items: stretch; border: 1px solid ${colors.line}; border-radius: ${controlRadius}; background: ${colors.surface}; overflow: hidden; }
+:where(.bina-ui-surface-field > .bina-ui-input) { flex: 1 1 0; min-width: 0; border: 0; border-radius: 0; background: transparent; outline: none; }
+:where(.bina-ui-surface-field > .bina-ui-button + .bina-ui-input) { text-align: center; }
+:where(.bina-ui-surface-field > .bina-ui-button) { border: 0; border-radius: 0; }
+:where(.bina-ui-surface-field > .bina-ui-button:not([class*="bina-ui-variant-"])) { background: ${colors.subtle}; }
+:where(.bina-ui-surface-field > .bina-ui-button):focus-visible { outline-offset: -2px; }
+:where(.bina-ui-surface-field > * + *) { border-inline-start: 1px solid ${colors.line}; }
+:where(.bina-ui-surface-field:has(> .bina-ui-input:focus-visible)) { outline: 2px solid ${colors.focus}; outline-offset: -1px; }
 :where(.bina-ui-divider-top) { border-top: 1px solid ${colors.line}; }
 :where(.bina-ui-divider-right) { border-right: 1px solid ${colors.line}; }
 :where(.bina-ui-divider-bottom) { border-bottom: 1px solid ${colors.line}; }
@@ -84,7 +84,7 @@ const lookCss: string = `
 :where(.bina-ui-small) { font-size: var(--bina-ui-small, 12.5px); }
 :where(.bina-ui-bold) { font-weight: 600; }
 :where(.bina-ui-text.bina-ui-truncate) { display: block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-:where(.bina-ui-button.bina-ui-tone-ghost, .bina-ui-button.bina-ui-tone-subtle, .bina-ui-button.bina-ui-tone-dashed, .bina-ui-tone-field > .bina-ui-button, .bina-ui-button.bina-ui-small) { min-width: 0; min-height: 0; }
+:where(.bina-ui-button.bina-ui-variant-ghost, .bina-ui-button.bina-ui-variant-subtle, .bina-ui-button.bina-ui-variant-dashed, .bina-ui-surface-field > .bina-ui-button, .bina-ui-button.bina-ui-small) { min-width: 0; min-height: 0; }
 :where(.bina-ui-column > .bina-ui-button.bina-ui-grow) { flex-grow: 0; align-self: stretch; }
 :where(.bina-ui-width) { box-sizing: border-box; width: var(--bina-ui-width); max-width: 100%; flex-shrink: 0; }
 :where(.bina-ui-height) { box-sizing: border-box; height: var(--bina-ui-height); min-height: 0; flex-shrink: 0; }
@@ -152,14 +152,16 @@ function setLength(node: HTMLElement, property: string, value: number | undefine
   }
   return next !== "";
 }
-/** 未指定の padding。tone 付きのボタンは小さめの道具の余白にし、theme の値があればそちらを使う */
+/** 未指定の padding。variant 付きのボタンは小さめの道具の余白にし、theme の値があればそちらを使う */
 function buttonPadding(op: UiUpdate): string {
-  if (!op.tone || !tones.includes(op.tone) || op.toggle !== undefined) return componentLength("button", "padding", "space", "0px");
-  return op.tone === "dashed" ? tonePadding("2px", "8px") : tonePadding("4px", "10px");
+  if (!op.variant || !variants.includes(op.variant) || op.toggle !== undefined) return componentLength("button", "padding", "space", "0px");
+  return op.variant === "dashed" ? variantPadding("2px", "8px") : variantPadding("4px", "10px");
 }
 /** 見た目の修飾をクラスと属性にする。名前はアプリから届くので、知っているものだけをクラスにする */
 function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: boolean): void {
+  for (const name of variants) setClass(node, `bina-ui-variant-${name}`, op.variant === name);
   for (const name of tones) setClass(node, `bina-ui-tone-${name}`, op.tone === name);
+  for (const name of surfaces) setClass(node, `bina-ui-surface-${name}`, op.surface === name);
   const sides = (op.divider ?? "").split(" ");
   for (const side of dividerSides) setClass(node, `bina-ui-divider-${side}`, sides.includes(side));
   for (const name of lookFlags) setClass(node, `bina-ui-${name}`, op[name] === true);

@@ -2,7 +2,7 @@
 
 ## v0.2.0（未リリース）
 
-- Décor の TS・AS に見た目の修飾（`tone`・`divider`・`mono`・`small`・`bold`・`truncate`・`width`・`height`・`minHeight`・`center`・`wrap`・`selected`・`toggle`・`scroll`・`fill`・`collapse`・`placeholder`）を追加し、色は OS の役割の CSS 変数で決める（案）
+- Décor の TS・AS に見た目の修飾（ボタンの種類の `variant`・文字の色の `tone`・面の `surface`、`divider`・`mono`・`small`・`bold`・`truncate`・`width`・`height`・`minHeight`・`center`・`wrap`・`selected`・`toggle`・`scroll`・`fill`・`collapse`・`placeholder`）を追加し、色は OS の役割の CSS 変数で決める（案）
 
 - Décor の TS・AS に `input(...).multiline()` を追加し、複数行の入力を textarea で扱う（案）
 

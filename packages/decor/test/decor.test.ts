@@ -281,14 +281,14 @@ Deno.test("見た目の修飾はクラス・属性・CSS 変数になり、描�
   const noop = () => {};
   const styled = () => column([
     text("見出し").tone("muted").mono().small().bold().truncate().key("t"),
-    button("保存", noop).tone("primary").key("primary"),
-    button("木", noop).tone("ghost").selected(true).key("selected"),
+    button("保存", noop).variant("primary").key("primary"),
+    button("木", noop).variant("ghost").selected(true).key("selected"),
     button("葉", noop).selected(false).key("unselected"),
     button("grow", () => { on = !on; }).toggle(on).key("switch"),
     button("文字", noop).toggle(true).label("グリッド").key("labelled"),
     input("", noop).placeholder("なし").height(80).key("input"),
-    row([text("値")]).tone("field").divider("left").divider("top").width(240).minHeight(420).center().scroll().fill().collapse().wrap().selected(true).key("row"),
-  ]).tone("dark").fill();
+    row([text("値")]).surface("field").divider("left").divider("top").width(240).minHeight(420).center().scroll().fill().collapse().wrap().selected(true).key("row"),
+  ]).surface("dark").fill();
   const plain = () => column([
     text("見出し").key("t"), button("保存", noop).key("primary"), button("木", noop).key("selected"), button("葉", noop).key("unselected"),
     button("grow", noop).key("switch"), button("文字", noop).key("labelled"), input("", noop).key("input"), row([text("値")]).key("row"),
@@ -298,11 +298,11 @@ Deno.test("見た目の修飾はクラス・属性・CSS 変数になり、描�
   try {
     root.render(styled());
     const outer = host.querySelector(".bina-ui-column")! as HTMLElement;
-    assertEquals([...outer.classList], ["bina-ui-column", "bina-ui-tone-dark", "bina-ui-fill"]);
+    assertEquals([...outer.classList], ["bina-ui-column", "bina-ui-surface-dark", "bina-ui-fill"]);
     assertEquals(classes("t"), ["bina-ui-bold", "bina-ui-mono", "bina-ui-small", "bina-ui-tone-muted", "bina-ui-truncate"]);
-    assertEquals(classes("primary"), ["bina-ui-tone-primary"]);
+    assertEquals(classes("primary"), ["bina-ui-variant-primary"]);
     assertEquals(at("selected").getAttribute("aria-pressed"), "true");
-    assertEquals(classes("selected"), ["bina-ui-selected", "bina-ui-tone-ghost"]);
+    assertEquals(classes("selected"), ["bina-ui-selected", "bina-ui-variant-ghost"]);
     assertEquals(at("unselected").getAttribute("aria-pressed"), "false");
     assertEquals(classes("unselected"), []);
     const toggle = at("switch");
@@ -323,7 +323,7 @@ Deno.test("見た目の修飾はクラス・属性・CSS 変数になり、描�
     assertEquals(classes("input"), ["bina-ui-height"]);
     assertEquals(field.style.getPropertyValue("--bina-ui-height"), "80px");
     const line = at("row");
-    assertEquals(classes("row"), ["bina-ui-center", "bina-ui-collapse", "bina-ui-divider-left", "bina-ui-divider-top", "bina-ui-fill", "bina-ui-scroll", "bina-ui-selected", "bina-ui-tone-field", "bina-ui-width", "bina-ui-wrap"]);
+    assertEquals(classes("row"), ["bina-ui-center", "bina-ui-collapse", "bina-ui-divider-left", "bina-ui-divider-top", "bina-ui-fill", "bina-ui-scroll", "bina-ui-selected", "bina-ui-surface-field", "bina-ui-width", "bina-ui-wrap"]);
     assertEquals(line.style.getPropertyValue("--bina-ui-width"), "240px");
     assertEquals(line.style.getPropertyValue("min-height"), "420px");
     assertEquals(line.hasAttribute("aria-pressed"), false);
@@ -343,7 +343,11 @@ Deno.test("見た目の修飾はクラス・属性・CSS 変数になり、描�
 });
 
 Deno.test("見た目の修飾は知らない名前と有限でない長さを無視する", async () => {
-  assertEquals(text("x").tone("primary").tone("evil").toneValue, "");
+  assertEquals(button("x", () => {}).variant("primary").variant("evil").variantValue, "");
+  assertEquals(text("x").tone("muted").tone("evil").toneValue, "");
+  assertEquals(column([]).surface("card").surface("evil").surfaceValue, "");
+  // 役割の違う名前は受け付けない
+  assertEquals([button("x", () => {}).variant("muted").variantValue, text("x").tone("primary").toneValue, column([]).surface("ghost").surfaceValue], ["", "", ""]);
   assertEquals(text("x").divider("middle").dividerValue, "");
   assertEquals(column([]).divider("bottom").divider("top").divider("bottom").dividerValue, "top bottom");
   const lengths = column([]).width(-5).height(NaN).minHeight(Infinity);
@@ -356,7 +360,7 @@ Deno.test("見た目の修飾は知らない名前と有限でない長さを無
     dom.apply([
       { op: "ui-create", handle: 1, kind: "row" },
       { op: "ui-update", handle: 1, text: "", padding: null, gap: null, grow: false, label: null, enabled: true, clickable: false,
-        tone: "card bina-ui-evil", divider: "top evil left", width: Infinity, height: -1, minHeight: NaN },
+        variant: "ghost bina-ui-evil", tone: "muted bina-ui-evil", surface: "card bina-ui-evil", divider: "top evil left", width: Infinity, height: -1, minHeight: NaN },
       { op: "ui-insert", parent: null, child: 1, before: null },
     ]);
     const node = host.querySelector(".bina-ui-row")! as HTMLElement;
@@ -372,23 +376,23 @@ Deno.test("見た目の修飾は既定でないものだけを操作に載せ、
   const ui = createUiDiffer(op => ops.push(op));
   ui.render(node("button", "a"), 1);
   const plain = ops.find(op => op.op === "ui-update")!;
-  for (const name of ["tone", "divider", "mono", "width", "selected", "toggle", "placeholder", "height", "minHeight", "wrap"]) assertEquals(name in plain, false, name);
+  for (const name of ["variant", "tone", "surface", "divider", "mono", "width", "selected", "toggle", "placeholder", "height", "minHeight", "wrap"]) assertEquals(name in plain, false, name);
   ops = [];
   ui.render(node("button", "a"), 2);
   assertEquals(ops, []);
-  ui.render({ ...node("button", "a"), tone: "ghost", selected: 0, toggle: -1, width: 0, wrap: false }, 3);
+  ui.render({ ...node("button", "a"), variant: "ghost", selected: 0, toggle: -1, width: 0, wrap: false }, 3);
   assertEquals(ops.length, 1);
   const update = ops[0]!;
   assert(update.op === "ui-update");
-  assertEquals([update.tone, update.selected, "toggle" in update, "width" in update, "wrap" in update], ["ghost", false, false, false, false]);
+  assertEquals([update.variant, "tone" in update, "surface" in update, update.selected, "toggle" in update, "width" in update, "wrap" in update], ["ghost", false, false, false, false, false, false]);
 });
 
-Deno.test("tone 付きのボタンは未指定の padding を小さめの道具の余白にし、スイッチは 0 にする", async () => {
+Deno.test("variant 付きのボタンは未指定の padding を小さめの道具の余白にし、スイッチは 0 にする", async () => {
   const window = new Window();
   const host = window.document.createElement("div") as unknown as HTMLElement;
   const root = mount(host);
   try {
-    root.render(row([button("既定", () => {}), button("ghost", () => {}).tone("ghost"), button("chip", () => {}).tone("dashed"), button("sw", () => {}).tone("ghost").toggle(true), button("明示", () => {}).tone("primary").padding(3)]));
+    root.render(row([button("既定", () => {}), button("ghost", () => {}).variant("ghost"), button("chip", () => {}).variant("dashed"), button("sw", () => {}).variant("ghost").toggle(true), button("明示", () => {}).variant("primary").padding(3)]));
     const [plain, ghost, chip, toggle, explicit] = [...host.querySelectorAll("button")].map(button => button.style.getPropertyValue("--bina-ui-padding"));
     assert(!plain!.includes("10px"));
     assertEquals(ghost!.split(" calc(").length, 2);
@@ -406,5 +410,5 @@ Deno.test("見た目の CSS は :where で詳細度 0 を保つ", async () => {
     if (!trimmed.includes("{") || trimmed.startsWith("@")) continue;
     assert(trimmed.startsWith(":where("), trimmed);
   }
-  for (const name of ["tone-primary", "tone-ghost", "tone-dark", "tone-field", "toggle", "collapse", "divider-top", "height", "wrap"]) assert(uiCss.includes(`.bina-ui-${name}`), name);
+  for (const name of ["variant-primary", "variant-ghost", "tone-muted", "surface-dark", "surface-field", "toggle", "collapse", "divider-top", "height", "wrap"]) assert(uiCss.includes(`.bina-ui-${name}`), name);
 });

@@ -26,8 +26,12 @@ export class View {
   shownValue: boolean = true;
   appValue: number = -1;
   multilineValue: boolean = false;
-  /** 役割の色・面の名前。"" は既定 */
+  /** ボタンの種類の名前。"" は既定 */
+  variantValue: string = "";
+  /** 文字の色の名前。"" は既定 */
   toneValue: string = "";
+  /** 面の名前。"" は既定 */
+  surfaceValue: string = "";
   /** 区切り線を引く辺を空白で区切った並び。"" は無し */
   dividerValue: string = "";
   monoValue: boolean = false;
@@ -65,8 +69,12 @@ export class View {
   enabled(b: boolean): View { this.enabledValue = b; return this; }
   /** 複数行の入力欄にする。 */
   multiline(): View { this.multilineValue = true; return this; }
-  /** 役割の色・面を選ぶ。値は OS が決める。知らない名前は既定に戻す */
+  /** ボタンの種類を選ぶ（button・buttonOf に効く）。色の値は OS が決める。知らない名前は既定に戻す */
+  variant(name: string): View { this.variantValue = variants.includes(name) ? name : ""; return this; }
+  /** 文字の色を選ぶ（text に効く）。色の値は OS が決める。知らない名前は既定に戻す */
   tone(name: string): View { this.toneValue = tones.includes(name) ? name : ""; return this; }
+  /** 面を選ぶ（column・row・grid に効く）。色の値は OS が決める。知らない名前は既定に戻す */
+  surface(name: string): View { this.surfaceValue = surfaces.includes(name) ? name : ""; return this; }
   /** 辺（"top"・"right"・"bottom"・"left"）に 1px の区切り線を引く。複数の辺は複数回呼ぶ */
   divider(side: string): View {
     if (!dividerSides.includes(side)) return this;
@@ -111,8 +119,12 @@ export class View {
   collapse(): View { this.collapseValue = true; return this; }
   arg(i: number): View { this.argValue = i; return this; }
 }
-/** tone に使える名前。button・text・column などで意味が分かれる */
-export const tones: Array<string> = ["primary", "ghost", "subtle", "danger", "dashed", "muted", "accent", "success", "surface", "sunken", "card", "dark", "field"];
+/** variant に使える名前（ボタンの種類） */
+export const variants: Array<string> = ["primary", "ghost", "subtle", "danger", "dashed"];
+/** tone に使える名前（文字の色） */
+export const tones: Array<string> = ["muted", "accent", "danger", "success"];
+/** surface に使える名前（面） */
+export const surfaces: Array<string> = ["surface", "sunken", "card", "dark", "field"];
 /** divider に使える辺 */
 export const dividerSides: Array<string> = ["top", "right", "bottom", "left"];
 export abstract class UiCallback { abstract call(arg: number): void; }
