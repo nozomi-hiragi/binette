@@ -22,7 +22,7 @@ export interface ShellUi extends SystemUi, MountedShell {
 const css = `
 :where(.bina-shell) { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; font: inherit; isolation: isolate; }
 :where(.bina-shell) [hidden] { display: none; }
-:where(.bina-shell-stage) { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; isolation: isolate; }
+:where(.bina-shell-stage) { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; isolation: isolate; }
 :where(.bina-shell-live) { position: absolute; z-index: 2147483647; pointer-events: none; right: max(var(--bina-shell-padding, 12px), env(safe-area-inset-right, 0px)); bottom: max(var(--bina-shell-padding, 12px), env(safe-area-inset-bottom, 0px)); color: var(--bina-shell-live-color, var(--bina-shell-color, #16181d)); opacity: var(--bina-shell-live-opacity, 0.35); font-size: var(--bina-shell-live-size, 0.875em); }
 :where(.bina-shell-install) { margin-inline-start: auto; }
 :where(.bina-shell-install-dialog) { z-index: 2147483647; max-width: min(28rem, 80vw); padding: var(--bina-shell-padding, 12px); border: 1px solid var(--bina-shell-border, #d5dae1); border-radius: var(--bina-shell-radius, 12px); background: var(--bina-shell-surface, #fff); color: var(--bina-shell-color, #16181d); font: inherit; overflow-wrap: anywhere; }
@@ -31,8 +31,8 @@ const css = `
 :where(.bina-shell-button):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-shell-entry) { display: inline-flex; gap: var(--bina-shell-gap, 8px); }
 :where(.bina-shell-button)[aria-pressed="true"] { border-color: var(--bina-shell-focus, #3273b9); }
-:where(.bina-shell-app) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-:where(.bina-shell-apps) { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-height: 0; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
+:where(.bina-shell-app) { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+:where(.bina-shell-apps) { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-height: 0; overflow: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
 :where(.bina-shell-apps-link) { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; text-align: start; text-decoration: underline; overflow-wrap: anywhere; }
 :where(.bina-shell-apps-link):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-shell-status) { color: var(--bina-shell-error, #b3261e); }
