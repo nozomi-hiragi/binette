@@ -59,16 +59,16 @@ root.render(component(Counter, { label: "回数" }));
 
 ```ts
 column([
-  row([text("デザイナー").bold(), text("保存しません").small().tone("muted").truncate()]).tone("surface").divider("bottom"),
+  row([text("デザイナー").bold(), text("保存しません").small().tone("muted").truncate()]).surface("surface").divider("bottom"),
   row([
-    column([button("row", select).tone("ghost").selected(true).grow()]).width(240).scroll().fill().divider("right"),
-    column([column([text("こんにちは")]).tone("card").width(360).minHeight(420)]).tone("sunken").center().grow().fill(),
+    column([button("row", select).variant("ghost").selected(true).grow()]).width(240).scroll().fill().divider("right"),
+    column([column([text("こんにちは")]).surface("card").width(360).minHeight(420)]).surface("sunken").center().grow().fill(),
   ]).fill().collapse(),
-  column([input(code, edit).multiline().mono().height(120)]).tone("dark"),
+  column([input(code, edit).multiline().mono().height(120)]).surface("dark"),
 ]).fill();
 ```
 
-色はアプリが値を書かず、`tone(name)` で OS の役割を選びます。ほかに `divider(side)`、`mono()`、`small()`、`bold()`、`truncate()`、`width(px)`、`height(px)`、`minHeight(px)`、`center()`、`wrap()`、`selected(b)`、`toggle(on)`、`scroll()`、`fill()`、`collapse()`、入力の `placeholder(s)` があります。TS と AS で共通の `parts.ts` にあり、View から UiNode、`ui-update` の操作を経て DOM のクラスと属性になります。古いアプリは送らないので、操作では既定でない値だけを載せます。名前と効果の一覧と役割の色の変数は [宣言的 UI](ui.md#見た目の修飾案) を参照してください。
+色はアプリが値を書かず、OS の役割を選びます。役割は効く部品ごとに、ボタンの種類の `variant(name)`、文字の色の `tone(name)`、面の `surface(name)` に分けます。ほかに `divider(side)`、`mono()`、`small()`、`bold()`、`truncate()`、`width(px)`、`height(px)`、`minHeight(px)`、`center()`、`wrap()`、`selected(b)`、`toggle(on)`、`scroll()`、`fill()`、`collapse()`、入力の `placeholder(s)` があります。TS と AS で共通の `parts.ts` にあり、View から UiNode、`ui-update` の操作を経て DOM のクラスと属性になります。古いアプリは送らないので、操作では既定でない値だけを載せます。名前と効果の一覧と役割の色の変数は [宣言的 UI](ui.md#見た目の修飾案) を参照してください。
 
 ## AS の入口（案）
 

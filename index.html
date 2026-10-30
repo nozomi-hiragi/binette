@@ -44,7 +44,7 @@
       --bina-ui-button-border: var(--color-base-300);
       --bina-ui-button-radius: 12px;
       --bina-ui-focus: var(--color-primary);
-      /* Décor の tone などが使う役割の色 */
+      /* Décor の variant・tone・surface などが使う役割の色 */
       --bina-ui-accent: var(--color-primary);
       --bina-ui-accent-content: var(--color-primary-content);
       --bina-ui-accent-soft: color-mix(in srgb, var(--color-primary) 14%, var(--color-base-100));
@@ -67,11 +67,11 @@
     .bina-shell-content { padding: 16px; }
     /* fill() を付けた Décor のアプリは、アプリの領域を端まで使う */
     .bina-shell-content:has(> .bina-ui-fill) { padding: 0; }
-    /* 下の規則は document 方式のボタンと tone の無い Décor のボタンの見た目。tone・スイッチ・選択・field の中の Décor のボタンは Décor の見た目に任せる */
-    .bina-shell-content button:not(:where([class*="bina-ui-tone-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-tone-field > *)) { padding: 8px 16px; border: 1px solid var(--color-base-300); border-radius: var(--radius-field); background: var(--color-primary); color: var(--color-primary-content); cursor: pointer; }
-    .bina-shell-content button:not(:where([class*="bina-ui-tone-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-tone-field > *, .bina-ui-small)) { min-height: 44px; }
-    .bina-shell-content button:not(:where([class*="bina-ui-tone-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-tone-field > *, .bina-ui-mono, .bina-ui-small, .bina-ui-bold)) { font: inherit; }
-    .bina-shell-content button:not(:where([class*="bina-ui-tone-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-tone-field > *)):focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    /* 下の規則は document 方式のボタンと variant の無い Décor のボタンの見た目。variant・スイッチ・選択・field の面の中の Décor のボタンは Décor の見た目に任せる */
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *)) { padding: 8px 16px; border: 1px solid var(--color-base-300); border-radius: var(--radius-field); background: var(--color-primary); color: var(--color-primary-content); cursor: pointer; }
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *, .bina-ui-small)) { min-height: 44px; }
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *, .bina-ui-mono, .bina-ui-small, .bina-ui-bold)) { font: inherit; }
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *)):focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
   </style>
 </head>
 <body>

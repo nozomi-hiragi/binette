@@ -28,10 +28,10 @@ function flip(): void { on = !on; }
 function typed(_s: string): void {}
 class Demo extends App {
   build(): View {
-    const header = row([text("デザイナー").bold(), text("保存しません").tone(on ? "" : "muted").small()]).divider("bottom").tone("surface");
-    const stepper = row([button("−", flip).tone("subtle"), input("16", typed).mono().placeholder("なし"), button("＋", flip)]).tone("field").width(160);
-    const body = row([column([button("木", flip).tone("ghost").selected(on).grow()]).scroll().fill().width(240), column([stepper]).fill().grow().center().tone("sunken")]).fill().collapse();
-    const code = column([input("column([])", typed).multiline().mono().height(120)]).tone("dark").minHeight(130);
+    const header = row([text("デザイナー").bold(), text("保存しません").tone(on ? "" : "muted").small()]).divider("bottom").surface("surface");
+    const stepper = row([button("−", flip).variant("subtle"), input("16", typed).mono().placeholder("なし"), button("＋", flip)]).surface("field").width(160);
+    const body = row([column([button("木", flip).variant("ghost").selected(on).grow()]).scroll().fill().width(240), column([stepper]).fill().grow().center().surface("sunken")]).fill().collapse();
+    const code = column([input("column([])", typed).multiline().mono().height(120)]).surface("dark").minHeight(130);
     return column([header, body, code, button("grow", flip).toggle(on).label("伸ばす")]).fill();
   }
 }
@@ -57,19 +57,19 @@ launch(new Demo());`;
     const muted = host.querySelector(".bina-ui-tone-muted")!;
     assert(muted.classList.contains("bina-ui-small"));
     assert(host.querySelector(".bina-ui-bold"));
-    assert(host.querySelector(".bina-ui-tone-surface.bina-ui-divider-bottom"));
-    const field = host.querySelector(".bina-ui-tone-field") as HTMLElement;
+    assert(host.querySelector(".bina-ui-surface-surface.bina-ui-divider-bottom"));
+    const field = host.querySelector(".bina-ui-surface-field") as HTMLElement;
     assertEquals(field.style.getPropertyValue("--bina-ui-width"), "160px");
     assertEquals(host.querySelector("input")!.getAttribute("placeholder"), "なし");
     assert(host.querySelector("input")!.classList.contains("bina-ui-mono"));
-    const tree = host.querySelector(".bina-ui-tone-ghost")!;
+    const tree = host.querySelector(".bina-ui-variant-ghost")!;
     assertEquals([tree.getAttribute("aria-pressed"), tree.classList.contains("bina-ui-selected")], ["false", false]);
     assert(host.querySelector(".bina-ui-collapse.bina-ui-fill"));
     assert(host.querySelector(".bina-ui-scroll.bina-ui-fill.bina-ui-width"));
-    assert(host.querySelector(".bina-ui-tone-sunken.bina-ui-center.bina-ui-grow"));
+    assert(host.querySelector(".bina-ui-surface-sunken.bina-ui-center.bina-ui-grow"));
     const textarea = host.querySelector("textarea")!;
     assertEquals(textarea.style.getPropertyValue("--bina-ui-height"), "120px");
-    assertEquals((host.querySelector(".bina-ui-tone-dark") as HTMLElement).style.getPropertyValue("min-height"), "130px");
+    assertEquals((host.querySelector(".bina-ui-surface-dark") as HTMLElement).style.getPropertyValue("min-height"), "130px");
 
     toggle.click();
     await waitFor(() => toggle.getAttribute("aria-checked") === "true");

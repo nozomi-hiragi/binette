@@ -179,7 +179,8 @@ export function mount(element: HTMLElement): Root {
       key: view.keyValue, label: view.labelValue, enabled: view.enabledValue,
       handler, minWidth: view.minWidthValue, heading: view.headingValue,
       list: view.listValue, shown: view.shownValue, app: view.appValue, multiline: view.multilineValue,
-      tone: view.toneValue, divider: view.dividerValue, mono: view.monoValue, small: view.smallValue, bold: view.boldValue, truncate: view.truncateValue,
+      variant: view.variantValue, tone: view.toneValue, surface: view.surfaceValue,
+      divider: view.dividerValue, mono: view.monoValue, small: view.smallValue, bold: view.boldValue, truncate: view.truncateValue,
       width: view.widthValue, center: view.centerValue, selected: view.selectedValue, toggle: view.toggleValue,
       scroll: view.scrollValue, fill: view.fillValue, collapse: view.collapseValue,
       placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue }, fiber];

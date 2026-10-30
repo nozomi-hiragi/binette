@@ -42,10 +42,10 @@ Réplique は build ごとにハンドラー番号を振り直し、画面の木
 
 色はアプリが値を指定せず、OS が持つ役割を選びます。修飾は TS と AS で共通です。DOM ではクラス `bina-ui-…` と属性になり、CSS は `:where()` で詳細度 0 です。描き直しで外した修飾はクラスと属性から外れます。
 
-- `tone(name)` は役割の色・面を選ぶ。知らない名前は無視して既定に戻す。クラスは `bina-ui-tone-<name>`
-  - button: `"primary"`（アクセントの塗り）、`"ghost"`（背景も枠も無く、文字は薄い色。hover で薄い面）、`"subtle"`（薄い面、枠なし）、`"danger"`（ghost の形で赤い文字）、`"dashed"`（破線の枠の小さなチップ）。tone 無しは従来の既定。tone 付きのボタンは未指定の padding を上下 4px・左右 10px（dashed は 2px・8px）にし、theme の button の padding があればそちらを使う
-  - text: `"muted"`（薄い文字）、`"accent"`、`"danger"`、`"success"`
-  - column・row・grid: `"surface"`（白い面）、`"sunken"`（灰色のキャンバス）、`"card"`（白い面・角丸・影）、`"dark"`（暗い面。中の文字・薄い文字・ghost のボタン・入力も暗い面に合わせ、入力は背景が透明で枠なし）、`"field"`（入力欄のような 1px の枠と角丸で中の部品をつなげる。中の input は枠と背景なし、中の button は枠なしで線で区切る。button の後の input は中央ぞろえ）
+- 役割の色は、ボタンの種類・文字の色・面の 3 つの修飾に分ける。どれも効く部品と名前の組が違い、同じ部品に別々に付けられる（例: 面の中の文字の色）。知らない名前は無視して既定に戻す。合わない部品に付けても効かない
+  - `variant(name)` はボタンの種類を選ぶ（button・buttonOf）。クラスは `bina-ui-variant-<name>`。`"primary"`（アクセントの塗り）、`"ghost"`（背景も枠も無く、文字は薄い色。hover で薄い面）、`"subtle"`（薄い面、枠なし）、`"danger"`（ghost の形で赤い文字）、`"dashed"`（破線の枠の小さなチップ）。variant 無しは従来の既定。variant 付きのボタンは未指定の padding を上下 4px・左右 10px（dashed は 2px・8px）にし、theme の button の padding があればそちらを使う
+  - `tone(name)` は文字の色を選ぶ（text）。クラスは `bina-ui-tone-<name>`。`"muted"`（薄い文字）、`"accent"`、`"danger"`、`"success"`
+  - `surface(name)` は面を選ぶ（column・row・grid）。クラスは `bina-ui-surface-<name>`。`"surface"`（白い面）、`"sunken"`（灰色のキャンバス）、`"card"`（白い面・角丸・影）、`"dark"`（暗い面。中の文字・薄い文字・ghost のボタン・入力も暗い面に合わせ、入力は背景が透明で枠なし）、`"field"`（入力欄のような 1px の枠と角丸で中の部品をつなげる。中の input は枠と背景なし、中の button は枠なしで線で区切る。button の後の input は中央ぞろえ）
 - `divider(side)` は `"top"`・`"right"`・`"bottom"`・`"left"` の辺に 1px の区切り線を引く。複数の辺は複数回呼ぶ。ほかの名前は無視する
 - `mono()` は等幅の字体、`small()` は小さめの文字（12.5px）、`bold()` は太字、`truncate()` は text を 1 行に収めて「…」で切る
 - `width(px)`・`height(px)` は固定の幅・高さ（border-box）。flex で縮めない。幅は親の幅を越えない。`height` は textarea の既定の最小の高さより優先する。`minHeight(px)` は最小の高さ。0 以下と有限でない値は指定なし
@@ -56,6 +56,6 @@ Réplique は build ごとにハンドラー番号を振り直し、画面の木
 - `fill()` は flex の親の高さいっぱいに広げる。row の子では横には伸ばさず縦に引き伸ばす。アプリの一番外の部品に付けると、Scene のアプリの領域の高さいっぱいになり、領域の余白も 0 になる。中の `grow()` と `scroll()` で区画ごとにスクロールする
 - `collapse()` は row に付ける。アプリの描画先の幅が 720px 未満のとき（コンテナークエリ）、子を縦に積んで全幅にし、子の `width()` を無視する。外側の `fill()`、その row、row の中の `fill()` と `scroll()` による高さの固定もゆるめ、アプリの領域全体を縦にスクロールする
 - column の中の button に `grow()` を付けると、横幅いっぱいに広がり、縦には伸びない。ghost と subtle の `buttonOf` は中身を左寄せにする
-- ghost・subtle・dashed のボタン、`tone("field")` の中のボタン、`small()` のボタンは最小 44px をゆるめて詰められる。tone 無し・primary・danger のボタンは最小 44px のまま
+- ghost・subtle・dashed のボタン、`surface("field")` の中のボタン、`small()` のボタンは最小 44px をゆるめて詰められる。variant 無し・primary・danger のボタンは最小 44px のまま
 - 役割の色の変数: `--bina-ui-accent`、`--bina-ui-accent-content`、`--bina-ui-accent-soft`、`--bina-ui-accent-text`、`--bina-ui-surface`、`--bina-ui-sunken`、`--bina-ui-subtle`、`--bina-ui-line`、`--bina-ui-muted`、`--bina-ui-danger`、`--bina-ui-success`、`--bina-ui-shadow`、`--bina-ui-dark`、`--bina-ui-dark-content`、`--bina-ui-dark-muted`、`--bina-ui-dark-line`、`--bina-ui-dark-subtle`、`--bina-ui-dark-accent`、`--bina-ui-dark-danger`、`--bina-ui-dark-success`、`--bina-ui-mono`、`--bina-ui-small`、`--bina-ui-control-radius`、`--bina-ui-card-radius`。どれも省略でき、省略すると白地のライトテーマの値になる。OS の index.html は `#app` で `--color-*` から割り当てる
-- OS の index.html の document 方式のボタンの規則（アクセントの塗り）は、tone 無しの Décor のボタンにだけ効き、tone・スイッチ・選択・`tone("field")` の中のボタンには効かない
+- OS の index.html の document 方式のボタンの規則（アクセントの塗り）は、variant 無しの Décor のボタンにだけ効き、variant・スイッチ・選択・`surface("field")` の中のボタンには効かない

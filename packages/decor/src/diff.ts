@@ -6,7 +6,7 @@ export type UiOp = Extract<DomOp, { op: `ui-${string}` }>;
 /** 描画する木。操作の kind は core の型を使う。 */
 export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number; multiline: boolean } & UiLook;
 /** 見た目の修飾。古いアプリは送らないので省略でき、省略は既定を表す。selected と toggle は -1 が指定なし、0 が偽、1 が真 */
-export type UiLook = { tone?: string; divider?: string; mono?: boolean; small?: boolean; bold?: boolean; truncate?: boolean; width?: number; center?: boolean; selected?: number; toggle?: number; scroll?: boolean; fill?: boolean; collapse?: boolean; placeholder?: string; height?: number; minHeight?: number; wrap?: boolean };
+export type UiLook = { variant?: string; tone?: string; surface?: string; divider?: string; mono?: boolean; small?: boolean; bold?: boolean; truncate?: boolean; width?: number; center?: boolean; selected?: number; toggle?: number; scroll?: boolean; fill?: boolean; collapse?: boolean; placeholder?: string; height?: number; minHeight?: number; wrap?: boolean };
 export type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
 
 /** 差分エンジンの状態と操作。 */
@@ -21,11 +21,11 @@ export interface UiDiffer {
 /** 差分エンジン。DOM や Worker に依存せず、操作を emit に渡す。 */
 export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: number) => void = () => {}): UiDiffer {
   // Worker には関数の本文だけを送るので、補助も関数の中に置く
-  const looks = ["tone", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap"] as const;
+  const looks = ["variant", "tone", "surface", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap"] as const;
   /** 見た目の修飾のうち既定でないものだけを操作に載せる。 */
   function lookFields(node: UiNode): Partial<Extract<UiOp, { op: "ui-update" }>> {
     const fields: Partial<Extract<UiOp, { op: "ui-update" }>> = {};
-    if (node.tone) fields.tone = node.tone;
+    for (const name of ["variant", "tone", "surface"] as const) { const value = node[name]; if (value) fields[name] = value; }
     if (node.divider) fields.divider = node.divider;
     for (const name of ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap"] as const) if (node[name]) fields[name] = true;
     if (node.placeholder) fields.placeholder = node.placeholder;
