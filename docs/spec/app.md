@@ -124,11 +124,11 @@ apps/settings/
 
 ## システムアプリ（実装済み）
 
-システムアプリ（OS と一緒に配るアプリ）は、インストールの手順を通らず、OS と一緒にビルドして配ります。扱いは [apps/](apps/README.md) にあります。ホーム（`role: "home"`）は [apps/home.md](apps/home.md) です。
+システムアプリ（OS の機能を持つアプリ）と通常の同梱アプリは、インストールの手順を通らず、OS と一緒にビルドして配ります。扱いは [apps/](apps/README.md) にあります。ホーム（`role: "home"`）は [apps/home.md](apps/home.md) です。
 
 ## インストール（案）
 
-システムアプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証はしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[regie/build.md](regie/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
+システムアプリと同梱アプリは、Binette をビルドするときに前もってビルドし、`.binapp` として OS（Binette とフロント）と一緒に配ります。ブラウザではコンパイラを読まず、HTML や権限の検証はしません。`.binapp` の形式と manifest の型を確かめ、保存して開きます（[regie/build.md](regie/build.md#書き出し実装済み)）。開発用の `{ source, read }` ではブラウザでビルドする道も残します。
 
 追加するアプリのインストールは、次の流れを予定しています。
 
