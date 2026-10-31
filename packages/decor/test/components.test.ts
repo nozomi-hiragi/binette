@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertStrictEquals } from "@std/assert";
 import type { DomOp } from "@binette/core";
 import { Window } from "happy-dom";
-import { badge, checkbox, chip, column, createUiDiffer, createUiDom, image, listTile, mount, picker, progress, radio, row, segmented, separator, slider, spacer, spinner, stack, tabs, text,
+import { appIcon, badge, checkbox, chip, column, createUiDiffer, createUiDom, image, listTile, mount, picker, progress, radio, row, segmented, separator, slider, spacer, spinner, stack, tabs, text,
   type UiNode } from "../src/index.ts";
 
 /** happy-dom の要素を DOM の型として扱う。 */
@@ -210,4 +210,26 @@ Deno.test("値を返す部品は描き直しのたびに値と版を送り、ほ
   assertEquals(ops.splice(0).map(op => op.op === "ui-update" ? op.handle : -1), [2, 3, 4]);
   ui.render(tree(["一", "三"]), 3);
   assertEquals(ops.splice(0).filter(op => op.op === "ui-update" && op.options?.[1] === "三").length, 1);
+});
+
+Deno.test("TS の mount に apps を渡すと appIcon がその SVG を描き、渡さなければ src を持たない", async () => {
+  const { window, host } = setup();
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>';
+  const apps: { icon?: string }[] = [{ icon: svg }, {}];
+  const root = mount(host, { apps });
+  const other = window.document.createElement("div") as unknown as HTMLElement;
+  host.after(other as never);
+  const plain = mount(other);
+  try {
+    root.render(row([appIcon(0), appIcon(1)]));
+    const images = host.querySelectorAll("img");
+    assertEquals(images[0]!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+    assertEquals(images[1]!.hasAttribute("src"), false);
+    // 後から足したアイコンも、次の描画で使う
+    apps.push({ icon: svg });
+    root.render(row([appIcon(0), appIcon(1), appIcon(2)]));
+    assertEquals(host.querySelectorAll("img")[2]!.getAttribute("src"), images[0]!.getAttribute("src"));
+    plain.render(appIcon(0));
+    assertEquals(other.querySelector("img")!.hasAttribute("src"), false);
+  } finally { root.unmount(); plain.unmount(); await window.happyDOM.close(); }
 });

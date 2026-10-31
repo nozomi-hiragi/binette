@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- ホームバーをドックに作り直す（案）。左にホーム、中央の台に開いているアプリのアイコン（無ければ頭文字の札）、右にインストール。名前は吹き出し、閉じるのは右クリック・長押し・メニューキー・Shift+F10 のメニューから。× は出さない。並びは Décor の TS の `mount` で描き、`mount(element, { apps })` で `appIcon` のアイコンを渡せるようにした。Régie の `SystemView.instances` に `icon` を足した
+
 - デザイナーにアイコンを追加
 
 - Décor の TS・AS に、Flutter・Jetpack Compose・SwiftUI によくある部品 `spacer`・`separator`・`stack`・`checkbox`・`radio`・`slider`・`picker`・`segmented`・`tabs`・`progress`・`spinner`・`image`・`listTile`・`chip`・`badge` と、修飾 `step`・`align` を追加（案）。値を返す部品は数を届ける新しいイベント（Régie の `dispatchUiValue`、アプリの `__bina_ui_value`）で値を受け取り、描き直しでアプリの値にそろえる。画像は base64 のラスターの data URL だけ。ダイアログ・シート・スナックバーは OS の重ね表示が要るので見送る。デザイナーは新しい部品の追加・木・インスペクター・コードの読み書きとプレビューに対応し、修飾の `width`・`height`・`step`・`align` も扱う

@@ -20,27 +20,31 @@ interface InstallPromptEvent extends Event {
   prompt(): Promise<unknown>;
 }
 
-/** OS の枠にライブモードの表示を作る。アプリには渡さない */
-export function mountLiveMode(stage: HTMLElement, installedOverride?: boolean): {
-  button: HTMLButtonElement;
+/** ライブモードの状態と操作。インストールのボタンはホームバーが描く */
+export interface LiveMode {
+  /** インストール済みか。true ならボタンを出さない */
+  readonly installed: boolean;
+  /** prompt の結果を待っている間は true。ボタンを押せなくする */
+  readonly busy: boolean;
+  /** インストールのボタンを押したときの処理 */
+  install(): Promise<void>;
   requireInstall(reason: string): boolean;
   stop(): void;
-} {
+}
+
+/** OS の枠にライブモードの透かしと手順を作る。installed・busy が変わったら onChange を呼ぶ。アプリには渡さない */
+export function mountLiveMode(stage: HTMLElement, installedOverride?: boolean, onChange: () => void = () => {}): LiveMode {
   const document = stage.ownerDocument;
   const window = document.defaultView;
   const queries = installedOverride === undefined ? displayModes(window) : [];
   let installed = installedOverride ?? isInstalled(window);
   let prompt: InstallPromptEvent | undefined;
   let stopped = false;
+  let busy = false;
   const watermark = document.createElement("span");
   watermark.className = "bina-shell-live";
   watermark.textContent = "ライブモード";
   watermark.setAttribute("aria-hidden", "true");
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "bina-shell-button bina-shell-install";
-  button.textContent = "インストール";
-  button.setAttribute("aria-label", "ライブモード：Binette をインストール");
   const dialog = document.createElement("dialog");
   dialog.className = "bina-shell-install-dialog";
   const title = document.createElement("h2");
@@ -74,8 +78,8 @@ export function mountLiveMode(stage: HTMLElement, installedOverride?: boolean): 
   };
   const render = () => {
     watermark.hidden = installed;
-    button.hidden = installed;
     if (installed) { prompt = undefined; closeDialog(); }
+    if (!stopped) onChange();
   };
   const updateMode = () => { installed = isInstalled(window); render(); };
   const appInstalled = () => { installed = true; render(); };
@@ -88,18 +92,19 @@ export function mountLiveMode(stage: HTMLElement, installedOverride?: boolean): 
     const pending = prompt;
     prompt = undefined;
     if (!pending) { showInstructions(); return; }
-    button.disabled = true;
+    busy = true; onChange();
     try { await pending.prompt(); }
     catch { if (!installed) showInstructions(); }
-    finally { button.disabled = false; }
+    finally { busy = false; if (!stopped) onChange(); }
   };
-  button.addEventListener("click", install);
   for (const query of queries) query.addEventListener?.("change", updateMode);
   window?.addEventListener("beforeinstallprompt", beforeInstall);
   if (installedOverride === undefined) window?.addEventListener("appinstalled", appInstalled);
-  render();
+  watermark.hidden = installed;
   return {
-    button,
+    get installed() { return installed; },
+    get busy() { return busy; },
+    install,
     requireInstall(message) {
       if (installed) return true;
       showInstructions(message);
@@ -111,10 +116,9 @@ export function mountLiveMode(stage: HTMLElement, installedOverride?: boolean): 
       for (const query of queries) query.removeEventListener?.("change", updateMode);
       window?.removeEventListener("beforeinstallprompt", beforeInstall);
       window?.removeEventListener("appinstalled", appInstalled);
-      button.removeEventListener("click", install);
       close.removeEventListener("click", closeDialog);
       closeDialog();
-      watermark.remove(); dialog.remove(); button.remove();
+      watermark.remove(); dialog.remove();
     },
   };
 }

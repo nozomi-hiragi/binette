@@ -6,6 +6,7 @@ import { State } from "@binette/core";
 import { mountShell } from "../src/index.ts";
 import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
+import { chooseFromMenu } from "./homebar-helper.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -119,7 +120,7 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
         await waitFor(() => activeHost(element) !== homeHost && logOf(element) === "create:0;start:1;resume;");
         await sleep(10);
         if (phase === "call") click(element, "click");
-        else element.querySelector<HTMLButtonElement>('[aria-label="テストを閉じる"]')!.click();
+        else chooseFromMenu(element, "テスト", "閉じる");
       }
       await waitFor(() => {
         return activeHost(element) === homeHost && !!logOf(element)?.endsWith("resume;") && (phase.startsWith("destroy") || errors.length === 1);
@@ -159,7 +160,10 @@ async function stackFixtures() {
   const app = await build();
   return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "test", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
 }
-const bar = (element: HTMLElement, label: string) => element.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click();
+// 「名前を閉じる」はホームバーのメニューの「閉じる」で押す
+const bar = (element: HTMLElement, label: string) => label.endsWith("を閉じる")
+  ? chooseFromMenu(element, label.slice(0, -"を閉じる".length), "閉じる")
+  : element.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click();
 
 Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さない。ホームバーで切り替え・閉じる", async () => {
   const window = new Window(); const element = host(window); const store = createMemoryAppStore();

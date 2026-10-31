@@ -3,6 +3,7 @@ import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp
 import { Window } from "happy-dom";
 import { mountShell, createShellUi } from "../src/index.ts";
 import { buildApp } from "@binette/regie/build";
+import { barLabels, chooseFromMenu } from "./homebar-helper.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
@@ -338,7 +339,7 @@ Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候�
       assertEquals(button.type, "button"); assertEquals(button.getAttribute("aria-label"), `${button.textContent}を開く`);
       assertEquals(button.children.length, 0);
     }
-    assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホームインストール");
+    assertEquals(barLabels(element), ["ホームを開く", "インストール"]);
     shell.stop(); assertEquals(element.children.length, 0);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -360,8 +361,8 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
       if (action === "close") {
         await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
         assertEquals(good.live, 1); assertEquals(good.terminated, 0);
-        assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホーム設定×インストール");
-        element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
+        assertEquals(barLabels(element), ["ホームを開く", "設定を開く", "インストール"]);
+        chooseFromMenu(element, "設定", "閉じる");
       } else if (action === "startup") bad.emit({ type: "failed", message: "アプリの起動失敗" });
       else {
         bad.emit({ type: "ready", exports: [] });
@@ -379,7 +380,7 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
         }
       }
       await waitFor(() => !host.hidden && element.querySelector(".bina-shell-app") === null);
-      assertEquals(count, 2); assertEquals(element.querySelector(".bina-shell-homebar")!.textContent, "ホームインストール");
+      assertEquals(count, 2); assertEquals(barLabels(element), ["ホームを開く", "インストール"]);
       assertEquals(errors.length, action === "startup" || action === "crash" ? 2 : 1);
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
@@ -403,7 +404,7 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
     await waitFor(() => resumed === 2);
     element.querySelector<HTMLButtonElement>('.bina-shell-homebar [aria-label="設定を開く"]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
-    element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
+    chooseFromMenu(element, "設定", "閉じる");
     await waitFor(() => element.querySelector("[data-bina-key=debug]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(host.hidden, true); assertEquals(count, 3); assertEquals(good.live, 1);
   } finally { shell.stop(); await window.happyDOM.close(); }
@@ -511,7 +512,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
     assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=homes]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
-    element.querySelector<HTMLButtonElement>('[aria-label="設定を閉じる"]')!.click();
+    chooseFromMenu(element, "設定", "閉じる");
     await waitFor(() => element.querySelector("[data-bina-key=homes]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
     shell.stop();
