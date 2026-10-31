@@ -174,7 +174,9 @@ function buttonPadding(op: UiUpdate): string {
 function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: boolean): void {
   for (const name of variants) setClass(node, `bina-ui-variant-${name}`, op.variant === name);
   for (const name of tones) setClass(node, `bina-ui-tone-${name}`, op.tone === name);
-  for (const name of surfaces) setClass(node, `bina-ui-surface-${name}`, op.surface === name);
+  // 面は column・row・grid だけに効く
+  const layout = ["bina-ui-column", "bina-ui-row", "bina-ui-grid"].some(name => node.classList.contains(name));
+  for (const name of surfaces) setClass(node, `bina-ui-surface-${name}`, layout && op.surface === name);
   const sides = (op.divider ?? "").split(" ");
   for (const side of dividerSides) setClass(node, `bina-ui-divider-${side}`, sides.includes(side));
   for (const name of lookFlags) setClass(node, `bina-ui-${name}`, op[name] === true);

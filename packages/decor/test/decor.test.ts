@@ -280,13 +280,13 @@ Deno.test("見た目の修飾はクラス・属性・CSS 変数になり、描�
   let on = false;
   const noop = () => {};
   const styled = () => column([
-    text("見出し").tone("muted").mono().small().bold().truncate().key("t"),
+    text("見出し").tone("muted").mono().small().bold().truncate().surface("dark").key("t"),
     button("保存", noop).variant("primary").key("primary"),
     button("木", noop).variant("ghost").selected(true).key("selected"),
     button("葉", noop).selected(false).key("unselected"),
     button("grow", () => { on = !on; }).toggle(on).key("switch"),
     button("文字", noop).toggle(true).label("グリッド").key("labelled"),
-    input("", noop).placeholder("なし").height(80).key("input"),
+    input("", noop).placeholder("なし").height(80).surface("field").key("input"),
     row([text("値")]).surface("field").divider("left").divider("top").width(240).minHeight(420).center().scroll().fill().collapse().wrap().selected(true).key("row"),
   ]).surface("dark").fill();
   const plain = () => column([
