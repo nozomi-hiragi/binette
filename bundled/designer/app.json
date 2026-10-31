@@ -1,0 +1,7 @@
+{
+  "id": "io.github.nozomi-hiragi.binette.designer",
+  "version": "0.1.0",
+  "binette": "0.2",
+  "name": "デザイナー",
+  "entry": { "as": "src/main.ts" }
+}

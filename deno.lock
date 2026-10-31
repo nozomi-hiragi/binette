@@ -1550,6 +1550,11 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
+      "bundled/designer": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
       "packages/core": {
         "dependencies": [
           "npm:valibot@1.5.0"
