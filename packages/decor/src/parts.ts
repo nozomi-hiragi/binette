@@ -26,6 +26,37 @@ export class View {
   shownValue: boolean = true;
   appValue: number = -1;
   multilineValue: boolean = false;
+  /** ボタンの種類の名前。"" は既定 */
+  variantValue: string = "";
+  /** 文字の色の名前。"" は既定 */
+  toneValue: string = "";
+  /** 面の名前。"" は既定 */
+  surfaceValue: string = "";
+  /** 区切り線を引く辺を空白で区切った並び。"" は無し */
+  dividerValue: string = "";
+  monoValue: boolean = false;
+  smallValue: boolean = false;
+  boldValue: boolean = false;
+  truncateValue: boolean = false;
+  /** 固定の幅（px）。0 は指定なし */
+  widthValue: number = 0;
+  centerValue: boolean = false;
+  /** 選ばれている状態。-1 は指定なし、0 は選ばれていない、1 は選ばれている */
+  selectedValue: number = -1;
+  /** スイッチの状態。-1 はスイッチでない、0 は切、1 は入 */
+  toggleValue: number = -1;
+  scrollValue: boolean = false;
+  fillValue: boolean = false;
+  collapseValue: boolean = false;
+  /** 入力欄の placeholder。"" は無し */
+  placeholderValue: string = "";
+  /** 固定の高さ（px）。0 は指定なし */
+  heightValue: number = 0;
+  /** 最小の高さ（px）。0 は指定なし */
+  minHeightValue: number = 0;
+  wrapValue: boolean = false;
+  /** 印の枠を付けるか。状態は表さない */
+  highlightValue: boolean = false;
   constructor(readonly kind: string) {}
   padding(n: number = space.md): View { this.paddingValue = n; return this; }
   gap(n: number = space.md): View { this.gapValue = n; return this; }
@@ -40,8 +71,66 @@ export class View {
   enabled(b: boolean): View { this.enabledValue = b; return this; }
   /** 複数行の入力欄にする。 */
   multiline(): View { this.multilineValue = true; return this; }
+  /** ボタンの種類を選ぶ（button・buttonOf に効く）。色の値は OS が決める。知らない名前は既定に戻す */
+  variant(name: string): View { this.variantValue = variants.includes(name) ? name : ""; return this; }
+  /** 文字の色を選ぶ（text に効く）。色の値は OS が決める。知らない名前は既定に戻す */
+  tone(name: string): View { this.toneValue = tones.includes(name) ? name : ""; return this; }
+  /** 面を選ぶ（column・row・grid に効く）。色の値は OS が決める。知らない名前は既定に戻す */
+  surface(name: string): View { this.surfaceValue = surfaces.includes(name) ? name : ""; return this; }
+  /** 辺（"top"・"right"・"bottom"・"left"）に 1px の区切り線を引く。複数の辺は複数回呼ぶ */
+  divider(side: string): View {
+    if (!dividerSides.includes(side)) return this;
+    const current = " " + this.dividerValue + " ";
+    let result = "";
+    for (let i = 0; i < dividerSides.length; i++) {
+      const name = dividerSides[i];
+      if (name == side || current.indexOf(" " + name + " ") >= 0) result += (result.length > 0 ? " " : "") + name;
+    }
+    this.dividerValue = result;
+    return this;
+  }
+  /** 等幅の字体にする */
+  mono(): View { this.monoValue = true; return this; }
+  /** 小さめの文字にする */
+  small(): View { this.smallValue = true; return this; }
+  /** 太字にする */
+  bold(): View { this.boldValue = true; return this; }
+  /** 1 行に収め、はみ出しは「…」にする */
+  truncate(): View { this.truncateValue = true; return this; }
+  /** 固定の幅（px）にし、flex で縮めない。0 以下と有限でない値は指定なし */
+  width(n: number): View { this.widthValue = n > 0 && n != Infinity ? n : 0; return this; }
+  /** 固定の高さ（px）にし、flex で縮めない。0 以下と有限でない値は指定なし */
+  height(n: number): View { this.heightValue = n > 0 && n != Infinity ? n : 0; return this; }
+  /** 最小の高さ（px）。0 以下と有限でない値は指定なし */
+  minHeight(n: number): View { this.minHeightValue = n > 0 && n != Infinity ? n : 0; return this; }
+  /** 入力欄が空のときに見せる文字 */
+  placeholder(s: string): View { this.placeholderValue = s; return this; }
+  /** row の子を折り返して並べる */
+  wrap(): View { this.wrapValue = true; return this; }
+  /** 子を縦横の中央に置く */
+  center(): View { this.centerValue = true; return this; }
+  /** 選ばれている状態を表す。ボタンは押された状態、ほかの部品はアクセントの細い枠になる */
+  selected(b: boolean): View { this.selectedValue = b ? 1 : 0; return this; }
+  /** 部品の種類によらず、アクセントの細い枠で印を付ける。状態は変えず、読み上げにも出ない */
+  highlight(b: boolean): View { this.highlightValue = b; return this; }
+  /** ボタンを入・切のスイッチにする。ボタンの文字は見せず、読み上げの名前に使う */
+  toggle(on: boolean): View { this.toggleValue = on ? 1 : 0; return this; }
+  /** この部品の中だけをスクロールする */
+  scroll(): View { this.scrollValue = true; return this; }
+  /** 親の高さいっぱいに広げる */
+  fill(): View { this.fillValue = true; return this; }
+  /** 幅が狭いとき、子を縦に積んで全幅にする（row に付ける） */
+  collapse(): View { this.collapseValue = true; return this; }
   arg(i: number): View { this.argValue = i; return this; }
 }
+/** variant に使える名前（ボタンの種類） */
+export const variants: Array<string> = ["primary", "ghost", "subtle", "danger", "dashed"];
+/** tone に使える名前（文字の色） */
+export const tones: Array<string> = ["muted", "accent", "danger", "success"];
+/** surface に使える名前（面） */
+export const surfaces: Array<string> = ["surface", "sunken", "card", "dark", "field"];
+/** divider に使える辺 */
+export const dividerSides: Array<string> = ["top", "right", "bottom", "left"];
 export abstract class UiCallback { abstract call(arg: number): void; }
 /** 子を縦に並べる。 */
 export function column(children: Array<View>): View { const v = new View("column"); v.children = children; return v; }

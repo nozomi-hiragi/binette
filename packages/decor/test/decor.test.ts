@@ -272,3 +272,222 @@ for (const multiline of [false, true]) {
     } finally { dom.clear(); await window.happyDOM.close(); }
   });
 }
+
+Deno.test("見た目の修飾はクラス・属性・CSS 変数になり、描き直しで付け外しされる", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  let on = false;
+  const noop = () => {};
+  const styled = () => column([
+    text("見出し").tone("muted").mono().small().bold().truncate().surface("dark").key("t"),
+    button("保存", noop).variant("primary").key("primary"),
+    button("木", noop).variant("ghost").selected(true).key("selected"),
+    button("葉", noop).selected(false).key("unselected"),
+    button("grow", () => { on = !on; }).toggle(on).key("switch"),
+    button("文字", noop).toggle(true).label("グリッド").key("labelled"),
+    input("", noop).placeholder("なし").height(80).surface("field").key("input"),
+    row([text("値")]).surface("field").divider("left").divider("top").width(240).minHeight(420).center().scroll().fill().collapse().wrap().selected(true).key("row"),
+  ]).surface("dark").fill();
+  const plain = () => column([
+    text("見出し").key("t"), button("保存", noop).key("primary"), button("木", noop).key("selected"), button("葉", noop).key("unselected"),
+    button("grow", noop).key("switch"), button("文字", noop).key("labelled"), input("", noop).key("input"), row([text("値")]).key("row"),
+  ]);
+  const at = (key: string) => host.querySelector(`[data-bina-key="${key}"]`)! as HTMLElement;
+  const classes = (key: string) => [...at(key).classList].filter(name => !/^bina-ui-(?:column|row|text|button|input)$/.test(name)).sort();
+  try {
+    root.render(styled());
+    const outer = host.querySelector(".bina-ui-column")! as HTMLElement;
+    assertEquals([...outer.classList], ["bina-ui-column", "bina-ui-surface-dark", "bina-ui-fill"]);
+    assertEquals(classes("t"), ["bina-ui-bold", "bina-ui-mono", "bina-ui-small", "bina-ui-tone-muted", "bina-ui-truncate"]);
+    assertEquals(classes("primary"), ["bina-ui-variant-primary"]);
+    assertEquals(at("selected").getAttribute("aria-pressed"), "true");
+    assertEquals(classes("selected"), ["bina-ui-selected", "bina-ui-variant-ghost"]);
+    assertEquals(at("unselected").getAttribute("aria-pressed"), "false");
+    assertEquals(classes("unselected"), []);
+    const toggle = at("switch");
+    assertEquals(toggle.getAttribute("role"), "switch");
+    assertEquals(toggle.getAttribute("aria-checked"), "false");
+    assertEquals(toggle.getAttribute("aria-label"), "grow");
+    assertEquals(toggle.hasAttribute("aria-pressed"), false);
+    assertEquals(toggle.textContent, "");
+    assertEquals(at("labelled").getAttribute("aria-label"), "グリッド");
+    assertEquals(at("labelled").getAttribute("aria-checked"), "true");
+    toggle.click();
+    assertEquals(on, true);
+    root.render(styled());
+    assertStrictEquals(at("switch"), toggle);
+    assertEquals(toggle.getAttribute("aria-checked"), "true");
+    const field = at("input") as HTMLInputElement;
+    assertEquals(field.getAttribute("placeholder"), "なし");
+    assertEquals(classes("input"), ["bina-ui-height"]);
+    assertEquals(field.style.getPropertyValue("--bina-ui-height"), "80px");
+    const line = at("row");
+    assertEquals(classes("row"), ["bina-ui-center", "bina-ui-collapse", "bina-ui-divider-left", "bina-ui-divider-top", "bina-ui-fill", "bina-ui-scroll", "bina-ui-selected", "bina-ui-surface-field", "bina-ui-width", "bina-ui-wrap"]);
+    assertEquals(line.style.getPropertyValue("--bina-ui-width"), "240px");
+    assertEquals(line.style.getPropertyValue("min-height"), "420px");
+    assertEquals(line.hasAttribute("aria-pressed"), false);
+
+    root.render(plain());
+    assertStrictEquals(at("row"), line);
+    assertStrictEquals(at("switch"), toggle);
+    assertEquals([...outer.classList], ["bina-ui-column"]);
+    for (const key of ["t", "primary", "selected", "unselected", "switch", "labelled", "input", "row"]) assertEquals(classes(key), [], key);
+    for (const name of ["aria-pressed", "aria-checked", "role", "placeholder"]) assertEquals(host.querySelector(`[${name}]`), null, name);
+    assertEquals(toggle.textContent, "grow");
+    assertEquals(toggle.hasAttribute("aria-label"), false);
+    assertEquals(line.style.getPropertyValue("--bina-ui-width"), "");
+    assertEquals(line.style.getPropertyValue("min-height"), "");
+    assertEquals(field.style.getPropertyValue("--bina-ui-height"), "");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("見た目の修飾は知らない名前と有限でない長さを無視する", async () => {
+  assertEquals(button("x", () => {}).variant("primary").variant("evil").variantValue, "");
+  assertEquals(text("x").tone("muted").tone("evil").toneValue, "");
+  assertEquals(column([]).surface("card").surface("evil").surfaceValue, "");
+  // 役割の違う名前は受け付けない
+  assertEquals([button("x", () => {}).variant("muted").variantValue, text("x").tone("primary").toneValue, column([]).surface("ghost").surfaceValue], ["", "", ""]);
+  assertEquals(text("x").divider("middle").dividerValue, "");
+  assertEquals(column([]).divider("bottom").divider("top").divider("bottom").dividerValue, "top bottom");
+  const lengths = column([]).width(-5).height(NaN).minHeight(Infinity);
+  assertEquals([lengths.widthValue, lengths.heightValue, lengths.minHeightValue], [0, 0, 0]);
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const dom = createUiDom(host, { dispatchUi() {}, dispatchUiText() {} });
+  try {
+    // AS のアプリは任意の文字列を送れるので、DOM 側でも知っている名前だけをクラスにする
+    dom.apply([
+      { op: "ui-create", handle: 1, kind: "row" },
+      { op: "ui-update", handle: 1, text: "", padding: null, gap: null, grow: false, label: null, enabled: true, clickable: false,
+        variant: "ghost bina-ui-evil", tone: "muted bina-ui-evil", surface: "card bina-ui-evil", divider: "top evil left", width: Infinity, height: -1, minHeight: NaN },
+      { op: "ui-insert", parent: null, child: 1, before: null },
+    ]);
+    const node = host.querySelector(".bina-ui-row")! as HTMLElement;
+    assertEquals([...node.classList].sort(), ["bina-ui-divider-left", "bina-ui-divider-top", "bina-ui-row"]);
+    assertEquals(node.style.getPropertyValue("--bina-ui-width"), "");
+    assertEquals(node.style.getPropertyValue("--bina-ui-height"), "");
+    assertEquals(node.style.getPropertyValue("min-height"), "");
+  } finally { dom.clear(); await window.happyDOM.close(); }
+});
+
+Deno.test("見た目の修飾は既定でないものだけを操作に載せ、変わったときだけ更新する", () => {
+  let ops: DomOp[] = [];
+  const ui = createUiDiffer(op => ops.push(op));
+  ui.render(node("button", "a"), 1);
+  const plain = ops.find(op => op.op === "ui-update")!;
+  for (const name of ["variant", "tone", "surface", "divider", "mono", "width", "selected", "toggle", "placeholder", "height", "minHeight", "wrap", "highlight"]) assertEquals(name in plain, false, name);
+  ops = [];
+  ui.render(node("button", "a"), 2);
+  assertEquals(ops, []);
+  ui.render({ ...node("button", "a"), variant: "ghost", selected: 0, toggle: -1, width: 0, wrap: false, highlight: false }, 3);
+  assertEquals(ops.length, 1);
+  const update = ops[0]!;
+  assert(update.op === "ui-update");
+  assertEquals([update.variant, "tone" in update, "surface" in update, update.selected, "toggle" in update, "width" in update, "wrap" in update, "highlight" in update], ["ghost", false, false, false, false, false, false, false]);
+  ops = [];
+  ui.render({ ...node("button", "a"), variant: "ghost", selected: 0, highlight: true }, 4);
+  assertEquals(ops.length, 1);
+  assert(ops[0]!.op === "ui-update" && ops[0]!.highlight === true);
+});
+
+Deno.test("variant 付きのボタンは未指定の padding を小さめの道具の余白にし、スイッチは 0 にする", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    root.render(row([button("既定", () => {}), button("ghost", () => {}).variant("ghost"), button("chip", () => {}).variant("dashed"), button("sw", () => {}).variant("ghost").toggle(true), button("明示", () => {}).variant("primary").padding(3)]));
+    const [plain, ghost, chip, toggle, explicit] = [...host.querySelectorAll("button")].map(button => button.style.getPropertyValue("--bina-ui-padding"));
+    assert(!plain!.includes("10px"));
+    assertEquals(ghost!.split(" calc(").length, 2);
+    assert(ghost!.includes("var(--bina-ui-button-padding-px, 4px)") && ghost!.includes("var(--bina-ui-button-padding-px, 10px)"));
+    assert(chip!.includes("var(--bina-ui-button-padding-px, 2px)") && chip!.includes("var(--bina-ui-button-padding-px, 8px)"));
+    assertEquals(toggle, plain);
+    assertEquals(explicit, "3px");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("見た目の CSS は :where で詳細度 0 を保つ", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  for (const line of uiCss.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.includes("{") || trimmed.startsWith("@")) continue;
+    assert(trimmed.startsWith(":where("), trimmed);
+  }
+  for (const name of ["variant-primary", "variant-ghost", "tone-muted", "surface-dark", "surface-field", "toggle", "collapse", "divider-top", "height", "wrap", "highlight"]) assert(uiCss.includes(`.bina-ui-${name}`), name);
+});
+
+Deno.test("center() の column ではボタンの左寄せを打ち消す", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  // 詳細度が同じなので、打ち消す規則は左寄せの規則より後に置く
+  const left = uiCss.indexOf(":where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }");
+  const centered = uiCss.indexOf(":where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow)) { align-self: auto; }");
+  assert(left >= 0 && centered > left);
+});
+
+Deno.test("highlight と button 以外の selected は同じ細い枠になり、collapse は左右の区切りを上下にする", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  const rule = (selector: string) => uiCss.split("\n").find(line => line.trim().startsWith(`:where(${selector}`)) ?? "";
+  const mark = rule(".bina-ui-highlight:not(:focus-visible)");
+  assert(mark.includes(".bina-ui-selected:not(.bina-ui-button)") && mark.includes("outline: 1.5px solid") && mark.includes("outline-offset: 2px"), mark);
+  assert(rule(".bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button))").includes("border-radius: 4px"));
+  // 角丸を持つ部品が自分の角丸を保つよう、4px の角丸は button と input の規則より前に置く
+  assert(uiCss.indexOf("border-radius: 4px") < uiCss.indexOf(":where(.bina-ui-button) {"));
+  assert(uiCss.indexOf("border-radius: 4px") < uiCss.indexOf(":where(.bina-ui-input) {"));
+  const narrow = uiCss.slice(uiCss.indexOf("@container bina-ui (width < 720px)"));
+  assert(narrow.includes(":where(.bina-ui-collapse > .bina-ui-divider-left, .bina-ui-collapse > .bina-ui-divider-right) { border-left: 0; border-right: 0; }"));
+  assert(narrow.includes(":where(.bina-ui-collapse > .bina-ui-divider-right) { border-bottom: 1px solid"));
+  assert(narrow.includes(":where(.bina-ui-collapse > .bina-ui-divider-left) { border-top: 1px solid"));
+});
+
+Deno.test("既定の入力欄は線の色の枠と余白を持ち、dark と field の中は今の見た目を保つ", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  const plain = ".bina-ui-input:not(.bina-ui-surface-dark *, .bina-ui-surface-field > *)";
+  const rule = (suffix: string) => uiCss.split("\n").find(line => line.startsWith(`:where(${plain}${suffix})`)) ?? "";
+  const look = rule("");
+  assert(look.includes("border: 1px solid var(--bina-ui-line") && look.includes("background: var(--bina-ui-surface"), look);
+  assert(look.includes("var(--bina-ui-input-radius-px, var(--bina-ui-input-radius, var(--bina-ui-control-radius, 6px)))"), look);
+  assert(look.includes("var(--bina-ui-input-padding-px, 6px)") && look.includes("var(--bina-ui-input-padding-px, 8px)"), look);
+  // focus-visible だけでなく、フォーカス中はずっとアクセントの枠にする
+  assert(rule(":focus").includes("outline: 2px solid var(--bina-ui-focus"));
+  // dark と field の中の規則はそのまま残す
+  assert(uiCss.includes(":where(.bina-ui-surface-dark .bina-ui-input) { background: transparent; border: 0; color: inherit; }"));
+  assert(uiCss.includes(":where(.bina-ui-surface-field > .bina-ui-input) { flex: 1 1 0; min-width: 0; border: 0; border-radius: 0; background: transparent; outline: none; }"));
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  try {
+    root.render(column([input("", () => {}), input("", () => {}).padding(3)]));
+    const [fallback, explicit] = [...host.querySelectorAll("input")].map(field => field.style.getPropertyValue("--bina-ui-padding"));
+    // 未指定の padding は CSS の既定の余白に任せ、明示した padding はそれより優先する
+    assert(fallback!.startsWith("var(--bina-ui-input-default-padding, calc("), fallback);
+    assertEquals(explicit, "3px");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("highlight はクラスだけを付け、button でも押された状態にしない", async () => {
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const root = mount(host);
+  const noop = () => {};
+  const view = (on: boolean) => column([
+    button("印", noop).highlight(on).key("button"),
+    button("選択", noop).selected(true).highlight(on).key("selected"),
+    text("文字").highlight(on).key("text"),
+    input("", noop).highlight(on).key("input"),
+    row([]).highlight(on).key("row"),
+  ]).highlight(on);
+  const at = (key: string) => host.querySelector(`[data-bina-key="${key}"]`)! as HTMLElement;
+  try {
+    root.render(view(true));
+    for (const key of ["button", "selected", "text", "input", "row"]) assert(at(key).classList.contains("bina-ui-highlight"), key);
+    assert(host.querySelector(".bina-ui-column")!.classList.contains("bina-ui-highlight"));
+    assertEquals(at("button").hasAttribute("aria-pressed"), false);
+    assertEquals(at("button").classList.contains("bina-ui-selected"), false);
+    assertEquals(at("selected").getAttribute("aria-pressed"), "true");
+    for (const name of ["aria-current", "aria-selected", "aria-checked"]) assertEquals(host.querySelector(`[${name}]`), null, name);
+    root.render(view(false));
+    assertEquals(host.querySelector(".bina-ui-highlight"), null);
+    assertEquals(at("selected").getAttribute("aria-pressed"), "true");
+  } finally { root.unmount(); await window.happyDOM.close(); }
+});
