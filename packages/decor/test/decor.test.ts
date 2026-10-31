@@ -417,6 +417,14 @@ Deno.test("見た目の CSS は :where で詳細度 0 を保つ", async () => {
   for (const name of ["variant-primary", "variant-ghost", "tone-muted", "surface-dark", "surface-field", "toggle", "collapse", "divider-top", "height", "wrap", "highlight"]) assert(uiCss.includes(`.bina-ui-${name}`), name);
 });
 
+Deno.test("center() の column ではボタンの左寄せを打ち消す", async () => {
+  const { uiCss } = await import("../src/index.ts");
+  // 詳細度が同じなので、打ち消す規則は左寄せの規則より後に置く
+  const left = uiCss.indexOf(":where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }");
+  const centered = uiCss.indexOf(":where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow)) { align-self: auto; }");
+  assert(left >= 0 && centered > left);
+});
+
 Deno.test("highlight と button 以外の selected は同じ細い枠になり、collapse は左右の区切りを上下にする", async () => {
   const { uiCss } = await import("../src/index.ts");
   const rule = (selector: string) => uiCss.split("\n").find(line => line.trim().startsWith(`:where(${selector}`)) ?? "";

@@ -125,6 +125,8 @@ export const uiCss = `
 :where(.bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button)) { border-radius: 4px; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
 :where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
+/* center() を付けた column では、ボタンも中央に置く */
+:where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow)) { align-self: auto; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
 :where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
 :where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }
