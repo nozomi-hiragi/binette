@@ -116,6 +116,9 @@ export function newErrors(): i32 {
   const cases = ['checkbox(1, f)', 'radio(true)', 'slider(1, 0, space.md, f)', 'slider(1, 0, f)', 'picker(["a"], 0.5, f)', 'picker("a", 0, f)', 'tabs([1], 0, f)',
     'progress(Infinity)', 'spacer(1)', 'listTile("a", "b", c, d, e)', 'listTile("a", "b", nul)', 'text("x").align("middle")', 'slider(1, 0, 2, f).step(space.md)', 'image(src)', 'text("x").width(space.md)'];
   for (let i = 0; i < cases.length; i++) if (parse(cases[i]).root !== null) return i + 1;
+  // 文字列を取る修飾は、閉じ括弧の前に空白があっても読める
+  const spaced = ['text("x").label("name" )', 'chip("New").align( "end" )'];
+  for (let i = 0; i < spaced.length; i++) if (parse(spaced[i]).root === null) return 100 + i;
   return 0;
 }
 export function newSummaries(): string {

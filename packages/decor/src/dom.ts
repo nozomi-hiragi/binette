@@ -127,7 +127,8 @@ ${alignCss}
 :where(.bina-ui-badge.bina-ui-tone-muted) { background: ${colors.subtle}; color: ${colors.muted}; }
 :where(.bina-ui-badge.bina-ui-tone-danger) { background: ${colors.danger}; color: ${colors.surface}; }
 :where(.bina-ui-badge.bina-ui-tone-success) { background: ${colors.success}; color: ${colors.surface}; }
-:where(.bina-ui-column > :is(.bina-ui-chip, .bina-ui-badge, .bina-ui-segmented, .bina-ui-image):not(.bina-ui-grow)) { align-self: flex-start; }
+/* align() を付けた子は、既定の左寄せより align() を優先する */
+:where(.bina-ui-column > :is(.bina-ui-chip, .bina-ui-badge, .bina-ui-segmented, .bina-ui-image):not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: flex-start; }
 `;
 const lookCss: string = `
 :where(.bina-ui-button[class*="bina-ui-variant-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${controlRadius}; }
@@ -212,9 +213,9 @@ export const uiCss = `
 :where([class^="bina-ui-"])[hidden] { display: none !important; }
 :where(.bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button)) { border-radius: 4px; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
-:where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
+:where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: flex-start; }
 /* center() を付けた column では、ボタンも中央に置く */
-:where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow)) { align-self: auto; }
+:where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: auto; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
 :where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
 :where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }

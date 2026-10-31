@@ -412,9 +412,11 @@ class Parser {
       if (!this.take("(")) return n;
       let value = "";
       this.skip();
-      if (quotedModifier(name)) value = this.stringValue();
-      if (name == "align" && !alignments.includes(value)) this.fail("位置の名前は topStart・top・topEnd・start・center・end・bottomStart・bottom・bottomEnd です");
-      else if (!flag(name) && this.peek() != ")") value = this.expression();
+      if (quotedModifier(name)) {
+        value = this.stringValue();
+        this.skip();
+        if (name == "align" && !alignments.includes(value)) this.fail("位置の名前は topStart・top・topEnd・start・center・end・bottomStart・bottom・bottomEnd です");
+      } else if (!flag(name) && this.peek() != ")") value = this.expression();
       else if (numeric(name) && name != "padding" && name != "gap") this.fail("数値が必要です");
       if (numeric(name) && value.length > 0 && !validModifierNumber(name, value)) this.fail(name == "heading" || name == "arg" ? "整数を指定してください（段の名前は使えません）" : name == "step" || name == "width" || name == "height" ? "有限の数値が必要です（段の名前は使えません）" : "有限の数値か段の名前が必要です");
       if (name == "enabled" && value != "true" && value != "false") this.fail("true または false が必要です");
