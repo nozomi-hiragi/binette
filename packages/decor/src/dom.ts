@@ -213,6 +213,8 @@ export const uiCss = `
 :where(.bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button)) { border-radius: 4px; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
 :where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
+/* center() を付けた column では、ボタンも中央に置く */
+:where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow)) { align-self: auto; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
 :where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
 :where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }
@@ -272,7 +274,9 @@ function buttonPadding(op: UiUpdate): string {
 function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: boolean): void {
   for (const name of variants) setClass(node, `bina-ui-variant-${name}`, op.variant === name);
   for (const name of tones) setClass(node, `bina-ui-tone-${name}`, op.tone === name);
-  for (const name of surfaces) setClass(node, `bina-ui-surface-${name}`, op.surface === name);
+  // 面は column・row・grid だけに効く
+  const layout = ["bina-ui-column", "bina-ui-row", "bina-ui-grid"].some(name => node.classList.contains(name));
+  for (const name of surfaces) setClass(node, `bina-ui-surface-${name}`, layout && op.surface === name);
   const sides = (op.divider ?? "").split(" ");
   for (const side of dividerSides) setClass(node, `bina-ui-divider-${side}`, sides.includes(side));
   for (const name of lookFlags) setClass(node, `bina-ui-${name}`, op[name] === true);
