@@ -83,3 +83,93 @@ launch(new Demo());`;
     assert(batches.flat().some(op => op.op === "ui-update" && op.toggle === true));
   } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("AS のよくある部品は本物の Worker を経て描かれ、値を返す操作がアプリに届いて描き直される", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, row, text, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, spacer, separator, stack, image, listTile, chip, badge } from "jsr:@binette/replique/ui";
+let on = false;
+let size: i32 = 0;
+let volume: f64 = 2;
+let color: i32 = 0;
+let view: i32 = 1;
+let tab: i32 = 0;
+let locked = false;
+function check(value: bool): void { if (!locked) on = value; }
+function choose(i: i32): void { size = i; }
+function move(value: f64): void { if (!locked) volume = value; }
+function paint(i: i32): void { color = i; }
+function show(i: i32): void { view = i; locked = i == 2; }
+function open(i: i32): void { tab = i; }
+class Demo extends App {
+  build(): View {
+    const status = "on:" + (on ? "1" : "0") + " size:" + size.toString() + " volume:" + volume.toString() + " color:" + color.toString() + " view:" + view.toString() + " tab:" + tab.toString();
+    return column([
+      tabs(["概要", "詳細"], tab, open),
+      text(status).key("status"),
+      row([checkbox(on, check).label("通知"), spacer(), separator(), radio(size == 0, choose).arg(0).label("小"), radio(size == 1, choose).arg(1).label("大")]),
+      slider(volume, 0, 10, move).step(0.5).label("音量"),
+      picker(["赤", "青"], color, paint).label("色"),
+      segmented(["日", "週", "月"], view, show),
+      progress(volume / 10), spinner().label("待機"),
+      stack([image("data:image/png;base64,iVBORw0KGgo=").label("絵"), badge("3").align("topEnd")]),
+      listTile("題", "副題", chip("新").tone("accent"), null),
+    ]);
+  }
+}
+launch(new Demo());`;
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "components", name: "部品", entry: { as: "main.ts" } }),
+    "main.ts": code,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.appendChild(host as never);
+  const process = await startProcess(built.wasm, { createWorker: realWorker });
+  const dom = createUiDom(host, process);
+  const fire = (target: Element, type: string) => target.dispatchEvent(new window.Event(type, { bubbles: true }) as unknown as Event);
+  const status = () => host.querySelector('[data-bina-key="status"]')!.textContent;
+  try {
+    process.attach(ops => dom.apply(ops));
+    await process.begin();
+    assertEquals(status(), "on:0 size:0 volume:2.0 color:0 view:1 tab:0");
+    const box = host.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    const radios = [...host.querySelectorAll('input[type="radio"]')] as HTMLInputElement[];
+    const range = host.querySelector('input[type="range"]') as HTMLInputElement;
+    const select = host.querySelector("select")!;
+    const segments = [...host.querySelector('[role="radiogroup"]')!.children] as HTMLButtonElement[];
+    const tabItems = [...host.querySelectorAll('[role="tab"]')] as HTMLButtonElement[];
+    assertEquals([box.getAttribute("aria-label"), radios[0]!.checked, range.value, range.step, select.selectedIndex], ["通知", true, "2", "0.5", 0]);
+    assertEquals(segments.map(item => item.getAttribute("aria-checked")), ["false", "true", "false"]);
+    assertEquals(host.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow"), "20");
+    assertEquals(host.querySelector("img")!.getAttribute("alt"), "絵");
+    assertEquals(host.querySelector(".bina-ui-separator")!.getAttribute("aria-orientation"), "vertical");
+    assert(host.querySelector(".bina-ui-listTile .bina-ui-chip"));
+
+    box.click();
+    await waitFor(() => status().startsWith("on:1"));
+    radios[1]!.click();
+    await waitFor(() => status().includes("size:1"));
+    assertEquals([radios[0]!.checked, radios[1]!.checked], [false, true]);
+    range.value = "6.5";
+    fire(range, "input");
+    await waitFor(() => status().includes("volume:6.5"));
+    assertEquals(host.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow"), "65");
+    select.selectedIndex = 1;
+    fire(select, "change");
+    await waitFor(() => status().includes("color:1"));
+    tabItems[1]!.click();
+    await waitFor(() => status().endsWith("tab:1"));
+    assertEquals(tabItems.map(item => item.getAttribute("aria-selected")), ["false", "true"]);
+    segments[1]!.focus();
+    segments[1]!.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }) as unknown as Event);
+    await waitFor(() => status().includes("view:2"));
+
+    // view:2 のあいだアプリは checkbox と slider の値を受け付けない。DOM はアプリの値に戻る
+    box.click();
+    range.value = "1";
+    fire(range, "input");
+    await waitFor(() => box.checked && range.value === "6.5");
+    assertEquals(status(), "on:1 size:1 volume:6.5 color:1 view:2 tab:1");
+  } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
+});

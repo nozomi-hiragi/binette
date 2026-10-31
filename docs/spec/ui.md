@@ -17,7 +17,7 @@ class Counter extends App {
 launch(new Counter());
 ```
 
-`App.build(): View | null` の既定値は `null` で、HTML 方式は従来どおりです。OS がライフサイクルのメソッドやイベントを呼んだ後に `build()` を呼びます。`View` は共通の型で、`column(children)`、`row(children)`、`text(s)`、`button(label, f)`、子を含むボタンを返す `buttonOf(children, f)`、入力欄 `input(value, onText)`、グリッド `grid(children)`、アイコン `appIcon(i)` を使えます。ボタンのハンドラーはトップレベルの引数なし関数か、`arg(i)` を組み合わせた `i32` 引数を一つ持つ関数です。入力の `onText` は `(s: string) => void` で、入力のたびに現在の文字列を受け取ります。`input(value, onText).multiline()` は textarea を描画し、改行を含む値を扱います。
+`App.build(): View | null` の既定値は `null` で、HTML 方式は従来どおりです。OS がライフサイクルのメソッドやイベントを呼んだ後に `build()` を呼びます。`View` は共通の型で、`column(children)`、`row(children)`、`text(s)`、`button(label, f)`、子を含むボタンを返す `buttonOf(children, f)`、入力欄 `input(value, onText)`、グリッド `grid(children)`、アイコン `appIcon(i)` を使えます。ボタンのハンドラーはトップレベルの引数なし関数か、`arg(i)` を組み合わせた `i32` 引数を一つ持つ関数です。入力の `onText` は `(s: string) => void` で、入力のたびに現在の文字列を受け取ります。`input(value, onText).multiline()` は textarea を描画し、改行を含む値を扱います。ほかに Flutter・Jetpack Compose・SwiftUI によくある部品（`spacer`・`separator`・`stack`・`checkbox`・`radio`・`slider`・`picker`・`segmented`・`tabs`・`progress`・`spinner`・`image`・`listTile`・`chip`・`badge`）があります。[よくある部品](#よくある部品案) を参照してください。
 
 修飾は `padding(n)`、`gap(n)`、`grow()`、`key(s)`、読み上げ用の `label(s)`、`enabled(b)`、`arg(i)`、グリッドの列の最小幅をピクセルで指定する `minWidth(px)` です。key を付けた兄弟は、順序を変えても同じ DOM 要素を使い続けます。
 
@@ -61,3 +61,47 @@ Réplique は build ごとにハンドラー番号を振り直し、画面の木
 - ghost・subtle・dashed のボタン、`surface("field")` の中のボタン、`small()` のボタンは最小 44px をゆるめて詰められる。variant 無し・primary・danger のボタンは最小 44px のまま
 - 役割の色の変数: `--bina-ui-accent`、`--bina-ui-accent-content`、`--bina-ui-accent-soft`、`--bina-ui-accent-text`、`--bina-ui-surface`、`--bina-ui-sunken`、`--bina-ui-subtle`、`--bina-ui-line`、`--bina-ui-muted`、`--bina-ui-danger`、`--bina-ui-success`、`--bina-ui-shadow`、`--bina-ui-dark`、`--bina-ui-dark-content`、`--bina-ui-dark-muted`、`--bina-ui-dark-line`、`--bina-ui-dark-subtle`、`--bina-ui-dark-accent`、`--bina-ui-dark-danger`、`--bina-ui-dark-success`、`--bina-ui-mono`、`--bina-ui-small`、`--bina-ui-control-radius`、`--bina-ui-card-radius`。どれも省略でき、省略すると白地のライトテーマの値になる。OS の index.html は `#app` で `--color-*` から割り当てる
 - OS の index.html の document 方式のボタンの規則（アクセントの塗り）は、variant 無しの Décor のボタンにだけ効き、variant・スイッチ・選択・`surface("field")` の中のボタンには効かない
+
+## よくある部品（案）
+
+Flutter・Jetpack Compose・SwiftUI に共通する考え方の部品を、Décor の書き方（部品関数＋修飾の連鎖、色は OS の役割）で足します。名前と形はすべて案です。どれも TS（`@binette/decor`）と AS（`jsr:@binette/replique/ui`・`jsr:@binette/decor/as`）で同じ名前と引数です。AS のハンドラーはトップレベルの関数で、外の変数をつかむクロージャは使えません。
+
+| 部品 | 引数 | DOM と role | キー操作 | 主に効く修飾 |
+| --- | --- | --- | --- | --- |
+| `spacer()` | なし | `div` | なし | なし（row・column の余りを埋める） |
+| `separator()` | なし | `hr`（`separator`。row の中では `aria-orientation="vertical"`） | なし | なし |
+| `stack(children)` | 子の配列 | `div`（grid で子を重ねる） | なし | `center()`、子の `align(name)`、子の `fill()`、`padding` |
+| `checkbox(checked, onChange)` | 状態、`(checked: bool) => void` | `input type=checkbox`（`checkbox`） | Space で切り替え | `label`（読み上げの名前）、`enabled` |
+| `radio(selected, onSelect)` | 状態、button と同じハンドラー | `input type=radio`（`radio`） | Space で選ぶ。Tab で 1 つずつ移る | `arg(i)`（どの値か）、`label`、`enabled` |
+| `slider(value, min, max, onChange)` | 値・最小・最大、`(value: f64) => void` | `input type=range`（`slider`） | 矢印・Home・End・PageUp・PageDown（ブラウザーの既定） | `step(n)`、`label`、`enabled`、`grow`・`width` |
+| `picker(options, index, onChange)` | 選択肢・選択中の番号、`(index: i32) => void` | `select`（`combobox`） | ブラウザーの既定 | `label`、`enabled`、`width`・`grow` |
+| `segmented(options, index, onChange)` | 同上 | `div role=radiogroup` と `button role=radio`（`aria-checked`） | 矢印で隣へ移って選ぶ（端で折り返す）、Home・End、Tab で入るのは選択中の 1 つ | `label`、`enabled`、`grow`・`width` |
+| `tabs(options, index, onChange)` | 同上 | `div role=tablist` と `button role=tab`（`aria-selected`） | segmented と同じ（自動で切り替える tablist） | `label`、`enabled` |
+| `progress(value)` | 割合 0〜1。負なら不定 | `div role=progressbar`（`aria-valuemin=0`・`aria-valuemax=100`・`aria-valuenow`。不定では valuenow なし） | なし | `label`、`width`・`grow` |
+| `spinner()` | なし | `div role=progressbar`（valuenow なし） | なし | `label`、`width`（直径） |
+| `image(src)` | data URL | `img`（`alt` は `label`、無ければ空で飾り） | なし | `label`、`width`・`height` |
+| `listTile(title, subtitle?, leading?, trailing?)` | 題・副題（省略は ""）・先頭と末尾の View（省略は null） | `div`。中は先頭・題と副題の column・末尾 | 中の部品による | `gap`（既定 `space.md`）、`padding`（既定 上下 `space.sm`・左右 `space.md`） |
+| `chip(label)` | 文字 | `span` | なし | `tone(name)`、`label`、`padding` |
+| `badge(value)` | 文字（数など） | `span` | なし | `tone(name)`、`label`（例「未読 3 件」） |
+
+- 値を返す部品のハンドラーは、checkbox が押したあとの真偽、slider が数（範囲に丸める）、picker・segmented・tabs が選んだ番号を受け取る。radio は button と同じ `() => void` か `(i: i32) => void` で、`arg(i)` の値で呼ぶ
+- 値はアプリが持つ。部品は入力欄と同じく「制御された部品」で、DOM は操作のすぐあとに見た目を変え、アプリの描き直しで値と入力の版を受け取ってアプリの値にそろえる。アプリが値を変えなければ（受け付けなければ）元の値に戻る。古い版の描き直しは新しい操作を戻さない
+- `enabled(false)` の部品と、隠れた部品への操作はアプリに届かず、表示はアプリの値に戻る。選択肢の番号が範囲外・整数でないとき、数が有限でないときも捨てる
+- 選択肢の番号が整数でないか範囲外なら、選択なし（-1）にする。slider の min・max・値が有限でないときは 0・min+1・min にする。`step(n)` が 0 以下なら刻みなし（連続）
+- `separator` は修飾の `divider(side)` と名前を分けた。同じ名前で部品と修飾の意味が違うと、文書・デザイナーのコード・誤りの表示で区別しにくいため。HTML の `hr` と ARIA の `separator` に合わせる。row が `collapse()` で縦に積まれたときは横の線になる
+- `listTile` は先頭・末尾に任意の View を置く（画像・checkbox・chip など）。押せる行は `buttonOf([listTile(...)], f).variant("ghost")` で作る。listTile の中の checkbox などには `label` で名前を付ける
+- `stack` の子の既定の位置は左上（`topStart`）。`stack(...).center()` は全体を中央に、子の `align(name)` はその子だけを置く。`align(name)` の名前は `"topStart"`・`"top"`・`"topEnd"`・`"start"`・`"center"`・`"end"`・`"bottomStart"`・`"bottom"`・`"bottomEnd"`。column の子では横、row の子では縦の成分だけが効く。知らない名前は既定に戻す。クラスは `bina-ui-align-<name>`
+- `image` は PNG・JPEG・GIF・WebP の base64 の data URL だけを描く。外部 URL・SVG・ほかの形式は `src` を付けない。Scene が document 方式の HTML を描く前の検査（sanitize）と同じ許可にした。アプリのパッケージ（`.binapp`）は manifest・HTML・アイコン・WASM だけを持ち、画像などのファイルを持たないので、アプリ内のファイルを指す形は今の仕組みでは成り立たない。ファイルを同梱する仕組みができたら足す
+- `card` は作らない。`column(...).surface("card")` で足りる
+- 見た目はどれも OS の役割の変数（`--bina-ui-accent`・`--bina-ui-accent-soft`・`--bina-ui-line`・`--bina-ui-surface`・`--bina-ui-subtle`・`--bina-ui-muted` など）で描き、ライト・ダーク・`surface("dark")` の中で同じ規則になる。`surface` は column・row・grid の面の修飾なので、新しい部品は自分の CSS で面を描く。checkbox・radio・slider はネイティブの要素の見た目を消して OS の色で描く。progress の不定の動きと spinner の回転は、`prefers-reduced-motion` で遅くする
+- column の中の chip・badge・segmented・image は左に寄せ、横に伸ばさない（`grow()` を付けたものを除く）。row の中の progress は残りの幅に伸びる
+- `chip` と `badge` の `tone`: chip は `"accent"`・`"success"`・`"danger"` で淡い面と色付きの文字、`"muted"` で薄い面。badge は既定がアクセントの塗り、`"danger"`・`"success"` はその色の塗り、`"muted"` は薄い面
+- segmented と tabs の中のボタンはクラス `bina-ui-option` を持つ。OS の index.html の document 方式のボタンの規則はこのボタンに効かない
+- Régie には `__bina_ui_value_handle`・`__bina_ui_value_ack`、アプリには `__bina_ui_value(build, handler, value: f64)` を足した。DomOp の `ui-update` には、その部品のときだけ `checked`・`value`・`min`・`max`・`step`・`options`・`index` を、指定したときだけ `align` を載せる
+
+## 未決
+
+- ダイアログ・ボトムシート・スナックバー（トースト）は今回は足さない。アプリの領域の外に重ねて出す表示と、フォーカスの閉じ込め・戻し、背景の操作の止め方、OS の通知や別のアプリの重ね表示との順番を、OS（Scene）の側で決める必要があるため
+- メニュー（ポップアップ）・日付と時刻の選択・アイコンの部品も同じ理由と、アイコンの持ち方が決まっていないため見送る
+- radio の矢印キーでの移動。今はネイティブの name の組を使わず、Tab で 1 つずつ移って Space で選ぶ。組を表す修飾（例 `radioGroup()`）を足すかは未決
+- 部品の名前（`picker` か `select` か、`listTile` か `listItem` か）。`select` はアプリのハンドラーの名前によく使われ（例 `button("row", select)`）、import とぶつかるので `picker` にした。`listItem` は `list()` の子に付くクラス `bina-ui-listitem` と大文字小文字だけ違うので `listTile` にした

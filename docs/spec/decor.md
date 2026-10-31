@@ -32,7 +32,7 @@ draw();
 
 `mount(element)` は描画先に結び付いた root を返します。`root.render(view)` は木を描き、次の描画では前の木との差分を当てます。`root.unmount()` は描画と状態を解除します。普通の変数を変えた場合は明示的な `render` が必要です。
 
-View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。`input(value, handler).multiline()` は改行を含む値を扱う textarea を描画します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す Scene の描画で使います。TS の `mount(element)` にはアプリ情報を渡す入口がないため、そこで作る `appIcon` は画像の `src` を持ちません。
+View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。よくある部品の `spacer()`、`separator()`、`stack(children)`、`checkbox(checked, onChange)`、`radio(selected, onSelect)`、`slider(value, min, max, onChange)`、`picker(options, index, onChange)`、`segmented(options, index, onChange)`、`tabs(options, index, onChange)`、`progress(value)`、`spinner()`、`image(src)`、`listTile(title, subtitle, leading, trailing)`、`chip(label)`、`badge(value)` と、修飾の `step(n)`・`align(name)` もあります（下の「よくある部品」）。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。`input(value, handler).multiline()` は改行を含む値を扱う textarea を描画します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す Scene の描画で使います。TS の `mount(element)` にはアプリ情報を渡す入口がないため、そこで作る `appIcon` は画像の `src` を持ちません。
 
 ### 関数の部品とフック（案）
 
@@ -69,6 +69,21 @@ column([
 ```
 
 色はアプリが値を書かず、OS の役割を選びます。役割は効く部品ごとに、ボタンの種類の `variant(name)`、文字の色の `tone(name)`、面の `surface(name)` に分けます。ほかに `divider(side)`、`mono()`、`small()`、`bold()`、`truncate()`、`width(px)`、`height(px)`、`minHeight(px)`、`center()`、`wrap()`、`selected(b)`、印の `highlight(b)`、`toggle(on)`、`scroll()`、`fill()`、`collapse()`、入力の `placeholder(s)` があります。TS と AS で共通の `parts.ts` にあり、View から UiNode、`ui-update` の操作を経て DOM のクラスと属性になります。古いアプリは送らないので、操作では既定でない値だけを載せます。名前と効果の一覧と役割の色の変数は [宣言的 UI](ui.md#見た目の修飾案) を参照してください。
+
+### よくある部品（案）
+
+```ts
+column([
+  tabs(["一般", "通知"], tab, i => { tab = i; draw(); }),
+  listTile("通知", "音とバナーで知らせる", null, checkbox(notify, on => { notify = on; draw(); }).label("通知")),
+  separator(),
+  row([text("音量"), slider(volume, 0, 1, v => { volume = v; draw(); }).step(0.05).grow().label("音量")]).gap(12),
+  row([segmented(["日", "週", "月"], period, i => { period = i; draw(); }), spacer(), spinner().label("読み込み中")]),
+  progress(volume),
+]).gap(16).padding(16);
+```
+
+値を返す部品（checkbox・radio・slider・picker・segmented・tabs）は、入力欄と同じく値をアプリが持ちます。DOM は操作のあとすぐ見た目を変え、アプリの描き直しで値と入力の版を受け取ってそろえます。差分エンジンは入力欄と同じく、これらの部品を描き直しのたびに更新に載せ、アプリが値を変えなかったときに DOM を戻せるようにします。Scene から Worker へは `dispatchUiValue(handle, value, version)` で数を一つ送り、Worker が部品の種類で確かめて（番号は範囲内の整数、slider は範囲に丸める）アプリの `__bina_ui_value(build, handler, value)` を呼びます。AS では checkbox・slider のハンドラーを `parts.ts` の関数の型で受け、radio・picker・segmented・tabs は button と同じ包み方（`as.ts` と `view.ts`）で番号を渡します。部品ごとの引数・role・キー操作・効く修飾は [宣言的 UI](ui.md#よくある部品案) を参照してください。
 
 ## AS の入口（案）
 

@@ -23,6 +23,8 @@ draw();
 
 見た目は役割の名前で選び、色の値は OS の CSS 変数（`--bina-ui-accent` など）が決めます。役割は効く部品ごとに、ボタンの種類の `variant("primary")`・`variant("ghost")`、文字の色の `tone("muted")`、面の `surface("card")`・`surface("dark")` などに分かれます。ほかに区切り線の `divider(side)`、字体の `mono()`・`small()`・`bold()`・`truncate()`、大きさの `width(px)`・`height(px)`・`minHeight(px)`、配置の `center()`・`wrap()`、状態の `selected(b)`・`toggle(on)`、印の `highlight(b)`、区画の `scroll()`・`fill()`・`collapse()`、入力の `placeholder(s)` があります。TS と AS の両方で使えます。
 
+Flutter・Jetpack Compose・SwiftUI によくある部品も、同じ書き方で使えます（案）。余りを埋める `spacer()`、区切り線の `separator()`（修飾の `divider(side)` と区別するための名前）、子を重ねる `stack(children)` と位置の `align(name)`、値を返す `checkbox(checked, onChange)`・`radio(selected, onSelect)`・`slider(value, min, max, onChange)`（刻みは `step(n)`）・`picker(options, index, onChange)`・`segmented(options, index, onChange)`・`tabs(options, index, onChange)`、進み具合の `progress(value)`（負は不定）・`spinner()`、画像の `image(src)`（base64 のラスターの data URL だけ）、一覧の行の `listTile(title, subtitle, leading, trailing)`、札の `chip(label)`・`badge(value)` です。値を返す部品は入力欄と同じく値をアプリが持ち、描き直しでアプリの値にそろえます。role・aria・キー操作は [宣言的 UI の仕様](../../docs/spec/ui.md) を参照してください。
+
 AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique/ui` も互換の入口として使えます。関数の部品とフックは TS の `mount` 向けです。JSX は含みません。
 
 API と分担の細部は案です。[仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/decor.md) を参照してください。

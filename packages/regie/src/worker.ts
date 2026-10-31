@@ -166,9 +166,11 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "fail", id: data.id, message: "アプリがまだ起動していません。" });
         return;
       }
-      if (data.name === "__bina_ui_text_ack") {
+      // 値を返す部品。番号は選択肢の数の中の整数だけ、slider は範囲に丸めて渡す
+      const valueKinds = ["checkbox", "radio", "slider", "picker", "segmented", "tabs"];
+      if (data.name === "__bina_ui_text_ack" || data.name === "__bina_ui_value_ack") {
         const target = ui.findAny(Number(data.args?.[0] ?? -1));
-        if (target?.node.kind === "input") {
+        if (target && (data.name === "__bina_ui_text_ack" ? target.node.kind === "input" : valueKinds.includes(target.node.kind))) {
           ui.inputVersions.set(target.handle, Number(data.args?.[1] ?? 0));
           ops.push(ui.update(target.handle, target.node, target.listItem));
           flush();
@@ -177,27 +179,37 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         return;
       }
       const uiText = data.name === "__bina_ui_text_handle";
-      const uiHandle = data.name === "__bina_ui_handle" || uiText;
+      const uiValue = data.name === "__bina_ui_value_handle";
+      const uiHandle = data.name === "__bina_ui_handle" || uiText || uiValue;
       const target = uiHandle ? ui.find(Number(data.args?.[0] ?? -1)) : undefined;
-      if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown || (uiText ? target.node.kind !== "input" : target.node.kind !== "button"))) {
+      const valueTarget = uiValue && target !== undefined && valueKinds.includes(target.node.kind);
+      let value = Number(data.args?.[1]);
+      if (valueTarget) {
+        const node = target!.node;
+        if (node.kind === "slider" && Number.isFinite(value)) value = Math.min(node.max ?? 1, Math.max(node.min ?? 0, value));
+        if (node.kind === "checkbox") value = value ? 1 : 0;
+        if (["picker", "segmented", "tabs"].includes(node.kind) && !(Number.isInteger(value) && value >= 0 && value < (node.options ?? []).length)) value = NaN;
+      }
+      if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown ||
+        (uiText ? target.node.kind !== "input" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button"))) {
         // 捨てた入力にも版を進めた値を返し、Scene の表示をアプリの値に戻す
-        if (uiText && target?.node.kind === "input") {
-          ui.inputVersions.set(target.handle, Number(data.args?.[2] ?? 0));
+        if ((uiText && target?.node.kind === "input") || valueTarget) {
+          ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));
           ops.push(ui.update(target.handle, target.node, target.listItem));
           flush();
         }
         scope.postMessage({ type: "done", id: data.id });
         return;
       }
-      const name = uiHandle ? (uiText ? "__bina_ui_text" : "__bina_ui_event") : data.name!;
+      const name = uiHandle ? (uiText ? "__bina_ui_text" : uiValue ? "__bina_ui_value" : "__bina_ui_event") : data.name!;
       const fn = Object.hasOwn(instance.exports, name) ? instance.exports[name] : undefined;
       if (typeof fn !== "function") {
         scope.postMessage({ type: "fail", id: data.id, message: `アプリに関数 ${data.name} がありません。` });
         return;
       }
       try {
-        if (uiText) ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));
-        fn(...(uiHandle ? [target!.build, target!.node.handler, ...(uiText ? [writeString(String(data.args?.[1] ?? ""))] : [])] : (data.args ?? [])));
+        if (uiText || uiValue) ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));
+        fn(...(uiHandle ? [target!.build, target!.node.handler, ...(uiText ? [writeString(String(data.args?.[1] ?? ""))] : uiValue ? [value] : [])] : (data.args ?? [])));
         flush();
         scope.postMessage({ type: "done", id: data.id });
       } catch (error) {

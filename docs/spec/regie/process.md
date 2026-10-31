@@ -40,6 +40,10 @@ interface Process {
   dispatch(listener: number): void;
   /** 宣言的 UI の要素ハンドルでクリックを届ける */
   dispatchUi(handle: number): void;
+  /** 宣言的 UI の入力欄の文字を、入力の版と一緒に届ける */
+  dispatchUiText(handle: number, value: string, version?: number): void;
+  /** 宣言的 UI の値を返す部品（checkbox・radio・slider・picker・segmented・tabs）の値を、入力の版と一緒に届ける（案） */
+  dispatchUiValue(handle: number, value: number, version?: number): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -86,4 +90,4 @@ Create の直前に日時と key を履歴に足します。historyLimit は既�
 
 ## 宣言的 UI（案）
 
-Worker は画面の木を前回と比較して差分を Scene に渡します。Scene はクリックした要素のハンドルを `dispatchUi(handle)` に渡し、Worker は現在の木にある要素の現在のハンドラーと build 番号で WASM を呼びます。要素が消えたかハンドラーが無い場合は捨てます。イベントを届ける状態の判断は HTML 方式と共通です。詳しくは [宣言的 UI](../ui.md) を参照してください。
+Worker は画面の木を前回と比較して差分を Scene に渡します。Scene はクリックした要素のハンドルを `dispatchUi(handle)` に渡し、Worker は現在の木にある要素の現在のハンドラーと build 番号で WASM を呼びます。要素が消えたかハンドラーが無い場合は捨てます。イベントを届ける状態の判断は HTML 方式と共通です。値を返す部品の操作（`dispatchUiValue`）は入力欄の文字と同じく、捨てるときも版を Worker に知らせ、表示をアプリの値に戻します。詳しくは [宣言的 UI](../ui.md) を参照してください。

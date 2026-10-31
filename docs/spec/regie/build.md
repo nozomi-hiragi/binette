@@ -56,7 +56,7 @@ function buildApp(read: (path: string) => Promise<string>, options?: BuildOption
 1. `read("app.json")` を parseAppManifest で読む（誤りは BinetteError）
 2. 入口のパスを整える。絶対パス・スキーム・バックスラッシュ・%・フォルダ外は拒む
 3. `entry.html` があれば HTML と AS を読み、省略時は空の HTML と AS を使う（案）
-4. AS の末尾に `\nexport { __bina_event, __bina_lifecycle, __bina_ui_event } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
+4. AS の末尾に `\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value } from "jsr:@binette/replique";\n` を足す。元の行番号は変えない（案・実装済み）
 5. asc でビルドし `{ manifest, html, wasm }` を返す
 
 `bina.ts` の生成を無くすのは決定 2026-10-27 です。HTML の解析、クリック関数の export 検査、BuiltApp.bindings、BuildOptions.parser と ShellOptions.parser、HtmlParser、deno-dom の依存を無くしました（案・実装済み）。入口に bina.ts というファイル名も使えます。

@@ -555,3 +555,55 @@ launch(new Demo());`;
     assertEquals(field.value, "final\nvalue");
   } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("宣言 UI の値を返す部品は、無効・範囲外・Pause で捨てた操作にも版を進めてアプリの値を返す", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, checkbox, slider, tabs } from "jsr:@binette/replique/ui";
+let on = false;
+let level: f64 = 1;
+let tab: i32 = 0;
+let calls: i32 = 0;
+function check(value: bool): void { on = value; calls++; }
+function move(value: f64): void { level = value; calls++; }
+function open(i: i32): void { tab = i; calls++; }
+class Demo extends App {
+  build(): View { return column([text("calls:" + calls.toString()), checkbox(on, check).enabled(calls < 3), slider(level, 0, 4, move), tabs(["一", "二"], tab, open)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const created = (kind: string) => batches.flat().find(op => op.op === "ui-create" && op.kind === kind);
+    const [box, range, list] = [created("checkbox"), created("slider"), created("tabs")];
+    assert(box?.op === "ui-create" && range?.op === "ui-create" && list?.op === "ui-create");
+    const last = (handle: number) => batches.flat().filter(op => op.op === "ui-update" && op.handle === handle).at(-1);
+    batches.length = 0;
+    // slider は範囲に丸め、tabs の範囲外の番号は捨てて今の番号を返す
+    process.dispatchUiValue(range.handle, 99, 1);
+    process.dispatchUiValue(list.handle, 5, 1);
+    process.dispatchUiValue(list.handle, 1.5, 2);
+    process.dispatchUiValue(list.handle, 1, 3);
+    process.dispatchUiValue(box.handle, 1, 1);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "calls:3"));
+    const slid = last(range.handle), opened = last(list.handle), checked = last(box.handle);
+    assert(slid?.op === "ui-update" && slid.value === 4 && slid.inputVersion === 1);
+    assert(opened?.op === "ui-update" && opened.index === 1 && opened.inputVersion === 3);
+    assert(checked?.op === "ui-update" && checked.checked === true && !checked.enabled);
+    // 無効になった checkbox への操作は捨て、版だけを進めて今の値を返す
+    batches.length = 0;
+    process.dispatchUiValue(box.handle, 0, 2);
+    await waitFor(() => last(box.handle)?.op === "ui-update" && (last(box.handle) as { inputVersion?: number }).inputVersion === 2);
+    const kept = last(box.handle);
+    assert(kept?.op === "ui-update" && kept.checked === true);
+    batches.length = 0;
+    process.dispatchUiValue(range.handle, 2, 2);
+    await process.pause();
+    await waitFor(() => last(range.handle)?.op === "ui-update" && (last(range.handle) as { inputVersion?: number }).inputVersion === 2);
+    const paused = last(range.handle);
+    assert(paused?.op === "ui-update" && paused.value === 4);
+    assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "calls:4"));
+  } finally { process.stop(); }
+});

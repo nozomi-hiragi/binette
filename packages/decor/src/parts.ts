@@ -57,6 +57,25 @@ export class View {
   wrapValue: boolean = false;
   /** 印の枠を付けるか。状態は表さない */
   highlightValue: boolean = false;
+  /** checkbox・radio の状態 */
+  checkedValue: boolean = false;
+  /** slider の値、progress の割合（0〜1。負は不定） */
+  numberValue: number = 0;
+  /** slider の最小値と最大値 */
+  minValue: number = 0;
+  maxValue: number = 1;
+  /** slider の刻み。0 は刻みなし（連続） */
+  stepValue: number = 0;
+  /** picker・segmented・tabs の選択肢 */
+  optionsValue: Array<string> = [];
+  /** picker・segmented・tabs の選択中の番号。-1 は選択なし */
+  indexValue: number = -1;
+  /** stack などの中での自分の位置の名前。"" は既定 */
+  alignValue: string = "";
+  /** slider の値を受け取る */
+  numberCallback: ((value: number) => void) | null = null;
+  /** checkbox の新しい状態を受け取る */
+  checkCallback: ((checked: boolean) => void) | null = null;
   constructor(readonly kind: string) {}
   padding(n: number = space.md): View { this.paddingValue = n; return this; }
   gap(n: number = space.md): View { this.gapValue = n; return this; }
@@ -122,7 +141,16 @@ export class View {
   /** 幅が狭いとき、子を縦に積んで全幅にする（row に付ける） */
   collapse(): View { this.collapseValue = true; return this; }
   arg(i: number): View { this.argValue = i; return this; }
+  /** slider の刻み。0 以下と有限でない値は刻みなし（連続） */
+  step(n: number): View { this.stepValue = n > 0 && n != Infinity ? n : 0; return this; }
+  /** stack の中での位置を選ぶ（"topStart"・"top"・"topEnd"・"start"・"center"・"end"・"bottomStart"・"bottom"・"bottomEnd"）。
+   * column の中では横、row の中では縦の成分だけが効く。知らない名前は既定に戻す */
+  align(name: string): View { this.alignValue = alignments.includes(name) ? name : ""; return this; }
 }
+/** align に使える名前（位置） */
+export const alignments: Array<string> = ["topStart", "top", "topEnd", "start", "center", "end", "bottomStart", "bottom", "bottomEnd"];
+/** 有限の数ならそのまま、そうでなければ fallback を返す */
+function finite(n: number, fallback: number): number { return n == n && n != Infinity && n != -Infinity ? n : fallback; }
 /** variant に使える名前（ボタンの種類） */
 export const variants: Array<string> = ["primary", "ghost", "subtle", "danger", "dashed"];
 /** tone に使える名前（文字の色） */
@@ -146,6 +174,56 @@ export function show(condition: boolean, view: View): View { view.shownValue = c
 export function row(children: Array<View>): View { const v = new View("row"); v.children = children; return v; }
 /** 文字を描く。 */
 export function text(value: string): View { const v = new View("text"); v.value = value; return v; }
+/** row・column の中で余りの場所を埋める。 */
+export function spacer(): View { return new View("spacer"); }
+/** 区切り線。column の中では横線、row の中では縦線になる。修飾の divider(side) と区別するため separator と呼ぶ */
+export function separator(): View { return new View("separator"); }
+/** 子を重ねる。子の位置は align(name)、全体の中央ぞろえは center() で選ぶ */
+export function stack(children: Array<View>): View { const v = new View("stack"); v.children = children; return v; }
+/** チェックボックス。onChange は押したあとの状態を受け取る */
+export function checkbox(checked: boolean, onChange: (checked: boolean) => void): View {
+  const v = new View("checkbox"); v.checkedValue = checked; v.checkCallback = onChange; return v;
+}
+/** min から max までの値を選ぶスライダー。onChange は動かしている間も値を受け取る */
+export function slider(value: number, min: number, max: number, onChange: (value: number) => void): View {
+  const v = new View("slider");
+  v.minValue = finite(min, 0);
+  v.maxValue = finite(max, v.minValue + 1);
+  v.numberValue = finite(value, v.minValue);
+  v.numberCallback = onChange;
+  return v;
+}
+/** 線形の進み具合。value は 0〜1 の割合で、負の値（と有限でない値）は終わりの分からない動きになる */
+export function progress(value: number): View { const v = new View("progress"); v.numberValue = value >= 0 && value != Infinity ? (value > 1 ? 1 : value) : -1; return v; }
+/** 円形の、終わりの分からない進み具合 */
+export function spinner(): View { return new View("spinner"); }
+/** 画像。src は PNG・JPEG・GIF・WebP の base64 の data URL だけを描き、ほかは描かない。label(s) が代替テキストになる */
+export function image(src: string): View { const v = new View("image"); v.value = src; return v; }
+/** 先頭・題・副題・末尾を持つ一行。副題が "" なら題だけにする */
+export function listTile(title: string, subtitle: string = "", leading: View | null = null, trailing: View | null = null): View {
+  const v = new View("listTile");
+  const lines: Array<View> = [text(title)];
+  if (subtitle.length > 0) lines.push(text(subtitle).small().tone("muted"));
+  const children: Array<View> = [];
+  if (leading !== null) children.push(leading);
+  children.push(column(lines).grow());
+  if (trailing !== null) children.push(trailing);
+  v.children = children;
+  v.gapValue = space.md;
+  return v;
+}
+/** 小さな札。tone(name) で色を選ぶ */
+export function chip(label: string): View { const v = new View("chip"); v.value = label; return v; }
+/** 数などを示す小さな丸い印。tone(name) で色を選ぶ */
+export function badge(value: string): View { const v = new View("badge"); v.value = value; return v; }
+/** 選択肢を持つ部品を作る。picker・segmented・tabs の共通部分。番号は整数でなければ -1 にする */
+export function choice(kind: string, options: Array<string>, index: number, callback: UiCallback): View {
+  const v = new View(kind);
+  v.optionsValue = options;
+  v.indexValue = index == Math.floor(index) && index >= 0 && index < options.length ? index : -1;
+  v.callback = callback;
+  return v;
+}
 /** 名前付きの段。負の値は CSS 変数への参照を表す。 */
 export class Scale {
   xs: number = -100;

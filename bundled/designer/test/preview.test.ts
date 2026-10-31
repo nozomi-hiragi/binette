@@ -8,12 +8,22 @@ interface PreviewNode {
   handler: number;
   enabled: boolean;
   children: PreviewNode[];
+  checked: boolean;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  options: string[];
+  index: number;
+  align: string;
+  highlight: boolean;
+  width: number;
 }
 
 /** デザイナーを実際の asc でコンパイルし、描いた部品の木を読み書きできるようにする。 */
 async function start() {
   const sources: Record<string, string> = {
-    "main.ts": await Deno.readTextFile(new URL("../src/main.ts", import.meta.url)) + '\nexport { __bina_lifecycle, __bina_ui_event, __bina_ui_text } from "jsr:@binette/replique";',
+    "main.ts": await Deno.readTextFile(new URL("../src/main.ts", import.meta.url)) + '\nexport { __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value } from "jsr:@binette/replique";',
     "model.ts": await Deno.readTextFile(new URL("../src/model.ts", import.meta.url)),
     "node_modules/jsr:@binette/replique.ts": await Deno.readTextFile(new URL("../../../packages/replique/src/index.ts", import.meta.url)),
     "node_modules/jsr:@binette/replique/ui.ts": await Deno.readTextFile(new URL("../../../packages/replique/src/ui.ts", import.meta.url)),
@@ -31,8 +41,9 @@ async function start() {
   const module = await WebAssembly.compile(new Uint8Array(wasm!));
   let frame!: { build: number; root: PreviewNode };
   function string(pointer: number): string {
-    const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true) / 2;
-    return String.fromCharCode(...new Uint16Array(exports.memory.buffer, pointer, length));
+    // 大きな木の JSON でも引数の数の上限に当たらないよう、まとめて読む
+    const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true);
+    return new TextDecoder("utf-16le").decode(new Uint8Array(exports.memory.buffer, pointer, length));
   }
   const imports: WebAssembly.Imports = {};
   for (const entry of WebAssembly.Module.imports(module)) {
@@ -48,6 +59,7 @@ async function start() {
     __bina_lifecycle(state: number, arg: number, time: number): void;
     __bina_ui_event(build: number, handler: number): void;
     __bina_ui_text(build: number, handler: number, pointer: number): void;
+    __bina_ui_value(build: number, handler: number, value: number): void;
     __new(size: number, id: number): number;
   };
   exports._start();
@@ -70,6 +82,8 @@ async function start() {
       new Uint16Array(exports.memory.buffer, pointer, value.length).set(Array.from(value, (c) => c.charCodeAt(0)));
       exports.__bina_ui_text(frame.build, field.handler, pointer);
     },
+    /** ラベルで探した値を返す部品（checkbox・slider・picker など）に値を届ける。 */
+    value(label: string, value: number) { exports.__bina_ui_value(frame.build, ui.find((node) => node.label === label).handler, value); },
     code: () => ui.find((node) => node.label === "Décor のコード").text,
     status: () => ui.find((node) => node.kind === "text" && node.text.startsWith("● ")).text,
     has: (label: string) => ui.nodes().some((node) => node.label === label),
@@ -108,7 +122,7 @@ Deno.test("通常アプリの appIcon は説明をプレビューし、木とコ
 Deno.test("インスペクターは選んだ部品に効く修飾だけをグループに分けて出す", async () => {
   const ui = await start();
   // 根の column: 余白・サイズ・識別・そのほか（list）。文字の中身や heading は出さない。
-  for (const title of ["インスペクター", "余白", "サイズ", "識別", "そのほか", "3 個の子"]) assert(ui.texts().includes(title), title);
+  for (const title of ["インスペクター", "余白", "サイズ", "識別", "そのほか", "9 個の子"]) assert(ui.texts().includes(title), title);
   for (const title of ["内容", "文字"]) assertEquals(ui.texts().includes(title), false, title);
   assert(ui.has("gap を増やす") && ui.has("list を切り替える"));
   assertEquals(ui.has("heading を増やす") || ui.has("multiline を切り替える") || ui.has("enabled を切り替える"), false);
@@ -165,4 +179,87 @@ Deno.test("数値の ＋、木の操作、コードの状態と反映", async ()
   assert(ui.has("部品を選択 text 新しい"));
   assertEquals(ui.has("部品を選択 input 複数行…"), false);
   assert(before !== ui.code());
+});
+
+Deno.test("見本は新しい部品をそのまま描き、プレビューの操作ではコールバック式を実行しない", async () => {
+  const ui = await start();
+  const kinds = new Set(ui.nodes().map((node) => node.kind));
+  for (const kind of ["tabs", "listTile", "stack", "image", "badge", "checkbox", "separator", "slider", "segmented", "spinner", "progress", "chip", "spacer"]) assert(kinds.has(kind), kind);
+  const tile = ui.find((node) => node.kind === "listTile");
+  assertEquals(tile.children.map((child) => child.kind), ["stack", "column", "checkbox"]);
+  assertEquals(ui.find((node) => node.kind === "badge").align, "topEnd");
+  assertEquals(ui.find((node) => node.kind === "tabs").options, ["一般", "通知", "表示"]);
+  const before = ui.code();
+  // プレビューの checkbox・slider・tabs を操作しても、木もコードも変わらない
+  ui.value("通知", 0);
+  ui.value("音量", 0.1);
+  ui.value("期間", 2);
+  assertEquals(ui.code(), before);
+  assertEquals(ui.find((node) => node.label === "通知" && node.kind === "checkbox").checked, true);
+  assertEquals(ui.find((node) => node.kind === "slider").value, 0.6);
+});
+
+Deno.test("新しい部品を追加し、インスペクターで値・範囲・選択肢・状態・位置を編集してコードに戻す", async () => {
+  const ui = await start();
+  const select = (name: string) => ui.click("部品を選択 " + name);
+  // 根の column に足していく
+  ui.click("slider を追加");
+  assert(ui.code().includes("slider(0.5, 0, 1, (value: f64) => {})"), ui.code());
+  ui.type("slider の max", "10");
+  ui.type("slider の値", "7.5");
+  ui.type("slider の min", "x");
+  assert(ui.texts().includes("min は有限の数値で指定してください。"));
+  ui.click("step を増やす");
+  assert(ui.code().includes("slider(7.5, 0, 10, (value: f64) => {}).step(1)"), ui.code());
+  const range = ui.find((node) => node.kind === "slider" && node.highlight);
+  assertEquals([range.value, range.min, range.max, range.step], [7.5, 0, 10, 1]);
+
+  select("column");
+  ui.click("segmented を追加");
+  ui.type("選択肢（1 行に 1 つ）", "小\n\n中\n大");
+  ui.type("選択中の番号", "2");
+  assert(ui.code().includes('segmented(["小", "中", "大"], 2, (index: i32) => {})'), ui.code());
+  ui.type("選択中の番号", "1.5");
+  assert(ui.texts().includes("選択中の番号は整数で指定してください（-1 は選択なし）。"));
+  assert(ui.has("部品を選択 segmented 大"));
+
+  select("column");
+  ui.click("checkbox を追加");
+  ui.click("checked を切り替える");
+  assert(ui.code().includes("checkbox(false, (checked: bool) => {})"), ui.code());
+  assert(ui.has("部品を選択 checkbox —"));
+
+  // listTile は先頭と末尾の 2 つまで。1 つだけのときは位置を選べる
+  select("column");
+  ui.click("listTile を追加");
+  ui.click("chip を追加");
+  assert(ui.code().includes('listTile("題", "副題", chip("札"))'), ui.code());
+  select("listTile 題");
+  ui.value("子の位置", 1);
+  assert(ui.code().includes('listTile("題", "副題", null, chip("札"))'), ui.code());
+  ui.click("radio を追加");
+  assert(ui.code().includes('listTile("題", "副題", radio(false, () => {}), chip("札"))'), ui.code());
+  ui.click("badge を追加");
+  assert(ui.texts().includes("listTile の子は先頭と末尾の 2 つまでです。"));
+  // 選んでいるのは足した radio。プレビューの listTile は radio を先頭、chip を末尾に描く
+  const tile = ui.find((node) => node.kind === "listTile" && node.children.some((child) => child.kind === "radio"));
+  assertEquals(tile.children.map((child) => [child.kind, child.highlight]), [["radio", true], ["column", false], ["chip", false]]);
+  // 先頭を消すと、残った子は末尾のまま
+  select("radio —");
+  ui.click("選択した部品を削除");
+  assert(ui.code().includes('listTile("題", "副題", null, chip("札"))'), ui.code());
+
+  // stack の子は align を選べ、外部 URL の画像は描かずに理由を見せる
+  select("column");
+  ui.click("stack を追加");
+  ui.click("image を追加");
+  ui.type("部品の文字または番号", "https://example.com/a.png");
+  assert(ui.texts().some((value) => value.startsWith("image · PNG")));
+  ui.value("align の位置", 9);
+  assert(ui.code().includes('image("https://example.com/a.png").align("bottomEnd")'), ui.code());
+  ui.click("width を増やす");
+  assert(ui.code().includes('.align("bottomEnd").width(1)'), ui.code());
+  ui.value("align の位置", 0);
+  assert(ui.code().includes('image("https://example.com/a.png").width(1)'), ui.code());
+  assertEquals(ui.status(), "● 木と一致");
 });

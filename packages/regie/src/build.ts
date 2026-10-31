@@ -77,7 +77,8 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const asc = options.compiler ?? await loadCompiler();
   const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, "jsr:@binette/decor/parts": decorParts, ...options.libraries };
   if (libraries["jsr:@binette/replique"] !== undefined && libraries["jsr:@binette/replique/ui"] === undefined) {
-    libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme } from "jsr:@binette/replique";';
+    libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme, ' +
+      'spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge } from "jsr:@binette/replique";';
   }
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
@@ -87,7 +88,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
     readFile: async (name) => {
       const path = appPath(name);
       if (path === null) return null;
-      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text } from "jsr:@binette/replique";\n';
+      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value } from "jsr:@binette/replique";\n';
       if (path.startsWith(NODE_MODULES)) return findLibrary(libraries, path);
       if (!path.endsWith(".ts")) return null;
       try { return await read(path) ?? null; } catch { return null; }
