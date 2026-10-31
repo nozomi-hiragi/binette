@@ -192,15 +192,16 @@ function preview(node: Node): View {
     else if (m.name == "key") view.key(m.value);
     else if (m.name == "label") view.label(m.value);
   }
-  // 選んでいる部品だけに付ける。false を付けるとボタンが押し状態の部品として読み上げられるため。
-  if (node == selected) view.selected(true);
+  // 選んでいる部品に枠だけの印を付ける（押した状態や aria は変えず、アプリの見た目のままにする）。
+  // 根の印はカードの角丸とぶつかるので出さない。根を選んでいることは構造の木で分かる。
+  if (node == selected && node != root) view.highlight(true);
   return view;
 }
 /** 区画とグループの見出し。 */
 function caption(value: string): View { return text(value).small().bold().tone("muted"); }
 /** 受け付けられなかった操作の理由。 */
 function warning(value: string): View { return text(value).small().tone("danger"); }
-/** 「ラベル列＋入力＋消す ×」の 1 行。× が無い行はその場所を空けて揃える。 */
+/** 「ラベル列＋入力＋消す ×」の 1 行。入力は × の列の手前まで伸ばし、× が無い行もその場所を空けて右端を揃える。 */
 function property(name: string, control: View, clear: View | null): View {
   return row([text(name).width(76).small().tone("muted"), control.grow(), clear === null ? text("").width(24) : clear]).gap(space.sm).minHeight(32);
 }
