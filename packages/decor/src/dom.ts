@@ -1,9 +1,11 @@
 import type { DomOp } from "@binette/core";
-import { dividerSides, surfaces, tones, variants } from "./parts.ts";
+import { alignments, dividerSides, surfaces, tones, variants } from "./parts.ts";
 /** DOM からアプリに届くイベント。 */
 export interface UiEvents {
   dispatchUi(handle: number): void;
   dispatchUiText(handle: number, value: string, version: number): void;
+  /** 値を返す部品（checkbox・radio・slider・picker・segmented・tabs）の操作。無いときはその操作を届けない */
+  dispatchUiValue?(handle: number, value: number, version: number): void;
 }
 /** 宣言 UI の DOM 設定。 */
 export interface UiDomOptions { apps?: { icon?: string }[]; }
@@ -42,6 +44,92 @@ const variantPadding = (block: string, inline: string): string => `${componentLe
 const plainInput = ".bina-ui-input:not(.bina-ui-surface-dark *, .bina-ui-surface-field > *)";
 /** 入力欄の未指定の padding。既定の入力欄は CSS の変数で余白を持ち、theme の値があればそちらを使う */
 const inputPadding = `var(--bina-ui-input-default-padding, ${componentLength("input", "padding", "space", "0px")})`;
+/** 選択肢を持つ部品（picker・segmented・tabs） */
+const choiceKinds = ["picker", "segmented", "tabs"];
+/** Scene の document 方式の sanitize と同じく、画像は base64 のラスターの data URL だけを描く */
+const rasterDataUrl = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;
+/** align の名前ごとの縦と横の位置 */
+const alignParts: Record<string, [string, string]> = {
+  topStart: ["start", "start"], top: ["start", "center"], topEnd: ["start", "end"],
+  start: ["center", "start"], center: ["center", "center"], end: ["center", "end"],
+  bottomStart: ["end", "start"], bottom: ["end", "center"], bottomEnd: ["end", "end"],
+};
+const flexPosition = (value: string): string => value === "center" ? "center" : `flex-${value}`;
+const alignCss: string = alignments.map(name => {
+  const [vertical, horizontal] = alignParts[name]!;
+  return `:where(.bina-ui-stack > .bina-ui-align-${name}) { align-self: ${vertical}; justify-self: ${horizontal}; }
+:where(.bina-ui-column > .bina-ui-align-${name}) { align-self: ${flexPosition(horizontal)}; }
+:where(.bina-ui-row > .bina-ui-align-${name}) { align-self: ${flexPosition(vertical)}; }`;
+}).join("\n");
+// チェックの印。アクセントの塗りの上に白で描く
+const checkMark = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`;
+/** よくある部品の見た目。どれも OS の役割の色を使い、ライトとダークで同じ規則にする */
+const partCss: string = `
+:where(.bina-ui-spacer) { flex: 1 1 0; min-width: 0; min-height: 0; }
+:where(.bina-ui-separator) { box-sizing: border-box; flex: none; align-self: stretch; height: 1px; margin: 0; border: 0; background: ${colors.line}; }
+:where(.bina-ui-row > .bina-ui-separator) { width: 1px; height: auto; min-height: 1em; }
+:where(.bina-ui-stack) { display: grid; grid-template: minmax(0, auto) / minmax(0, 1fr); place-items: start; }
+:where(.bina-ui-stack > *) { grid-area: 1 / 1; }
+:where(.bina-ui-stack.bina-ui-center) { place-items: center; }
+:where(.bina-ui-stack > .bina-ui-fill) { place-self: stretch; }
+${alignCss}
+:where(.bina-ui-checkbox, .bina-ui-radio) { appearance: none; box-sizing: border-box; flex: none; width: 18px; height: 18px; margin: 0; border: 1.5px solid color-mix(in srgb, ${colors.muted} 80%, transparent); background: ${colors.surface} no-repeat center / 100%; cursor: pointer; transition: background-color 0.12s, border-color 0.12s; }
+:where(.bina-ui-checkbox) { border-radius: 4px; }
+:where(.bina-ui-radio) { border-radius: 50%; }
+:where(.bina-ui-checkbox:checked) { border-color: ${colors.accent}; background-color: ${colors.accent}; background-image: ${checkMark}; }
+:where(.bina-ui-radio:checked) { border-color: ${colors.accent}; background-image: radial-gradient(circle, ${colors.accent} 0 4px, transparent 4.5px); }
+:where(.bina-ui-slider) { appearance: none; box-sizing: border-box; min-width: 96px; height: 24px; margin: 0; background: transparent; accent-color: ${colors.accent}; cursor: pointer; }
+:where(.bina-ui-slider)::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(${colors.accent}, ${colors.accent}) 0 0 / var(--bina-ui-slider-fill, 0%) 100% no-repeat, color-mix(in srgb, ${colors.accent} 18%, transparent); }
+:where(.bina-ui-slider)::-moz-range-track { height: 4px; border-radius: 2px; background: color-mix(in srgb, ${colors.accent} 18%, transparent); }
+:where(.bina-ui-slider)::-moz-range-progress { height: 4px; border-radius: 2px; background: ${colors.accent}; }
+:where(.bina-ui-slider)::-webkit-slider-thumb { appearance: none; box-sizing: border-box; width: 18px; height: 18px; margin-top: -7px; border: 2px solid ${colors.surface}; border-radius: 50%; background: ${colors.accent}; box-shadow: 0 1px 3px rgb(0 0 0 / 30%); }
+:where(.bina-ui-slider)::-moz-range-thumb { box-sizing: border-box; width: 18px; height: 18px; border: 2px solid ${colors.surface}; border-radius: 50%; background: ${colors.accent}; box-shadow: 0 1px 3px rgb(0 0 0 / 30%); }
+:where(.bina-ui-picker) { appearance: none; box-sizing: border-box; min-width: 0; max-width: 100%; padding: 6px 30px 6px 10px; font: inherit; color: inherit; border: 1px solid ${colors.line}; border-radius: var(--bina-ui-input-radius, var(--bina-ui-control-radius, 6px)); cursor: pointer;
+  background: linear-gradient(45deg, transparent 50%, ${colors.muted} 50%) calc(100% - 15px) 50% / 5px 5px no-repeat, linear-gradient(135deg, ${colors.muted} 50%, transparent 50%) calc(100% - 10px) 50% / 5px 5px no-repeat, ${colors.surface}; }
+:where(.bina-ui-picker option) { color: CanvasText; background: Canvas; }
+:where(.bina-ui-checkbox, .bina-ui-radio, .bina-ui-slider):focus-visible { outline: 2px solid ${colors.focus}; outline-offset: 2px; }
+:where(.bina-ui-picker:focus-visible) { outline: 2px solid ${colors.focus}; outline-offset: -1px; }
+:where(.bina-ui-checkbox, .bina-ui-radio, .bina-ui-slider, .bina-ui-picker):disabled { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
+:where(.bina-ui-option) { margin: 0; border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+:where(.bina-ui-option):focus-visible { outline: 2px solid ${colors.focus}; outline-offset: -2px; }
+:where(.bina-ui-option:disabled) { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
+:where(.bina-ui-segmented) { display: inline-flex; align-items: stretch; box-sizing: border-box; max-width: 100%; border: 1px solid ${colors.line}; border-radius: ${controlRadius}; background: ${colors.surface}; overflow: hidden; }
+:where(.bina-ui-segmented > .bina-ui-option) { flex: 1 1 0; min-width: 0; min-height: 32px; padding: 4px 14px; overflow: hidden; text-overflow: ellipsis; }
+:where(.bina-ui-segmented > .bina-ui-option + .bina-ui-option) { border-inline-start: 1px solid ${colors.line}; }
+:where(.bina-ui-segmented > .bina-ui-option:not(:disabled):hover) { background: ${colors.subtle}; }
+:where(.bina-ui-segmented > .bina-ui-option[aria-checked="true"]) { background: ${colors.accentSoft}; color: ${colors.accentText}; font-weight: 600; }
+:where(.bina-ui-tabs) { display: flex; align-items: stretch; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; box-shadow: inset 0 -1px 0 ${colors.line}; }
+:where(.bina-ui-tabs > .bina-ui-option) { flex: none; min-height: 40px; padding: 8px 12px; color: ${colors.muted}; }
+:where(.bina-ui-tabs > .bina-ui-option:not(:disabled):hover) { color: inherit; }
+:where(.bina-ui-tabs > .bina-ui-option[aria-selected="true"]) { color: ${colors.accentText}; font-weight: 600; box-shadow: inset 0 -2px 0 ${colors.accent}; }
+:where(.bina-ui-progress) { position: relative; box-sizing: border-box; height: 4px; min-width: 48px; border-radius: 2px; background: color-mix(in srgb, ${colors.accent} 18%, transparent); overflow: hidden; }
+:where(.bina-ui-row > .bina-ui-progress) { flex: 1 1 120px; }
+:where(.bina-ui-progress)::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--bina-ui-progress, 0%); border-radius: inherit; background: ${colors.accent}; transition: width 0.2s; }
+:where(.bina-ui-progress.bina-ui-indeterminate)::before { width: 40%; transition: none; animation: bina-ui-indeterminate 1.4s ease-in-out infinite; }
+@keyframes bina-ui-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+:where(.bina-ui-spinner) { box-sizing: border-box; flex: none; width: 20px; aspect-ratio: 1; border: 2.5px solid color-mix(in srgb, ${colors.accent} 20%, transparent); border-top-color: ${colors.accent}; border-radius: 50%; animation: bina-ui-spin 0.8s linear infinite; }
+@keyframes bina-ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  :where(.bina-ui-spinner) { animation-duration: 2.4s; }
+  :where(.bina-ui-progress.bina-ui-indeterminate)::before { animation-duration: 4s; }
+  :where(.bina-ui-progress)::before, :where(.bina-ui-checkbox, .bina-ui-radio) { transition: none; }
+}
+:where(.bina-ui-image) { display: block; max-width: 100%; height: auto; object-fit: cover; }
+:where(.bina-ui-listTile) { display: flex; align-items: center; box-sizing: border-box; min-height: 48px; text-align: start; }
+:where(.bina-ui-listTile.bina-ui-listitem) { display: flex; list-style: none; }
+:where(.bina-ui-listTile > .bina-ui-grow) { min-width: 0; overflow-wrap: anywhere; }
+:where(.bina-ui-chip) { display: inline-flex; align-items: center; box-sizing: border-box; flex: none; max-width: 100%; min-height: 24px; border: 1px solid ${colors.line}; border-radius: 999px; background: ${colors.surface}; font-size: var(--bina-ui-small, 12.5px); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:where(.bina-ui-chip.bina-ui-tone-muted) { color: ${colors.muted}; background: ${colors.subtle}; border-color: transparent; }
+:where(.bina-ui-chip.bina-ui-tone-accent) { color: ${colors.accentText}; background: ${colors.accentSoft}; border-color: transparent; }
+:where(.bina-ui-chip.bina-ui-tone-danger) { color: ${colors.danger}; background: color-mix(in srgb, ${colors.danger} 12%, transparent); border-color: transparent; }
+:where(.bina-ui-chip.bina-ui-tone-success) { color: ${colors.success}; background: color-mix(in srgb, ${colors.success} 12%, transparent); border-color: transparent; }
+:where(.bina-ui-badge) { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; flex: none; min-width: 18px; height: 18px; border-radius: 9px; background: ${colors.accent}; color: ${colors.accentContent}; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+:where(.bina-ui-badge.bina-ui-tone-muted) { background: ${colors.subtle}; color: ${colors.muted}; }
+:where(.bina-ui-badge.bina-ui-tone-danger) { background: ${colors.danger}; color: ${colors.surface}; }
+:where(.bina-ui-badge.bina-ui-tone-success) { background: ${colors.success}; color: ${colors.surface}; }
+/* align() を付けた子は、既定の左寄せより align() を優先する */
+:where(.bina-ui-column > :is(.bina-ui-chip, .bina-ui-badge, .bina-ui-segmented, .bina-ui-image):not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: flex-start; }
+`;
 const lookCss: string = `
 :where(.bina-ui-button[class*="bina-ui-variant-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${controlRadius}; }
 :where(.bina-ui-button.bina-ui-variant-ghost:has(> *), .bina-ui-button.bina-ui-variant-subtle:has(> *)) { align-items: stretch; text-align: start; }
@@ -113,6 +201,7 @@ const lookCss: string = `
   :where(.bina-ui-collapse > .bina-ui-divider-left, .bina-ui-collapse > .bina-ui-divider-right) { border-left: 0; border-right: 0; }
   :where(.bina-ui-collapse > .bina-ui-divider-right) { border-bottom: 1px solid ${colors.line}; }
   :where(.bina-ui-collapse > .bina-ui-divider-left) { border-top: 1px solid ${colors.line}; }
+  :where(.bina-ui-collapse > .bina-ui-separator) { width: auto; height: 1px; min-height: 0; }
   :where(.bina-ui-collapse > .bina-ui-divider-right + .bina-ui-divider-left:not(.bina-ui-divider-top)) { border-top: 0; }
   :where(.bina-ui-fill:has(.bina-ui-collapse), .bina-ui-collapse, .bina-ui-collapse .bina-ui-fill, .bina-ui-collapse .bina-ui-scroll) { flex: none; min-height: auto; overflow: visible; }
 }
@@ -124,17 +213,17 @@ export const uiCss = `
 :where([class^="bina-ui-"])[hidden] { display: none !important; }
 :where(.bina-ui-highlight, .bina-ui-selected:not(.bina-ui-button)) { border-radius: 4px; }
 :where(.bina-ui-column) { display: flex; flex-direction: column; }
-:where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow)) { align-self: flex-start; }
+:where(.bina-ui-column > .bina-ui-button:not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: flex-start; }
 /* center() を付けた column では、ボタンも中央に置く */
-:where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow)) { align-self: auto; }
+:where(.bina-ui-column.bina-ui-center > .bina-ui-button:not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: auto; }
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
 :where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
 :where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }
 :where(.bina-ui-input) { font: inherit; font-size: ${componentLength("input", "font-size", "font-size", "1em")}; border-radius: ${componentLength("input", "radius", "radius", "var(--bina-ui-input-radius, 0px)")}; color: inherit; min-width: 0; }
 :where(textarea.bina-ui-input:not(.bina-ui-height)) { min-height: 8lh; }
 :where(textarea.bina-ui-input) { resize: vertical; }
-:where(.bina-ui-column, .bina-ui-row, .bina-ui-grid) { gap: var(--bina-ui-gap, 0px); }
-:where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input) { padding: var(--bina-ui-padding, 0px); }
+:where(.bina-ui-column, .bina-ui-row, .bina-ui-grid, .bina-ui-listTile) { gap: var(--bina-ui-gap, 0px); }
+:where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input, .bina-ui-stack, .bina-ui-listTile, .bina-ui-chip, .bina-ui-badge) { padding: var(--bina-ui-padding, 0px); }
 :where(.bina-ui-button) { padding: var(--bina-ui-padding, ${componentLength("button", "padding", "space", "0px")}); }
 :where(.bina-ui-input) { padding: var(--bina-ui-padding, ${inputPadding}); }
 :where(.bina-ui-fill) { flex: 1 1 0; min-height: 0; align-self: stretch; }
@@ -149,10 +238,18 @@ export const uiCss = `
 :where(.bina-ui-heading-3) { font-size: 1.17em; font-weight: bold; }
 :where(.bina-ui-list) { padding-inline-start: 1.5em; }
 :where(.bina-ui-listitem) { display: list-item; list-style: disc; }
+${partCss}
 ${lookCss}`;
 
 type UiUpdate = Extract<DomOp, { op: "ui-update" }>;
 const lookFlags = ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap", "highlight"] as const;
+/** 部品ごとの未指定の padding。ほかの部品は 0 */
+const kindPadding: Record<string, string> = { listTile: `${length(-2)} ${length(-3)}`, chip: "2px 10px", badge: "0 5px" };
+/** 部品が自分で持つ role。値を持つ部品のうちネイティブの要素はその role のままにする */
+const kindRoles: Record<string, string> = { segmented: "radiogroup", tabs: "tablist", progress: "progressbar", spinner: "progressbar" };
+const nativeKinds = ["checkbox", "radio", "slider", "picker", "image", "separator"];
+/** 文字を自分の子として描く部品 */
+const textKinds = ["text", "button", "chip", "badge"];
 // 値が変わるときだけ書き換え、描き直しで DOM を無駄に触らない
 function setClass(node: HTMLElement, name: string, on: boolean): void {
   if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
@@ -191,10 +288,17 @@ function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: b
   setAttribute(node, "aria-pressed", isButton && !toggle && op.selected !== undefined ? String(op.selected) : null);
   setClass(node, "bina-ui-toggle", toggle);
   setAttribute(node, "aria-checked", toggle ? String(op.toggle) : null);
-  const field = ["INPUT", "TEXTAREA"].includes(node.tagName.toUpperCase());
-  setAttribute(node, "placeholder", field && op.placeholder ? op.placeholder : null);
+  setAttribute(node, "placeholder", node.classList.contains("bina-ui-input") && op.placeholder ? op.placeholder : null);
+  for (const name of alignments) setClass(node, `bina-ui-align-${name}`, op.align === name);
 }
 
+/** スライダーの塗る長さ。WebKit 系の track は進んだ部分を持たないので、割合を変数で渡す */
+function fillSlider(field: HTMLInputElement): void {
+  const min = Number(field.min), max = Number(field.max), value = Number(field.value);
+  const ratio = max > min && Number.isFinite(value) ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0;
+  const next = `${ratio * 100}%`;
+  if (field.style.getPropertyValue("--bina-ui-slider-fill") !== next) field.style.setProperty("--bina-ui-slider-fill", next);
+}
 /** 宣言 UI の DOM 操作の適用先。 */
 export interface UiDom {
   apply(ops: DomOp[]): void;
@@ -204,7 +308,9 @@ export interface UiDom {
 /** 宣言 UI の操作を DOM に反映する。 */
 export function createUiDom(element: HTMLElement, process: UiEvents, options: UiDomOptions = {}): UiDom {
   // 宣言 UI は document API のハンドルと独立して管理する。
-  const uiNodes = new Map<number, { node: HTMLElement; clickable: boolean; textNode: Text | null; inputVersion: number; composing: boolean; theme: string[]; lastText: string | null; pending: { text: string; version: number } | null; remove: () => void }>();
+  type Entry = { node: HTMLElement; kind: string; clickable: boolean; enabled: boolean; textNode: Text | null; inputVersion: number; composing: boolean; theme: string[]; lastText: string | null;
+    pending: { text: string; version: number } | null; options: string[] | null; index: number; remove: () => void };
+  const uiNodes = new Map<number, Entry>();
   let uiStyle: HTMLStyleElement | undefined;
   const removeUi = (root: HTMLElement) => {
     for (const [handle, entry] of uiNodes) {
@@ -215,6 +321,40 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
     }
     root.remove();
   };
+  /** 選択肢のボタン（segmented・tabs）の選択中の印と、Tab で入る 1 つを決める */
+  const markChoice = (entry: Entry, index: number): void => {
+    entry.index = index;
+    const items = [...entry.node.children] as HTMLElement[];
+    const attribute = entry.kind === "tabs" ? "aria-selected" : "aria-checked";
+    const focusable = index >= 0 && index < items.length ? index : 0;
+    items.forEach((item, i) => {
+      setAttribute(item, attribute, String(i === index));
+      setAttribute(item, "tabindex", i === focusable ? "0" : "-1");
+    });
+  };
+  /** 選択肢が変わったときだけ作り直す。フォーカスのあった位置は保つ */
+  const setChoices = (entry: Entry, next: string[]): boolean => {
+    const current = entry.options;
+    if (current && current.length === next.length && current.every((option, i) => option === next[i])) return false;
+    const document = element.ownerDocument;
+    const items = [...entry.node.children];
+    const focused = items.findIndex(item => item === document.activeElement);
+    entry.options = next.slice();
+    if (entry.kind === "picker") {
+      entry.node.replaceChildren(...next.map(label => { const option = document.createElement("option"); option.textContent = label; return option; }));
+      return true;
+    }
+    entry.node.replaceChildren(...next.map(label => {
+      const option = document.createElement("button");
+      option.setAttribute("type", "button");
+      option.className = "bina-ui-option";
+      option.setAttribute("role", entry.kind === "tabs" ? "tab" : "radio");
+      option.textContent = label;
+      return option;
+    }));
+    if (focused >= 0) (entry.node.children[Math.min(focused, next.length - 1)] as HTMLElement | undefined)?.focus();
+    return true;
+  };
   return {
     apply(ops: DomOp[]): void { for (const op of ops) {
       if (op.op === "ui-create") {
@@ -223,35 +363,76 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           uiStyle.textContent = uiCss;
           element.appendChild(uiStyle);
         }
-        const tag = op.kind === "input" ? (op.multiline ? "textarea" : "input") : op.kind === "appIcon" ? "img" : op.kind === "button" ? "button" : op.kind === "text" ? "span" : "div";
+        const kind: string = op.kind;
+        const tags: Record<string, string> = { appIcon: "img", image: "img", button: "button", text: "span", chip: "span", badge: "span",
+          checkbox: "input", radio: "input", slider: "input", picker: "select", separator: "hr" };
+        const tag = kind === "input" ? (op.multiline ? "textarea" : "input") : Object.hasOwn(tags, kind) ? tags[kind]! : "div";
         const node = element.ownerDocument.createElement(tag);
-        node.className = `bina-ui-${op.kind}`;
+        node.className = `bina-ui-${kind}`;
         if (tag === "button") node.setAttribute("type", "button");
-        const entry = { node, clickable: false, textNode: null as Text | null, inputVersion: 0, composing: false, theme: [] as string[], lastText: null as string | null, pending: null as { text: string; version: number } | null, remove: () => {} };
-        if (tag === "button") {
-          const listener = () => { if (entry.clickable) process.dispatchUi(op.handle); };
-          node.addEventListener("click", listener);
-          entry.remove = () => node.removeEventListener("click", listener);
-        }
+        const entry: Entry = { node, kind, clickable: false, enabled: true, textNode: null, inputVersion: 0, composing: false, theme: [], lastText: null, pending: null, options: null, index: -1, remove: () => {} };
+        const listen = (type: string, listener: (event: Event) => void) => {
+          node.addEventListener(type, listener);
+          const previous = entry.remove;
+          entry.remove = () => { previous(); node.removeEventListener(type, listener); };
+        };
+        /** 値を返す部品の操作を送る。版を進め、古い描き直しで DOM の値を戻さないようにする */
+        const send = (value: number) => { process.dispatchUiValue?.(op.handle, value, ++entry.inputVersion); };
+        if (tag === "button") listen("click", () => { if (entry.clickable) process.dispatchUi(op.handle); });
         if (tag === "img") node.setAttribute("alt", "");
-        if (tag === "input" || tag === "textarea") {
+        if (kind === "checkbox" || kind === "radio" || kind === "slider") {
+          const field = node as HTMLInputElement;
+          field.setAttribute("type", kind === "slider" ? "range" : kind);
+          if (kind === "slider") listen("input", () => { fillSlider(field); if (entry.clickable && !field.disabled) send(Number(field.value)); });
+          // ラジオは選ばれたときだけ change が来る
+          else listen("change", () => { if (entry.clickable && !field.disabled) send(field.checked ? 1 : 0); });
+        }
+        if (kind === "picker") {
+          const field = node as HTMLSelectElement;
+          listen("change", () => { if (entry.clickable && !field.disabled) send(field.selectedIndex); });
+        }
+        if (kind === "segmented" || kind === "tabs") {
+          const items = () => [...node.children] as HTMLButtonElement[];
+          const pick = (index: number, focus: boolean) => {
+            const item = items()[index];
+            if (!item || item.disabled) return;
+            if (focus) item.focus();
+            if (!entry.clickable || index === entry.index) return;
+            markChoice(entry, index);
+            send(index);
+          };
+          listen("click", event => {
+            const item = (event.target as Element | null)?.closest?.(".bina-ui-option");
+            if (item && item.parentNode === node) pick(items().indexOf(item as HTMLButtonElement), false);
+          });
+          // 矢印で隣へ移って選ぶ。Home・End で端へ（WAI-ARIA の radiogroup と、自動で切り替える tablist の操作）
+          listen("keydown", event => {
+            const key = (event as KeyboardEvent).key;
+            const all = items();
+            if (!all.length) return;
+            const focused = all.findIndex(item => item === element.ownerDocument.activeElement);
+            const from = focused >= 0 ? focused : Math.max(0, entry.index);
+            const next = key === "ArrowRight" || key === "ArrowDown" ? (from + 1) % all.length : key === "ArrowLeft" || key === "ArrowUp" ? (from - 1 + all.length) % all.length
+              : key === "Home" ? 0 : key === "End" ? all.length - 1 : -1;
+            if (next < 0) return;
+            event.preventDefault();
+            pick(next, true);
+          });
+        }
+        if (kind === "input") {
           if (tag === "input") node.setAttribute("type", "text");
           const field = node as TextField;
           const notify = () => { const value = field.value; if (entry.clickable && !field.disabled && value !== entry.lastText) { entry.lastText = value; process.dispatchUiText(op.handle, value, ++entry.inputVersion); } };
-          const input = () => { notify(); };
-          const start = () => { entry.composing = true; };
-          const end = () => {
+          listen("input", () => { notify(); });
+          listen("compositionstart", () => { entry.composing = true; });
+          listen("compositionend", () => {
             entry.composing = false;
             notify();
             // 変換中に届いた描き直しを、新しい入力が無ければここで反映する
             const pending = entry.pending;
             entry.pending = null;
             if (pending && pending.version >= entry.inputVersion && field.value !== pending.text) { field.value = pending.text; entry.lastText = pending.text; }
-          };
-          node.addEventListener("input", input);
-          node.addEventListener("compositionstart", start);
-          node.addEventListener("compositionend", end);
-          entry.remove = () => { node.removeEventListener("input", input); node.removeEventListener("compositionstart", start); node.removeEventListener("compositionend", end); };
+          });
         }
         const previous = uiNodes.get(op.handle);
         if (previous) removeUi(previous.node);
@@ -262,21 +443,66 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         const entry = uiNodes.get(op.handle);
         if (!entry) continue;
         const node = entry.node;
-        if (["input", "textarea"].includes(node.tagName.toLowerCase())) {
+        const kind = entry.kind;
+        const version = op.inputVersion ?? 0;
+        // 値を返す部品は、利用者の新しい操作より古い描き直しでは値を戻さない
+        const current = version >= entry.inputVersion;
+        if (kind === "input") {
           const field = node as TextField;
-          const version = op.inputVersion ?? 0;
-          if (version >= entry.inputVersion) {
+          if (current) {
             if (entry.composing) entry.pending = { text: op.text, version };
             else if (field.value !== op.text) { field.value = op.text; entry.lastText = op.text; }
           }
         }
-        if (node.tagName.toLowerCase() === "img") {
+        if (kind === "checkbox" || kind === "radio") {
+          const field = node as HTMLInputElement;
+          if (current && field.checked !== (op.checked === true)) field.checked = op.checked === true;
+        }
+        if (kind === "slider") {
+          const field = node as HTMLInputElement;
+          // 値は範囲に丸められるので、範囲を先に書く
+          for (const [name, value] of [["min", op.min ?? 0], ["max", op.max ?? 1]] as const) setAttribute(field, name, Number.isFinite(value) ? String(value) : null);
+          setAttribute(field, "step", op.step !== undefined && Number.isFinite(op.step) && op.step > 0 ? String(op.step) : "any");
+          const value = op.value ?? 0;
+          if (current && Number.isFinite(value) && Number(field.value) !== value) field.value = String(value);
+          fillSlider(field);
+        }
+        if (choiceKinds.includes(kind)) {
+          const changed = setChoices(entry, Array.isArray(op.options) ? op.options.map(String) : []);
+          const index = op.index ?? -1;
+          if (kind === "picker") {
+            const field = node as HTMLSelectElement;
+            if ((changed || current) && field.selectedIndex !== index) field.selectedIndex = index;
+            entry.index = index;
+          } else if (changed || current) markChoice(entry, index);
+          for (const item of node.children) if (item.tagName.toLowerCase() === "button" && (item as HTMLButtonElement).disabled === op.enabled) (item as HTMLButtonElement).disabled = !op.enabled;
+        }
+        if (kind === "progress") {
+          const value = op.value ?? -1;
+          const indeterminate = !(value >= 0);
+          const ratio = Math.min(1, Math.max(0, value));
+          setClass(node, "bina-ui-indeterminate", indeterminate);
+          const width = indeterminate ? "" : `${ratio * 100}%`;
+          if (node.style.getPropertyValue("--bina-ui-progress") !== width) {
+            if (width) node.style.setProperty("--bina-ui-progress", width);
+            else node.style.removeProperty("--bina-ui-progress");
+          }
+          setAttribute(node, "aria-valuemin", "0");
+          setAttribute(node, "aria-valuemax", "100");
+          setAttribute(node, "aria-valuenow", indeterminate ? null : String(Math.round(ratio * 100)));
+        }
+        if (kind === "appIcon") {
           const icon = options.apps?.[op.app ?? -1]?.icon;
           if (icon === undefined) node.removeAttribute("src");
           else {
             const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}`;
             if (node.getAttribute("src") !== src) node.setAttribute("src", src);
           }
+        }
+        if (kind === "image") {
+          // 外部 URL やほかの形式は読み込まない。代替テキストは label
+          setAttribute(node, "src", rasterDataUrl.test(op.text) ? op.text : null);
+          setAttribute(node, "alt", op.label ?? "");
         }
         for (const property of entry.theme) node.style.removeProperty(property);
         entry.theme = [];
@@ -299,7 +525,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         // スイッチは文字を見せず、読み上げの名前にだけ使う
         const toggle = isButton && op.toggle !== undefined;
         const shownText = toggle ? "" : op.text;
-        if (node.classList.contains("bina-ui-text") || isButton) {
+        if (textKinds.includes(kind)) {
           if (shownText && !entry.textNode) {
             entry.textNode = element.ownerDocument.createTextNode(shownText);
             node.insertBefore(entry.textNode, node.firstChild);
@@ -313,7 +539,8 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         const minWidth = op.minWidth ? `${Math.max(0, op.minWidth)}px` : "";
         if (!isGrid && node.style.minWidth !== minWidth) node.style.minWidth = minWidth;
         const level = op.heading ?? 0;
-        const role = toggle ? "switch" : level > 0 ? "heading" : op.list ? "list" : op.listItem ? "listitem" : null;
+        const own = Object.hasOwn(kindRoles, kind) ? kindRoles[kind]! : null;
+        const role = own ?? (nativeKinds.includes(kind) ? null : toggle ? "switch" : level > 0 ? "heading" : op.list ? "list" : op.listItem ? "listitem" : null);
         if (role === null) { if (node.hasAttribute("role")) node.removeAttribute("role"); }
         else if (node.getAttribute("role") !== role) node.setAttribute("role", role);
         if (level > 0) { if (node.getAttribute("aria-level") !== String(level)) node.setAttribute("aria-level", String(level)); }
@@ -323,7 +550,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (node.classList.contains("bina-ui-listitem") !== !!op.listItem) node.classList.toggle("bina-ui-listitem", !!op.listItem);
         for (const [name, value] of [["padding", op.padding], ["gap", op.gap], ["minWidth", isGrid && op.minWidth ? op.minWidth : null]] as const) {
           const property = `--bina-ui-${name}`;
-          const fallback = name === "padding" ? isButton ? buttonPadding(op) : node.classList.contains("bina-ui-input") ? inputPadding : "0px" : "";
+          const fallback = name === "padding" ? isButton ? buttonPadding(op) : kind === "input" ? inputPadding : Object.hasOwn(kindPadding, kind) ? kindPadding[kind]! : "0px" : "";
           const next = value === null ? fallback : name === "minWidth" ? `${Math.max(0, value)}px` : length(value);
           if (node.style.getPropertyValue(property) !== next) {
             if (next) node.style.setProperty(property, next);
@@ -331,11 +558,13 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           }
         }
         if (node.classList.contains("bina-ui-grow") !== op.grow) node.classList.toggle("bina-ui-grow", op.grow);
-        setAttribute(node, "aria-label", op.label || (toggle && op.text) || null);
+        // 画像の名前は alt で渡す
+        setAttribute(node, "aria-label", kind === "image" ? null : op.label || (toggle && op.text) || null);
         applyLook(node, op, isButton, toggle);
-        if (["button", "input", "textarea"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
+        if (["button", "input", "textarea", "select"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
           (node as HTMLButtonElement).disabled = !op.enabled;
         }
+        entry.enabled = op.enabled;
         entry.clickable = op.clickable;
         continue;
       }
@@ -345,6 +574,8 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         const before = op.before === null ? null : uiNodes.get(op.before)?.node;
         if (parent && child && parent !== child && !child.contains(parent) && (before === null || before?.parentNode === parent)) {
           parent.insertBefore(child, before);
+          // row の中の区切り線は縦の線として読み上げる
+          if (child.classList.contains("bina-ui-separator")) setAttribute(child, "aria-orientation", parent.classList.contains("bina-ui-row") ? "vertical" : null);
         }
         continue;
       }

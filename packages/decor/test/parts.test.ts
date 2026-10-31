@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import asc from "assemblyscript/asc";
-import { tree, integers, multiline, looks } from "./fixtures/parts.ts";
+import { tree, integers, multiline, looks, newParts } from "./fixtures/parts.ts";
 import { View, intString } from "../src/parts.ts";
 import { theme, text } from "../src/view.ts";
 
@@ -20,7 +20,7 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   });
   assertEquals(result.error, null, stderr.toString());
   const { instance } = await WebAssembly.instantiate(new Uint8Array(wasm!), { env: { abort() { throw new Error("AS aborted"); } } });
-  const exports = instance.exports as { memory: WebAssembly.Memory; themeValue(): number; integers(): number; multiline(): number; looks(): number };
+  const exports = instance.exports as { memory: WebAssembly.Memory; themeValue(): number; integers(): number; multiline(): number; looks(): number; newParts(): number };
   function string(pointer: number): string {
     const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true) / 2;
     return String.fromCharCode(...new Uint16Array(exports.memory.buffer, pointer, length));
@@ -31,6 +31,31 @@ Deno.test("shared parts produce identical themes and integer strings in Deno and
   assertEquals(string(exports.multiline()), multiline());
   assertEquals(multiline(), "input:true:-1:first\nsecond");
   assertEquals(string(exports.looks()), looks());
+  // AS の f64 の toString は整数に .0 を付けるので、数の表記だけをそろえて比べる
+  const asParts = string(exports.newParts()).replace(/(\d)\.0(?=[,:])/g, "$1");
+  assertEquals(asParts, newParts());
+  assertEquals(newParts().split("\n"), [
+    "spacer::0:0,0,1,0::-1:::0:000",
+    "separator::0:0,0,1,0::-1:::0:000",
+    "stack::0:0,0,1,0::-1::text+badge+text:0:000",
+    "checkbox::1:0,0,1,0::-1:::0:010",
+    "slider::0:0.5,0,2,0.25::-1:::0:100",
+    "slider::0:0,0,1,0::-1:::0:100",
+    "progress::0:0.25,0,1,0::-1:::0:000",
+    "progress::0:-1,0,1,0::-1:::0:000",
+    "progress::0:1,0,1,0::-1:::0:000",
+    "progress::0:-1,0,1,0::-1:::0:000",
+    "spinner::0:0,0,1,0::-1:::0:000",
+    "image:data:image/png;base64,AAAA:0:0,0,1,0::-1:::0:000",
+    "listTile::0:0,0,1,0::-1::chip+column+checkbox:-3:000",
+    "listTile::0:0,0,1,0::-1::column:-3:000",
+    "chip:札:0:0,0,1,0::-1:::0:000",
+    "badge:12:0:0,0,1,0::-1:::0:000",
+    "picker::0:0,0,1,0:一/二:1:::0:001",
+    "tabs::0:0,0,1,0:一:-1:::0:001",
+    "segmented::0:0,0,1,0:一/二:-1:::0:001",
+    "text@", "badge@topEnd", "text@",
+  ]);
   assertEquals(looks(), "ghost|muted|card|top left|111111111|240,0,420|1,0|なし|1;||||000000000|0,0,0|0,-1||0;||||000000000|0,0,0|-1,-1||0");
   const view = new View("text");
   assertEquals(view.multilineValue, false);

@@ -4,7 +4,9 @@ import type { DomOp } from "@binette/core";
 export type UiOp = Extract<DomOp, { op: `ui-${string}` }>;
 
 /** 描画する木。操作の kind は core の型を使う。 */
-export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number; multiline: boolean } & UiLook;
+export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number; multiline: boolean } & UiLook & UiValue;
+/** 部品の値と位置。古いアプリは送らないので省略でき、省略は既定を表す */
+export type UiValue = { checked?: boolean; value?: number; min?: number; max?: number; step?: number; options?: string[]; index?: number; align?: string };
 /** 見た目の修飾。古いアプリは送らないので省略でき、省略は既定を表す。selected と toggle は -1 が指定なし、0 が偽、1 が真 */
 export type UiLook = { variant?: string; tone?: string; surface?: string; divider?: string; mono?: boolean; small?: boolean; bold?: boolean; truncate?: boolean; width?: number; center?: boolean; selected?: number; toggle?: number; scroll?: boolean; fill?: boolean; collapse?: boolean; placeholder?: string; height?: number; minHeight?: number; wrap?: boolean; highlight?: boolean };
 export type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
@@ -21,7 +23,12 @@ export interface UiDiffer {
 /** 差分エンジン。DOM や Worker に依存せず、操作を emit に渡す。 */
 export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: number) => void = () => {}): UiDiffer {
   // Worker には関数の本文だけを送るので、補助も関数の中に置く
-  const looks = ["variant", "tone", "surface", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap", "highlight"] as const;
+  const looks = ["variant", "tone", "surface", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap", "highlight",
+    "checked", "value", "min", "max", "step", "index", "align"] as const;
+  /** 利用者が値を変える部品。入力欄と同じく、描き直しのたびにアプリの値と入力の版を送り、受け付けなかった操作を DOM で戻せるようにする */
+  const controlled = ["input", "checkbox", "radio", "slider", "picker", "segmented", "tabs"];
+  const sameOptions = (a: string[] | undefined, b: string[] | undefined): boolean =>
+    (a ?? []).length === (b ?? []).length && (a ?? []).every((option, i) => option === (b ?? [])[i]);
   /** 見た目の修飾のうち既定でないものだけを操作に載せる。 */
   function lookFields(node: UiNode): Partial<Extract<UiOp, { op: "ui-update" }>> {
     const fields: Partial<Extract<UiOp, { op: "ui-update" }>> = {};
@@ -32,6 +39,12 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
     for (const name of ["width", "height", "minHeight"] as const) { const value = node[name]; if (value && value > 0) fields[name] = value; }
     if (node.selected !== undefined && node.selected >= 0) fields.selected = node.selected > 0;
     if (node.toggle !== undefined && node.toggle >= 0) fields.toggle = node.toggle > 0;
+    if (node.align) fields.align = node.align;
+    // 値はその部品のときだけ載せる
+    if (node.kind === "checkbox" || node.kind === "radio") fields.checked = node.checked === true;
+    if (node.kind === "slider" || node.kind === "progress") fields.value = node.value ?? 0;
+    if (node.kind === "slider") { fields.min = node.min ?? 0; fields.max = node.max ?? 1; fields.step = node.step ?? 0; }
+    if (node.kind === "picker" || node.kind === "segmented" || node.kind === "tabs") { fields.options = (node.options ?? []).slice(); fields.index = node.index ?? -1; }
     return fields;
   }
   function sameInputMode(a: UiNode, b: UiNode): boolean {
@@ -52,9 +65,9 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
       emit({ op: "ui-create", handle: mounted.handle, kind: node.kind, multiline: node.multiline });
     }
     const prev = old?.node;
-    if (node.kind === "input" || !prev || prev.theme !== node.theme || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
+    if (controlled.includes(node.kind) || !prev || prev.theme !== node.theme || prev.text !== node.text || prev.padding !== node.padding || prev.gap !== node.gap ||
       prev.key !== node.key || prev.minWidth !== node.minWidth || prev.heading !== node.heading || prev.list !== node.list || old?.listItem !== listItem || prev.shown !== node.shown || prev.app !== node.app || prev.grow !== node.grow || prev.label !== node.label || prev.enabled !== node.enabled ||
-      (prev.handler !== -1) !== (node.handler !== -1) || looks.some(name => prev[name] !== node[name])) {
+      (prev.handler !== -1) !== (node.handler !== -1) || looks.some(name => prev[name] !== node[name]) || !sameOptions(prev.options, node.options)) {
       emit(uiUpdate(mounted.handle, node, listItem));
     }
     const previous = mounted.children;

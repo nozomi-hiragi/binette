@@ -90,8 +90,8 @@ export function integerModifiers(): i32 {
     validModifierNumber("minWidth", "1.5") && validModifierNumber("gap", "space.md") ? 0 : 5;
 }
 export function inspectorRows(): string {
-  const kinds = ["column", "row", "grid", "buttonOf", "text", "button", "input", "appIcon"];
-  const names = ["padding", "gap", "minWidth", "grow", "heading", "key", "label", "list", "enabled", "multiline", "arg"];
+  const kinds = ["column", "row", "grid", "buttonOf", "text", "button", "input", "appIcon", "stack", "listTile", "checkbox", "radio", "slider", "tabs", "progress"];
+  const names = ["padding", "gap", "minWidth", "grow", "heading", "key", "label", "list", "enabled", "multiline", "arg", "step", "align"];
   const out: string[] = [];
   for (let i = 0; i < kinds.length; i++) {
     let line = kinds[i] + ":";
@@ -99,6 +99,35 @@ export function inspectorRows(): string {
     out.push(line.trim());
   }
   return out.join("|");
+}
+export function newParts(): string {
+  const code = 'column([spacer(), separator(), spinner(), checkbox(true, (c: bool) => {}), radio(false, select).arg(2), slider(-1.5, -2, 2e3, (v: f64) => {}).step(0.5),' +
+    ' picker(["赤", "青\\\\n二行"], -1, (i: i32) => {}), segmented([], 0, pick), tabs(["一", "二"], 1, (i: i32) => {}), progress(-1), image("data:image/png;base64,AAAA"),' +
+    ' stack([text("下"), badge("3").align("topEnd")]).padding(4), listTile("題"), listTile("題", ""), listTile("題", "副", chip("札")), listTile("題", "副", null, badge("1"),),' +
+    ' listTile("題", "副", text("前"), text("後")).gap(8), chip("札").width(40).height(20)])';
+  const first = parse(code);
+  if (first.root === null) return first.error;
+  const output = write(changetype<Node>(first.root));
+  const next = parse(output);
+  if (next.root === null) return next.error;
+  return write(changetype<Node>(next.root)) == output ? output : "不一致";
+}
+export function newErrors(): i32 {
+  const cases = ['checkbox(1, f)', 'radio(true)', 'slider(1, 0, space.md, f)', 'slider(1, 0, f)', 'picker(["a"], 0.5, f)', 'picker("a", 0, f)', 'tabs([1], 0, f)',
+    'progress(Infinity)', 'spacer(1)', 'listTile("a", "b", c, d, e)', 'listTile("a", "b", nul)', 'text("x").align("middle")', 'slider(1, 0, 2, f).step(space.md)', 'image(src)', 'text("x").width(space.md)'];
+  for (let i = 0; i < cases.length; i++) if (parse(cases[i]).root !== null) return i + 1;
+  // 文字列を取る修飾は、閉じ括弧の前に空白があっても読める
+  const spaced = ['text("x").label("name" )', 'chip("New").align( "end" )'];
+  for (let i = 0; i < spaced.length; i++) if (parse(spaced[i]).root === null) return 100 + i;
+  return 0;
+}
+export function newSummaries(): string {
+  const r = parse('row([checkbox(true, f), radio(false, f), tabs(["一", "二"], 1, f), picker(["一"], -1, f), slider(0.5, 0, 1, f), listTile("題"), image("data:image/png;base64,AAAAAAAAAAAAAAAAAAAAAAAA"), spacer()])');
+  if (r.root === null) return r.error;
+  const root = changetype<Node>(r.root);
+  const out: string[] = [];
+  for (let i = 0; i < root.children.length; i++) out.push(summary(root.children[i]));
+  return out.join(",");
 }
 export function summaries(): string {
   const r = parse('column([text("一行"), input("複数\\\\n行", (s: string) => {}), appIcon(3), row([])])');
@@ -140,6 +169,9 @@ Deno.test("デザイナーの木と式の往復・全パーツ・修飾・日本
     integerModifiers(): number;
     inspectorRows(): number;
     summaries(): number;
+    newParts(): number;
+    newErrors(): number;
+    newSummaries(): number;
   };
   function string(pointer: number): string {
     const length = new DataView(exports.memory.buffer).getUint32(pointer - 4, true) / 2;
@@ -171,6 +203,23 @@ Deno.test("デザイナーの木と式の往復・全パーツ・修飾・日本
     "button:padding minWidth grow key label enabled arg",
     "input:padding minWidth grow key label enabled multiline",
     "appIcon:padding minWidth grow key label",
+    "stack:padding minWidth grow key label",
+    "listTile:padding gap minWidth grow key label",
+    "checkbox:padding minWidth grow key label enabled",
+    "radio:padding minWidth grow key label enabled arg",
+    "slider:padding minWidth grow key label enabled step",
+    "tabs:padding minWidth grow key label enabled",
+    "progress:padding minWidth grow key label",
   ]);
+  // 新しい部品の引数と修飾を読み書きし、もう一度読んでも同じ式になる
+  const parts = string(exports.newParts());
+  for (const piece of ["spacer(),", "separator(),", "spinner(),", "checkbox(true, (c: bool) => {})", "radio(false, select).arg(2)", "slider(-1.5, -2, 2000, (v: f64) => {}).step(0.5)",
+    'picker(["赤", "青\\n二行"], -1, (i: i32) => {})', "segmented([], 0, pick)", 'tabs(["一", "二"], 1, (i: i32) => {})', "progress(-1)", 'image("data:image/png;base64,AAAA")',
+    'badge("3").align("topEnd")', '  ]).padding(4)', 'listTile("題"),', 'listTile("題", "副", chip("札"))', 'listTile("題", "副", null, badge("1"))', 'listTile("題", "副", text("前"), text("後")).gap(8)',
+    'chip("札").width(40).height(20)']) assert(parts.includes(piece), piece + "\n" + parts);
+  // 2 つ目の listTile("題", "") は副題が空なので題だけに戻る
+  assertEquals(parts.split('listTile("題"),').length, 3, parts);
+  assertEquals(exports.newErrors(), 0);
+  assertEquals(string(exports.newSummaries()), "✓,—,二,1 個の選択肢,0.5,題,data:image/png;base64,AA…,");
   assertEquals(string(exports.summaries()), ",一行,複数…,3,");
 });

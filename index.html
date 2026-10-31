@@ -67,11 +67,11 @@
     .bina-shell-content { padding: 16px; }
     /* fill() を付けた Décor のアプリは、アプリの領域を端まで使う */
     .bina-shell-content:has(> .bina-ui-fill) { padding: 0; }
-    /* 下の規則は document 方式のボタンと variant の無い Décor のボタンの見た目。variant・スイッチ・選択・field の面の中の Décor のボタンは Décor の見た目に任せる */
-    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *)) { padding: 8px 16px; border: 1px solid var(--color-base-300); border-radius: var(--radius-field); background: var(--color-primary); color: var(--color-primary-content); cursor: pointer; }
-    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *, .bina-ui-small)) { min-height: 44px; }
-    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *, .bina-ui-mono, .bina-ui-small, .bina-ui-bold)) { font: inherit; }
-    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-surface-field > *)):focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+    /* 下の規則は document 方式のボタンと variant の無い Décor のボタンの見た目。variant・スイッチ・選択・選択肢（segmented・tabs）・field の面の中の Décor のボタンは Décor の見た目に任せる */
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-option, .bina-ui-surface-field > *)) { padding: 8px 16px; border: 1px solid var(--color-base-300); border-radius: var(--radius-field); background: var(--color-primary); color: var(--color-primary-content); cursor: pointer; }
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-option, .bina-ui-surface-field > *, .bina-ui-small)) { min-height: 44px; }
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-option, .bina-ui-surface-field > *, .bina-ui-mono, .bina-ui-small, .bina-ui-bold)) { font: inherit; }
+    .bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-option, .bina-ui-surface-field > *)):focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
   </style>
 </head>
 <body>

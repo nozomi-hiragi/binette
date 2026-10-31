@@ -2,7 +2,7 @@ import { createUiDiffer, type UiNode } from "./diff.ts";
 import { createUiDom } from "./dom.ts";
 
 export * from "./parts.ts";
-import { View, UiCallback, Theme, Scale, ComponentTheme, theme as sharedTheme } from "./parts.ts";
+import { View, UiCallback, Theme, Scale, ComponentTheme, theme as sharedTheme, choice } from "./parts.ts";
 
 class FunctionUiCallback extends UiCallback {
   constructor(private callback: (arg: number) => void) { super(); }
@@ -16,6 +16,24 @@ export function button(label: string, callback: (arg: number) => void): View {
 export function buttonOf(children: View[], callback: (arg: number) => void): View {
   const view = new View("button"); view.children = children; view.callback = new FunctionUiCallback(callback); return view;
 }
+/** ラジオボタンを作る。押すと onSelect を arg(i) の値で呼ぶ。 */
+export function radio(selected: boolean, onSelect: (arg: number) => void): View {
+  const view = new View("radio"); view.checkedValue = selected; view.callback = new FunctionUiCallback(onSelect); return view;
+}
+/** 選択肢から一つを選ぶ欄（ネイティブの select）を作る。onChange は選んだ番号を受け取る。 */
+export function picker(options: string[], index: number, onChange: (index: number) => void): View {
+  return choice("picker", options, index, new FunctionUiCallback(onChange));
+}
+/** つながったボタンで一つを選ぶ部品を作る。onChange は選んだ番号を受け取る。 */
+export function segmented(options: string[], index: number, onChange: (index: number) => void): View {
+  return choice("segmented", options, index, new FunctionUiCallback(onChange));
+}
+/** タブの見出しの並びを作る。onChange は選んだ番号を受け取る。 */
+export function tabs(options: string[], index: number, onChange: (index: number) => void): View {
+  return choice("tabs", options, index, new FunctionUiCallback(onChange));
+}
+/** 値を返すイベントで、受け取った数を選択肢の番号として渡す部品か。 */
+function indexed(kind: string): boolean { return kind === "picker" || kind === "segmented" || kind === "tabs"; }
 type Component = { fn: (props: never) => View; props: unknown };
 const components = new WeakMap<View, Component>();
 
@@ -112,6 +130,17 @@ export function mount(element: HTMLElement): Root {
       differ.inputVersions.set(handle, version);
       if (target.node.enabled) handlers[target.node.handler]?.textCallback?.(value);
     },
+    dispatchUiValue(handle, value, version) {
+      const target = differ.find(handle);
+      if (!target) return;
+      differ.inputVersions.set(handle, version);
+      const view = target.node.enabled ? handlers[target.node.handler] : undefined;
+      if (!view || !Number.isFinite(value)) return;
+      if (view.numberCallback) view.numberCallback(Math.min(view.maxValue, Math.max(view.minValue, value)));
+      else if (view.checkCallback) view.checkCallback(value !== 0);
+      else if (!indexed(view.kind)) view.callback?.call(view.argValue);
+      else if (Number.isInteger(value) && value >= 0 && value < view.optionsValue.length) view.callback?.call(value);
+    },
   });
   let tree: Fiber | undefined;
   let rootView: View | undefined;
@@ -173,7 +202,7 @@ export function mount(element: HTMLElement): Root {
     });
     for (const child of previous) if (!used.has(child)) dispose(child);
     fiber.children = children.map(child => child.next);
-    const handler = view.callback || view.textCallback ? handlers.push(view) - 1 : -1;
+    const handler = view.callback || view.textCallback || view.numberCallback || view.checkCallback ? handlers.push(view) - 1 : -1;
     return [{ kind: view.kind as UiNode["kind"], children: children.map(child => child.result), text: view.value,
       theme: view.themeValue, padding: view.paddingValue === -100 ? null : view.paddingValue, gap: view.gapValue, grow: view.growValue,
       key: view.keyValue, label: view.labelValue, enabled: view.enabledValue,
@@ -183,7 +212,9 @@ export function mount(element: HTMLElement): Root {
       divider: view.dividerValue, mono: view.monoValue, small: view.smallValue, bold: view.boldValue, truncate: view.truncateValue,
       width: view.widthValue, center: view.centerValue, selected: view.selectedValue, toggle: view.toggleValue,
       scroll: view.scrollValue, fill: view.fillValue, collapse: view.collapseValue,
-      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue, highlight: view.highlightValue }, fiber];
+      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue, highlight: view.highlightValue,
+      checked: view.checkedValue, value: view.numberValue, min: view.minValue, max: view.maxValue, step: view.stepValue,
+      options: view.optionsValue.slice(), index: view.indexValue, align: view.alignValue }, fiber];
   }
   function draw(view: View): void {
     const drawRevision = ++revision;

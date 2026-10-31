@@ -48,6 +48,8 @@ export interface Process {
   /** 宣言的 UI の要素ハンドルでイベントを届ける */
   dispatchUi(handle: number): void;
   dispatchUiText(handle: number, value: string, version?: number): void;
+  /** 値を返す部品（checkbox・radio・slider・picker・segmented・tabs）の操作を届ける。捨てるときも版を知らせ、表示をアプリの値に戻す */
+  dispatchUiValue(handle: number, value: number, version?: number): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -224,6 +226,14 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       if (closing || state === State.Stop || state === State.Destroy) return;
       void enqueue(async () => {
         if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_text_handle", handle, value, version);
+        else if (!closing && state !== State.Stop && state !== State.Destroy) await acknowledge();
+      }).catch(reportCall);
+    },
+    dispatchUiValue(handle, value, version = 0) {
+      const acknowledge = () => running?.call("__bina_ui_value_ack", handle, version);
+      if (closing || state === State.Stop || state === State.Destroy) return;
+      void enqueue(async () => {
+        if (accepting && state === State.Resume && !closing && !finishRequested && !openings.length) await running?.call("__bina_ui_value_handle", handle, value, version);
         else if (!closing && state !== State.Stop && state !== State.Destroy) await acknowledge();
       }).catch(reportCall);
     },

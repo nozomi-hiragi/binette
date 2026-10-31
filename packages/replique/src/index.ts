@@ -1,7 +1,8 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
 /** アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。 */
 import { View, UiCallback } from "jsr:@binette/decor/as";
-export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme } from "jsr:@binette/decor/as";
+export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
+  spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge } from "jsr:@binette/decor/as";
 // @ts-ignore: decorator
 @external("binette", "dom.byId")
 declare function byId(handle: i32, id: string): void;
@@ -256,7 +257,8 @@ declare function finishImport(): void;
 declare function renderUi(value: string): void;
 
 class UiHandler {
-  constructor(readonly callback: UiCallback | null, readonly arg: number, readonly textCallback: ((value: string) => void) | null) {}
+  constructor(readonly callback: UiCallback | null, readonly arg: number, readonly textCallback: ((value: string) => void) | null,
+    readonly numberCallback: ((value: f64) => void) | null, readonly checkCallback: ((checked: boolean) => void) | null, readonly indexed: boolean) {}
 }
 let uiHandlers: Array<UiHandler> = [];
 let uiBuild: i32 = 0;
@@ -278,10 +280,14 @@ function jsonString(value: string): string {
 function serializeView(view: View): string {
   let handler: i32 = -1;
   const callback = view.callback;
-  if (callback !== null || view.textCallback !== null) {
+  if (callback !== null || view.textCallback !== null || view.numberCallback !== null || view.checkCallback !== null) {
     handler = uiHandlers.length;
-    uiHandlers.push(new UiHandler(callback, view.argValue, view.textCallback));
+    const indexed = view.kind == "picker" || view.kind == "segmented" || view.kind == "tabs";
+    uiHandlers.push(new UiHandler(callback, view.argValue, view.textCallback, view.numberCallback, view.checkCallback, indexed));
   }
+  let options = "[";
+  for (let i = 0; i < view.optionsValue.length; i++) options += (i > 0 ? "," : "") + jsonString(view.optionsValue[i]);
+  options += "]";
   let children = "[";
   for (let i = 0; i < view.children.length; i++) {
     if (i > 0) children += ",";
@@ -298,7 +304,10 @@ function serializeView(view: View): string {
     ',"width":' + view.widthValue.toString() + ',"center":' + (view.centerValue ? "true" : "false") + ',"selected":' + view.selectedValue.toString() +
     ',"toggle":' + view.toggleValue.toString() + ',"scroll":' + (view.scrollValue ? "true" : "false") + ',"fill":' + (view.fillValue ? "true" : "false") +
     ',"collapse":' + (view.collapseValue ? "true" : "false") + ',"placeholder":' + jsonString(view.placeholderValue) +
-    ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + ',"highlight":' + (view.highlightValue ? "true" : "false") + '}';
+    ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + ',"highlight":' + (view.highlightValue ? "true" : "false") +
+    ',"checked":' + (view.checkedValue ? "true" : "false") + ',"value":' + view.numberValue.toString() + ',"min":' + view.minValue.toString() +
+    ',"max":' + view.maxValue.toString() + ',"step":' + view.stepValue.toString() + ',"options":' + options + ',"index":' + view.indexValue.toString() +
+    ',"align":' + jsonString(view.alignValue) + '}';
 }
 
 function rebuild(): void {
@@ -328,6 +337,20 @@ export function __bina_ui_text(build: i32, handler: i32, value: string): void {
   const callback = uiHandlers[handler].textCallback;
   if (callback === null) return;
   callback(value);
+  rebuild();
+}
+
+/** Régie が値を返す部品の操作を届ける。slider は数、checkbox は 0 か 1、picker・segmented・tabs は番号。radio は arg(i) の値で呼ぶ */
+export function __bina_ui_value(build: i32, handler: i32, value: f64): void {
+  if (build != uiBuild || handler < 0 || handler >= uiHandlers.length) return;
+  const entry = uiHandlers[handler];
+  const numberCallback = entry.numberCallback;
+  const checkCallback = entry.checkCallback;
+  const callback = entry.callback;
+  if (numberCallback !== null) numberCallback(value);
+  else if (checkCallback !== null) checkCallback(value != 0);
+  else if (callback !== null) callback.call(entry.indexed ? value : entry.arg);
+  else return;
   rebuild();
 }
 
