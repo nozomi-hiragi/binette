@@ -17,7 +17,7 @@ draw();
 // 使い終わったら root.unmount();
 ```
 
-`mount(element)` が返す root の `render(view)` を呼ぶと描画します。次の呼び出しでは前の木との差分を反映し、`unmount()` で描画を解除します。普通の変数を変えたあとの描画は明示的に呼びます。`component` と `useState` を使うと、状態の更新後に自動で描き直せます。`useEffect` では描画後の処理と片付けを登録できます。
+`mount(element)` が返す root の `render(view)` を呼ぶと描画します。次の呼び出しでは前の木との差分を反映し、`unmount()` で描画を解除します。普通の変数を変えたあとの描画は明示的に呼びます。`component` と `useState` を使うと、状態の更新後に自動で描き直せます。`useEffect` では描画後の処理と片付けを登録できます。`mount(element, { apps })` と渡すと、`appIcon(i)` が `apps[i].icon` の SVG を描きます。
 
 複数行の入力欄は `input(value, onText).multiline()` で作ります。HTML の `textarea` として描画され、改行を含む値を受け取れます。通常の input と同じく、IME の変換中や古い入力の版による描き直しで、入力中の値を上書きしません。TS と AS の両方で使えます。
 

@@ -1,5 +1,5 @@
 import { createUiDiffer, type UiNode } from "./diff.ts";
-import { createUiDom } from "./dom.ts";
+import { createUiDom, type UiDomOptions } from "./dom.ts";
 
 export * from "./parts.ts";
 import { View, UiCallback, Theme, Scale, ComponentTheme, theme as sharedTheme, choice } from "./parts.ts";
@@ -110,8 +110,8 @@ export interface Root {
   /** DOM とリスナーを取り除く。 */
   unmount(): void;
 }
-/** 要素の中に宣言 UI を描く root を作る。 */
-export function mount(element: HTMLElement): Root {
+/** 要素の中に宣言 UI を描く root を作る。options.apps を渡すと appIcon(i) がその i 番目の icon（SVG）を描く。 */
+export function mount(element: HTMLElement, options: UiDomOptions = {}): Root {
   let handlers: View[] = [];
   let build = 0;
   let active = true;
@@ -141,7 +141,7 @@ export function mount(element: HTMLElement): Root {
       else if (!indexed(view.kind)) view.callback?.call(view.argValue);
       else if (Number.isInteger(value) && value >= 0 && value < view.optionsValue.length) view.callback?.call(value);
     },
-  });
+  }, options);
   let tree: Fiber | undefined;
   let rootView: View | undefined;
   let scheduled = false;

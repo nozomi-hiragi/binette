@@ -28,7 +28,7 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 `public/` は Vite の publicDir です。手書きの `sw.js`・`manifest.webmanifest`・自作の `icon.svg` をそのまま `dist/` の直下へ写します。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。SW を更新するときは、古いキャッシュを消せるよう `binette-v0.2.0-1` の版も変えてください。
 
-設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。ホームもシステムアプリ `apps/home`（`"role": "home"`）です。Scene の `mountShell` がホームを開き、画面の下にホームバーを出してアプリの切り替えと終了を受け持ちます。
+設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。ホームもシステムアプリ `apps/home`（`"role": "home"`）です。Scene の `mountShell` がホームを開き、画面の下にホームバーを出し、アプリのアイコンのドックでの切り替えと、アイコンのメニューからの終了を受け持ちます。
 
 ## バージョンの決め方
 

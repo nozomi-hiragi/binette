@@ -29,7 +29,8 @@ export interface SystemUi {
 
 /** ホームバーと前面と Apps に見せる状態 */
 export interface SystemView {
-  instances: { id: number; key: string; name: string; home: boolean; closing: boolean }[];
+  /** icon はアプリの SVG の文字列。ホームバーのアイコンに使う。無いアプリは undefined */
+  instances: { id: number; key: string; name: string; icon?: string; home: boolean; closing: boolean }[];
   front: number | "apps" | undefined;
   apps: { key: string; name: string }[];
   clearError: boolean;
@@ -167,7 +168,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   };
   function renderBar(clearError = false) {
     options.ui.update({
-      instances: [...sessions].map(s => ({ id: s.id, key: s.installed.key, name: s.installed.manifest.name, home: s.home, closing: s.closing })),
+      instances: [...sessions].map(s => ({ id: s.id, key: s.installed.key, name: s.installed.manifest.name, icon: s.installed.icon, home: s.home, closing: s.closing })),
       front: appsShown ? "apps" : active === hiding ? undefined : active?.id,
       apps: [...apps].sort((a, b) => a.manifest.name < b.manifest.name ? -1 : a.manifest.name > b.manifest.name ? 1 : 0).map(app => ({ key: app.key, name: app.manifest.name })),
       clearError,

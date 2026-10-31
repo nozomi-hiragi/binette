@@ -36,8 +36,8 @@ interface SystemUi {
   report(error: unknown): void;
 }
 interface SystemView {
-  /** スタック。並びはホームバーに出す順 */
-  instances: { id: number; key: string; name: string; home: boolean; closing: boolean }[];
+  /** スタック。並びはホームバーに出す順。icon はアプリの SVG の文字列（無ければ undefined） */
+  instances: { id: number; key: string; name: string; icon?: string; home: boolean; closing: boolean }[];
   /** 前面。"apps" は Apps の一覧 */
   front: number | "apps" | undefined;
   /** Apps に並べるアプリ（名前の順） */
