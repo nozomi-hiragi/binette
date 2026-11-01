@@ -90,7 +90,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
      ルートの OS（src/main.ts）
 ```
 
-- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene の大枠のうち、ホームバーは役割 `homebar` のシステムアプリに移し、Scene に残るのはアプリの UI の描画と、カーネルが直接描く Apps・復旧画面になる（決定 2026-11-01、[roles.md](roles.md#ホームバー決定-2026-11-01)）
+- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene の大枠（既定のホームバー、Apps、復旧画面）とアプリの UI の描画はカーネルに入る。ホームバーは役割 `homebar` のアプリで差し替えられるようにする（決定 2026-11-01、差し替えを作る時期は案。[roles.md](roles.md#ホームバー決定-2026-11-01)）
 - 宣言 UI の共通部分は Décor に置く（[decor.md](decor.md)、案）。Décor は core だけに依存し、Régie と Scene がそれぞれ差分と DOM への反映を使う。
 - システムの依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
 - ビルドは Régie に置く（[regie/build.md](regie/build.md)）。何を動かしてよいかの判断と同じ所に置くため。asc は重いので `@binette/regie/build` という別の入口にし、ビルドしない利用者は読まない

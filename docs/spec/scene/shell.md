@@ -54,7 +54,7 @@ function isInstalled(window: Window | null): boolean
 ## ホームバー（案・実装済み）
 
 > [!NOTE]
-> ホームバーは、役割 `homebar` のシステムアプリに移します（決定 2026-11-01、[roles.md](../roles.md#ホームバー決定-2026-11-01)）。機能はカーネルが `homebar` の API として渡し、見た目と並びはアプリが Décor で作ります。下は今のコードの形です。
+> 既定のホームバーは、このまま Scene（カーネル）に埋め込みます。役割 `homebar` のアプリを割り当てたときだけ、そちらに差し替えます（[roles.md](../roles.md#ホームバー決定-2026-11-01)。差し替えを作る時期は案）。
 
 - 高さ約 60px の淡い帯（`--bina-shell-background`）で、上に細い線を引く。外側は `nav`（aria-label「ホームバー」）のまま
 - 左端にホーム（家の線画、文字なし、36px、aria-label「ホームを開く」）。ホームが前面なら淡いアクセントの面と `aria-pressed="true"`
