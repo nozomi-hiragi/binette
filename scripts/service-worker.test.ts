@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 
 const source = await Deno.readTextFile(new URL("../public/sw.js", import.meta.url));
 const BASE = "https://example.test/binette/";
@@ -53,6 +53,7 @@ function setup(base = BASE) {
   let claimed = 0;
   let network: Fetcher = () => Promise.resolve(new Response("ネット"));
   const requests: string[] = [];
+  const reloads: RequestCache[] = [];
   const key = (request: Request | URL | string) => new URL(request instanceof Request ? request.url : String(request), base).href;
   const open = (name: string) => {
     if (!stored.has(name)) stored.set(name, new Map());
@@ -60,7 +61,15 @@ function setup(base = BASE) {
     return {
       match(request: Request | URL | string) { return Promise.resolve(entries.get(key(request))?.clone()); },
       put(request: Request | URL | string, response: Response) { entries.set(key(request), response.clone()); return Promise.resolve(); },
-      addAll(paths: string[]) { for (const path of paths) entries.set(key(path), new Response(path === "./index.html" ? ENTRY : mixedInstall && path === "./regie.js" ? "別版" : `シェル:${path}`)); return Promise.resolve(); },
+      addAll(requests: (Request | string)[]) {
+        for (const request of requests) {
+          // HTTP キャッシュを通さず取り直すこと
+          if (request instanceof Request) reloads.push(request.cache);
+          const path = `./${new URL(key(request)).pathname.slice(new URL(base).pathname.length)}`;
+          entries.set(key(request), new Response(path === "./index.html" ? ENTRY : mixedInstall && path === "./regie.js" ? "別版" : `シェル:${path === "./" ? "./" : path}`));
+        }
+        return Promise.resolve();
+      },
     };
   };
   const worker = {
@@ -96,6 +105,7 @@ function setup(base = BASE) {
     set failDatabase(value: boolean) { failDatabase = value; },
     get transactions() { return transactions; }, get closed() { return closed; },
     set network(fetcher: Fetcher) { network = fetcher; },
+    get reloads() { return reloads; },
     get skipped() { return skipped; }, get claimed() { return claimed; },
   };
 }
@@ -104,6 +114,7 @@ Deno.test("SW はサブパスのシェルを入れて待機を飛ばし、古い
   const sw = setup();
   await sw.dispatch("install").done();
   assertEquals(sw.skipped, 1);
+  assert(sw.reloads.length > 0 && sw.reloads.every(cache => cache === "reload"));
   assertEquals([...sw.stored.get(CACHE)!.keys()], ["", "index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js"].map(path => BASE + path));
   sw.open("binette-old"); sw.open("another-app");
   await sw.dispatch("activate").done();

@@ -11,7 +11,8 @@ const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./
 worker.addEventListener("install", event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    await cache.addAll(SHELL);
+    // HTTP キャッシュに残った前の版を混ぜないよう、配信元へ取り直す。
+    await cache.addAll(SHELL.map(path => new Request(new URL(path, worker.location.href), { cache: "reload" })));
     // 配置の途中に入口と JS の版が混ざっていたら、新しい SW を有効にしない。
     const html = await cache.match(new URL("./index.html", worker.location.href));
     const kernel = await cache.match(new URL("./regie.js", worker.location.href));
