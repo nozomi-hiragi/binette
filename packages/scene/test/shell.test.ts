@@ -500,9 +500,12 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key=homes] button").length === 2);
-    assertEquals(element.querySelector("[data-bina-key=homes] button")!.textContent, "ホーム（使用中）");
+    const homes = () => element.querySelectorAll<HTMLButtonElement>("[data-bina-key=homes] button");
+    assertEquals([homes()[0]!.textContent, homes()[0]!.getAttribute("aria-pressed")], ["ホーム✓", "true"]);
     element.querySelectorAll<HTMLButtonElement>("[data-bina-key=homes] button")[1]!.click();
-    await waitFor(() => element.querySelectorAll("[data-bina-key=homes] button")[1]!.textContent === "別のホーム（使用中）" && worker.live === 1);
+    await waitFor(() => homes()[1]!.getAttribute("aria-pressed") === "true" && worker.live === 1);
+    assert(homes()[0]!.getAttribute("aria-pressed") !== "true");
+    assertEquals(homes()[1]!.textContent, "別のホーム✓");
     assertEquals((await store.system.getSettings())!.roles, { home: otherKey });
     const old = (await store.system.getLast(installedAppKey(homeApp.source, builtHome.manifest.id)))!;
     assertEquals({ state: old.state, done: old.done, reason: old.reason }, { state: 6, done: true, reason: { kind: 0, cause: 0 } });
@@ -530,9 +533,19 @@ Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で�
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key=history] > *").length === 5);
-    const lines = [...element.querySelectorAll("[data-bina-key=history] > *")].map(node => node.textContent!);
-    assert(lines[0]!.endsWith(" ホーム"));
-    assertEquals(lines.slice(1), ["2100-03-01 00:00:00 無いアプリの識別子", "2000-02-29 12:34:56 無いアプリの識別子", "1970-01-01 00:00:00 無いアプリの識別子", "1969-12-31 23:59:59 無いアプリの識別子"]);
+    const lines = [...element.querySelectorAll("[data-bina-key=history] > *")].map(node =>
+      [...node.children[0]!.children].map(child => child.textContent!)
+    );
+    assertEquals(lines[0]![0], "ホーム");
+    assertEquals(lines.slice(1), [
+      ["無いアプリの識別子", "2100-03-01 00:00:00"],
+      ["無いアプリの識別子", "2000-02-29 12:34:56"],
+      ["無いアプリの識別子", "1970-01-01 00:00:00"],
+      ["無いアプリの識別子", "1969-12-31 23:59:59"],
+    ]);
+    const historySection = element.querySelector("[data-bina-key=history-section]")!;
+    assertEquals(historySection.textContent!.match(/UTC/g)?.length, 1);
+    assertEquals(historySection.querySelector("[data-bina-key=history-title]")!.nextElementSibling!.textContent, "UTC");
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
