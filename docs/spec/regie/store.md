@@ -4,6 +4,31 @@
 
 インストール済みアプリと OS の記録の保存先です。今のコードでは `packages/regie/src/store.ts` にあります（場所は変えません）。
 
+## ファイルの木（案・実装済み）
+
+`packages/regie/src/fs.ts` の `FileTree` は、パスとバイト列を扱うカーネル用の API です。メモリ版と IndexedDB 版は同じ操作を持ち、読み書きするバイト列を写します。アプリに権限付きで渡す API は後の作業です。
+
+```ts
+interface FileTree {
+  read(path: string): Promise<Uint8Array | undefined>;
+  readFiles(paths: readonly string[]): Promise<(Uint8Array | undefined)[]>;
+  write(path: string, data: Uint8Array): Promise<void>;
+  writeFiles(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  list(prefix: string): Promise<string[]>;
+  delete(path: string): Promise<void>;
+  replaceSystem(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  readOverlay(path: string): Promise<Uint8Array | undefined>;
+  listOverlay(prefix: string): Promise<string[]>;
+  update(path: string, transform: (value: Uint8Array | undefined) => Uint8Array): Promise<void>;
+}
+```
+
+- `createMemoryFileTree()`、`createIndexedDbFileTree({ name? })` で作る。IndexedDB の既定名は `binette-apps`、接続は初回操作時に開く
+- パスは正規の絶対パス。`list` は指定パス自身とその子孫のファイルを返し、結果は文字コード順。ファイルが無ければ `read` は `undefined`、`delete` は何もしない
+- `readOverlay` と `listOverlay` は `/apps/home/a` のような論理パスを取り、対応する `/user/apps/home/a` と `/system/apps/home/a` を重ねる。`/apps/settings` とその子孫は `/system` だけを使う
+- `readFiles` は複数ファイルを同じ時点の状態から読む。`write`・`writeFiles`・`delete`・`update` は `/system` を変更できない。`writeFiles` は複数ファイルをまとめて原子的に書く。`replaceSystem` は `/system/…` のファイルの集合を丸ごと入れ替える。`update` は 1 ファイルの読み書きを原子的に行い、起動履歴の同時更新に使う
+- これはカーネル用の API であり、それ自体はアプリごとの権限を検査しない。`replaceSystem` はカーネルの更新処理だけに渡す
+
 ## AppStore（実装済み）
 
 ビルド結果を保存します。アプリ自身が使うデータのストレージとは別です。
@@ -32,12 +57,14 @@ interface AppStore {
 - `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
 - `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
 - `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
+- `createAppStore(tree)` は指定した `FileTree` を使う。`/apps/<ID>/<入手元>/` に、WASM をそのまま `app.wasm`、残りの記録を `record.json` として置き、2 ファイルを原子的に書く。ID と入手元は `encodeURIComponent` で符号化し、空文字と `.`・`..` は正規パスと衝突しないよう別に表す。保存形式と配置は案
+- `list` は `/apps` 以下の記録ファイルを探す。索引は持たず、一覧はパス順に返す。`get` は key の入手元と ID からパスを求めて直接読む
 
 版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。入手元の検証や権限の確認はまだしません。
 
 ## SystemStore（案・実装済み）
 
-AppStore.system で同じ保存先の OS の記録を読み書きします。メモリ版は AppStore ごとに持ち、読み書きで値を写します。IndexedDB 版は同じ DB を v2 に上げ、既存の apps 表を残して system 表を追加します。system は `last:<installedAppKey>`、launches、settings のキーで最後の状態・履歴・設定を保存します。各書き込みはトランザクションの完了まで待ちます。
+AppStore.system で同じファイルの木の OS の記録を読み書きします。最後の状態・履歴・設定は `/data/system/` 以下に置きます（配置は案）。IndexedDB は DB を v3 に上げて files 表を作り、旧 apps・system 表の記録を移します。旧表は残します。各書き込みはトランザクションの完了まで待ちます。
 
 ```ts
 interface LifecycleRecord {

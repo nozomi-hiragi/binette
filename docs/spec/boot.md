@@ -62,7 +62,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 | `/apps/<id>/…` | インストールしたアプリ。`app.json`、ソース、ビルド結果 |
 | `/data/<id>/…` | アプリごとのデータ。将来、Coulisses へのバックアップの対象 |
 
-- 今の `AppStore`・`SystemStore`（[regie/store.md](regie/store.md)）は、ファイルの木の上に載せ直す（案）
+- `AppStore`・`SystemStore` はファイルの木の上に保存する（API と保存先の細部は案。[regie/store.md](regie/store.md)）。目録、ハッシュの検査、アプリに渡す権限付き API はまだ実装していない
 
 ## アプリの置き方（決定 2026-11-01）
 

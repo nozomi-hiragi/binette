@@ -1,4 +1,6 @@
 import type { AppManifest } from "@binette/core";
+import { appFilePaths } from "./app-files.ts";
+import { createIndexedDbFileTree, createMemoryFileTree, type FileTree } from "./fs.ts";
 
 /** インストールしたアプリのビルド結果 */
 export interface InstalledApp {
@@ -86,93 +88,88 @@ export function installedAppKey(source: string, id: string): string {
   return JSON.stringify([source, id]);
 }
 
-/** メモリに保存する。読み書きの値は IndexedDB と同じく写す */
-export function createMemoryAppStore(): AppStore {
-  const apps = new Map<string, InstalledApp>();
-  const last = new Map<string, LifecycleRecord>();
-  let launches: LaunchRecord[] = [];
-  let settings: Partial<SystemSettings> | undefined;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const encode = (value: unknown): Uint8Array => encoder.encode(JSON.stringify(value));
+const decode = <T>(value: Uint8Array | undefined): T | undefined =>
+  value === undefined ? undefined : JSON.parse(decoder.decode(value)) as T;
+const launchesPath = "/data/system/launches.json";
+const settingsPath = "/data/system/settings.json";
+const lastPath = (key: string) => `/data/system/last/${encodeURIComponent(key)}.json`;
+type StoredApp = Omit<InstalledApp, "wasm">;
+
+/** 同じファイルの木にアプリと OS の記録を保存する。一覧はパス順に返す。 */
+export function createAppStore(tree: FileTree): AppStore {
+  const readApp = async (recordPath: string): Promise<InstalledApp | undefined> => {
+    const [record, wasm] = await tree.readFiles([recordPath, recordPath.replace(/record\.json$/, "app.wasm")]);
+    if (record === undefined || wasm === undefined) return undefined;
+    let app: StoredApp | undefined;
+    try { app = decode<StoredApp>(record); } catch { return undefined; }
+    if (!app || typeof app.source !== "string" || typeof app.manifest?.id !== "string" ||
+      appFilePaths(app.manifest.id, app.source).record !== recordPath) return undefined;
+    return { ...app, icon: app.icon, wasm };
+  };
   return {
     system: {
-      getLast: key => Promise.resolve(structuredClone(last.get(key))),
-      putLast(key, record) { last.set(key, structuredClone(record)); return Promise.resolve(); },
-      listLaunches: () => Promise.resolve(structuredClone(launches)),
+      getLast: async key => decode<LifecycleRecord>(await tree.read(lastPath(key))),
+      putLast(key, record) { return tree.write(lastPath(key), encode(record)); },
+      listLaunches: async () => decode<LaunchRecord[]>(await tree.read(launchesPath)) ?? [],
       recordLaunch(record, limit = 100) {
         const size = historySize(limit);
-        launches = size ? [...launches, structuredClone(record)].slice(-size) : [];
-        return Promise.resolve();
+        const copy = structuredClone(record);
+        return tree.update(launchesPath, value => {
+          const launches = [...(decode<LaunchRecord[]>(value) ?? []), copy];
+          return encode(size ? launches.slice(-size) : []);
+        });
       },
-      getSettings: () => Promise.resolve(structuredClone(settings)),
-      putSettings(value) { validateSystemSettings(value); settings = structuredClone(value); return Promise.resolve(); },
+      getSettings: async () => decode<Partial<SystemSettings>>(await tree.read(settingsPath)),
+      putSettings(settings) {
+        validateSystemSettings(settings);
+        return tree.write(settingsPath, encode(settings));
+      },
     },
-    list: () => Promise.resolve(structuredClone([...apps.values()])),
-    get: (key) => Promise.resolve(structuredClone(apps.get(key))),
-    put(app) {
-      apps.set(app.key, structuredClone(app));
-      return Promise.resolve();
+    async list() {
+      const paths = (await tree.list("/apps")).filter(path => /^\/apps\/[^/]+\/[^/]+\/record\.json$/.test(path));
+      const apps = await Promise.all(paths.map(readApp));
+      return apps.filter((app): app is InstalledApp => app !== undefined);
+    },
+    async get(key) {
+      let parts: unknown;
+      try { parts = JSON.parse(key); } catch { return undefined; }
+      if (!Array.isArray(parts) || parts.length !== 2 || !parts.every(part => typeof part === "string")) return undefined;
+      if (installedAppKey(parts[0], parts[1]) !== key) return undefined;
+      return await readApp(appFilePaths(parts[1], parts[0]).record);
+    },
+    async put(app) {
+      const { wasm, ...record } = app;
+      const paths = appFilePaths(app.manifest.id, app.source);
+      await tree.writeFiles(new Map([[paths.record, encode(record)], [paths.wasm, wasm.slice()]]));
     },
   };
 }
 
-/** IndexedDB の保存先 */
+/** 読み書きの値をコピーしてメモリに保存する。 */
+export function createMemoryAppStore(): AppStore {
+  return createAppStore(createMemoryFileTree());
+}
+
+/** IndexedDB の保存先。 */
 export interface IndexedDbAppStoreOptions {
-  /** DB 名。省略すると binette-apps */
+  /** DB 名。省略すると binette-apps。 */
   name?: string;
 }
 
-/** グローバルの indexedDB に保存する。接続は最初の読み書きで開く */
+/** グローバルの indexedDB に保存する。接続は最初の読み書きで開く。 */
 export function createIndexedDbAppStore(options: IndexedDbAppStoreOptions = {}): AppStore {
-  let opening: Promise<IDBDatabase> | undefined;
-  const open = () => opening ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const request = globalThis.indexedDB.open(options.name ?? "binette-apps", 2);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("apps")) db.createObjectStore("apps", { keyPath: "key" });
-      if (!db.objectStoreNames.contains("system")) db.createObjectStore("system");
-    };
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const db = request.result;
-      db.onversionchange = () => { db.close(); opening = undefined; };
-      resolve(db);
-    };
-  }).catch((error: unknown) => { opening = undefined; throw error; });
-
-  const run = async <T>(table: string, mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
-    const db = await open();
-    return new Promise<T>((resolve, reject) => {
-      const transaction = db.transaction(table, mode);
-      const request = action(transaction.objectStore(table));
-      transaction.oncomplete = () => resolve(request.result);
-      transaction.onabort = () => reject(transaction.error ?? request.error ?? new Error("保存を中断しました。"));
-      transaction.onerror = () => reject(transaction.error ?? request.error);
-    });
-  };
+  const store = createAppStore(createIndexedDbFileTree(options));
+  const system = store.system;
   return {
+    ...store,
     system: {
-      getLast: key => run("system", "readonly", store => store.get(`last:${key}`)),
-      putLast: async (key, record) => { await run("system", "readwrite", store => store.put(record, `last:${key}`)); },
-      listLaunches: async () => await run<LaunchRecord[] | undefined>("system", "readonly", store => store.get("launches")) ?? [],
-      async recordLaunch(record, limit = 100) {
-        const size = historySize(limit);
-        // 読んでから書くまでを一つのトランザクションにし、同時の起動も失わない
-        await run("system", "readwrite", store => {
-          const request = store.get("launches");
-          request.onsuccess = () => {
-            const launches = [...(request.result ?? []) as LaunchRecord[], record];
-            store.put(size ? launches.slice(-size) : [], "launches");
-          };
-          return request;
-        });
-      },
-      getSettings: () => run("system", "readonly", store => store.get("settings")),
-      async putSettings(settings) {
-        validateSystemSettings(settings);
-        await run("system", "readwrite", store => store.put(settings, "settings"));
-      },
+      ...system,
+      // IndexedDB 版は検証エラーも Promise の拒否で返す従来の契約を保つ。
+      async recordLaunch(record, limit) { await system.recordLaunch(record, limit); },
+      async putSettings(settings) { await system.putSettings(settings); },
     },
-    list: () => run<InstalledApp[]>("apps", "readonly", (store) => store.getAll()),
-    get: (key) => run<InstalledApp | undefined>("apps", "readonly", (store) => store.get(key)),
-    put: async (app) => { await run("apps", "readwrite", (store) => store.put(app)); },
   };
 }
