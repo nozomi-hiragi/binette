@@ -1,5 +1,6 @@
 import { DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
 import type { BuildOptions } from "./build.ts";
+import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
 import type { ApiDenial, ShellSnapshot } from "./launch.ts";
@@ -14,6 +15,8 @@ export type SystemApp = { source: string } & (
 /** システムの設定 */
 export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
+  /** 指定するとソースのビルドを検証済みコンパイラの Worker で行う。 */
+  browserBuild?: BrowserBuildOptions;
   /** 役割の既定の割り当て（役割 → installedAppKey）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
   roles?: Record<string, string>;
   /** 新しい版の `/system` があるとき、設定アプリの「更新」で入れ替える処理 */
@@ -169,8 +172,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       } else if (!installed || installed.manifest.version !== manifest.version) {
         const path = iconPath(manifest.icon);
         // app.json は最初に読んだものを使う
-        const { buildApp } = await import("./build.ts");
-        const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text!) : app.read(path), options);
+        const read = (path: string) => path === "app.json" ? Promise.resolve(text!) : app.read(path);
+        const built = options.browserBuild
+          ? await (await import("./browser-build.ts")).buildAppInWorker(read, { libraries: options.libraries, ...options.browserBuild })
+          : await (await import("./build.ts")).buildApp(read, options);
         const icon = path === undefined ? undefined : await app.read(path);
         installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);

@@ -79,6 +79,32 @@ export async function systemManifest(root: string): Promise<SystemManifest> {
   return { version: await sha256(encode(files)), files };
 }
 
+/** asc と Binaryen を、追加の取得が要らない単一のブラウザ用 ESM にまとめる */
+export async function buildCompiler(out: string): Promise<void> {
+  const target = resolve(out);
+  await Deno.mkdir(resolve(target, ".."), { recursive: true });
+  const staging = await Deno.makeTempDir({ prefix: "binette-compiler-" });
+  try {
+    // npm: を直接入口にすると Deno が CLI を選ぶため、API を再公開する入口を置く。
+    await Deno.writeTextFile(resolve(staging, "entry.ts"), 'export * from "npm:assemblyscript@0.28.20/asc";\n');
+    const result = await new Deno.Command(Deno.execPath(), {
+      // fixture の設定や node_modules に依存せず、実装側の lock で推移依存も固定する。
+      cwd: staging,
+      args: [
+        "bundle", "--no-config", "--lock", resolve(import.meta.dirname!, "../deno.lock"),
+        "--frozen-lockfile", "--node-modules-dir=none",
+        "--platform", "browser", "--format", "esm", "--minify",
+        "--output", target, "entry.ts",
+      ],
+      stdout: "null",
+      stderr: "piped",
+    }).output();
+    if (!result.success) {
+      throw new Error(`コンパイラを書き出せません。${new TextDecoder().decode(result.stderr)}`);
+    }
+  } finally { await Deno.remove(staging, { recursive: true }); }
+}
+
 /** 旧方式の生成物だけを消し、ほかのファイルには触れない */
 async function cleanPrebuilt(root: string): Promise<void> {
   for (const dir of [".binapp", ".binapp/system", ".binapp/bundled"]) {
@@ -108,6 +134,9 @@ export async function buildApps(root: string): Promise<void> {
       } catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
     }
     await Deno.writeFile(resolve(system, "boot.json"), encode({ roles }));
+    await buildCompiler(resolve(system, "tools/asc.js"));
+    await Deno.mkdir(resolve(system, "libraries"));
+    await Deno.copyFile(replique, resolve(system, "libraries/replique.ts"));
     const manifest = await systemManifest(system);
     const publicDir = resolve(root, ".binapp/public");
     await remove(publicDir);

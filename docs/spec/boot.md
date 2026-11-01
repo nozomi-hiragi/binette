@@ -33,9 +33,10 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 | `index.html` | 入口。`regie.js` を SRI（`integrity` 属性）付きで読む |
 | `regie.js` | カーネル本体。minify した JS |
 | `regie-worker.js` | アプリを動かす Worker の中身 |
+| `build-worker.js` | asc を動かすビルド専用 Worker の中身（案） |
 | `sw.js` | Service Worker。入口とカーネルをキャッシュし、ファイルの木を URL で返す |
 
-- カーネルは `regie.js` と `regie-worker.js` の 2 つにする（決定）。Worker の中身は別ファイルにする（今の Blob URL の Worker をやめる。CSP の `worker-src blob:` も要らなくなる）
+- カーネルは `regie.js` と `regie-worker.js` の 2 つにする（決定）。ビルド用の入口は別の `build-worker.js` にする（案）。Worker の中身は別ファイルにする（今の Blob URL の Worker をやめる。CSP の `worker-src blob:` も要らなくなる）
 - `manifest.webmanifest` と `icon.svg` も入口に置く。配布元の目録と固定物は同じ配布先から別に取る
 - AS のコンパイラ（asc）はカーネルに入れない（決定）。重い（約 13.6 MB、gzip で約 2.9 MB）ので、ファイルの木から取る部品にする
 
@@ -47,7 +48,8 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 | `system/boot.json` | 役割の既定の割り当て（どのアプリをシェル・ホーム・設定にするか） |
 | `system/apps/<アプリ>/` | システムアプリ（シェル、ホーム、設定など）。`app.json` とビルド済みの `.wasm` |
 | `system/bundled/<アプリ>/` | 同梱アプリ。システムアプリと同じファイル形式（案） |
-| `system/tools/asc.js` | AS のコンパイラ。minify した JS で、Worker の中で動かす |
+| `system/tools/asc.js` | AS のコンパイラ。依存込みの minify した JS で、Worker の中で動かす |
+| `system/libraries/replique.ts` | ブラウザでのビルドに渡す Réplique の AS ソース（案） |
 
 ## ファイルの木（決定 2026-11-01）
 
@@ -78,6 +80,8 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 - ビルドは Worker の中の asc で行う
 - システムアプリは固定物なので、ビルド済みの `.wasm` を取ってきて置く。ブラウザではビルドし直さない
 
+ブラウザ向けビルドの API と保存先は案です。asc と Réplique は保存済み目録の SHA-256 と大きさを検証してから使います。Réplique はビルドに AS ソースが必要なため、この配布物は JS や WASM ではなくソースのままです。
+
 ## 起動の流れ（決定 2026-11-01）
 
 1. `index.html` が `regie.js` を読む。改ざんはブラウザが SRI で検知する
@@ -101,7 +105,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 ## 改変の検知（決定 2026-11-01）
 
 - カーネル: `index.html` の SRI でブラウザが確かめる（カーネルは自分のハッシュを自分では確かめられないため）
-- `regie-worker.js` は Worker に SRI を指定できないため、現在は同じオリジンと HTTPS を信頼する。改変の検知方法は未決。案として、`regie.js` に期待するハッシュを埋め込み、信頼できる Service Worker が Worker への応答をその値で検証してから返す方法がある。初回も SW の制御が始まってから Worker を起動し、SW とハッシュ伝達の信頼方法、更新時の版の整合を決める必要がある。別途 fetch して検証するだけでは Worker の取得時に内容が変わる可能性を防げないため、採用しない
+- `regie-worker.js` と `build-worker.js` は Worker に SRI を指定できないため、現在は同じオリジンと HTTPS を信頼する。改変の検知方法は未決。案として、`regie.js` に期待するハッシュを埋め込み、信頼できる Service Worker が Worker への応答をその値で検証してから返す方法がある。初回も SW の制御が始まってから Worker を起動し、SW とハッシュ伝達の信頼方法、更新時の版の整合を決める必要がある。別途 fetch して検証するだけでは Worker の取得時に内容が変わる可能性を防げないため、採用しない
 - `/system` のファイル: 目録の SHA-256 と、取ったときと読み込むたびの両方で比べる。IndexedDB の中身を書き換えられても気づける
 - 目録: 今は HTTPS と同じオリジンを信じる。取得元を増やすときに、署名とカーネルに埋め込む公開鍵を足す
 - 現在の保存目録は署名がない。オフライン時や更新待ちの旧版など、同じ版の配布元目録と照合できない場合は、保存目録と固定物の両方を同時に改変されると検知できない。旧版の目録の信頼方法は未決

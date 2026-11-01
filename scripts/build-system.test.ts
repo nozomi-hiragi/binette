@@ -104,6 +104,39 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp/bundled`)), []);
     assert(first.files.some((file) => file.path === "system/apps/home/app.wasm"));
     assert(first.files.some((file) => file.path === "system/bundled/home/app.wasm"));
+    assert(first.files.some((file) => file.path === "system/libraries/replique.ts"));
+    assertEquals(await Deno.readTextFile(`${out}/system/libraries/replique.ts`), await Deno.readTextFile(replique));
+    const compiler = first.files.find((file) => file.path === "system/tools/asc.js");
+    assert(compiler);
+    assertEquals(compiler.size, (await Deno.stat(`${out}/system/tools/asc.js`)).size);
+    assert(compiler.size > 0);
+    assertEquals(Array.from(Deno.readDirSync(`${out}/system/tools`), (entry) => entry.name), ["asc.js"]);
+    // 配布した単一 ESM を Worker から読み、標準ライブラリと Binaryen の最適化まで使う。
+    const workerUrl = URL.createObjectURL(new Blob([`
+      import * as asc from ${JSON.stringify(new URL(`file://${out}/system/tools/asc.js`).href)};
+      const files = {};
+      const stderr = asc.createMemoryStream();
+      const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimize"], {
+        stderr,
+        readFile: (path) => path === "main.ts" ? "export function size(): i32 { return new Int32Array(3).length; }" : null,
+        writeFile: (path, data) => { files[path] = data; },
+        listFiles: () => [],
+      });
+      if (error) throw new Error(stderr.toString());
+      const { instance } = await WebAssembly.instantiate(files["main.wasm"], { env: { abort() { throw new Error("abort"); } } });
+      postMessage({ version: asc.version, size: instance.exports.size() });
+    `], { type: "text/javascript" }));
+    const worker = new Worker(workerUrl, { type: "module" });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        worker.onmessage = (event) => resolve(event.data);
+        worker.onerror = (event) => { event.preventDefault(); reject(new Error(event.message)); };
+      });
+      assertEquals(result, { version: "0.28.20", size: 3 });
+    } finally {
+      worker.terminate();
+      URL.revokeObjectURL(workerUrl);
+    }
     await buildApps(dir);
     assertEquals(JSON.parse(await Deno.readTextFile(`${out}/manifest.json`)), first);
     await Deno.remove(`${dir}/bundled/home`, { recursive: true });

@@ -19,3 +19,5 @@ export type { SystemApp, SystemOptions, SystemUi, SystemView, BinetteSystem } fr
 export { startSystem } from "./system.ts";
 export type { PrebuiltApp } from "./prebuilt.ts";
 export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";
+export type { BrowserBuildOptions } from "./browser-build.ts";
+export { buildAppInWorker, buildStoredApp } from "./browser-build.ts";

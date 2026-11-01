@@ -43,12 +43,12 @@ export function kernelIntegrity(): Plugin {
       }
       // SW がキャッシュから返す固定物（入口・カーネル・アイコンなど）のどれかが変わったら版を変える。
       const parts: Uint8Array[] = [];
-      for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js"]) {
+      for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js", "build-worker.js"]) {
         let data: Uint8Array;
         try {
           data = await Deno.readFile(resolve(outDir, name));
         } catch (error) {
-          if (error instanceof Deno.errors.NotFound && name !== "regie.js" && name !== "regie-worker.js") continue;
+          if (error instanceof Deno.errors.NotFound && !["regie.js", "regie-worker.js", "build-worker.js"].includes(name)) continue;
           throw error;
         }
         parts.push(new TextEncoder().encode(`${name}\0${data.byteLength}\0`), data);

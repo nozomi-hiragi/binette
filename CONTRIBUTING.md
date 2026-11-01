@@ -20,13 +20,13 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 ## Binette の開発
 
-`deno task start` は `deno task build:system` でシステムアプリと同梱アプリをビルドし、目録と固定物を用意してから Vite を http://localhost:5175/ に起動します。アプリや `public/` を変更したときは `deno task build:system` を再実行します。`deno task build` は同じ準備のあと、相対 URL で動く静的ファイルを `dist/` に生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、asc を配布しません。
+`deno task start` は `deno task build:system` でシステムアプリと同梱アプリをビルドし、目録と固定物を用意してから Vite を http://localhost:5175/ に起動します。アプリや `public/` を変更したときは `deno task build:system` を再実行します。`deno task build` は同じ準備のあと、相対 URL で動く静的ファイルを `dist/` に生成し、GitHub Pages のサブパスにも配置できます。Binette は IndexedDB を使い、ブラウザのビルド用に asc を別ファイルとして配布します。
 
-`build:system` は `apps/` と `bundled/` の直下で `app.json` を持つフォルダを自動で見つけます。配布用の `manifest.json` と `system/…`、`public/` のファイルを `.binapp/public/` に用意し、Vite が開発時と本番ビルドで配ります。本番のカーネルは固定名の `regie.js` と `regie-worker.js` に分かれ、ビルド時に `index.html` に `regie.js` の SHA-384 SRI を書き込みます。`.binapp/` と `dist/` は生成物なのでコミットしません。同梱アプリを追加するときは、`apps/home/deno.json` と同じ AS の型設定をそのアプリの `deno.json` に置き、ルートの `workspace` と `check` の入口にも追加します。
+`build:system` は `apps/` と `bundled/` の直下で `app.json` を持つフォルダを自動で見つけます。asc を依存込みで minify した `system/tools/asc.js` と Réplique の AS ソースを生成し、SHA-256 付きの `manifest.json` と `system/…`、`public/` のファイルを `.binapp/public/` に用意し、Vite が開発時と本番ビルドで配ります。本番のカーネルは固定名の `regie.js` と `regie-worker.js` に分かれ、ビルド時に `index.html` に `regie.js` の SHA-384 SRI を書き込みます。`.binapp/` と `dist/` は生成物なのでコミットしません。同梱アプリを追加するときは、`apps/home/deno.json` と同じ AS の型設定をそのアプリの `deno.json` に置き、ルートの `workspace` と `check` の入口にも追加します。
 
 入口は直下の `index.html`・`vite.config.ts` と `src/main.ts` です。書き出しとホームの表示は、システムアプリ、同梱アプリの順に、それぞれフォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。並び順と並べ替えの仕様は未決です。`deno task check` は生成物が無くても通り、`deno task test` は `dist/` と `.binapp/` を除外します。
 
-`public/` の手書きの `sw.js`・`manifest.webmanifest`・`icon.svg` は配布用ディレクトリにコピーされます。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。`deno task build` は `regie.js` と `regie-worker.js` のハッシュを `sw.js` のキャッシュの版（`binette-v0.2.0-3-<ハッシュ>`）に足すので、カーネルが変われば新しい SW に切り替わります。`sw.js` 自体の作りを変えたときは `binette-v0.2.0-3` の版も変えてください。
+`public/` の手書きの `sw.js`・`manifest.webmanifest`・`icon.svg` は配布用ディレクトリにコピーされます。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。`deno task build` は `regie.js`・`regie-worker.js`・`build-worker.js` のハッシュを `sw.js` のキャッシュの版（`binette-v0.2.0-3-<ハッシュ>`）に足すので、カーネルが変われば新しい SW に切り替わります。`sw.js` 自体の作りを変えたときは `binette-v0.2.0-3` の版も変えてください。
 
 設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今はホームの選択、新しい版への更新、デバッグ値、起動の履歴で、ほかの項目は未決です。ホームもシステムアプリ `apps/home`（`"roles": ["home"]`）です。役割は名乗るだけでは効かず、`system/boot.json` の既定と設定で割り当てたアプリにだけ、その役割の API が `onCreate(last, api)` の辞書で届きます（[docs/spec/roles.md](docs/spec/roles.md)）。Régie が常駐のシステムアプリ `apps/shell`（`"roles": ["shell"]`）を最初に起動し、シェルが `ShellApi.openHome()` でホームを開きます。シェルは AS の Décor でホームバーと `appArea()` を描き、Scene はその領域にアプリを配置します。シェルはスタックに数えず、落ち続けたときだけ Scene が表示領域とホームボタンの最低限の大枠を出します。
 

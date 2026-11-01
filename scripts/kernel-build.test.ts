@@ -11,7 +11,7 @@ Deno.test("配布カーネルと Worker は独立した固定名で、HTML の S
       build: { outDir },
     });
     const files = Array.from(Deno.readDirSync(outDir), (entry) => entry.name).sort();
-    assertEquals(files, ["index.html", "regie-worker.js", "regie.js"]);
+    assertEquals(files, ["build-worker.js", "index.html", "regie-worker.js", "regie.js"]);
     const kernel = await Deno.readFile(`${outDir}/regie.js`);
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-384", kernel));
     const expected = `sha384-${btoa(String.fromCharCode(...digest))}`;
