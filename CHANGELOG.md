@@ -4,7 +4,6 @@
 
 - 常駐シェルをシステムアプリ `apps/shell` に移す（形と名前は案）。Régie が最初に起動し、シェルが `ShellApi.openHome()` でホームを呼ぶ。シェルはスタックに数えず、ホームや Apps の一覧にも出さない。Décor の TS・AS に `appArea()`、Réplique に `ShellApi` と起動中一覧の同期を追加する。Scene はアプリを表示領域に配置し、シェルが落ち続けた場合だけ表示領域とホームボタンの大枠を描く。既定のバーはホーム・起動中のアプリ・戻る・閉じる・設定。設定からシェルを差し替えられ、ライブモードではインストールを案内する。以前の吹き出し・メニューは未移植で、通知は API の入口だけ
 
-
 - 役割と API の辞書を実装する（[docs/spec/roles.md](docs/spec/roles.md)、形と名前は案）。
   - `app.json` の `role`（文字列）を `roles`（文字列の配列）に変える。旧名の `role` は読み替えず `BinetteError` にする。apps/home・apps/settings の `app.json`、テスト、仕様を合わせた
   - 役割の割り当て: 初回は `system/boot.json` の既定（カーネルが `SystemOptions.roles` に渡す）、そのあとは `SystemSettings.roles`（役割 → installedAppKey。以前の `home` を置き換える）。名乗っただけでは API は届かず、割り当てられたアプリにだけ届く。変えられるのは設定アプリの `OsApi.assign` だけで、設定の役割は固定
