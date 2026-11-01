@@ -1,7 +1,22 @@
 import { assert, assertEquals } from "@std/assert";
-import { createMemoryAppStore } from "@binette/regie";
+import { buildApp } from "@binette/regie/build";
+import { createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
 import { isInstalled, mountShell } from "../src/index.ts";
+
+const root = new URL("../../..", import.meta.url);
+const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
+const shellApp = { source: "binette:system", prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/shell/${path}`, root)), { libraries }) };
+function createWorker(): RegieWorker {
+  const { port1, port2 } = new MessageChannel();
+  port1.start(); port2.start(); serveApp(port1 as never);
+  return { postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
+    addEventListener: (type, listener) => port2.addEventListener(type, listener as never),
+    terminate() { port1.close(); port2.close(); } };
+}
+function installButton(element: HTMLElement): HTMLButtonElement | null {
+  return element.querySelector<HTMLButtonElement>("[data-bina-key=shell-install]");
+}
 
 function fakeWindow(mode?: string, standalone = false): globalThis.Window {
   return { navigator: { standalone }, matchMedia: (query: string) => ({ matches: query === `(display-mode: ${mode})` }) } as unknown as globalThis.Window;
@@ -12,8 +27,10 @@ async function fixture(installed?: boolean, prepare?: (window: Window) => void) 
   prepare?.(window);
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
-  // ライブ表示のテストではアプリを起動しない。ホームが無いという状態表示だけが出る
-  const shell = await mountShell(element, { apps: [], store: createMemoryAppStore(), installed });
+  // 実際のシェルを起動して Worker 経由のインストール操作を検証する
+  const shell = await mountShell(element, { apps: [shellApp], store: createMemoryAppStore(), installed, createWorker });
+  await waitFor(() => element.querySelector("[data-bina-key=shell-home]") !== null &&
+    (installButton(element) === null) === element.querySelector<HTMLElement>(".bina-shell-live")!.hidden);
   return { window, element, shell, async close() { shell.stop(); await window.happyDOM.close(); } };
 }
 
@@ -41,19 +58,19 @@ Deno.test("installed の上書きでは matchMedia を使わず、ライブの�
     });
     try {
       const watermark = f.element.querySelector<HTMLElement>(".bina-shell-live")!;
-      const button = f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!;
+      const button = installButton(f.element);
       assertEquals(watermark.hidden, installed);
-      assertEquals(button.hidden, installed);
+      assertEquals(installButton(f.element) === null, installed);
       assertEquals(watermark.textContent, "ライブモード");
       assertEquals(watermark.getAttribute("aria-hidden"), "true");
       assertEquals(watermark.closest(".bina-shell-app"), null);
       // ホームバーの右端に置き、読み上げは「インストール」
-      assertEquals(button.closest("nav")?.className, "bina-shell-homebar");
-      assertEquals(button.parentElement?.lastElementChild, button);
-      assertEquals(button.getAttribute("aria-label"), "インストール");
+      if (button) assertEquals(button.closest("[data-bina-key=shell-bar]") !== null, true);
+      if (button) assertEquals(button.parentElement?.lastElementChild, button);
+      if (button) assertEquals(button.textContent, "インストール");
       assert(f.element.querySelector("style")!.textContent!.match(/:where\(\.bina-shell-live\)[^}]*pointer-events: none/));
       f.window.dispatchEvent(new f.window.Event("appinstalled"));
-      assertEquals(button.hidden, installed);
+      assertEquals(installButton(f.element) === null, installed);
       assertEquals(mediaCalls, 0);
     } finally { await f.close(); }
   }
@@ -69,17 +86,18 @@ Deno.test("display-mode の change で透かしとボタンが変わり、stop �
   });
   try {
     const watermark = f.element.querySelector<HTMLElement>(".bina-shell-live")!;
-    const button = f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!;
-    assertEquals(button.hidden, false);
+    assert(installButton(f.element) !== null);
     const query = queries.get("(display-mode: standalone)")!;
     query.matches = true; query.dispatchEvent(new Event("change"));
-    await waitFor(() => button.hidden === true && watermark.hidden === true);
+    await waitFor(() => installButton(f.element) === null && watermark.hidden === true);
     assert(f.shell.requireInstall("不要な表示"));
     query.matches = false; query.dispatchEvent(new Event("change"));
-    await waitFor(() => !button.hidden && !watermark.hidden);
+    await waitFor(() => installButton(f.element) !== null && !watermark.hidden);
+    const detachedButton = installButton(f.element)!;
     f.shell.stop();
     query.matches = true; query.dispatchEvent(new Event("change"));
-    assertEquals(button.hidden, false);
+    assertEquals(watermark.hidden, false);
+    assertEquals(detachedButton.isConnected, false);
     assertEquals(f.element.childNodes.length, 0);
   } finally { await f.close(); }
 });
@@ -87,12 +105,12 @@ Deno.test("display-mode の change で透かしとボタンが変わり、stop �
 Deno.test("matchMedia が無くてもライブを表示でき、appinstalled で手順とライブ表示が閉じる", async () => {
   const f = await fixture(undefined, window => { Object.defineProperty(window, "matchMedia", { value: undefined }); });
   try {
-    const button = f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!;
-    button.click();
+    const button = installButton(f.element);
+    button!.click();
     const dialog = f.element.querySelector<HTMLDialogElement>("dialog")!;
     await waitFor(() => dialog.open);
     f.window.dispatchEvent(new f.window.Event("appinstalled"));
-    await waitFor(() => button.hidden && !dialog.open);
+    await waitFor(() => installButton(f.element) === null && !dialog.open);
     assertEquals(f.element.querySelector<HTMLElement>(".bina-shell-live")!.hidden, true);
     assert(f.shell.requireInstall("インストール後"));
   } finally { await f.close(); }
@@ -120,23 +138,24 @@ Deno.test("prompt が無ければ短い手順を開き、閉じるボタンで�
     // showModal/close の無い DOM 実装でも open 属性で動く
     Object.defineProperty(dialog, "showModal", { value: undefined });
     Object.defineProperty(dialog, "close", { value: undefined });
-    const button = f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!;
-    button.click();
+    const button = installButton(f.element);
+    button!.click();
     await waitFor(() => dialog.open);
     assert(dialog.textContent!.includes("ブラウザのメニュー"));
     dialog.querySelector<HTMLButtonElement>("button")!.click();
     assertEquals(dialog.open, false);
     f.shell.requireInstall("特別な理由");
-    button.click();
+    button!.click();
     assertEquals(dialog.open, true);
-    assertEquals(dialog.querySelector("p")!.hidden, true);
+    await waitFor(() => dialog.querySelector("p")!.hidden === true);
   } finally { await f.close(); }
 });
 
 Deno.test("iPhone では Safari の共有からホーム画面に追加する手順を出す", async () => {
   const f = await fixture(false, window => { Object.defineProperty(window.navigator, "userAgent", { value: "iPhone Safari" }); });
   try {
-    f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!.click();
+    installButton(f.element)!.click();
+    await waitFor(() => f.element.querySelector<HTMLDialogElement>("dialog")!.open);
     assert(f.element.querySelector("dialog")!.textContent!.includes("Safari の共有 → ホーム画面に追加"));
   } finally { await f.close(); }
 });
@@ -149,11 +168,11 @@ Deno.test("beforeinstallprompt は標準表示を止め、ボタンで一度だ�
     Object.assign(event, { prompt() { calls++; return Promise.resolve(); } });
     f.window.dispatchEvent(event);
     assert(event.defaultPrevented);
-    const button = f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!;
-    button.click();
-    await waitFor(() => calls === 1 && !button.disabled);
+    const button = installButton(f.element);
+    button!.click();
+    await waitFor(() => calls === 1 && !installButton(f.element)!.disabled);
     assertEquals(f.element.querySelector<HTMLDialogElement>("dialog")!.open, false);
-    button.click();
+    button!.click();
     await waitFor(() => f.element.querySelector<HTMLDialogElement>("dialog")!.open);
     assertEquals(calls, 1);
   } finally { await f.close(); }
@@ -166,7 +185,7 @@ Deno.test("prompt の失敗は手順で案内し、複数の shell の表示は�
       const event = new f.window.Event("beforeinstallprompt", { cancelable: true });
       Object.assign(event, { prompt: () => Promise.reject(new Error("インストール非対応")) });
       f.window.dispatchEvent(event);
-      f.element.querySelector<HTMLButtonElement>("[data-bina-key=install]")!.click();
+      installButton(f.element)!.click();
       await waitFor(() => f.element.querySelector<HTMLDialogElement>("dialog")!.open);
     }));
     assert(fixtures[0]!.element.querySelector("h2")!.id !== fixtures[1]!.element.querySelector("h2")!.id);

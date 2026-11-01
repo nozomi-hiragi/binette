@@ -16,8 +16,25 @@ export interface OsSnapshot {
 /** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
 export type ApiDenial = "NotGranted" | "NotAssigned";
 
+/** シェルの起動中アプリ一覧の各要素 */
+export interface ShellInstance {
+  id: number;
+  appIndex: number;
+  name: string;
+  front: boolean;
+  hasIcon: boolean;
+}
+
+/** シェルアプリの起動時に渡す写し */
+export interface ShellSnapshot {
+  instances: ShellInstance[];
+  homeFront: boolean;
+  installed: boolean;
+  installBusy: boolean;
+}
+
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "shell"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -54,6 +71,16 @@ export interface LaunchOptions {
   storage?: Map<string, string>;
   /** データの書き込み。value が null なら削除 */
   onStorage?: (name: string, value: string | null) => void;
+  /** 辞書の `shell`。シェルアプリだけに渡す。省略時は shell.* を使えない */
+  shell?: ShellSnapshot;
+  onShellOpen?: (i: number) => void;
+  onShellClose?: (i: number) => void;
+  onShellBack?: () => void;
+  onShellHome?: () => void;
+  /** シェルが設定アプリを開くよう頼んだとき */
+  onShellSettings?: () => void;
+  onShellNotify?: (text: string) => void;
+  onShellInstall?: () => void;
   /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted として扱う */
   denied?: Record<string, ApiDenial>;
   /** アプリを終了しない呼び出しの失敗 */
@@ -74,6 +101,8 @@ export interface RegieApp {
   readonly exports: readonly string[];
   /** export した関数を呼ぶ。終わったら解決する。呼び出し中の DOM 操作は、解決より先に `onDom` に届く */
   call(name: string, ...args: (number | string)[]): Promise<void>;
+  /** シェルの状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
+  syncShell?(snapshot: ShellSnapshot): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -140,7 +169,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -158,6 +187,9 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
                 catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
               });
             },
+            syncShell(snapshot) {
+              if (!stopped) worker.postMessage({ type: "shell.sync", shell: snapshot });
+            },
             stop,
           });
           notifyRequests();
@@ -174,6 +206,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.assign": assignments.push([data.role!, data.i!]); break;
         case "os.update": options.onUpdate?.(); break;
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
+        case "shell.open": options.onShellOpen?.(data.i!); break;
+        case "shell.close": options.onShellClose?.(data.i!); break;
+        case "shell.back": options.onShellBack?.(); break;
+        case "shell.home": options.onShellHome?.(); break;
+        case "shell.settings": options.onShellSettings?.(); break;
+        case "shell.notify": options.onShellNotify?.(data.text!); break;
+        case "shell.install": options.onShellInstall?.(); break;
         case "finish": finishing = true; break;
         case "done": {
           clearTimeout(pending.get(data.id!)?.timer);
@@ -198,7 +237,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.shell === undefined ? {} : { shell: options.shell }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

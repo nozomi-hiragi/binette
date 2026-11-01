@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type ShellSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -33,6 +33,7 @@ export interface ProcessOptions {
     apps?: { id: string; name: string; icon?: string }[];
     os?: LaunchOptions["os"];
     storage?: LaunchOptions["storage"];
+    shell?: LaunchOptions["shell"];
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
@@ -41,6 +42,13 @@ export interface ProcessOptions {
   onAssign?: LaunchOptions["onAssign"];
   onUpdate?: LaunchOptions["onUpdate"];
   onStorage?: LaunchOptions["onStorage"];
+  onShellOpen?: LaunchOptions["onShellOpen"];
+  onShellClose?: LaunchOptions["onShellClose"];
+  onShellBack?: LaunchOptions["onShellBack"];
+  onShellHome?: LaunchOptions["onShellHome"];
+  onShellSettings?: LaunchOptions["onShellSettings"];
+  onShellNotify?: LaunchOptions["onShellNotify"];
+  onShellInstall?: LaunchOptions["onShellInstall"];
 }
 
 /** 状態を進めるアプリ */
@@ -59,6 +67,8 @@ export interface Process {
   dispatchUiText(handle: number, value: string, version?: number): void;
   /** 値を返す部品（checkbox・radio・slider・picker・segmented・tabs）の操作を届ける。捨てるときも版を知らせ、表示をアプリの値に戻す */
   dispatchUiValue(handle: number, value: number, version?: number): void;
+  /** シェルの状態（起動中アプリ一覧や前面）の更新を知らせる */
+  syncShell?(snapshot: ShellSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -129,11 +139,19 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     last,
     os: options.grants?.os,
     storage: options.grants?.storage,
+    shell: options.grants?.shell,
     denied: options.grants?.denied,
     onSet: options.onSet,
     onAssign(role, i) { assignments.push([role, i]); notifyRequests(); },
     onUpdate: options.onUpdate,
     onStorage: options.onStorage,
+    onShellOpen: options.onShellOpen,
+    onShellClose: options.onShellClose,
+    onShellBack: options.onShellBack,
+    onShellHome: options.onShellHome,
+    onShellSettings: options.onShellSettings,
+    onShellNotify: options.onShellNotify,
+    onShellInstall: options.onShellInstall,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -310,6 +328,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       if (frozen) cancelTimer();
       else armTimer();
     },
+    syncShell(snapshot) { running?.syncShell?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,
   };

@@ -41,6 +41,11 @@ function chooseHome(index: i32): void {
   if (os == null) return;
   os.assign("home", index);
 }
+function chooseShell(index: i32): void {
+  const os = osApi;
+  if (os == null) return;
+  os.assign("shell", index);
+}
 function update(): void {
   const os = osApi;
   if (os == null || updating) return;
@@ -68,6 +73,10 @@ class Settings extends App {
     const homes: View[] = [];
     for (let i: i32 = 0; i < os.candidateCount("home"); i++) {
       homes.push(button(os.candidateName("home", i) + (os.candidateId("home", i) == os.role("home") ? "（使用中）" : ""), chooseHome).arg(i).padding(12).key("home-" + i.toString()));
+    }
+    const shells: View[] = [];
+    for (let i: i32 = 0; i < os.candidateCount("shell"); i++) {
+      shells.push(button(os.candidateName("shell", i) + (os.candidateId("shell", i) == os.role("shell") ? "（使用中）" : ""), chooseShell).arg(i).padding(12).key("shell-" + i.toString()));
     }
     const debug: View[] = [];
     for (let i: i32 = 0; i < names.length; i++) {
@@ -100,6 +109,7 @@ class Settings extends App {
         show(!available, text("最新の版です。").key("update-latest")),
       ]).gap(8),
       column([text("ホーム").heading(2).key("home-title"), column(homes).gap(8).key("homes")]).gap(8),
+      column([text("シェル").heading(2).key("shell-title"), column(shells).gap(8).key("shells")]).gap(8),
       column([text("デバッグ").heading(2).key("debug-title"), column(debug).gap(8).key("debug")]).gap(8),
       column([text("起動の履歴").heading(2).key("history-title"), text("日時は UTC です。"), column(history).gap(8).list().key("history")]).gap(8),
     ]).gap(16).key("settings-root");

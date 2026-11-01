@@ -219,6 +219,7 @@ export const uiCss = `
 :where(.bina-ui-row) { display: flex; flex-direction: row; align-items: center; }
 :where(.bina-ui-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--bina-ui-minWidth, 112px)), 1fr)); align-content: start; background: var(--bina-ui-grid-background, transparent); }
 :where(.bina-ui-appIcon) { width: var(--bina-ui-icon-size, 56px); height: var(--bina-ui-icon-size, 56px); object-fit: contain; }
+:where(.bina-ui-appArea) { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; height: 100%; position: relative; overflow: hidden; isolation: isolate; }
 :where(.bina-ui-input) { font: inherit; font-size: ${componentLength("input", "font-size", "font-size", "1em")}; border-radius: ${componentLength("input", "radius", "radius", "var(--bina-ui-input-radius, 0px)")}; color: inherit; min-width: 0; }
 :where(textarea.bina-ui-input:not(.bina-ui-height)) { min-height: 8lh; }
 :where(textarea.bina-ui-input) { resize: vertical; }

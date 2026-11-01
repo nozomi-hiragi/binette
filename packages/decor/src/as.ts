@@ -1,7 +1,7 @@
 /** 宣言的 UI の部品と修飾（AssemblyScript）。共通の部品は parts.ts にあり、ここはハンドラーの包み方だけを持つ。 */
-import { View, UiCallback, column, row, grid, text, input, appIcon, show, Scale, space, radius, fontSize, Theme, ComponentTheme, theme, intString,
+import { View, UiCallback, column, row, grid, text, input, appIcon, appArea, show, Scale, space, radius, fontSize, Theme, ComponentTheme, theme, intString,
   spacer, separator, stack, checkbox, slider, progress, spinner, image, listTile, chip, badge, choice } from "./parts.ts";
-export { View, UiCallback, column, row, grid, text, input, appIcon, show, Scale, space, radius, fontSize, Theme, ComponentTheme, theme, intString,
+export { View, UiCallback, column, row, grid, text, input, appIcon, appArea, show, Scale, space, radius, fontSize, Theme, ComponentTheme, theme, intString,
   spacer, separator, stack, checkbox, slider, progress, spinner, image, listTile, chip, badge };
 
 class TypedUiCallback<T> extends UiCallback {

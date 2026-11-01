@@ -9,6 +9,10 @@ export interface MountOptions {
   apps?: { id: string; name: string; icon?: string }[];
   /** アプリを終了しない誤り */
   onError?: (error: unknown) => void;
+  /** DOM 操作を反映した後の通知 */
+  onDom?: () => void;
+  /** シェルからアプリ表示領域の内側へ DOM 操作を届かせない */
+  isolateAppArea?: boolean;
 }
 
 /** 描いたアプリのリスナー */
@@ -42,7 +46,8 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
     if (made) return made;
     const id = ids.get(handle);
     if (id === undefined) return undefined;
-    const found = element.querySelector<HTMLElement>(`[id="${escapeId(id)}"]`);
+    const found = [...element.querySelectorAll<HTMLElement>(`[id="${escapeId(id)}"]`)].find(node =>
+      !options.isolateAppArea || !node.closest(".bina-ui-appArea"));
     return found && found !== element && element.contains(found) ? found : undefined;
   };
   // DOM を変える前に対象を調べる。byId はその時点の DOM に対して解決する。
@@ -123,7 +128,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
       }
     }
   };
-  process.attach(applyDom);
+  process.attach(ops => { applyDom(ops); options.onDom?.(); });
   const mounted = { stop() { stopped = true; for (const entry of removers.values()) entry.remove(); ui.stop(); removers.clear(); ids.clear(); created.clear(); } };
   counts.set(mounted, () => ({ ids: ids.size, created: created.size, removers: removers.size }));
   return mounted;

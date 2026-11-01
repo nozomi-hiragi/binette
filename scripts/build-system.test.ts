@@ -46,8 +46,8 @@ Deno.test("システムアプリの失敗はフォルダ名を示す", async () 
 Deno.test("実際のシステムアプリは HTML なしで宣言 UI をビルドする", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    assertEquals(await buildFolder(new URL("../apps", import.meta.url).pathname, dir, replique), ["home", "settings"]);
-    for (const name of ["home", "settings"]) {
+    assertEquals(await buildFolder(new URL("../apps", import.meta.url).pathname, dir, replique), ["home", "settings", "shell"]);
+    for (const name of ["home", "settings", "shell"]) {
       const manifest = JSON.parse(await Deno.readTextFile(`${dir}/${name}/app.json`));
       assertEquals(manifest.entry.html, undefined);
       assertEquals(await Deno.readTextFile(`${dir}/${name}/index.html`), "");
@@ -87,6 +87,7 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     await Deno.writeTextFile(`${dir}/public/sw.js`, "// static");
     await app(`${dir}/apps`, "home");
     await app(`${dir}/apps`, "settings");
+    await app(`${dir}/apps`, "shell");
     await app(`${dir}/bundled`, "home");
     await Deno.mkdir(`${dir}/.binapp/bundled`, { recursive: true });
     await Deno.writeTextFile(`${dir}/.binapp/old.binapp`, "古い");
@@ -96,7 +97,7 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     const out = `${dir}/.binapp/public`;
     const first: SystemManifest = JSON.parse(await Deno.readTextFile(`${out}/manifest.json`));
     assertEquals(first, await systemManifest(`${out}/system`));
-    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "home", settings: "settings" } });
+    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "home", settings: "settings", shell: "shell" } });
     assertEquals(await Deno.readTextFile(`${out}/sw.js`), "// static");
     assertEquals(Array.from(Deno.readDirSync(`${dir}/public`), (entry) => entry.name), ["sw.js"]);
     assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp`), (entry) => entry.name).sort(), ["bundled", "keep.txt", "public"]);

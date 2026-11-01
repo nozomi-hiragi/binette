@@ -101,7 +101,7 @@ export async function buildApps(root: string): Promise<void> {
       for (const name of names) console.log(`system/${output}/${name}`);
     }
     const roles: Record<string, string> = {};
-    for (const name of ["home", "settings"]) {
+    for (const name of ["home", "settings", "shell"]) {
       try {
         const manifest = JSON.parse(await Deno.readTextFile(resolve(system, "apps", name, "app.json")));
         roles[name] = manifest.id;

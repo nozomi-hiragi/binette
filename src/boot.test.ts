@@ -16,9 +16,9 @@ async function fixture() {
   const tree = createMemoryFileTree();
   const files = new Map<string, Uint8Array>([[
     "system/boot.json",
-    encode({ roles: { home: "home", settings: "settings" } }),
+    encode({ roles: { home: "home", settings: "settings", shell: "shell" } }),
   ]]);
-  for (const name of ["home", "settings"]) {
+  for (const name of ["home", "settings", "shell"]) {
     files.set(
       `system/apps/${name}/app.json`,
       encode({ id: name, name, roles: [name], entry: { as: "main.ts" } }),
@@ -65,6 +65,7 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
   assertEquals(roles, {
     home: installedAppKey("binette:system", "home"),
     settings: installedAppKey("binette:system", "settings"),
+    shell: installedAppKey("binette:system", "shell"),
   });
   assertEquals(
     apps.find((app) => app.prebuilt?.manifest.id === "settings")?.prebuilt
@@ -182,5 +183,6 @@ Deno.test("オフラインでも保存済みの配布物を検証してホーム
   assertEquals(apps.map((app) => app.prebuilt?.manifest.id), [
     "home",
     "settings",
+    "shell",
   ]);
 });

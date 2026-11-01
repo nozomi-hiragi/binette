@@ -168,6 +168,8 @@ export function grid(children: Array<View>): View { const v = new View("grid"); 
 export function input(value: string, onText: (value: string) => void): View { const v = new View("input"); v.value = value; v.textCallback = onText; return v; }
 /** アプリのアイコンを描く。 */
 export function appIcon(index: number): View { const v = new View("appIcon"); v.appValue = index; return v; }
+/** アプリの表示領域。カーネルがホームやほかのアプリをこの中に出す */
+export function appArea(): View { return new View("appArea"); }
 /** 部品の表示を切り替える。 */
 export function show(condition: boolean, view: View): View { view.shownValue = condition; return view; }
 /** 子を横に並べる。 */

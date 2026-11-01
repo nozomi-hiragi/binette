@@ -32,7 +32,7 @@ draw();
 
 `mount(element)` は描画先に結び付いた root を返します。`root.render(view)` は木を描き、次の描画では前の木との差分を当てます。`root.unmount()` は描画と状態を解除します。普通の変数を変えた場合は明示的な `render` が必要です。
 
-View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。よくある部品の `spacer()`、`separator()`、`stack(children)`、`checkbox(checked, onChange)`、`radio(selected, onSelect)`、`slider(value, min, max, onChange)`、`picker(options, index, onChange)`、`segmented(options, index, onChange)`、`tabs(options, index, onChange)`、`progress(value)`、`spinner()`、`image(src)`、`listTile(title, subtitle, leading, trailing)`、`chip(label)`、`badge(value)` と、修飾の `step(n)`・`align(name)` もあります（下の「よくある部品」）。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。`input(value, handler).multiline()` は改行を含む値を扱う textarea を描画します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す描画で使います。TS の `mount(element, { apps })` の `apps[i].icon`（SVG の文字列）を `appIcon(i)` が描きます（Scene のホームバーが使う）。`apps` を渡さない `mount(element)` で作る `appIcon` は画像の `src` を持ちません。
+View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。よくある部品の `spacer()`、`separator()`、`stack(children)`、`checkbox(checked, onChange)`、`radio(selected, onSelect)`、`slider(value, min, max, onChange)`、`picker(options, index, onChange)`、`segmented(options, index, onChange)`、`tabs(options, index, onChange)`、`progress(value)`、`spinner()`、`image(src)`、`listTile(title, subtitle, leading, trailing)`、`chip(label)`、`badge(value)` と、修飾の `step(n)`・`align(name)` もあります（下の「よくある部品」）。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。`input(value, handler).multiline()` は改行を含む値を扱う textarea を描画します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す描画で使います。TS の `mount(element, { apps })` の `apps[i].icon`（SVG の文字列）を `appIcon(i)` が描きます。`apps` を渡さない `mount(element)` で作る `appIcon` は画像の `src` を持ちません。
 
 ### 関数の部品とフック（案）
 
@@ -133,3 +133,7 @@ defaults.radius = radius.sm;
 config.button = defaults;
 return theme(config, column([button("保存", save)]).gap().padding());
 ```
+
+## アプリの表示領域（実装済み、形は案）
+
+`appArea()` はシェルがアプリの表示先を宣言する部品です。TS・AS の両方から使えます。`.bina-ui-appArea` の空の領域を作り、Scene がホームや前面のアプリを配置します。シェルは中のアプリの DOM を扱いません。通常のアプリにほかのアプリを開く権限を与える部品ではありません。
