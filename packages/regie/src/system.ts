@@ -486,7 +486,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     shellSession = session;
     try {
       const api = apiOf(selectedShell);
-      const storage = api.keys.has("storage") ? await options.store.data.read(selectedShell.manifest.id).catch(() => undefined) : undefined;
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedShell.manifest.id)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (shellSession !== session || stopped) return;
       const mounted = await startProcess(selectedShell.wasm, {
