@@ -12,7 +12,12 @@ export default defineConfig({
   plugins: [kernelIntegrity()],
   worker: {
     format: "es",
-    rollupOptions: { output: { entryFileNames: "regie-worker.js" } },
+    rollupOptions: {
+      external: ["assemblyscript/asc"],
+      output: {
+        entryFileNames: (chunk) => chunk.name === "build-worker-entry" ? "build-worker.js" : "regie-worker.js",
+      },
+    },
   },
   build: {
     minify: true,

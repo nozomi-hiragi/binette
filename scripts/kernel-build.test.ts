@@ -11,7 +11,7 @@ Deno.test("配布カーネルと Worker は独立した固定名で、HTML の S
       build: { outDir },
     });
     const files = Array.from(Deno.readDirSync(outDir), (entry) => entry.name).sort();
-    assertEquals(files, ["index.html", "regie-worker.js", "regie.js"]);
+    assertEquals(files, ["build-worker.js", "index.html", "regie-worker.js", "regie.js"]);
     const kernel = await Deno.readFile(`${outDir}/regie.js`);
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-384", kernel));
     const expected = `sha384-${btoa(String.fromCharCode(...digest))}`;
@@ -51,6 +51,15 @@ Deno.test("ビルドは sw.js のキャッシュの版にカーネルのハッ�
     });
     const source = await Deno.readTextFile(`${outDir}/sw.js`);
     assert(/^const CACHE = "binette-test-[0-9a-f]{16}";$/m.test(source));
+    const files = await Promise.all(["regie.js", "regie-worker.js", "build-worker.js"].map((name) => Deno.readFile(`${outDir}/${name}`)));
+    const bytes = new Uint8Array(files.reduce((size, file) => size + file.byteLength, 0));
+    let offset = 0;
+    for (const file of files) {
+      bytes.set(file, offset);
+      offset += file.byteLength;
+    }
+    const stamp = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("").slice(0, 16);
+    assertEquals(source, `const CACHE = "binette-test-${stamp}";\n`);
   } finally {
     await Deno.remove(outDir, { recursive: true });
     await Deno.remove(publicDir, { recursive: true });

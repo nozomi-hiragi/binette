@@ -41,12 +41,14 @@ export function kernelIntegrity(): Plugin {
         if (error instanceof Deno.errors.NotFound) return;
         throw error;
       }
-      const kernel = await Deno.readFile(resolve(outDir, "regie.js"));
-      const worker = await Deno.readFile(resolve(outDir, "regie-worker.js"));
-      const both = new Uint8Array(kernel.byteLength + worker.byteLength);
-      both.set(kernel);
-      both.set(worker, kernel.byteLength);
-      const stamp = hex(await crypto.subtle.digest("SHA-256", both)).slice(0, 16);
+      const files = await Promise.all(["regie.js", "regie-worker.js", "build-worker.js"].map((name) => Deno.readFile(resolve(outDir, name))));
+      const bytes = new Uint8Array(files.reduce((size, file) => size + file.byteLength, 0));
+      let offset = 0;
+      for (const file of files) {
+        bytes.set(file, offset);
+        offset += file.byteLength;
+      }
+      const stamp = hex(await crypto.subtle.digest("SHA-256", bytes)).slice(0, 16);
       const stamped = source.replace(/const CACHE = "([^"]+)";/, (_line, name) => `const CACHE = "${name}-${stamp}";`);
       if (stamped === source) throw new Error("sw.js にキャッシュの版がありません。");
       await Deno.writeTextFile(sw, stamped);

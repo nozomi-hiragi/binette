@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- asc をカーネルの外に配布し、目録で検証したコンパイラを Worker で動かして、ファイルの木のアプリのソースをビルドする（API と保存先は案）。Réplique のソースも目録に載せる。システムアプリは従来どおりビルド済みの WASM を使う
+
 - 役割と API の辞書を実装する（[docs/spec/roles.md](docs/spec/roles.md)、形と名前は案）。
   - `app.json` の `role`（文字列）を `roles`（文字列の配列）に変える。旧名の `role` は読み替えず `BinetteError` にする。apps/home・apps/settings の `app.json`、テスト、仕様を合わせた
   - 役割の割り当て: 初回は `system/boot.json` の既定（カーネルが `SystemOptions.roles` に渡す）、そのあとは `SystemSettings.roles`（役割 → installedAppKey。以前の `home` を置き換える）。名乗っただけでは API は届かず、割り当てられたアプリにだけ届く。変えられるのは設定アプリの `OsApi.assign` だけで、設定の役割は固定
