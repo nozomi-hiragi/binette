@@ -11,7 +11,8 @@ const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./
 worker.addEventListener("install", event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    await cache.addAll(SHELL);
+    // HTTP キャッシュに残った前の版を混ぜないよう、配信元へ取り直す。
+    await cache.addAll(SHELL.map(path => new Request(new URL(path, worker.location.href), { cache: "reload" })));
     // 配置の途中に入口と JS の版が混ざっていたら、新しい SW を有効にしない。
     const html = await cache.match(new URL("./index.html", worker.location.href));
     const kernel = await cache.match(new URL("./regie.js", worker.location.href));
@@ -163,6 +164,8 @@ async function fileResponse(encoded) {
     if (!(data instanceof Uint8Array)) throw new Error("ファイルの形式が不正です。");
     return new Response(data.slice(), { headers: {
       "Content-Type": mime(path), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+      // /user の HTML や SVG を直接開いても、スクリプトを動かさず、OS と同じオリジンにもしない。
+      "Content-Security-Policy": "sandbox",
     } });
   } catch { return failure(500, "ファイルの読み込みまたは検証に失敗しました。"); }
 }

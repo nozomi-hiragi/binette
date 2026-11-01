@@ -31,7 +31,7 @@ export function kernelIntegrity(): Plugin {
         if (!found) throw new Error("HTML にカーネルの script がありません。");
       },
     },
-    // SW は index.html をキャッシュから返すので、カーネルが変わったら sw.js の中身も変え、ブラウザに新しい SW を入れさせる
+    // SW は入口とカーネルをキャッシュから返すので、どれかが変わったら sw.js の中身も変え、ブラウザに新しい SW を入れさせる
     async closeBundle() {
       const sw = resolve(outDir, "sw.js");
       let source: string;
@@ -41,14 +41,22 @@ export function kernelIntegrity(): Plugin {
         if (error instanceof Deno.errors.NotFound) return;
         throw error;
       }
-      const files = await Promise.all(["regie.js", "regie-worker.js", "build-worker.js"].map((name) => Deno.readFile(resolve(outDir, name))));
-      const bytes = new Uint8Array(files.reduce((size, file) => size + file.byteLength, 0));
-      let offset = 0;
-      for (const file of files) {
-        bytes.set(file, offset);
-        offset += file.byteLength;
+      // SW がキャッシュから返す固定物（入口・カーネル・アイコンなど）のどれかが変わったら版を変える。
+      const parts: Uint8Array[] = [];
+      for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js", "build-worker.js"]) {
+        let data: Uint8Array;
+        try {
+          data = await Deno.readFile(resolve(outDir, name));
+        } catch (error) {
+          if (error instanceof Deno.errors.NotFound && !["regie.js", "regie-worker.js", "build-worker.js"].includes(name)) continue;
+          throw error;
+        }
+        parts.push(new TextEncoder().encode(`${name}\0${data.byteLength}\0`), data);
       }
-      const stamp = hex(await crypto.subtle.digest("SHA-256", bytes)).slice(0, 16);
+      const both = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
+      let offset = 0;
+      for (const part of parts) { both.set(part, offset); offset += part.byteLength; }
+      const stamp = hex(await crypto.subtle.digest("SHA-256", both)).slice(0, 16);
       const stamped = source.replace(/const CACHE = "([^"]+)";/, (_line, name) => `const CACHE = "${name}-${stamp}";`);
       if (stamped === source) throw new Error("sw.js にキャッシュの版がありません。");
       await Deno.writeTextFile(sw, stamped);
