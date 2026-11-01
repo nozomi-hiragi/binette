@@ -15,7 +15,8 @@ function createWorker(): RegieWorker {
     terminate() { port1.close(); port2.close(); } };
 }
 function installButton(element: HTMLElement): HTMLButtonElement | null {
-  return element.querySelector<HTMLButtonElement>("[data-bina-key=shell-install]");
+  const button = element.querySelector<HTMLButtonElement>("[data-bina-key=install]");
+  return button?.hidden ? null : button;
 }
 
 function fakeWindow(mode?: string, standalone = false): globalThis.Window {
@@ -29,7 +30,7 @@ async function fixture(installed?: boolean, prepare?: (window: Window) => void) 
   window.document.body.append(element as never);
   // 実際のシェルを起動して Worker 経由のインストール操作を検証する
   const shell = await mountShell(element, { apps: [shellApp], store: createMemoryAppStore(), installed, createWorker });
-  await waitFor(() => element.querySelector("[data-bina-key=shell-home]") !== null &&
+  await waitFor(() => element.querySelector("[data-bina-key=home]") !== null &&
     (installButton(element) === null) === element.querySelector<HTMLElement>(".bina-shell-live")!.hidden);
   return { window, element, shell, async close() { shell.stop(); await window.happyDOM.close(); } };
 }
@@ -64,8 +65,10 @@ Deno.test("installed の上書きでは matchMedia を使わず、ライブの�
       assertEquals(watermark.textContent, "ライブモード");
       assertEquals(watermark.getAttribute("aria-hidden"), "true");
       assertEquals(watermark.closest(".bina-shell-app"), null);
+      assertEquals(watermark.parentElement, f.element.querySelector(".bina-shell-host .bina-ui-appArea"));
+      assertEquals(f.element.querySelector("dialog")!.parentElement, f.element.querySelector(".bina-shell"));
       // ホームバーの右端に置き、読み上げは「インストール」
-      if (button) assertEquals(button.closest("[data-bina-key=shell-bar]") !== null, true);
+      if (button) assertEquals(button.closest("[data-bina-key=homebar]") !== null, true);
       if (button) assertEquals(button.parentElement?.lastElementChild, button);
       if (button) assertEquals(button.textContent, "インストール");
       assert(f.element.querySelector("style")!.textContent!.match(/:where\(\.bina-shell-live\)[^}]*pointer-events: none/));

@@ -83,9 +83,12 @@ export async function loadBootApps(
         manifest.roles?.includes("shell")
       ) roles.shell = key;
       if (coreSettings && manifest.id === boot.roles.settings) roles.settings = key;
-      const [wasm, html, icon] = await Promise.all([
+      const [wasm, html, css, icon] = await Promise.all([
         required(`${directory}/app.wasm`, coreSettings),
         required(`${directory}/index.html`, coreSettings),
+        manifest.entry.css === undefined
+          ? undefined
+          : required(`${directory}/style.css`, coreSettings),
         manifest.icon === undefined
           ? undefined
           : required(`${directory}/icon.svg`, coreSettings),
@@ -96,6 +99,7 @@ export async function loadBootApps(
           manifest,
           wasm,
           html: decoder.decode(html),
+          ...(css === undefined ? {} : { css: decoder.decode(css) }),
           ...(icon === undefined ? {} : { icon: decoder.decode(icon) }),
         },
       });

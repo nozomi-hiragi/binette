@@ -34,6 +34,12 @@ draw();
 
 View は `column(children)`、`row(children)`、`text(value)`、`button(label, handler)`、`buttonOf(children, handler)`、`input(value, handler)`、`grid(children)`、`appIcon(index)`、`show(condition, view)` で作ります。よくある部品の `spacer()`、`separator()`、`stack(children)`、`checkbox(checked, onChange)`、`radio(selected, onSelect)`、`slider(value, min, max, onChange)`、`picker(options, index, onChange)`、`segmented(options, index, onChange)`、`tabs(options, index, onChange)`、`progress(value)`、`spinner()`、`image(src)`、`listTile(title, subtitle, leading, trailing)`、`chip(label)`、`badge(value)` と、修飾の `step(n)`・`align(name)` もあります（下の「よくある部品」）。AS と同じ修飾を連ねて、余白、key、読み上げ用のラベルなどを設定します。`input(value, handler).multiline()` は改行を含む値を扱う textarea を描画します。TS のイベントには普通の関数を渡します。`appIcon` はアプリ情報を渡す描画で使います。TS の `mount(element, { apps })` の `apps[i].icon`（SVG の文字列）を `appIcon(i)` が描きます。`apps` を渡さない `mount(element)` で作る `appIcon` は画像の `src` を持ちません。
 
+### 吹き出しとメニュー（案）
+
+TS と AS のボタンに `.tip("名前")` と `.menu([menuItem("開く", open).arg(i), menuItem("閉じる", close).arg(i)])` を付けられます。`menuItem` のハンドラーと `arg` はボタンと同じです。AS では `jsr:@binette/replique/ui` からも使えます。
+
+吹き出しはマウスを載せるかキーボードでフォーカスすると出ます。メニューは右クリック、タッチ・ペンの長押し、メニューキー、Shift+F10 で開きます。矢印キーで項目を巡り、Enter かスペースで選び、Escape・Tab・外側のクリックで閉じます。長押し後のクリックはボタンに届けません。表示と位置決め、操作はメインスレッドの Décor が行います。
+
 ### 関数の部品とフック（案）
 
 ```ts

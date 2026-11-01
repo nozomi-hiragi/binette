@@ -112,6 +112,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
         shellHost.replaceChildren();
         const mounted = mountApp(shellHost, instance.app.html, process, {
           apps: instance.apps,
+          css: instance.app.css,
           onError: error => ui.report(error),
           onDom: () => ui.update(view),
           isolateAppArea: true,
@@ -130,7 +131,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       host.hidden = view.front !== instance.id;
       const targetArea = getAppArea();
       targetArea.append(host);
-      const mounted = mountApp(host, instance.app.html, process, { apps: instance.apps, onError: error => ui.report(error) });
+      const mounted = mountApp(host, instance.app.html, process, { apps: instance.apps, css: instance.app.css, onError: error => ui.report(error) });
       const remove = () => { mounted.stop(); host.remove(); hosts.delete(instance.id); };
       hosts.set(instance.id, { host, stop: remove });
       return { remove };
@@ -145,6 +146,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       shellHost.hidden = useFallback;
 
       const targetArea = getAppArea();
+      live.setAppArea(targetArea);
       for (const [id, entry] of hosts) {
         if (entry.host.parentElement !== targetArea) targetArea.append(entry.host);
         entry.host.hidden = id !== front;

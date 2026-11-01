@@ -51,7 +51,7 @@ function isInstalled(window: Window | null): boolean
 
 ## ホームバーと最低限の大枠（案・実装済み）
 
-通常のホームバーは [apps/shell.md](../apps/shell.md) のとおりです。Scene はホームバーの宣言の木を組みません。
+通常のホームバーは [apps/shell.md](../apps/shell.md) のとおりです。Scene はホームバーの宣言の木を組まず、シェルの CSS を表示先に限定して適用します。
 
 シェルが無い、または落ち続けると、`.bina-shell-fallback` にアプリの表示領域と「ホーム」ボタンを出します。ボタンは `system.openHome()` を呼びます。既存のアプリの DOM は作り直さず、表示先を移します。シェルの再起動中と復帰後も、前面の判定は Régie が持ちます。
 

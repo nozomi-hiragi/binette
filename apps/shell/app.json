@@ -6,6 +6,7 @@
   "roles": ["shell"],
   "icon": "icon.svg",
   "entry": {
+    "css": "src/style.css",
     "as": "src/main.ts"
   }
 }

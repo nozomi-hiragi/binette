@@ -9,7 +9,7 @@ import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTI
 /** システムにインストールするアプリ。read は開発用 */
 export type SystemApp = { source: string } & (
   | { read: (path: string) => Promise<string>; prebuilt?: never }
-  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string }; read?: never }
+  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string; css?: string }; read?: never }
 );
 
 /** システムの設定 */
@@ -166,8 +166,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       let installed = await options.store.get(key);
       if (app.prebuilt !== undefined) {
         // ビルドが要らないので毎回入れ直す。版を上げ忘れた OS の更新でも古いものを残さない。入れた日時は最初のものを保つ
-        const { html, icon, wasm } = app.prebuilt;
-        installed = { key, source: app.source, manifest, icon, html, wasm, installedAt: installed?.installedAt ?? Date.now() };
+        const { html, css, icon, wasm } = app.prebuilt;
+        installed = { key, source: app.source, manifest, icon, html, ...(css === undefined ? {} : { css }), wasm, installedAt: installed?.installedAt ?? Date.now() };
         await options.store.put(installed);
       } else if (!installed || installed.manifest.version !== manifest.version) {
         const path = iconPath(manifest.icon);
@@ -177,7 +177,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           ? await (await import("./browser-build.ts")).buildAppInWorker(read, { libraries: options.libraries, ...options.browserBuild })
           : await (await import("./build.ts")).buildApp(read, options);
         const icon = path === undefined ? undefined : await app.read(path);
-        installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
+        installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, ...(built.css === undefined ? {} : { css: built.css }), wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
       }
       installedApps.push(installed);

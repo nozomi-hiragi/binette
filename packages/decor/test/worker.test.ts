@@ -170,3 +170,40 @@ launch(new Demo());`;
     assertEquals(status(), "on:1 size:1 volume:6.5 color:1 view:2 tab:1");
   } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("AS の吹き出しとメニュー項目は Worker を往復し、選択した引数で描き直す", async () => {
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "menu", name: "メニュー", entry: { as: "main.ts" } }),
+    "main.ts": `import { App, launch } from "jsr:@binette/replique";
+import { View, button, column, menuItem, text } from "jsr:@binette/replique/ui";
+let value: i32 = 0;
+function choose(i: i32): void { value = i; }
+class Demo extends App {
+  build(): View { return column([button("設定", choose).tip("設定の操作").menu([menuItem("選ぶ", choose).arg(7)]), text(value.toString())]); }
+}
+launch(new Demo());`,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(host as never);
+  const process = await startProcess(built.wasm, { createWorker: realWorker });
+  const dom = createUiDom(host, process);
+  try {
+    process.attach(ops => dom.apply(ops));
+    await process.begin();
+    const button = host.querySelector("button")!;
+    assertEquals(button.getAttribute("aria-haspopup"), "menu");
+    button.focus();
+    assertEquals(host.querySelector(".bina-ui-tip")?.textContent, "設定の操作");
+    button.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }) as unknown as Event);
+    const item = host.querySelector<HTMLButtonElement>('[role="menuitem"]')!;
+    assertEquals(item.textContent, "選ぶ");
+    item.click();
+    await waitFor(() => host.querySelector(".bina-ui-text")?.textContent === "7");
+    assertEquals(host.querySelector<HTMLElement>(".bina-ui-menu")!.hidden, true);
+    assertEquals(window.document.activeElement, button as never);
+  } finally {
+    dom.clear(); dom.stop(); process.stop(); await window.happyDOM.close();
+  }
+});

@@ -16,6 +16,10 @@ export function button(label: string, callback: (arg: number) => void): View {
 export function buttonOf(children: View[], callback: (arg: number) => void): View {
   const view = new View("button"); view.children = children; view.callback = new FunctionUiCallback(callback); return view;
 }
+/** メニューの項目を作る。menu() に渡す。押すと callback を arg(i) の値で呼ぶ。 */
+export function menuItem(label: string, callback: (arg: number) => void): View {
+  const view = new View("menuItem"); view.value = label; view.callback = new FunctionUiCallback(callback); return view;
+}
 /** ラジオボタンを作る。押すと onSelect を arg(i) の値で呼ぶ。 */
 export function radio(selected: boolean, onSelect: (arg: number) => void): View {
   const view = new View("radio"); view.checkedValue = selected; view.callback = new FunctionUiCallback(onSelect); return view;
@@ -212,7 +216,7 @@ export function mount(element: HTMLElement, options: UiDomOptions = {}): Root {
       divider: view.dividerValue, mono: view.monoValue, small: view.smallValue, bold: view.boldValue, truncate: view.truncateValue,
       width: view.widthValue, center: view.centerValue, selected: view.selectedValue, toggle: view.toggleValue,
       scroll: view.scrollValue, fill: view.fillValue, collapse: view.collapseValue,
-      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue, highlight: view.highlightValue,
+      placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue, highlight: view.highlightValue, tip: view.tipValue,
       checked: view.checkedValue, value: view.numberValue, min: view.minValue, max: view.maxValue, step: view.stepValue,
       options: view.optionsValue.slice(), index: view.indexValue, align: view.alignValue }, fiber];
   }

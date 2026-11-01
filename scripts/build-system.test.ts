@@ -4,9 +4,10 @@ import { appNames, buildApps, buildFolder, type SystemManifest, systemManifest }
 const replique = new URL("../packages/replique/src/index.ts", import.meta.url).pathname;
 async function app(root: string, name: string): Promise<void> {
   await Deno.mkdir(`${root}/${name}`, { recursive: true });
-  await Deno.writeTextFile(`${root}/${name}/app.json`, JSON.stringify({ id: name, name, icon: "assets/picture.svg", entry: { html: "view.html", as: "main.ts" } }));
+  await Deno.writeTextFile(`${root}/${name}/app.json`, JSON.stringify({ id: name, name, icon: "assets/picture.svg", entry: { html: "view.html", css: "assets/style.css", as: "main.ts" } }));
   await Deno.mkdir(`${root}/${name}/assets`);
   await Deno.writeTextFile(`${root}/${name}/assets/picture.svg`, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  await Deno.writeTextFile(`${root}/${name}/assets/style.css`, "p { color: red }");
   await Deno.writeTextFile(`${root}/${name}/view.html`, "<p>例</p>");
   await Deno.writeTextFile(`${root}/${name}/main.ts`, 'import { App, launch } from "jsr:@binette/replique"; launch(new App());');
 }
@@ -22,9 +23,10 @@ Deno.test("アプリをフォルダ名順で固定名のファイルへ書き出
     assertEquals(Array.from(Deno.readDirSync(`${dir}/out`), (entry) => entry.name).sort(), ["a", "a-b"]);
     for (const name of ["a", "a-b"]) {
       const output = `${dir}/out/${name}`;
-      assertEquals(Array.from(Deno.readDirSync(output), (entry) => entry.name).sort(), ["app.json", "app.wasm", "icon.svg", "index.html"]);
+      assertEquals(Array.from(Deno.readDirSync(output), (entry) => entry.name).sort(), ["app.json", "app.wasm", "icon.svg", "index.html", "style.css"]);
       const manifest = JSON.parse(await Deno.readTextFile(`${output}/app.json`));
       assertEquals(manifest.id, name);
+      assertEquals(await Deno.readTextFile(`${output}/style.css`), "p { color: red }");
       assertEquals(manifest.icon, "icon.svg");
       assertEquals(await Deno.readTextFile(`${output}/index.html`), "<p>例</p>");
       assertEquals(await Deno.readTextFile(`${output}/icon.svg`), '<svg xmlns="http://www.w3.org/2000/svg"/>');

@@ -19,6 +19,8 @@ class TypedUiCallback<T> extends UiCallback {
 }
 export function button<T>(label: string, f: T): View { const v = new View("button"); v.value = label; v.callback = new TypedUiCallback<T>(f); return v; }
 export function buttonOf<T>(children: Array<View>, f: T): View { const v = new View("button"); v.children = children; v.callback = new TypedUiCallback<T>(f); return v; }
+/** メニューの項目。menu() に渡す。押すと f を呼び、どの項目かは arg(i) で区別する。ハンドラーは button と同じ形 */
+export function menuItem<T>(label: string, f: T): View { const v = new View("menuItem"); v.value = label; v.callback = new TypedUiCallback<T>(f); return v; }
 /** ラジオボタン。押すと onSelect を呼ぶ。どの値かは arg(i) で区別する。ハンドラーは button と同じ形 */
 export function radio<T>(selected: boolean, f: T): View { const v = new View("radio"); v.checkedValue = selected; v.callback = new TypedUiCallback<T>(f); return v; }
 /** 選択肢から一つを選ぶ欄（ネイティブの select）。ハンドラーは選んだ番号を (i32) で受け取る */

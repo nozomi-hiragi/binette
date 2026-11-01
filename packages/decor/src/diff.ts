@@ -8,7 +8,7 @@ export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; childre
 /** 部品の値と位置。古いアプリは送らないので省略でき、省略は既定を表す */
 export type UiValue = { checked?: boolean; value?: number; min?: number; max?: number; step?: number; options?: string[]; index?: number; align?: string };
 /** 見た目の修飾。古いアプリは送らないので省略でき、省略は既定を表す。selected と toggle は -1 が指定なし、0 が偽、1 が真 */
-export type UiLook = { variant?: string; tone?: string; surface?: string; divider?: string; mono?: boolean; small?: boolean; bold?: boolean; truncate?: boolean; width?: number; center?: boolean; selected?: number; toggle?: number; scroll?: boolean; fill?: boolean; collapse?: boolean; placeholder?: string; height?: number; minHeight?: number; wrap?: boolean; highlight?: boolean };
+export type UiLook = { variant?: string; tone?: string; surface?: string; divider?: string; mono?: boolean; small?: boolean; bold?: boolean; truncate?: boolean; width?: number; center?: boolean; selected?: number; toggle?: number; scroll?: boolean; fill?: boolean; collapse?: boolean; placeholder?: string; height?: number; minHeight?: number; wrap?: boolean; highlight?: boolean; tip?: string };
 export type Mounted = { handle: number; node: UiNode; children: Mounted[]; build: number; listItem: boolean };
 
 /** 差分エンジンの状態と操作。 */
@@ -23,7 +23,7 @@ export interface UiDiffer {
 /** 差分エンジン。DOM や Worker に依存せず、操作を emit に渡す。 */
 export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: number) => void = () => {}): UiDiffer {
   // Worker には関数の本文だけを送るので、補助も関数の中に置く
-  const looks = ["variant", "tone", "surface", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap", "highlight",
+  const looks = ["variant", "tone", "surface", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap", "highlight", "tip",
     "checked", "value", "min", "max", "step", "index", "align"] as const;
   /** 利用者が値を変える部品。入力欄と同じく、描き直しのたびにアプリの値と入力の版を送り、受け付けなかった操作を DOM で戻せるようにする */
   const controlled = ["input", "checkbox", "radio", "slider", "picker", "segmented", "tabs"];
@@ -36,6 +36,7 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
     if (node.divider) fields.divider = node.divider;
     for (const name of ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap", "highlight"] as const) if (node[name]) fields[name] = true;
     if (node.placeholder) fields.placeholder = node.placeholder;
+    if (node.tip) fields.tip = node.tip;
     for (const name of ["width", "height", "minHeight"] as const) { const value = node[name]; if (value && value > 0) fields[name] = value; }
     if (node.selected !== undefined && node.selected >= 0) fields.selected = node.selected > 0;
     if (node.toggle !== undefined && node.toggle >= 0) fields.toggle = node.toggle > 0;

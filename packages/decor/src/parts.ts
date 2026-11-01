@@ -57,6 +57,8 @@ export class View {
   wrapValue: boolean = false;
   /** 印の枠を付けるか。状態は表さない */
   highlightValue: boolean = false;
+  /** 吹き出しの文字。"" は無し */
+  tipValue: string = "";
   /** checkbox・radio の状態 */
   checkedValue: boolean = false;
   /** slider の値、progress の割合（0〜1。負は不定） */
@@ -132,6 +134,14 @@ export class View {
   selected(b: boolean): View { this.selectedValue = b ? 1 : 0; return this; }
   /** 部品の種類によらず、アクセントの細い枠で印を付ける。状態は変えず、読み上げにも出ない */
   highlight(b: boolean): View { this.highlightValue = b; return this; }
+  /** マウスを載せる・キーボードでフォーカスすると名前の吹き出しを出す（button・buttonOf に効く）。読み上げには出さないので、名前は label() でも付ける */
+  tip(s: string): View { this.tipValue = s; return this; }
+  /** 右クリック・長押し・メニューキー・Shift+F10 で開くメニューを付ける（button・buttonOf に効く）。項目は menuItem() で作る。
+   * 項目は子として描き直しの木に入るが、画面にはメニューを開いたときだけ出る。メニューの題は tip() の文字 */
+  menu(items: Array<View>): View {
+    for (let i = 0; i < items.length; i++) if (items[i].kind == "menuItem") this.children.push(items[i]);
+    return this;
+  }
   /** ボタンを入・切のスイッチにする。ボタンの文字は見せず、読み上げの名前に使う */
   toggle(on: boolean): View { this.toggleValue = on ? 1 : 0; return this; }
   /** この部品の中だけをスクロールする */

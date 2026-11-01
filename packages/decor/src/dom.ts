@@ -1,5 +1,6 @@
 import type { DomOp } from "@binette/core";
 import { alignments, dividerSides, surfaces, tones, variants } from "./parts.ts";
+import { createOverlay } from "./overlay.ts";
 /** DOM からアプリに届くイベント。 */
 export interface UiEvents {
   dispatchUi(handle: number): void;
@@ -130,6 +131,21 @@ ${alignCss}
 /* align() を付けた子は、既定の左寄せより align() を優先する */
 :where(.bina-ui-column > :is(.bina-ui-chip, .bina-ui-badge, .bina-ui-segmented, .bina-ui-image):not(.bina-ui-grow):not([class*="bina-ui-align-"])) { align-self: flex-start; }
 `;
+const overlayCss: string = `
+/* ボタンの吹き出しとメニュー。部品の木の外に出す重ね表示で、ダークでは背景より少し明るくして持ち上げる */
+:where(.bina-ui-tip) { position: fixed; z-index: 2147483647; pointer-events: none; box-sizing: border-box; max-width: calc(100vw - 8px); padding: 4px 8px; border-radius: 6px; background: var(--bina-ui-dark, #16181d); color: var(--bina-ui-dark-content, #d7dae0); box-shadow: 0 0 0 1px var(--bina-ui-dark-line, #2e323a); font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:where(.bina-ui-menu) { position: fixed; z-index: 2147483647; box-sizing: border-box; min-width: 160px; max-width: calc(100vw - 16px); padding: 4px; border-radius: 12px; background: ${colors.surface}; box-shadow: 0 0 0 1px ${colors.line}, 0 8px 24px color-mix(in srgb, currentColor 16%, transparent); font-size: 14px; }
+:where(.bina-ui-menuTitle) { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; padding: 6px 10px 8px; border-bottom: 1px solid ${colors.line}; color: ${colors.muted}; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:where(.bina-ui-menuTitle img) { flex: none; width: 16px; height: 16px; }
+:where(.bina-ui-menuItem) { display: block; box-sizing: border-box; width: 100%; margin: 0; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+:where(.bina-ui-menuItem:hover, .bina-ui-menuItem:focus) { background: color-mix(in srgb, ${colors.accent} 14%, transparent); outline: none; }
+:where(.bina-ui-menuItem:focus-visible) { outline: 2px solid ${colors.focus}; outline-offset: -2px; }
+:where(.bina-ui-menuItem:disabled) { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
+@supports (color: light-dark(#fff, #000)) {
+  :where(.bina-ui-tip) { background: light-dark(var(--bina-ui-dark, #16181d), color-mix(in srgb, var(--bina-ui-dark-content, #d7dae0) 22%, var(--bina-ui-dark, #16181d))); }
+  :where(.bina-ui-menu) { background: light-dark(${colors.surface}, color-mix(in srgb, currentColor 9%, ${colors.surface})); }
+}
+`;
 const lookCss: string = `
 :where(.bina-ui-button[class*="bina-ui-variant-"]) { display: inline-flex; align-items: center; justify-content: center; border-radius: ${controlRadius}; }
 :where(.bina-ui-button.bina-ui-variant-ghost:has(> *), .bina-ui-button.bina-ui-variant-subtle:has(> *)) { align-items: stretch; text-align: start; }
@@ -240,17 +256,18 @@ export const uiCss = `
 :where(.bina-ui-list) { padding-inline-start: 1.5em; }
 :where(.bina-ui-listitem) { display: list-item; list-style: disc; }
 ${partCss}
-${lookCss}`;
+${lookCss}
+${overlayCss}`;
 
 type UiUpdate = Extract<DomOp, { op: "ui-update" }>;
 const lookFlags = ["mono", "small", "bold", "truncate", "center", "scroll", "fill", "collapse", "wrap", "highlight"] as const;
 /** 部品ごとの未指定の padding。ほかの部品は 0 */
 const kindPadding: Record<string, string> = { listTile: `${length(-2)} ${length(-3)}`, chip: "2px 10px", badge: "0 5px" };
 /** 部品が自分で持つ role。値を持つ部品のうちネイティブの要素はその role のままにする */
-const kindRoles: Record<string, string> = { segmented: "radiogroup", tabs: "tablist", progress: "progressbar", spinner: "progressbar" };
+const kindRoles: Record<string, string> = { menuItem: "menuitem", segmented: "radiogroup", tabs: "tablist", progress: "progressbar", spinner: "progressbar" };
 const nativeKinds = ["checkbox", "radio", "slider", "picker", "image", "separator"];
 /** 文字を自分の子として描く部品 */
-const textKinds = ["text", "button", "chip", "badge"];
+const textKinds = ["text", "button", "chip", "badge", "menuItem"];
 // 値が変わるときだけ書き換え、描き直しで DOM を無駄に触らない
 function setClass(node: HTMLElement, name: string, on: boolean): void {
   if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
@@ -310,14 +327,31 @@ export interface UiDom {
 export function createUiDom(element: HTMLElement, process: UiEvents, options: UiDomOptions = {}): UiDom {
   // 宣言 UI は document API のハンドルと独立して管理する。
   type Entry = { node: HTMLElement; kind: string; clickable: boolean; enabled: boolean; textNode: Text | null; inputVersion: number; composing: boolean; theme: string[]; lastText: string | null;
-    pending: { text: string; version: number } | null; options: string[] | null; index: number; remove: () => void };
+    pending: { text: string; version: number } | null; options: string[] | null; index: number; remove: () => void;
+    /** 吹き出しの文字 */ tip: string | undefined; /** メニューの項目（menuItem）の番号。画面には出さず、メニューを開いたときだけ重ね表示に移す */ items: number[]; /** メニューの項目の持ち主 */ owner: Entry | undefined };
   const uiNodes = new Map<number, Entry>();
+  const byNode = new WeakMap<HTMLElement, Entry>();
   let uiStyle: HTMLStyleElement | undefined;
+  const overlay = createOverlay(element, {
+    tip: node => byNode.get(node)?.tip,
+    items: node => (byNode.get(node)?.items ?? []).map(handle => uiNodes.get(handle)?.node).filter((item): item is HTMLElement => item !== undefined && !item.hidden),
+  });
+  /** メニューを持つボタンは、メニューがあると知らせる */
+  const markMenu = (entry: Entry): void => setAttribute(entry.node, "aria-haspopup", entry.items.length ? "menu" : null);
+  const forgetItem = (entry: Entry): void => {
+    const owner = entry.owner;
+    entry.owner = undefined;
+    if (owner) { owner.items = owner.items.filter(handle => uiNodes.get(handle) !== entry); markMenu(owner); }
+  };
   const removeUi = (root: HTMLElement) => {
-    for (const [handle, entry] of uiNodes) {
+    overlay.release(root);
+    for (const [handle, entry] of [...uiNodes]) {
       if (root === entry.node || root.contains(entry.node)) {
         entry.remove();
         uiNodes.delete(handle);
+        forgetItem(entry);
+        // 項目は木の外にあるので、持ち主と一緒に片付ける
+        for (const item of entry.items) { uiNodes.get(item)?.remove(); uiNodes.delete(item); }
       }
     }
     root.remove();
@@ -366,12 +400,14 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         }
         const kind: string = op.kind;
         const tags: Record<string, string> = { appIcon: "img", image: "img", button: "button", text: "span", chip: "span", badge: "span",
-          checkbox: "input", radio: "input", slider: "input", picker: "select", separator: "hr" };
+          checkbox: "input", radio: "input", slider: "input", picker: "select", separator: "hr", menuItem: "button" };
         const tag = kind === "input" ? (op.multiline ? "textarea" : "input") : Object.hasOwn(tags, kind) ? tags[kind]! : "div";
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${kind}`;
         if (tag === "button") node.setAttribute("type", "button");
-        const entry: Entry = { node, kind, clickable: false, enabled: true, textNode: null, inputVersion: 0, composing: false, theme: [], lastText: null, pending: null, options: null, index: -1, remove: () => {} };
+        const entry: Entry = { node, kind, clickable: false, enabled: true, textNode: null, inputVersion: 0, composing: false, theme: [], lastText: null, pending: null, options: null, index: -1, remove: () => {}, tip: undefined, items: [], owner: undefined };
+        byNode.set(node, entry);
+        if (kind === "menuItem") node.tabIndex = -1;
         const listen = (type: string, listener: (event: Event) => void) => {
           node.addEventListener(type, listener);
           const previous = entry.remove;
@@ -565,14 +601,28 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (["button", "input", "textarea", "select"].includes(node.tagName.toLowerCase()) && (node as HTMLButtonElement).disabled === op.enabled) {
           (node as HTMLButtonElement).disabled = !op.enabled;
         }
+        entry.tip = op.tip;
         entry.enabled = op.enabled;
         entry.clickable = op.clickable;
         continue;
       }
       if (op.op === "ui-insert") {
+        const item = uiNodes.get(op.child);
+        // メニューの項目は画面に挿さず、持ち主の一覧に並べる。一覧の終わりが「最後」になるので、画面の子の前に置く指定は終わりに直す
+        if (item?.kind === "menuItem") {
+          const owner = op.parent === null ? undefined : uiNodes.get(op.parent);
+          if (owner && owner !== item) {
+            forgetItem(item);
+            const at = op.before === null ? -1 : owner.items.indexOf(op.before);
+            owner.items.splice(at < 0 ? owner.items.length : at, 0, op.child);
+            item.owner = owner;
+            markMenu(owner);
+          }
+          continue;
+        }
         const parent = op.parent === null ? element : uiNodes.get(op.parent)?.node;
         const child = uiNodes.get(op.child)?.node;
-        const before = op.before === null ? null : uiNodes.get(op.before)?.node;
+        const before = op.before === null || uiNodes.get(op.before)?.kind === "menuItem" ? null : uiNodes.get(op.before)?.node;
         if (parent && child && parent !== child && !child.contains(parent) && (before === null || before?.parentNode === parent)) {
           parent.insertBefore(child, before);
           // row の中の区切り線は縦の線として読み上げる
@@ -585,8 +635,9 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (entry) removeUi(entry.node);
         continue;
       }
-    } },
-    stop(): void { for (const entry of uiNodes.values()) entry.remove(); uiNodes.clear(); },
+    }
+    overlay.sync(); },
+    stop(): void { overlay.stop(); for (const entry of uiNodes.values()) entry.remove(); uiNodes.clear(); },
     clear(): void { for (const entry of [...uiNodes.values()]) removeUi(entry.node); uiStyle?.remove(); uiStyle = undefined; },
   };
 }

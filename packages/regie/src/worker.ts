@@ -312,7 +312,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         if (["picker", "segmented", "tabs"].includes(node.kind) && !(Number.isInteger(value) && value >= 0 && value < (node.options ?? []).length)) value = NaN;
       }
       if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown ||
-        (uiText ? target.node.kind !== "input" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button"))) {
+        (uiText ? target.node.kind !== "input" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button" && target.node.kind !== "menuItem"))) {
         // 捨てた入力にも版を進めた値を返し、Scene の表示をアプリの値に戻す
         if ((uiText && target?.node.kind === "input") || valueTarget) {
           ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));

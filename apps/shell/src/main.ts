@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, launch, ShellApi } from "jsr:@binette/replique";
-import { appArea, appIcon, button, buttonOf, column, row, text, View } from "jsr:@binette/replique/ui";
+import { appArea, appIcon, buttonOf, column, menuItem, row, show, text, View } from "jsr:@binette/replique/ui";
 
 // 辞書から取ったシェルの API。ボタンのコールバックは関数なので、グローバルで持つ
 let shellApi: ShellApi | null = null;
@@ -20,19 +20,16 @@ function closeApp(index: i32): void {
   if (api != null) api.close(index);
 }
 
-function goBack(): void {
-  const api = shellApi;
-  if (api != null) api.back();
-}
-
 function installBinette(): void {
   const api = shellApi;
   if (api != null) api.install();
 }
 
-function openSettings(): void {
-  const api = shellApi;
-  if (api != null) api.openSettings();
+/** 名前の最初の文字（コードポイント）。アイコンの無いアプリの札に使う */
+function initial(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length == 0) return "?";
+  return String.fromCodePoint(trimmed.codePointAt(0)).toUpperCase();
 }
 
 class ShellApp extends App {
@@ -50,54 +47,33 @@ class ShellApp extends App {
       return column([appArea().grow()]).grow().key("shell-root");
     }
 
-    // 左にホームボタン
-    const homeBtn = button("ホーム", goHome)
-      .selected(api.isHome())
-      .key("shell-home");
-
-    // 中央に開いているアプリのドック
+    // 開いているアプリのドック。閉じる操作は × でなく、右クリック・長押しのメニューに置く
     const dock: View[] = [];
     const count = api.count();
-    let frontIndex: i32 = -1;
     for (let i: i32 = 0; i < count; i++) {
-      const isFront = api.isFront(i);
-      if (isFront) frontIndex = i;
-      const label = api.hasIcon(i) ? appIcon(api.appIndex(i)).width(26).height(26) : text(api.name(i));
+      const name = api.name(i);
       dock.push(
-        buttonOf([label], switchToApp)
+        buttonOf([api.hasIcon(i) ? appIcon(api.appIndex(i)) : text(initial(name))], switchToApp)
           .arg(i)
-          .label(api.name(i) + "を開く")
-          .selected(isFront)
-          .key("shell-dock-" + i.toString()),
+          .label(name + "を開く")
+          .selected(api.isFront(i))
+          .tip(name)
+          .menu([menuItem("開く", switchToApp).arg(i), menuItem("閉じる", closeApp).arg(i)])
+          .key("dock-" + api.appIndex(i).toString()),
       );
     }
 
-    // 右のボタン群（戻る、閉じる、設定）
-    const rightControls: View[] = [];
-    if (!api.isHome()) {
-      rightControls.push(button("戻る", goBack).key("shell-back"));
-      if (frontIndex >= 0) {
-        rightControls.push(button("閉じる", closeApp).arg(frontIndex).key("shell-close"));
-      }
-    }
-    // 設定を開くボタン
-    rightControls.push(button("設定", openSettings).key("shell-settings"));
-    if (!api.isInstalled()) {
-      rightControls.push(button("インストール", installBinette)
+    // 左にホーム、中央にドック、右にインストール（ライブモードだけ）。アイコンの見た目は style.css
+    const homebar = row([
+      buttonOf([], goHome).label("ホームを開く").selected(api.isHome()).tip("ホーム").key("home"),
+      // 開いているアプリが無いときは、空の台を見せずに隠す
+      show(dock.length > 0, row(dock).key("dock")),
+      show(!api.isInstalled(), buttonOf([text("インストール")], installBinette)
+        .label("インストール")
+        .tip("Binette をインストール")
         .enabled(!api.installBusy())
-        .key("shell-install"));
-    }
-
-    // ドックとバーのレイアウト
-    const barItems: View[] = [homeBtn];
-    // ドックは間を埋め、右のボタン群を右端に寄せる
-    barItems.push(dock.length > 0 ? row(dock).gap(4).grow().key("shell-dock-row") : row([]).grow().key("shell-spacer"));
-    barItems.push(row(rightControls).gap(4).key("shell-right-row"));
-
-    const homebar = row(barItems)
-      .gap(8)
-      .padding(8)
-      .key("shell-bar");
+        .key("install")),
+    ]).key("homebar");
 
     return column([
       appArea().grow().key("shell-area"),

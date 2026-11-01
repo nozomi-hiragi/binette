@@ -3,6 +3,7 @@ import type { DomOp } from "@binette/core";
 import type { Process } from "@binette/regie";
 import { Window } from "happy-dom";
 import { mountApp } from "../src/mount.ts";
+import { scopeCss } from "../src/sanitize.ts";
 
 Deno.test("initial HTML removes executable content, unsafe attributes, and external URLs silently", async () => {
   const window = new Window();
@@ -76,4 +77,35 @@ Deno.test("initial HTML preserves allowed content, raster data URLs, byId, and c
     assertEquals(button.type, "button");
     mounted.stop(); button.click(); assertEquals(events, [7]);
   } finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("CSS は表示先ごとの scope と子アプリの境界を持つ", async () => {
+  const window = new Window();
+  const process = { attach() {}, dispatch() {} } as unknown as Process;
+  const hosts = [window.document.createElement("div"), window.document.createElement("div")];
+  const mounted = hosts.map(host => mountApp(host as unknown as HTMLElement, "<p>アプリ</p>", process, { css: "p { color: red }" }));
+  try {
+    const ids = hosts.map(host => host.getAttribute("data-bina-scope"));
+    assertEquals(ids[0] === ids[1], false);
+    for (const host of hosts) {
+      assertEquals(host.querySelector("style")!.textContent, `@scope ([data-bina-scope="${host.getAttribute("data-bina-scope")}"]) to (.bina-ui-appArea) {\np { color: red }\n}`);
+    }
+    const errors: unknown[] = [];
+    const rejected = mountApp(hosts[0] as unknown as HTMLElement, "<p>残る</p>", process, { css: '} body { display: none }', onError: error => errors.push(error) });
+    assertEquals(hosts[0]!.querySelector("style"), null);
+    assertEquals(hosts[0]!.querySelector("p")!.textContent, "残る");
+    assertEquals(errors.length, 1);
+    rejected.stop();
+  } finally { mounted.forEach(app => app.stop()); await window.happyDOM.close(); }
+});
+
+Deno.test("他アプリと名前を共有する keyframes と layer を拒む", () => {
+  for (const css of [
+    "@keyframes shared { from { opacity: 0 } to { opacity: 1 } }",
+    "@-webkit-keyframes shared { from { opacity: 0 } to { opacity: 1 } }",
+    "@layer shared { p { color: red } }",
+    "@layer first, second;",
+    "@media (width > 100px) { @keyframes shared { to { opacity: 1 } } }",
+    "@supports (display: grid) { @layer shared { p { color: red } } }",
+  ]) assertEquals(scopeCss(css, "1"), null, css);
 });

@@ -21,13 +21,14 @@ async function fixture() {
   for (const name of ["home", "settings", "shell"]) {
     files.set(
       `system/apps/${name}/app.json`,
-      encode({ id: name, name, roles: [name], entry: { as: "main.ts" } }),
+      encode({ id: name, name, roles: [name], entry: { as: "main.ts", css: "src/style.css" } }),
     );
     files.set(
       `system/apps/${name}/app.wasm`,
       new Uint8Array([0, 97, 115, 109]),
     );
     files.set(`system/apps/${name}/index.html`, new Uint8Array());
+    files.set(`system/apps/${name}/style.css`, new TextEncoder().encode("p { color: red }"));
   }
   const manifest: SystemManifest = { version: "1", files: [] };
   for (const [path, data] of files) {
@@ -62,6 +63,7 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
   const { tree, distribution } = await fixture();
   await tree.write("/user/apps/settings/app.wasm", new Uint8Array([99]));
   const { apps, roles } = await loadBootApps(tree, distribution);
+  assertEquals(apps.find(app => app.prebuilt?.manifest.id === "shell")?.prebuilt?.css, "p { color: red }");
   assertEquals(roles, {
     home: installedAppKey("binette:system", "home"),
     settings: installedAppKey("binette:system", "settings"),

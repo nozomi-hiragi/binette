@@ -11,6 +11,8 @@ export interface InstalledApp {
   /** SVG の文字列。無ければ undefined */
   icon: string | undefined;
   html: string;
+  /** `entry.css` の CSS。無ければ undefined */
+  css?: string;
   wasm: Uint8Array;
   /** Date.now() の Unix epoch ミリ秒 */
   installedAt: number;

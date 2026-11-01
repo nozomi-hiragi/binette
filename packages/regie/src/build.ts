@@ -45,6 +45,8 @@ export interface BuiltApp {
   manifest: AppManifest;
   /** 入口の HTML */
   html: string;
+  /** `entry.css` の CSS。指定が無ければ undefined */
+  css?: string;
   /** AS をビルドした WASM */
   wasm: Uint8Array;
 }
@@ -73,13 +75,13 @@ function findLibrary(libraries: Record<string, string>, name: string): string | 
  */
 export async function buildApp(read: (path: string) => Promise<string>, options: BuildOptions = {}): Promise<BuiltApp> {
   const manifest = parseAppManifest(await read("app.json"));
-  const { as: entry, html: htmlPath } = entryPaths(manifest.entry);
-  const [html, source] = await Promise.all([htmlPath === undefined ? Promise.resolve("") : read(htmlPath), read(entry)]);
+  const { as: entry, html: htmlPath, css: cssPath } = entryPaths(manifest.entry);
+  const [html, source, css] = await Promise.all([htmlPath === undefined ? Promise.resolve("") : read(htmlPath), read(entry), cssPath === undefined ? Promise.resolve(undefined) : read(cssPath)]);
   const asc = options.compiler ?? await loadCompiler();
   const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, "jsr:@binette/decor/parts": decorParts, ...options.libraries };
   if (libraries["jsr:@binette/replique"] !== undefined && libraries["jsr:@binette/replique/ui"] === undefined) {
     libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme, ' +
-      'spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge } from "jsr:@binette/replique";';
+      'spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/replique";';
   }
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
@@ -105,5 +107,5 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
     const output = (stderr.toString() || stdout.toString() || error?.message || "").trim();
     throw new Error(`アプリをビルドできません。\n${output}`);
   }
-  return { manifest, html, wasm };
+  return { manifest, html, ...(css === undefined ? {} : { css }), wasm };
 }

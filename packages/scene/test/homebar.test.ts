@@ -49,7 +49,7 @@ async function fixture(installed = true) {
     },
   });
   const button = (key: string) => element.querySelector<HTMLButtonElement>(`[data-bina-key=${key}]`);
-  await waitFor(() => button("shell-home") !== null && button("home-tile-0") !== null);
+  await waitFor(() => button("home") !== null && button("home-tile-0") !== null);
   const waitReady = async () => {
     await waitFor(() => live === ready);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -62,21 +62,21 @@ async function fixture(installed = true) {
 Deno.test("シェルのバーはホームと起動中だけを並べ、前面の印と切り替えを更新する", async () => {
   const f = await fixture();
   try {
-    assertEquals(f.button("shell-home")!.getAttribute("aria-pressed"), "true");
-    assertEquals(f.element.querySelector("[data-bina-key=shell-dock-row]"), null);
-    f.button("shell-settings")!.click();
-    await waitFor(() => f.button("shell-dock-0") !== null && f.button("shell-close") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
-    assertEquals(f.element.querySelectorAll("[data-bina-key^=shell-dock-]").length, 2);
-    assertEquals(f.button("shell-dock-0")!.getAttribute("aria-pressed"), "true");
-    assertEquals(f.button("shell-home")!.getAttribute("aria-pressed"), "false");
+    assertEquals(f.button("home")!.getAttribute("aria-pressed"), "true");
+    assertEquals(f.element.querySelector<HTMLElement>("[data-bina-key=dock]")!.hidden, true);
+    f.button("home-tile-0")!.click();
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    assertEquals(f.element.querySelectorAll("[data-bina-key=dock] > .bina-ui-button").length, 1);
+    assertEquals(f.button("dock-0")!.getAttribute("aria-pressed"), "true");
+    assertEquals(f.button("home")!.getAttribute("aria-pressed"), "false");
     await f.waitReady();
-    f.button("shell-home")!.click();
-    await waitFor(() => f.button("shell-home")!.getAttribute("aria-pressed") === "true");
+    f.button("home")!.click();
+    await waitFor(() => f.button("home")!.getAttribute("aria-pressed") === "true");
     assertEquals(f.errors, []);
-    assertEquals(f.button("shell-dock-0")!.getAttribute("aria-pressed"), "false");
+    assertEquals(f.button("dock-0")!.getAttribute("aria-pressed"), "false");
     await f.waitReady();
-    f.button("shell-dock-0")!.click();
-    await waitFor(() => f.button("shell-dock-0")!.getAttribute("aria-pressed") === "true");
+    f.button("dock-0")!.click();
+    await waitFor(() => f.button("dock-0")!.getAttribute("aria-pressed") === "true");
     assertEquals(f.errors, []);
   } finally { await f.close(); }
 });
@@ -85,57 +85,62 @@ Deno.test("ドックは対応するアプリのアイコンと読み上げ名を
   const f = await fixture();
   try {
     f.button("home-tile-0")!.click();
-    await waitFor(() => f.button("shell-dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
-    const dock = f.button("shell-dock-0")!;
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    const dock = f.button("dock-0")!;
     assertEquals(dock.getAttribute("aria-label"), "設定を開く");
     const image = dock.querySelector("img")!;
     assertEquals(image.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(apps[2]!.prebuilt.icon!)}`);
     assertEquals(image.getAttribute("alt"), "");
     await f.waitReady();
-    f.button("shell-home")!.click();
-    await waitFor(() => f.button("shell-home")!.getAttribute("aria-pressed") === "true");
+    f.button("home")!.click();
+    await waitFor(() => f.button("home")!.getAttribute("aria-pressed") === "true");
     f.button("home-tile-1")!.click();
-    await waitFor(() => f.button("shell-dock-1") !== null && [...f.element.querySelectorAll(".bina-shell-app")].some(host => host.querySelector(".bina-ui-text")?.textContent === "本文"));
-    assertEquals(f.button("shell-dock-1")!.getAttribute("aria-label"), "アイコンなしを開く");
-    assertEquals(f.button("shell-dock-1")!.textContent, "アイコンなし");
-    assertEquals(f.button("shell-dock-1")!.querySelector("img"), null);
+    await waitFor(() => f.button("dock-1") !== null && [...f.element.querySelectorAll(".bina-shell-app")].some(host => host.querySelector(".bina-ui-text")?.textContent === "本文"));
+    assertEquals(f.button("dock-1")!.getAttribute("aria-label"), "アイコンなしを開く");
+    assertEquals(f.button("dock-1")!.textContent, "ア");
+    assertEquals(f.button("dock-1")!.querySelector("img"), null);
   } finally { await f.close(); }
 });
 
-Deno.test("メニューの代わりに前面の閉じるボタンを使い、閉じたアプリをドックから除く", async () => {
+Deno.test("ドックのメニューから閉じると、閉じたアプリをドックから除く", async () => {
   const f = await fixture();
   try {
-    f.button("shell-settings")!.click();
-    await waitFor(() => f.button("shell-close") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    f.button("home-tile-0")!.click();
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
     await f.waitReady();
-    f.button("shell-close")!.focus();
-    assertEquals(f.window.document.activeElement as unknown, f.button("shell-close"));
-    f.button("shell-close")!.click();
-    await waitFor(() => f.button("shell-close") === null && f.button("shell-dock-0") === null && f.button("shell-home")!.getAttribute("aria-pressed") === "true");
-    assertEquals(f.button("shell-home")!.getAttribute("aria-pressed"), "true");
-    assertEquals(f.element.querySelector("[data-bina-key=shell-dock-row]"), null);
+    f.button("dock-0")!.dispatchEvent(new f.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }) as unknown as Event);
+    const close = [...f.element.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent === "閉じる");
+    assert(close);
+    close.click();
+    await waitFor(() => f.button("dock-0") === null && f.button("home")!.getAttribute("aria-pressed") === "true");
+    assertEquals(f.element.querySelector<HTMLElement>("[data-bina-key=dock]")!.hidden, true);
     assertEquals(f.errors, []);
   } finally { await f.close(); }
 });
 
-Deno.test("前面を切り替えてから閉じると選んだアプリだけを閉じ、残ったアプリを開ける", async () => {
+Deno.test("ドックのメニューは選んだアプリだけを閉じ、残ったアプリを開ける", async () => {
   const f = await fixture();
   try {
-    f.button("shell-settings")!.click();
-    await waitFor(() => f.button("shell-close") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    f.button("home-tile-0")!.click();
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
     await f.waitReady();
-    f.button("shell-home")!.click();
-    await waitFor(() => f.button("shell-home")!.getAttribute("aria-pressed") === "true");
+    f.button("home")!.click();
+    await waitFor(() => f.button("home")!.getAttribute("aria-pressed") === "true");
     f.button("home-tile-1")!.click();
-    await waitFor(() => f.button("shell-dock-1") !== null && [...f.element.querySelectorAll(".bina-shell-app")].some(host => host.querySelector(".bina-ui-text")?.textContent === "本文"));
+    await waitFor(() => f.button("dock-1") !== null && f.button("dock-1")!.getAttribute("aria-pressed") === "true");
     await f.waitReady();
-    f.button("shell-dock-0")!.click();
-    await waitFor(() => f.button("shell-dock-0")!.getAttribute("aria-pressed") === "true");
-    f.button("shell-close")!.click();
-    await waitFor(() => f.button("shell-dock-1") === null && f.button("shell-dock-0")!.textContent === "アイコンなし");
+    // 前面でない設定のメニューから閉じても、前面のアプリは閉じない
+    f.button("dock-0")!.dispatchEvent(new f.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }) as unknown as Event);
+    const close = [...f.element.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent === "閉じる");
+    assert(close);
+    close.click();
+    await waitFor(() => f.button("dock-0") === null);
+    assertEquals(f.button("dock-1")!.getAttribute("aria-pressed"), "true");
     await f.waitReady();
-    f.button("shell-dock-0")!.click();
-    await waitFor(() => f.button("shell-dock-0")!.getAttribute("aria-pressed") === "true");
+    f.button("home")!.click();
+    await waitFor(() => f.button("home")!.getAttribute("aria-pressed") === "true");
+    f.button("dock-1")!.click();
+    await waitFor(() => f.button("dock-1")!.getAttribute("aria-pressed") === "true");
     assertEquals(f.errors, []);
   } finally { await f.close(); }
 });
@@ -144,9 +149,9 @@ Deno.test("インストールはライブモードだけに表示し、押すと
   for (const installed of [false, true]) {
     const f = await fixture(installed);
     try {
-      assertEquals(f.button("shell-install") === null, installed);
+      assertEquals(f.button("install")!.hidden, installed);
       if (!installed) {
-        f.button("shell-install")!.click();
+        f.button("install")!.click();
         await waitFor(() => f.element.querySelector<HTMLDialogElement>("dialog")!.open);
       }
     } finally { await f.close(); }
@@ -156,7 +161,7 @@ Deno.test("インストールはライブモードだけに表示し、押すと
 Deno.test("stop はシェルとアプリの Worker および表示を片付け、古いボタンは起動しない", async () => {
   const f = await fixture();
   try {
-    const oldButton = f.button("shell-settings")!;
+    const oldButton = f.button("home")!;
     f.shell.stop();
     oldButton.click();
     await new Promise(resolve => setTimeout(resolve, 20));

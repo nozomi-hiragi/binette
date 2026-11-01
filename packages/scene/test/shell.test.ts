@@ -659,3 +659,34 @@ Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭
     assert(times[before + 1]! - times[before]! < 600, `待ちが戻っていません: ${times[before + 1]! - times[before]!}`);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("ライブの透かしはアプリ表示領域と最低限の大枠を追い、dialog は移さない", async () => {
+  const window = new Window(); const element = elementIn(window);
+  const ui = createShellUi(element, { installed: false });
+  const state = { instances: [], front: undefined, apps: [], clearError: false };
+  try {
+    const root = element.querySelector<HTMLElement>(".bina-shell")!;
+    const host = element.querySelector<HTMLElement>(".bina-shell-host")!;
+    const fallback = element.querySelector<HTMLElement>(".bina-shell-fallback-area")!;
+    const watermark = element.querySelector<HTMLElement>(".bina-shell-live")!;
+    const dialog = element.querySelector<HTMLDialogElement>("dialog")!;
+    const area = window.document.createElement("div") as unknown as HTMLElement;
+    area.className = "bina-ui-appArea";
+    host.append(area);
+    ui.update(state);
+    assertEquals(watermark.parentElement, area);
+    ui.requireInstall("保存");
+    assertEquals(dialog.parentElement, root);
+    assertEquals(dialog.open, true);
+    ui.update({ ...state, shellUnavailable: true });
+    assertEquals(watermark.parentElement, fallback);
+    // 再起動後の新しい木にも同じ透かしを移し、古い木には残さない
+    const restartedArea = area.cloneNode() as HTMLElement;
+    host.replaceChildren(restartedArea);
+    ui.update(state);
+    assertEquals(watermark.parentElement, restartedArea);
+    assertEquals(element.querySelectorAll(".bina-shell-live").length, 1);
+    assertEquals(dialog.parentElement, root);
+    assertEquals(dialog.open, true);
+  } finally { ui.stop(); await window.happyDOM.close(); }
+});

@@ -3,6 +3,7 @@ import { buildApp } from "@binette/regie/build";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
 import { mountShell } from "../src/index.ts";
+import { chooseFromMenu } from "./homebar-helper.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
@@ -16,7 +17,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
   assert(condition(), "シェルの状態が変わりませんでした");
 }
 
-Deno.test("シェルを先に起動し、appArea のホームから設定を開き、戻る・閉じるでも領域を保つ", async () => {
+Deno.test("シェルを先に起動し、appArea のホームから設定を開き、ホーム・メニューから閉じても領域を保つ", async () => {
   const window = new Window();
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
@@ -48,26 +49,26 @@ Deno.test("シェルを先に起動し、appArea のホームから設定を開�
   });
   const button = (key: string) => element.querySelector<HTMLButtonElement>(`[data-bina-key=${key}]`);
   try {
-    await waitFor(() => button("shell-home") !== null && button("home-tile-0") !== null);
+    await waitFor(() => button("home") !== null && button("home-tile-0") !== null);
     const area = element.querySelector<HTMLElement>(".bina-ui-appArea")!;
     const home = element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!;
     assertEquals(home.parentElement, area);
     assertEquals(created, 2);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-fallback")!.hidden, true);
     button("home-tile-0")!.click();
-    await waitFor(() => button("shell-close") !== null && element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => button("dock-0")?.getAttribute("aria-pressed") === "true" && element.querySelector("[data-bina-key=debug]") !== null);
     assertEquals(created, 3);
     assertEquals(home.hidden, true);
     const settings = element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!;
     assertEquals(settings.parentElement, area);
     await waitFor(() => resumed === 3);
     await new Promise(resolve => setTimeout(resolve, 0));
-    button("shell-back")!.click();
-    await waitFor(() => !home.hidden && button("shell-close") === null && button("shell-dock-0") !== null);
+    button("home")!.click();
+    await waitFor(() => !home.hidden && button("home")?.getAttribute("aria-pressed") === "true" && button("dock-0") !== null);
     assertEquals(element.querySelector(".bina-ui-appArea"), area);
-    button("shell-dock-0")!.click();
-    await waitFor(() => !settings.hidden && button("shell-close") !== null);
-    button("shell-close")!.click();
+    button("dock-0")!.click();
+    await waitFor(() => !settings.hidden && button("dock-0")?.getAttribute("aria-pressed") === "true");
+    chooseFromMenu(element, "設定", "閉じる");
     await waitFor(() => !settings.isConnected && !home.hidden && live === 2);
     assertEquals(element.querySelector(".bina-ui-appArea"), area);
     assertEquals(errors, []);

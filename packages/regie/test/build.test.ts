@@ -1,4 +1,4 @@
-import { assert, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { buildApp } from "../src/build.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
@@ -26,3 +26,14 @@ launch(new Page());`;
     assert(WebAssembly.validate(new Uint8Array(built.wasm)));
   });
 }
+
+Deno.test("entry.css をフォルダ内から読み、ビルド結果へ渡す", async () => {
+  const css = ":scope { color: red }";
+  const sources = { ...files, "app.json": JSON.stringify({ id: "css", name: "CSS", entry: { as: "main.ts", css: "./src/style.css" } }), "main.ts": "export function initialize(): void {}", "src/style.css": css };
+  const built = await buildApp(path => Promise.resolve(sources[path as keyof typeof sources]!), { libraries });
+  assertEquals(built.css, css);
+  assertEquals(built.html, "");
+  for (const path of ["../secret.css", "/secret.css", "https://example.com/style.css"]) {
+    await assertRejects(() => buildApp(file => Promise.resolve(file === "app.json" ? JSON.stringify({ id: "css", name: "CSS", entry: { as: "main.ts", css: path } }) : "")), Error, "相対パス");
+  }
+});
