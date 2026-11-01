@@ -1,8 +1,8 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
 /** アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。 */
 import { View, UiCallback } from "jsr:@binette/decor/as";
-export { View, column, row, text, button, buttonOf, input, grid, appIcon, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
-  spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge } from "jsr:@binette/decor/as";
+export { View, column, row, text, button, buttonOf, input, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
+  spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/decor/as";
 // @ts-ignore: decorator
 @external("binette", "dom.byId")
 declare function byId(handle: i32, id: string): void;
@@ -300,9 +300,47 @@ export class StorageApi {
 /** `api.get<FsApi>("fs")`。ファイルの木。範囲の決め方が未決なので、キーだけ用意して今は誰にも届かない */
 export class FsApi {}
 
+/** `api.get<ShellApi>("shell")`。シェルの役割に割り当てられたアプリにだけ届く */
+export class ShellApi {
+  /** 起動中のアプリ（ホームを除く）の数 */
+  count(): i32 { return shellCountImport(); }
+  /** running の別名 */
+  running(): i32 { return this.count(); }
+  /** i 番目のアプリの名前 */
+  name(i: i32): string { return shellNameImport(i); }
+  /** i 番目のアプリが前面にあるか */
+  isFront(i: i32): boolean { return shellIsFrontImport(i) != 0; }
+  /** ホームが前面にあるか */
+  isHome(): boolean { return shellIsHomeImport() != 0; }
+  /** i 番目のアプリのアイコンがあるか */
+  hasIcon(i: i32): boolean { return shellHasIconImport(i) != 0; }
+  /** i 番目のアプリに対応する apps 一覧の番号。appIcon に渡す */
+  appIndex(i: i32): i32 { return shellAppIndexImport(i); }
+  /** インストール済みか */
+  isInstalled(): boolean { return shellIsInstalledImport() != 0; }
+  /** インストールの確認を待っているか */
+  installBusy(): boolean { return shellInstallBusyImport() != 0; }
+  /** インストールを案内する */
+  install(): void { shellInstallImport(); }
+  /** i 番目のアプリを開く（前面にする） */
+  open(i: i32): void { shellOpenImport(i); }
+  /** i 番目のアプリを閉じる */
+  close(i: i32): void { shellCloseImport(i); }
+  /** ホームを開く */
+  openHome(): void { shellOpenHomeImport(); }
+  /** openHome の別名 */
+  home(): void { this.openHome(); }
+  /** 戻る */
+  back(): void { shellBackImport(); }
+  /** 設定の役割に割り当てられたアプリを開く */
+  openSettings(): void { shellOpenSettingsImport(); }
+  /** 通知（案。枠のみ） */
+  notify(text: string): void { shellNotifyImport(text); }
+}
+
 /**
  * OS が `onCreate` で渡す API の辞書。キーで取り出す。
- * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi）を返す
+ * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi、`shell` は ShellApi）を返す
  */
 export class Api {
   /** 届いていれば API を、キーが無いか型引数が合わないか、届いていなければ null を返す */
@@ -312,6 +350,7 @@ export class Api {
     if (key == "os" && idof<T>() == idof<OsApi>()) return changetype<T>(new OsApi());
     if (key == "storage" && idof<T>() == idof<StorageApi>()) return changetype<T>(new StorageApi());
     if (key == "fs" && idof<T>() == idof<FsApi>()) return changetype<T>(new FsApi());
+    if (key == "shell" && idof<T>() == idof<ShellApi>()) return changetype<T>(new ShellApi());
     return null;
   }
   /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
@@ -348,6 +387,52 @@ declare function lastCauseImport(): DestroyCause;
 // @ts-ignore: decorator
 @external("binette", "app.finish")
 declare function finishImport(): void;
+
+// @ts-ignore: decorator
+@external("binette", "shell.count")
+declare function shellCountImport(): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.name")
+declare function shellNameImport(i: i32): string;
+// @ts-ignore: decorator
+@external("binette", "shell.isFront")
+declare function shellIsFrontImport(i: i32): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.isHome")
+declare function shellIsHomeImport(): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.hasIcon")
+declare function shellHasIconImport(i: i32): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.appIndex")
+declare function shellAppIndexImport(i: i32): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.isInstalled")
+declare function shellIsInstalledImport(): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.installBusy")
+declare function shellInstallBusyImport(): i32;
+// @ts-ignore: decorator
+@external("binette", "shell.install")
+declare function shellInstallImport(): void;
+// @ts-ignore: decorator
+@external("binette", "shell.open")
+declare function shellOpenImport(i: i32): void;
+// @ts-ignore: decorator
+@external("binette", "shell.close")
+declare function shellCloseImport(i: i32): void;
+// @ts-ignore: decorator
+@external("binette", "shell.openHome")
+declare function shellOpenHomeImport(): void;
+// @ts-ignore: decorator
+@external("binette", "shell.back")
+declare function shellBackImport(): void;
+// @ts-ignore: decorator
+@external("binette", "shell.openSettings")
+declare function shellOpenSettingsImport(): void;
+// @ts-ignore: decorator
+@external("binette", "shell.notify")
+declare function shellNotifyImport(text: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "ui.render")
@@ -401,7 +486,7 @@ function serializeView(view: View): string {
     ',"width":' + view.widthValue.toString() + ',"center":' + (view.centerValue ? "true" : "false") + ',"selected":' + view.selectedValue.toString() +
     ',"toggle":' + view.toggleValue.toString() + ',"scroll":' + (view.scrollValue ? "true" : "false") + ',"fill":' + (view.fillValue ? "true" : "false") +
     ',"collapse":' + (view.collapseValue ? "true" : "false") + ',"placeholder":' + jsonString(view.placeholderValue) +
-    ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + ',"highlight":' + (view.highlightValue ? "true" : "false") +
+    ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + ',"highlight":' + (view.highlightValue ? "true" : "false") + ',"tip":' + jsonString(view.tipValue) +
     ',"checked":' + (view.checkedValue ? "true" : "false") + ',"value":' + view.numberValue.toString() + ',"min":' + view.minValue.toString() +
     ',"max":' + view.maxValue.toString() + ',"step":' + view.stepValue.toString() + ',"options":' + options + ',"index":' + view.indexValue.toString() +
     ',"align":' + jsonString(view.alignValue) + '}';
@@ -485,5 +570,10 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
     case State.Stop: app.onStop(); break;
     case State.Destroy: app.onDestroy(new DestroyReason(a, b)); break;
   }
+  rebuild();
+}
+
+/** OS がシェルの状態（起動中の一覧や前面）の更新を知らせる */
+export function __bina_shell_sync(): void {
   rebuild();
 }

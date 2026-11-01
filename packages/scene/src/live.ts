@@ -29,6 +29,8 @@ export interface LiveMode {
   /** インストールのボタンを押したときの処理 */
   install(): Promise<void>;
   requireInstall(reason: string): boolean;
+  /** 透かしだけを現在のアプリ表示領域へ移す。手順の dialog は OS の枠に残す */
+  setAppArea(area: HTMLElement): void;
   stop(): void;
 }
 
@@ -105,6 +107,9 @@ export function mountLiveMode(stage: HTMLElement, installedOverride?: boolean, o
     get installed() { return installed; },
     get busy() { return busy; },
     install,
+    setAppArea(area) {
+      if (!stopped && watermark.parentElement !== area) area.append(watermark);
+    },
     requireInstall(message) {
       if (installed) return true;
       showInstructions(message);

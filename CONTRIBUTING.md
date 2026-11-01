@@ -28,7 +28,7 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 `public/` の手書きの `sw.js`・`manifest.webmanifest`・`icon.svg` は配布用ディレクトリにコピーされます。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。`deno task build` は `regie.js`・`regie-worker.js`・`build-worker.js` のハッシュを `sw.js` のキャッシュの版（`binette-v0.2.0-3-<ハッシュ>`）に足すので、カーネルが変われば新しい SW に切り替わります。`sw.js` 自体の作りを変えたときは `binette-v0.2.0-3` の版も変えてください。
 
-設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今はホームの選択、新しい版への更新、デバッグ値、起動の履歴で、ほかの項目は未決です。ホームもシステムアプリ `apps/home`（`"roles": ["home"]`）です。役割は名乗るだけでは効かず、`system/boot.json` の既定と設定で割り当てたアプリにだけ、その役割の API が `onCreate(last, api)` の辞書で届きます（[docs/spec/roles.md](docs/spec/roles.md)）。Scene の `mountShell` がホームを開き、画面の下にホームバーを出し、アプリのアイコンのドックでの切り替えと、アイコンのメニューからの終了を受け持ちます。
+設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今はホームの選択、新しい版への更新、デバッグ値、起動の履歴で、ほかの項目は未決です。ホームもシステムアプリ `apps/home`（`"roles": ["home"]`）です。役割は名乗るだけでは効かず、`system/boot.json` の既定と設定で割り当てたアプリにだけ、その役割の API が `onCreate(last, api)` の辞書で届きます（[docs/spec/roles.md](docs/spec/roles.md)）。Régie が常駐のシステムアプリ `apps/shell`（`"roles": ["shell"]`）を最初に起動し、シェルが `ShellApi.openHome()` でホームを開きます。シェルは AS の Décor でホームバーと `appArea()` を描き、Scene はその領域にアプリを配置します。シェルはスタックに数えず、落ち続けたときだけ Scene が表示領域とホームボタンの最低限の大枠を出します。
 
 ## バージョンの決め方
 

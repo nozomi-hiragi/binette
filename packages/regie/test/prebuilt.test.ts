@@ -4,7 +4,7 @@ import { writePrebuiltApp } from "../src/cli.ts";
 
 const app: PrebuiltApp = {
   manifest: { id: "example", name: "例", entry: { html: "index.html", as: "main.ts" } },
-  html: "<p>例</p>", icon: "<svg/>", wasm: new Uint8Array([0, 1, 127, 128, 254, 255]),
+  html: "<p>例</p>", css: "p { color: red }", icon: "<svg/>", wasm: new Uint8Array([0, 1, 127, 128, 254, 255]),
 };
 Deno.test(".binapp は全バイトと日本語、任意の icon を往復できる", () => {
   assertEquals(parsePrebuiltApp(stringifyPrebuiltApp(app)), app);
@@ -15,7 +15,7 @@ Deno.test(".binapp は全バイトと日本語、任意の icon を往復でき�
 Deno.test(".binapp の形式名・版・欄・manifest の誤りは日本語の Error", () => {
   const valid = JSON.parse(stringifyPrebuiltApp(app));
   for (const text of ["{", "null", "[]", ...[
-    { format: "other" }, { version: "0.3" }, { html: null }, { icon: null }, { wasm: 1 }, { wasm: "!" },
+    { format: "other" }, { version: "0.3" }, { html: null }, { icon: null }, { css: null }, { wasm: 1 }, { wasm: "!" },
     { wasm: "a" }, { manifest: null }, { manifest: { ...app.manifest, name: 1 } },
   ].map((patch) => JSON.stringify({ ...valid, ...patch }))]) {
     const error = assertThrows(() => parsePrebuiltApp(text), Error);

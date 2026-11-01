@@ -2,10 +2,9 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
 import { State } from "@binette/core";
-import { mountShell } from "../src/index.ts";
+import { mountSystem as mountShell, operate, systemView } from "./system-helper.ts";
 import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
-import { chooseFromMenu } from "./homebar-helper.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -124,11 +123,9 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
         await waitFor(() => activeHost(element) !== homeHost && logOf(element) === "create:0;start:1;resume;");
         await sleep(10);
         if (phase === "call") click(element, "click");
-        else chooseFromMenu(element, "テスト", "閉じる");
+        else operate(element, "テスト", "閉じる");
       }
-      await waitFor(() => {
-        return activeHost(element) === homeHost && !!logOf(element)?.endsWith("resume;") && (phase.startsWith("destroy") || errors.length === 1);
-      });
+      await waitFor(() => activeHost(element) === homeHost && !!logOf(element)?.endsWith("resume;") && (phase.startsWith("destroy") || errors.length === 1));
       assertEquals(launches, 2);
       if (phase.startsWith("destroy")) {
         assertEquals(errors, []); assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, true);
@@ -164,12 +161,12 @@ async function stackFixtures() {
   const app = await build();
   return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "test", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
 }
-// 「名前を閉じる」はホームバーのメニューの「閉じる」で押す
+// 公開システム API で切り替えと終了を行う
 const bar = (element: HTMLElement, label: string) => label.endsWith("を閉じる")
-  ? chooseFromMenu(element, label.slice(0, -"を閉じる".length), "閉じる")
-  : element.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click();
+  ? operate(element, label.slice(0, -"を閉じる".length), "閉じる")
+  : operate(element, label.slice(0, -"を開く".length), "開く");
 
-Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さない。ホームバーで切り替え・閉じる", async () => {
+Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さない。公開 API で切り替え・閉じる", async () => {
   const window = new Window(); const element = host(window); const store = createMemoryAppStore();
   let launches = 0, terminated = 0;
   const shell = await mountShell(element, { apps: await stackFixtures(), store,
@@ -187,7 +184,7 @@ Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さ�
     assertEquals(logOf(b), "create:0;start:1;resume;pause;stop;destroy:1:2;");
     assertEquals(activeHost(element), c); assert(a.isConnected); assert(home.isConnected);
     assertEquals(launches, 4); assertEquals(terminated, 1);
-    assertEquals(element.querySelector('[aria-label="Bを開く"]'), null);
+    assertEquals(systemView(element).instances.some(i => i.name === "B"), false);
     bar(element, "Aを閉じる"); await waitFor(() => !a.isConnected);
     assert(logOf(a)!.endsWith("stop;destroy:0:0;")); assertEquals(activeHost(element), c);
     bar(element, "Cを閉じる"); await waitFor(() => !c.isConnected && activeHost(element) === home);
@@ -227,7 +224,7 @@ Deno.test("Pause を待つあいだに同じアプリへ戻っても、前面を
     release!();
     await waitFor(() => !!a.querySelector("#log")!.textContent!.endsWith("pause;resume;"));
     assertEquals(activeHost(element), a); assertEquals(visible(), 1);
-    assertEquals(element.querySelector('[aria-label="Aを開く"]')!.getAttribute("aria-pressed"), "true");
+    assert(systemView(element).instances.some(i => i.name === "A" && i.id === systemView(element).front));
     bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
     assertEquals(visible(), 1); assert(a.hidden);
   } finally { shell.stop(); await window.happyDOM.close(); }
@@ -274,7 +271,7 @@ Deno.test("隠れたインスタンスの Stop の例外はスタックから外
     const b = activeHost(element);
     await waitFor(() => errors.length === 1);
     assertEquals(activeHost(element), b); assert(!a.isConnected);
-    assertEquals(element.querySelector('[aria-label="Aを開く"]'), null);
+    assertEquals(systemView(element).instances.some(i => i.name === "A"), false);
     assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
     assert((errors[0] as Error).message.includes("背面の失敗"));
     assertEquals(element.querySelector<HTMLElement>('[role=status]')!.hidden, false);
@@ -296,7 +293,7 @@ Deno.test("ホームが onPause で落ちても、開いたアプリから引き
     await sleep(400);
     assertEquals(activeHost(element), opened);
     assertEquals(element.querySelectorAll(".bina-shell-app:not([hidden])").length, 1);
-    assertEquals(element.querySelector('[aria-label="Aを開く"]')!.getAttribute("aria-pressed"), "true");
+    assert(systemView(element).instances.some(i => i.name === "A" && i.id === systemView(element).front));
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 

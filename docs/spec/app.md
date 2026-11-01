@@ -110,7 +110,8 @@ apps/settings/
 
 - 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜14）で誤りになる。15 は欄が「ある」だけで誤りにする
 - パスの形（`..` を含む、絶対 URL など）はまだ確かめない
-- `entry.css` は検査するが、今は読まない
+- `entry.css` を指定すると、ビルド時に相対パスから読み、ビルド済みアプリと保存データにも含める。Scene は表示先ごとに `@scope` で適用し、シェルの子アプリの表示領域にはセレクタを適用しない。CSS の継承は通常どおり行われる
+- CSS は外部の読み込みや大域への影響を避けるため保守的に検査する。`@import`・`@font-face`・`@property`・`@keyframes`・`@layer`・`image-set()`、文字列外のバックスラッシュなどを含む CSS は全体を適用せずエラーを通知する。`url()` は data URL のみ使える
 
 ## Régie が記録するもの（案）
 
@@ -121,7 +122,7 @@ apps/settings/
 - ユーザーが許可した権限
 - 使用量、インストール日時
 
-今は `AppStore` に入手元・manifest・SVG・HTML・WASM・インストール日時を保存します（[regie/store.md](regie/store.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
+今は `AppStore` に入手元・manifest・SVG・HTML・CSS・WASM・インストール日時を保存します（[regie/store.md](regie/store.md#appstore実装済み)）。コミット・ハッシュ・許可した権限・使用量は記録しません。
 
 ## システムアプリ（実装済み）
 

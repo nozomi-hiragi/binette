@@ -53,6 +53,7 @@ export async function buildFolder(root: string, out: string, replique: string, l
       await Deno.writeFile(resolve(target, "app.json"), encode(manifest));
       await Deno.writeFile(resolve(target, "app.wasm"), built.wasm);
       await Deno.writeTextFile(resolve(target, "index.html"), built.html);
+      if (built.css !== undefined) await Deno.writeTextFile(resolve(target, "style.css"), built.css);
       if (icon !== undefined) await Deno.writeTextFile(resolve(target, "icon.svg"), await read(icon));
     } catch (error) {
       throw new Error(`${label}「${name}」を書き出せません。${error instanceof Error ? error.message : String(error)}`, { cause: error });
@@ -127,7 +128,7 @@ export async function buildApps(root: string): Promise<void> {
       for (const name of names) console.log(`system/${output}/${name}`);
     }
     const roles: Record<string, string> = {};
-    for (const name of ["home", "settings"]) {
+    for (const name of ["home", "settings", "shell"]) {
       try {
         const manifest = JSON.parse(await Deno.readTextFile(resolve(system, "apps", name, "app.json")));
         roles[name] = manifest.id;

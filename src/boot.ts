@@ -32,7 +32,8 @@ export async function loadBootApps(
   const boot = JSON.parse(decoder.decode(await required("/boot.json", true)));
   if (
     !boot || typeof boot.roles?.home !== "string" ||
-    typeof boot.roles?.settings !== "string"
+    typeof boot.roles?.settings !== "string" ||
+    typeof boot.roles?.shell !== "string"
   ) {
     throw new Error("boot.json の役割の割り当てが不正です。");
   }
@@ -77,10 +78,17 @@ export async function loadBootApps(
         source === SYSTEM && manifest.id === boot.roles.home &&
         manifest.roles?.includes("home")
       ) roles.home = key;
+      if (
+        source === SYSTEM && manifest.id === boot.roles.shell &&
+        manifest.roles?.includes("shell")
+      ) roles.shell = key;
       if (coreSettings && manifest.id === boot.roles.settings) roles.settings = key;
-      const [wasm, html, icon] = await Promise.all([
+      const [wasm, html, css, icon] = await Promise.all([
         required(`${directory}/app.wasm`, coreSettings),
         required(`${directory}/index.html`, coreSettings),
+        manifest.entry.css === undefined
+          ? undefined
+          : required(`${directory}/style.css`, coreSettings),
         manifest.icon === undefined
           ? undefined
           : required(`${directory}/icon.svg`, coreSettings),
@@ -91,14 +99,15 @@ export async function loadBootApps(
           manifest,
           wasm,
           html: decoder.decode(html),
+          ...(css === undefined ? {} : { css: decoder.decode(css) }),
           ...(icon === undefined ? {} : { icon: decoder.decode(icon) }),
         },
       });
     }
   }
-  if (!roles.home || !roles.settings) {
+  if (!roles.home || !roles.settings || !roles.shell) {
     throw new Error(
-      "boot.json に指定されたホームまたは設定アプリがありません。",
+      "boot.json に指定されたシェル、ホームまたは設定アプリがありません。",
     );
   }
   return { apps, roles };

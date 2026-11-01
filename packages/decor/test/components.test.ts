@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertStrictEquals } from "@std/assert";
 import type { DomOp } from "@binette/core";
 import { Window } from "happy-dom";
-import { appIcon, badge, checkbox, chip, column, createUiDiffer, createUiDom, image, listTile, mount, picker, progress, radio, row, segmented, separator, slider, spacer, spinner, stack, tabs, text,
+import { appArea, appIcon, badge, checkbox, chip, column, createUiDiffer, createUiDom, image, listTile, mount, picker, progress, radio, row, segmented, separator, slider, spacer, spinner, stack, tabs, text,
   type UiNode } from "../src/index.ts";
 
 /** happy-dom の要素を DOM の型として扱う。 */
@@ -232,4 +232,16 @@ Deno.test("TS の mount に apps を渡すと appIcon がその SVG を描き、
     plain.render(appIcon(0));
     assertEquals(other.querySelector("img")!.hasAttribute("src"), false);
   } finally { root.unmount(); plain.unmount(); await window.happyDOM.close(); }
+});
+
+Deno.test("appArea はアプリの表示領域の要素を描く", async () => {
+  const { window, host } = setup();
+  const root = mount(host);
+  try {
+    root.render(column([appArea().grow(), text("バー")]));
+    const area = host.querySelector(".bina-ui-appArea");
+    assert(area !== null);
+    assertEquals(area.tagName.toLowerCase(), "div");
+    assertEquals(area.classList.contains("bina-ui-grow"), true);
+  } finally { root.unmount(); await window.happyDOM.close(); }
 });

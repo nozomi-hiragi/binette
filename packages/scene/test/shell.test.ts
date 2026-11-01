@@ -1,9 +1,9 @@
 import { assert, assertEquals } from "@std/assert";
 import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
-import { mountShell, createShellUi } from "../src/index.ts";
+import { createShellUi } from "../src/index.ts";
+import { mountSystem as mountShell, operate, systemView } from "./system-helper.ts";
 import { buildApp } from "@binette/regie/build";
-import { barLabels, chooseFromMenu } from "./homebar-helper.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
@@ -103,11 +103,11 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     assertEquals([...tiles].map((t) => t.textContent), ["設定", "設定の写し"]);
     assertEquals(element.querySelector("svg"), null);
     assertEquals(tiles[0]!.querySelector("img")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fixtures[0]!.icon!)}`);
-    assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
+    assertEquals(element.querySelector<HTMLElement>(".bina-shell-fallback-bar")!.hidden, false);
     tiles[0]!.click(); tiles[1]!.click();
     await waitFor(() => worker.ready === 2);
     await waitFor(() => element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden === true);
-    assertEquals(element.querySelector<HTMLElement>(".bina-shell-homebar")!.hidden, false);
+    assertEquals(element.querySelector<HTMLElement>(".bina-shell-fallback-bar")!.hidden, false);
     // 宣言 UI の初回 build が反映されるまで待ち、詳細を開く。
     await waitFor(() => {
       if (element.querySelector("[data-bina-key=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。") return true;
@@ -119,7 +119,7 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(element.querySelector("[data-bina-key=description]")!.textContent, "ブラウザだけで動く、アプリの土台です。");
-    element.querySelector<HTMLButtonElement>('[aria-label="設定を開く"]')!.click();
+    operate(element, "設定", "開く");
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=description]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(worker.created, 2); assertEquals(worker.maximum, 2); assertEquals(worker.live, 2);
     assertEquals(errors, []);
@@ -330,7 +330,7 @@ Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候�
   try {
     const host = element.querySelector<HTMLElement>(".bina-shell-apps")!;
     assertEquals(host.hidden, false);
-    assertEquals(host.parentElement, element.querySelector(".bina-shell-stage"));
+    assertEquals(host.parentElement, element.querySelector(".bina-shell-fallback-area"));
     assertEquals(host.closest(".bina-shell-app"), null);
     const buttons = [...host.querySelectorAll<HTMLButtonElement>("button")];
     assertEquals(buttons.map(button => button.textContent), ['<img src=x onerror="alert(1)">', "A", "Z", "a", "あ", "設定"]);
@@ -339,7 +339,7 @@ Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候�
       assertEquals(button.type, "button"); assertEquals(button.getAttribute("aria-label"), `${button.textContent}を開く`);
       assertEquals(button.children.length, 0);
     }
-    assertEquals(barLabels(element), ["ホームを開く", "インストール"]);
+    assertEquals(systemView(element).instances.filter(i => !i.home && !i.closing).map(i => i.name), []);
     shell.stop(); assertEquals(element.children.length, 0);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -361,8 +361,8 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
       if (action === "close") {
         await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
         assertEquals(good.live, 1); assertEquals(good.terminated, 0);
-        assertEquals(barLabels(element), ["ホームを開く", "設定を開く", "インストール"]);
-        chooseFromMenu(element, "設定", "閉じる");
+        assertEquals(systemView(element).instances.filter(i => !i.home && !i.closing).map(i => i.name), ["設定"]);
+        operate(element, "設定", "閉じる");
       } else if (action === "startup") bad.emit({ type: "failed", message: "アプリの起動失敗" });
       else {
         bad.emit({ type: "ready", exports: [] });
@@ -380,7 +380,7 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
         }
       }
       await waitFor(() => !host.hidden && element.querySelector(".bina-shell-app") === null);
-      assertEquals(count, 2); assertEquals(barLabels(element), ["ホームを開く", "インストール"]);
+      assertEquals(count, 2); assertEquals(systemView(element).instances.filter(i => !i.home && !i.closing).map(i => i.name), []);
       assertEquals(errors.length, action === "startup" || action === "crash" ? 2 : 1);
     } finally { shell.stop(); await window.happyDOM.close(); }
   });
@@ -400,11 +400,11 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
     host.querySelector<HTMLButtonElement>("button")!.click();
     await waitFor(() => resumed === 1);
     assertEquals(host.hidden, true);
-    element.querySelector<HTMLButtonElement>('.bina-shell-homebar [aria-label=ホームを開く]')!.click();
+    operate(element, "ホーム", "開く");
     await waitFor(() => resumed === 2);
-    element.querySelector<HTMLButtonElement>('.bina-shell-homebar [aria-label="設定を開く"]')!.click();
+    operate(element, "設定", "開く");
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
-    chooseFromMenu(element, "設定", "閉じる");
+    operate(element, "設定", "閉じる");
     await waitFor(() => element.querySelector("[data-bina-key=debug]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(host.hidden, true); assertEquals(count, 3); assertEquals(good.live, 1);
   } finally { shell.stop(); await window.happyDOM.close(); }
@@ -511,7 +511,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
     assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=homes]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
-    chooseFromMenu(element, "設定", "閉じる");
+    operate(element, "設定", "閉じる");
     await waitFor(() => element.querySelector("[data-bina-key=homes]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals((await store.system.listLaunches()).at(-1)!.app, otherKey);
     shell.stop();
@@ -658,4 +658,35 @@ Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭
     await waitFor(() => times.length >= before + 2);
     assert(times[before + 1]! - times[before]! < 600, `待ちが戻っていません: ${times[before + 1]! - times[before]!}`);
   } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ライブの透かしはアプリ表示領域と最低限の大枠を追い、dialog は移さない", async () => {
+  const window = new Window(); const element = elementIn(window);
+  const ui = createShellUi(element, { installed: false });
+  const state = { instances: [], front: undefined, apps: [], clearError: false };
+  try {
+    const root = element.querySelector<HTMLElement>(".bina-shell")!;
+    const host = element.querySelector<HTMLElement>(".bina-shell-host")!;
+    const fallback = element.querySelector<HTMLElement>(".bina-shell-fallback-area")!;
+    const watermark = element.querySelector<HTMLElement>(".bina-shell-live")!;
+    const dialog = element.querySelector<HTMLDialogElement>("dialog")!;
+    const area = window.document.createElement("div") as unknown as HTMLElement;
+    area.className = "bina-ui-appArea";
+    host.append(area);
+    ui.update(state);
+    assertEquals(watermark.parentElement, area);
+    ui.requireInstall("保存");
+    assertEquals(dialog.parentElement, root);
+    assertEquals(dialog.open, true);
+    ui.update({ ...state, shellUnavailable: true });
+    assertEquals(watermark.parentElement, fallback);
+    // 再起動後の新しい木にも同じ透かしを移し、古い木には残さない
+    const restartedArea = area.cloneNode() as HTMLElement;
+    host.replaceChildren(restartedArea);
+    ui.update(state);
+    assertEquals(watermark.parentElement, restartedArea);
+    assertEquals(element.querySelectorAll(".bina-shell-live").length, 1);
+    assertEquals(dialog.parentElement, root);
+    assertEquals(dialog.open, true);
+  } finally { ui.stop(); await window.happyDOM.close(); }
 });

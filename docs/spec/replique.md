@@ -133,7 +133,7 @@ Element の中身は i32 の handle です。id とリスナーは Map で保持
 | `app.lastKind` / `app.lastCause` | なし（i32 を返す。今はどちらも 0） |
 | `app.finish` | なし（自分を閉じる要求） |
 
-アプリは `apps.*`・`os.*`・`storage.*` の import を直接は使わず、辞書から取ったクラスを通します。辞書に載っていないキーの import を直接呼ぶと（辞書を通さない呼び出し）、権限のない呼び出しとして例外でアプリを終了します（[regie/run.md](regie/run.md#メッセージ実装済み)）。番号の範囲外も例外です。任意の URL や SVG をアプリから渡す API はありません。
+アプリは `apps.*`・`os.*`・`storage.*`・`shell.*` の import を直接は使わず、辞書から取ったクラスを通します。辞書に載っていないキーの import を直接呼ぶと（辞書を通さない呼び出し）、権限のない呼び出しとして例外でアプリを終了します（[regie/run.md](regie/run.md#メッセージ実装済み)）。番号の範囲外も例外です。任意の URL や SVG をアプリから渡す API はありません。
 
 ## API の辞書（実装済み、形は案）
 
@@ -153,6 +153,7 @@ export class Api {
 
 | キー | クラス | 届く相手 | 内容 |
 | --- | --- | --- | --- |
+| `shell` | `ShellApi` | シェル | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知は入口だけ（[apps/shell.md](apps/shell.md)） |
 | `apps` | `AppsApi` | ホーム（とシェル） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、`role(role)`・`candidateCount(role)`・`candidateName(role, i)`・`candidateId(role, i)`・`assign(role, i)`、`launchCount()`・`launchTime(i)`・`launchName(i)`、`updateAvailable()`・`update()` |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリごとのデータ（`/data/<id>/`） |
@@ -173,7 +174,7 @@ class Home extends App {
 
 - get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
-- `role(role)` は役割に割り当てたアプリの installedAppKey（`JSON.stringify([source, manifest.id])`）です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・installedAppKey です。割り当てを変えられるのは `home` だけ（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
+- `role(role)` は役割に割り当てたアプリの installedAppKey（`JSON.stringify([source, manifest.id])`）です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・installedAppKey です。割り当てを変えられるのは `home` と `shell`（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ installedAppKey。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
 - `updateAvailable()` は設定アプリの起動時に、新しい版の `/system` があったかです。`update()` は OS に更新を頼みます。OS は `/system` を入れ替えて再読み込みします。完了や失敗は戻りません（失敗は OS のエラー表示に出ます）。更新を渡されていないときの `update()` は何もしません
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います

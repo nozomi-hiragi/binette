@@ -1,0 +1,12 @@
+{
+  "id": "io.github.nozomi-hiragi.binette.shell",
+  "version": "0.1.0",
+  "binette": "0.2",
+  "name": "シェル",
+  "roles": ["shell"],
+  "icon": "icon.svg",
+  "entry": {
+    "css": "src/style.css",
+    "as": "src/main.ts"
+  }
+}

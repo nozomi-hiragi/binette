@@ -1,5 +1,5 @@
 import { createUiDom } from "@binette/decor";
-import { sanitizeHtml } from "./sanitize.ts";
+import { sanitizeHtml, scopeCss } from "./sanitize.ts";
 import type { DomOp } from "@binette/core";
 import type { Process } from "@binette/regie";
 
@@ -9,6 +9,12 @@ export interface MountOptions {
   apps?: { id: string; name: string; icon?: string }[];
   /** アプリを終了しない誤り */
   onError?: (error: unknown) => void;
+  /** DOM 操作を反映した後の通知 */
+  onDom?: () => void;
+  /** アプリの CSS（`entry.css`）。このアプリの表示先の中だけに効かせる */
+  css?: string;
+  /** シェルからアプリ表示領域の内側へ DOM 操作を届かせない */
+  isolateAppArea?: boolean;
 }
 
 /** 描いたアプリのリスナー */
@@ -24,12 +30,27 @@ export function mountCounts(mounted: MountedApp): { ids: number; created: number
   return counts.get(mounted)?.();
 }
 
+let scopes = 0;
+
 /** HTML を描き、プロセスからの DOM 操作を反映する */
 export function mountApp(element: HTMLElement, html: string, process: Process, options: MountOptions = {}): MountedApp {
   // アプリの領域が外に出ないようにする
   element.style.contain = "paint";
   element.replaceChildren(sanitizeHtml(element.ownerDocument, html));
+  element.removeAttribute("data-bina-scope");
   const report = (error: unknown) => options.onError?.(error);
+  if (options.css) {
+    // 表示先ごとの印を付け、CSS はその印の中（子のアプリの表示領域は除く）にだけ効かせる
+    const id = String(++scopes);
+    const scoped = scopeCss(options.css, id);
+    if (scoped === null) report(new Error("アプリの CSS を読み込めません。{} の対応が取れないか、外部を読み込んでいます。"));
+    else {
+      const style = element.ownerDocument.createElement("style");
+      style.textContent = scoped;
+      element.setAttribute("data-bina-scope", id);
+      element.append(style);
+    }
+  }
   const ids = new Map<number, string>();
   const created = new Map<number, HTMLElement>();
   const removers = new Map<number, { handle: number; type: string; node: HTMLElement; remove: () => void }>();
@@ -42,7 +63,8 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
     if (made) return made;
     const id = ids.get(handle);
     if (id === undefined) return undefined;
-    const found = element.querySelector<HTMLElement>(`[id="${escapeId(id)}"]`);
+    const found = [...element.querySelectorAll<HTMLElement>(`[id="${escapeId(id)}"]`)].find(node =>
+      !options.isolateAppArea || !node.closest(".bina-ui-appArea"));
     return found && found !== element && element.contains(found) ? found : undefined;
   };
   // DOM を変える前に対象を調べる。byId はその時点の DOM に対して解決する。
@@ -123,7 +145,7 @@ export function mountApp(element: HTMLElement, html: string, process: Process, o
       }
     }
   };
-  process.attach(applyDom);
+  process.attach(ops => { applyDom(ops); options.onDom?.(); });
   const mounted = { stop() { stopped = true; for (const entry of removers.values()) entry.remove(); ui.stop(); removers.clear(); ids.clear(); created.clear(); } };
   counts.set(mounted, () => ({ ids: ids.size, created: created.size, removers: removers.size }));
   return mounted;

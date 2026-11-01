@@ -2,7 +2,7 @@
 
 [システムアプリの目次](README.md)
 
-ホームは、入っているアプリを並べ、押されたアプリを開くシステムアプリです（決定）。並べ方はホームの宣言的 UI が持ち、見た目は Scene の部品が持ち、どれをホームにするか・アプリを開く流れは Régie（[regie/system.md](../regie/system.md)）、アプリを置く枠とホームバーは Scene（[scene/shell.md](../scene/shell.md)）が持ちます。以下は実装済み（形は案）です。
+ホームは、入っているアプリを並べ、押されたアプリを開くシステムアプリです（決定）。並べ方はホームの宣言的 UI が持ち、見た目は Scene の部品が持ち、どれをホームにするか・アプリを開く流れは Régie（[regie/system.md](../regie/system.md)）、ホームバーと表示領域の宣言はシェル（[shell.md](shell.md)）、アプリの配置は Scene（[scene/shell.md](../scene/shell.md)）が持ちます。以下は実装済み（形は案）です。
 
 ## 役割
 

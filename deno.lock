@@ -1550,6 +1550,11 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
+      "apps/shell": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
       "bundled/designer": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"

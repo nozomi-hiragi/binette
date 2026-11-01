@@ -1,0 +1,48 @@
+/* シェルのホームバー。見た目は Décor の木のキー（data-bina-key）で選び、この CSS はシェルの表示先の中だけに効く（アプリの表示領域の中には効かない）。
+   色は --bina-shell-* とホストが与える OS の役割の色（--bina-ui-*）だけで決め、ライトとダークで同じ規則にする */
+:scope {
+  --shell-accent: var(--bina-ui-accent, var(--bina-shell-focus, #3273b9));
+  /* 淡いアクセントの面。下の面に透かして重ねるので、ダークの持ち上げた台の上でも沈まない */
+  --shell-accent-soft: color-mix(in srgb, var(--shell-accent) 14%, transparent);
+  --shell-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --shell-line: var(--bina-ui-line, var(--bina-shell-border, #d5dae1));
+  --shell-dock-background: var(--bina-shell-dock-background, var(--bina-shell-surface, #fff));
+}
+/* 左にホーム、中央にドック、右にインストール。ドックが広いときは両端を縮めずドックの中だけをスクロールする */
+[data-bina-key="homebar"] { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr); align-items: center; gap: var(--bina-shell-gap, 8px); box-sizing: content-box; flex-shrink: 0; margin-top: auto; min-height: 52px; padding: var(--bina-shell-homebar-padding-block, 4px) max(var(--bina-shell-padding, 12px), env(safe-area-inset-right, 0px)) max(var(--bina-shell-homebar-padding-block, 4px), env(safe-area-inset-bottom, 0px)) max(var(--bina-shell-padding, 12px), env(safe-area-inset-left, 0px)); border-top: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); container: bina-shell-homebar / inline-size; }
+[data-bina-key="homebar"] .bina-ui-button { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-select: none; }
+[data-bina-key="home"], [data-bina-key="install"] { grid-row: 1; display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-width: 0; min-height: 0; height: 36px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; line-height: 1; white-space: nowrap; }
+/* アイコンだけのボタン。線画を mask にして currentColor で塗るので、ダークでも文字と同じ色になる */
+[data-bina-key="home"]::before, [data-bina-key="install"]::before { content: ""; flex: none; width: 20px; height: 20px; background: currentColor; -webkit-mask: var(--shell-icon) center / contain no-repeat; mask: var(--shell-icon) center / contain no-repeat; }
+[data-bina-key="home"] { grid-column: 1; justify-self: start; width: 36px; --shell-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2010.4%2012%204l8%206.4V19a1%201%200%200%201-1%201h-4.5v-5.5h-5V20H5a1%201%200%200%201-1-1z%22%2F%3E%3C%2Fsvg%3E"); }
+[data-bina-key="home"]:hover { background: var(--shell-hover); }
+[data-bina-key="home"][aria-pressed="true"] { background: var(--shell-accent-soft); color: var(--bina-ui-accent-text, var(--shell-accent)); }
+[data-bina-key="install"] { grid-column: 3; justify-self: end; height: 32px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--shell-accent); color: var(--bina-ui-accent-content, var(--bina-shell-surface, #fff)); font-size: 13px; font-weight: 600; --shell-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%204.5v13M6.5%2012l5.5%205.5%205.5-5.5%22%2F%3E%3C%2Fsvg%3E"); }
+[data-bina-key="install"]::before { width: 16px; height: 16px; }
+[data-bina-key="install"]:not(:disabled):hover { background: color-mix(in srgb, var(--shell-accent) 86%, var(--bina-shell-color, #16181d)); }
+[data-bina-key="install"] > .bina-ui-text { padding: 0; }
+[data-bina-key="home"]:focus-visible, [data-bina-key="install"]:focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
+/* 狭い画面では、インストールもアイコンだけにする */
+@container bina-shell-homebar (width < 720px) {
+  [data-bina-key="install"] { width: 36px; height: 36px; padding: 0; border-radius: 10px; background: transparent; color: inherit; }
+  [data-bina-key="install"]::before { width: 20px; height: 20px; }
+  [data-bina-key="install"]:not(:disabled):hover { background: var(--shell-hover); }
+  [data-bina-key="install"] > .bina-ui-text { display: none; }
+}
+/* 開いているアプリの台。吹き出しは台の上に出すので、ボタンの上端から台の余白の分だけ離す */
+[data-bina-key="dock"] { grid-row: 1; grid-column: 2; justify-self: center; display: flex; align-items: center; gap: 2px; box-sizing: border-box; min-width: 0; max-width: 100%; padding: 6px; border-radius: 16px; background: var(--shell-dock-background); box-shadow: var(--bina-shell-dock-shadow, 0 0 0 1px color-mix(in srgb, currentColor 8%, transparent), 0 2px 8px color-mix(in srgb, var(--bina-shell-color, #16181d) 10%, transparent)); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; --bina-ui-icon-size: 26px; --bina-ui-tip-gap: 12px; }
+[data-bina-key="dock"]::-webkit-scrollbar { display: none; }
+[data-bina-key="dock"] > .bina-ui-button { position: relative; flex: none; display: grid; place-items: center; box-sizing: border-box; width: 40px; height: 40px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; }
+[data-bina-key="dock"] > .bina-ui-button:hover { background: var(--shell-hover); }
+/* 前面のアプリは淡いアクセントの面と点で示す */
+[data-bina-key="dock"] > .bina-ui-button[aria-pressed="true"] { background: var(--shell-accent-soft); }
+[data-bina-key="dock"] > .bina-ui-button[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--shell-accent); }
+/* ドックはスクロールで外側を切るので、フォーカスの枠は内側に引く */
+[data-bina-key="dock"] > .bina-ui-button:focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: -2px; }
+[data-bina-key="dock"] > .bina-ui-button > .bina-ui-appIcon { display: block; pointer-events: none; }
+/* アイコンの無いアプリの頭文字の札 */
+[data-bina-key="dock"] > .bina-ui-button > .bina-ui-text { display: grid; place-items: center; box-sizing: border-box; width: 26px; height: 26px; padding: 0; border-radius: 8px; background: var(--bina-ui-sunken, var(--bina-shell-background, #f3f5f8)); box-shadow: inset 0 0 0 1px var(--shell-line); font-size: 13px; font-weight: 600; line-height: 1; }
+/* ダークでは台を背景より少し明るくして持ち上げる。light-dark() の無いブラウザはライトの値のまま */
+@supports (color: light-dark(#fff, #000)) {
+  [data-bina-key="dock"] { background: var(--bina-shell-dock-background, light-dark(var(--bina-shell-surface, #fff), color-mix(in srgb, var(--bina-shell-color, #f5f6f8) 9%, var(--bina-shell-background, #1a1c21)))); }
+}

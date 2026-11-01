@@ -5,7 +5,7 @@
 Binette を「カーネルだけ配り、残りは取ってきてブラウザの中に置いて動かす」形にするための仕様です。目的は、アプリの上でアプリを作れること、ホームバーのような OS の部品もアプリの上でいじれることです（のぞみ 2026-11-01）。
 
 > [!NOTE]
-> 2026-11-01 に決めた構成です。目録とファイルの木からの起動、カーネルの分離配布、Service Worker、役割の割り当てと辞書 API、設定アプリの更新は実装済みです。シェルはこれから実装します。ファイル名・パス・関数名は、どれも **案** です。役割と API の受け渡しは [roles.md](roles.md) にあります。
+> 2026-11-01 に決めた構成です。目録とファイルの木からの起動、カーネルの分離配布、Service Worker、役割の割り当てと辞書 API、設定アプリの更新は実装済みです。常駐シェルとアプリ表示領域も実装済みです。ファイル名・パス・関数名は、どれも **案** です。役割と API の受け渡しは [roles.md](roles.md) にあります。
 
 ## 方針（決定 2026-11-01）
 
@@ -72,7 +72,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 
 `manifest.json` は `{ "version": "…", "files": [{ "path": "system/boot.json", "sha256": "…", "size": 123 }] }` の形です。SHA-256 は小文字の 16 進、サイズはバイト数です。版はファイル一覧の JSON の SHA-256 で、内容が変わると変わります。保存した目録は `/system/.manifest.json` に置き、固定物と一緒に入れ替えます。
 
-`system/boot.json` は `roles.home`・`roles.settings` に既定アプリの ID を入れます。カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg` を置きます。同梱アプリの配置と入手元は案です。シェルとその役割は後の PR で追加します。
+`system/boot.json` は `roles.shell`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg` を置きます。同梱アプリの配置と入手元は案です。既定のシェルは `apps/shell` です。
 
 ## アプリの置き方（決定 2026-11-01）
 

@@ -1,4 +1,3 @@
-import { resolve } from "@std/path";
 import type { Plugin } from "vite";
 
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -11,7 +10,8 @@ export function kernelIntegrity(): Plugin {
     apply: "build",
     enforce: "post",
     configResolved(config) {
-      outDir = resolve(config.root, config.build.outDir);
+      // Vite が設定を束ねると @std/path を解決できないので、自前でつなぐ
+      outDir = config.build.outDir.startsWith("/") ? config.build.outDir : `${config.root}/${config.build.outDir}`;
     },
     generateBundle: {
       order: "post",
@@ -33,7 +33,7 @@ export function kernelIntegrity(): Plugin {
     },
     // SW は入口とカーネルをキャッシュから返すので、どれかが変わったら sw.js の中身も変え、ブラウザに新しい SW を入れさせる
     async closeBundle() {
-      const sw = resolve(outDir, "sw.js");
+      const sw = `${outDir}/sw.js`;
       let source: string;
       try {
         source = await Deno.readTextFile(sw);
@@ -46,7 +46,7 @@ export function kernelIntegrity(): Plugin {
       for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js", "build-worker.js"]) {
         let data: Uint8Array;
         try {
-          data = await Deno.readFile(resolve(outDir, name));
+          data = await Deno.readFile(`${outDir}/${name}`);
         } catch (error) {
           if (error instanceof Deno.errors.NotFound && !["regie.js", "regie-worker.js", "build-worker.js"].includes(name)) continue;
           throw error;

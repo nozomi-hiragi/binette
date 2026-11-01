@@ -116,7 +116,7 @@ const click = (result: Output | RecordOutput, id: string) => {
 };
 async function mountSystem(result: Output, options: Omit<SystemOptions, "ui">) {
   const system = await startSystem({ ...options, ui: result.ui });
-  await system.openHome();
+  if (!result.view.shellUnavailable) await system.openHome();
   return system;
 }
 function bar(result: Output, system: BinetteSystem, label: string) {
@@ -591,4 +591,26 @@ Deno.test("更新の失敗は report に届き、起動中のアプリを止め�
     assertEquals((element.errors[0] as Error).message, "更新に失敗");
     assertEquals(element.view.instances.length, 2);
   } finally { shell.stop(); }
+});
+
+Deno.test("シェルが起動後に落ち続けると再起動を止め、最低限の大枠でホームを開く", async () => {
+  const crashing = await build(`import { Api, App, Last, launch } from "jsr:@binette/replique";
+class Shell extends App {
+  onCreate(_last: Last, _api: Api): void {}
+  onResume(): void { unreachable(); }
+}
+launch(new Shell());`);
+  crashing.manifest = { ...crashing.manifest, id: "shell", roles: ["shell"] };
+  const element = output();
+  let starts = 0;
+  const system = await startSystem({ ui: element.ui, apps: [homeApp, { source: "binette:system", prebuilt: crashing }],
+    store: createMemoryAppStore(), homeRetryWindow: 220, createWorker() { starts++; return createWorker(); } });
+  try {
+    await waitFor(() => element.view.shellUnavailable === true && element.view.instances.some(instance => instance.home));
+    assert(starts >= 4, `再起動とホームの起動が足りません: ${starts}`);
+    assertEquals(element.view.instances.some(instance => instance.key.endsWith("shell")), false);
+    const settled = starts;
+    await sleep(400);
+    assertEquals(starts, settled);
+  } finally { system.stop(); }
 });

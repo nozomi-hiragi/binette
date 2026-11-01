@@ -3,13 +3,13 @@ import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial } from "./launch.ts";
+import type { ApiDenial, ShellSnapshot } from "./launch.ts";
 import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
 export type SystemApp = { source: string } & (
   | { read: (path: string) => Promise<string>; prebuilt?: never }
-  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string }; read?: never }
+  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string; css?: string }; read?: never }
 );
 
 /** システムの設定 */
@@ -30,9 +30,10 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
 
 /** システムが見せ方を受け持つ側に頼むこと */
 export interface SystemUi {
-  present(instance: { id: number; app: InstalledApp; home: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
+  present(instance: { id: number; app: InstalledApp; home: boolean; shell?: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
   update(view: SystemView): void;
   report(error: unknown): void;
+  install?(): void;
 }
 
 /** ホームバーと前面と Apps に見せる状態 */
@@ -42,6 +43,8 @@ export interface SystemView {
   front: number | "apps" | undefined;
   apps: { key: string; name: string }[];
   clearError: boolean;
+  /** シェルが落ち続けてフォールバック UI を描くべきか */
+  shellUnavailable?: boolean;
 }
 
 /** 起動したシステム */
@@ -50,6 +53,7 @@ export interface BinetteSystem {
   open(key: string): Promise<void>;
   close(id: number): Promise<void>;
   setPage(page: { visible: boolean; frozen: boolean }): void;
+  setInstallState?(installed: boolean, busy: boolean): void;
   stop(): void;
 }
 
@@ -62,9 +66,10 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
   os: { roles: ["settings"] },
   storage: {},
   fs: { permission: "fs" },
+  shell: { roles: ["shell"] },
 };
-/** 設定アプリで割り当てを変えられる役割。設定は固定で、シェルは後で足す */
-const ASSIGNABLE_ROLES = ["home"];
+/** 設定アプリで割り当てを変えられる役割。設定アプリ自体は固定 */
+const ASSIGNABLE_ROLES = ["home", "shell"];
 const SYSTEM_SOURCE = "binette:system";
 
 const HOME_RESTART_FIRST = 100;
@@ -82,6 +87,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const page = crypto.randomUUID();
   let frozen = false;
   let visible = true;
+  let installed = false;
+  let installBusy = false;
   let nextId = 0;
   let openedHome = false;
   let appsShown = false;
@@ -89,6 +96,19 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let homeFailingSince: number | undefined;
   let homeUnavailable = false;
+  let shellSession: Session | undefined;
+  let shellFailingSince: number | undefined;
+  let shellRestartDelay = HOME_RESTART_FIRST;
+  let shellRestartTimer: ReturnType<typeof setTimeout> | undefined;
+  let shellUnavailable = false;
+  const mayRestartShell = (startedAt?: number) => {
+    const now = performance.now();
+    if (shellFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) {
+      shellFailingSince = now;
+      shellRestartDelay = HOME_RESTART_FIRST;
+    }
+    return now - shellFailingSince < settings.homeRetryWindow;
+  };
   // 落ちたホームを起動し直す前の待ち。落ちるたびに倍にし、HOME_RESTART_MAX で頭打ちにする
   let homeRestartDelay = HOME_RESTART_FIRST;
   const resetHomeFailures = () => {
@@ -126,6 +146,15 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     sessions.delete(session);
     renderBar();
   };
+  const cutShell = () => {
+    if (!shellSession) return;
+    const session = shellSession;
+    shellSession = undefined;
+    session.controller.abort();
+    session.mounted?.stop();
+    session.view?.remove();
+    renderBar();
+  };
   const installedApps: InstalledApp[] = [];
   const seen = new Set<string>();
   for (const app of options.apps) {
@@ -137,8 +166,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       let installed = await options.store.get(key);
       if (app.prebuilt !== undefined) {
         // ビルドが要らないので毎回入れ直す。版を上げ忘れた OS の更新でも古いものを残さない。入れた日時は最初のものを保つ
-        const { html, icon, wasm } = app.prebuilt;
-        installed = { key, source: app.source, manifest, icon, html, wasm, installedAt: installed?.installedAt ?? Date.now() };
+        const { html, css, icon, wasm } = app.prebuilt;
+        installed = { key, source: app.source, manifest, icon, html, ...(css === undefined ? {} : { css }), wasm, installedAt: installed?.installedAt ?? Date.now() };
         await options.store.put(installed);
       } else if (!installed || installed.manifest.version !== manifest.version) {
         const path = iconPath(manifest.icon);
@@ -148,7 +177,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           ? await (await import("./browser-build.ts")).buildAppInWorker(read, { libraries: options.libraries, ...options.browserBuild })
           : await (await import("./build.ts")).buildApp(read, options);
         const icon = path === undefined ? undefined : await app.read(path);
-        installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, wasm: built.wasm, installedAt: Date.now() };
+        installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, ...(built.css === undefined ? {} : { css: built.css }), wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
       }
       installedApps.push(installed);
@@ -163,12 +192,13 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const candidates = (role: string) => ASSIGNABLE_ROLES.includes(role) ? holders(role) : [];
   const assign = (role: string): InstalledApp | undefined => {
     const list = role === "settings" ? holders(role).filter(app => app.source === SYSTEM_SOURCE) : holders(role);
-    const chosen = ASSIGNABLE_ROLES.includes(role) ? settings.roles[role] : undefined;
+    const chosen = role === "settings" ? undefined : settings.roles[role];
     return list.find(app => app.key === chosen) ?? list.find(app => app.key === options.roles?.[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
   };
-  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings") };
+  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), shell: assign("shell") };
   let home = assigned.home;
-  const apps = installedApps.filter(app => !app.manifest.roles?.includes("home"));
+  let shell = assigned.shell;
+  const apps = installedApps.filter(app => !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("shell"));
   const updateAvailable = options.update !== undefined;
   let saving = Promise.resolve();
   const saveSettings = () => {
@@ -189,7 +219,22 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   /** 設定アプリが、役割に割り当てるアプリを候補の番号で選ぶ */
   const selectRole = async (role: string, i: number) => {
     const list = candidates(role);
-    if (stopped || role !== "home" || !Number.isInteger(i) || !list[i]) return;
+    if (stopped || !Number.isInteger(i) || !list[i]) return;
+    if (role === "shell") {
+      const previous = shell;
+      shell = assigned.shell = list[i]!;
+      settings.roles.shell = shell.key;
+      saveSettings();
+      if (previous?.key !== shell.key || shellUnavailable) {
+        clearTimeout(shellRestartTimer);
+        shellFailingSince = undefined;
+        shellRestartDelay = HOME_RESTART_FIRST;
+        shellUnavailable = false;
+        cutShell();
+        await startShell();
+      }
+      return;
+    }
     const previous = home;
     home = assigned.home = list[i]!;
     settings.roles.home = home.key;
@@ -226,12 +271,27 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       updateAvailable,
     };
   };
+  const shellSnapshot = (): ShellSnapshot => {
+    const instances = [...sessions].filter(s => !s.home && !s.closing).map(s => ({
+      id: s.id,
+      appIndex: apps.findIndex(app => app.key === s.installed.key),
+      name: s.installed.manifest.name,
+      front: active === s,
+      hasIcon: s.installed.icon !== undefined,
+    }));
+    const homeFront = active !== undefined && active.home;
+    return { instances, homeFront, installed, installBusy };
+  };
+
   function renderBar(clearError = false) {
+    const snapshot = shellSnapshot();
+    shellSession?.mounted?.syncShell?.(snapshot);
     options.ui.update({
       instances: [...sessions].map(s => ({ id: s.id, key: s.installed.key, name: s.installed.manifest.name, icon: s.installed.icon, home: s.home, closing: s.closing })),
       front: appsShown ? "apps" : active === hiding ? undefined : active?.id,
       apps: [...apps].sort((a, b) => a.manifest.name < b.manifest.name ? -1 : a.manifest.name > b.manifest.name ? 1 : 0).map(app => ({ key: app.key, name: app.manifest.name })),
       clearError,
+      shellUnavailable: shellUnavailable || !shell,
     });
   }
   function showApps() {
@@ -403,16 +463,141 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       }
     }
   }
+  const openHome = async () => {
+    if (!home) return;
+    if (homeUnavailable) { homeUnavailable = false; resetHomeFailures(); }
+    const clearStatus = openedHome;
+    openedHome = true;
+    await show(home, true, clearStatus);
+  };
+  function restartShell() {
+    const delay = shellRestartDelay;
+    shellRestartDelay = Math.min(shellRestartDelay * 2, HOME_RESTART_MAX);
+    clearTimeout(shellRestartTimer);
+    shellRestartTimer = setTimeout(() => {
+      if (!stopped && shell) void startShell();
+    }, delay);
+  }
+  async function startShell(): Promise<void> {
+    if (stopped || !shell) {
+      shellUnavailable = true;
+      renderBar();
+      return;
+    }
+    const selectedShell = shell;
+    clearTimeout(shellRestartTimer);
+    if (shellSession) cutShell();
+    const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedShell, home: false, finish: false, closing: false, lastShown: ++shown };
+    shellSession = session;
+    try {
+      const api = apiOf(selectedShell);
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedShell.manifest.id)).catch(() => undefined) : undefined;
+      if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
+      if (shellSession !== session || stopped) return;
+      const mounted = await startProcess(selectedShell.wasm, {
+        declarative: selectedShell.manifest.entry.html === undefined,
+        createWorker: options.createWorker,
+        workerUrl: options.workerUrl,
+        callTimeout: settings.callTimeout,
+        stopDelay: settings.stopDelay,
+        destroyTimeout: settings.destroyTimeout,
+        persistence: { store: options.store.system, key: selectedShell.key, historyLimit: settings.historyLimit },
+        page,
+        signal: session.controller.signal,
+        onError: error => { if (shellSession === session) report(error); },
+        onExit(error) {
+          if (shellSession !== session) return;
+          cutShell();
+          report(error);
+          if (mayRestartShell(session.startedAt)) restartShell();
+          else {
+            shellUnavailable = true;
+            renderBar();
+            void openHome();
+          }
+        },
+        onFinish() {
+          if (shellSession !== session) return;
+          cutShell();
+          if (mayRestartShell(session.startedAt)) restartShell();
+          else {
+            shellUnavailable = true;
+            renderBar();
+            void openHome();
+          }
+        },
+        grants: {
+          denied: api.denied,
+          shell: shellSnapshot(),
+          ...(storage ? { storage } : {}),
+          ...(api.keys.has("apps") ? { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) } : {}),
+        },
+        onStorage(name, value) {
+          if (!api.keys.has("storage")) return;
+          saving = saving.then(() => options.store.data.write(selectedShell.manifest.id, name, value)).catch(report);
+        },
+        onShellOpen(id) {
+          const target = [...sessions].find(s => s.id === id && !s.home && !s.closing);
+          if (target) void show(target.installed, false);
+        },
+        onShellClose(id) {
+          const target = [...sessions].find(s => s.id === id && !s.home && !s.closing);
+          if (target) void close(target, DestroyKind.User, DestroyCause.Os);
+        },
+        onShellHome() { void openHome(); },
+        onShellSettings() {
+          const target = assigned.settings;
+          if (target) void show(target, false);
+        },
+        onShellBack() {
+          if (active && !active.home) void returnHome();
+        },
+        onShellNotify(_text) {},
+        onShellInstall() { options.ui.install?.(); },
+        onOpen(i) {
+          if (!api.keys.has("apps") || !Number.isInteger(i) || !apps[i]) return;
+          void show(apps[i]!, false);
+        },
+      });
+      if (shellSession !== session || stopped) { mounted.stop(); return; }
+      session.view = options.ui.present({
+        id: session.id, app: selectedShell, home: false, shell: true,
+        apps: api.keys.has("apps") ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
+      }, mounted);
+      await mounted.begin();
+      if (shellSession !== session || stopped) { mounted.stop(); session.view.remove(); return; }
+      session.mounted = mounted;
+      mounted.setStopDelay(settings.stopDelay);
+      session.startedAt = performance.now();
+      mounted.setFrozen(frozen);
+      // 隠れている間に起動し終えたシェルは、ふつうのアプリと同じく Pause に戻す
+      if (!visible || frozen) await mounted.pause().catch(() => {});
+      if (shellSession !== session || stopped) return;
+      shellUnavailable = false;
+      renderBar();
+    } catch (error) {
+      if (shellSession !== session) return;
+      cutShell();
+      report(error);
+      if (mayRestartShell()) restartShell();
+      else {
+        shellUnavailable = true;
+        renderBar();
+        void openHome();
+      }
+    }
+  }
   renderBar();
   if (!home) report(new Error("ホームのシステムアプリがありません。"));
+  if (shell) {
+    await startShell();
+  } else {
+    shellUnavailable = true;
+    renderBar();
+    await openHome();
+  }
   return {
-    async openHome() {
-      if (!home) return;
-      if (homeUnavailable) { homeUnavailable = false; resetHomeFailures(); }
-      const clearStatus = openedHome;
-      openedHome = true;
-      await show(home, true, clearStatus);
-    },
+    openHome,
     async open(key) {
       const app = apps.find(app => app.key === key);
       if (app) await show(app, false);
@@ -421,13 +606,21 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const session = [...sessions].find(session => session.id === id);
       if (session) await close(session, DestroyKind.User, DestroyCause.Os);
     },
+    setInstallState(value, busy) {
+      if (stopped || (installed === value && installBusy === busy)) return;
+      installed = value;
+      installBusy = busy;
+      renderBar();
+    },
     setPage(page) {
       if (stopped) return;
       visible = page.visible;
       if (frozen !== page.frozen) {
         frozen = page.frozen;
+        shellSession?.mounted?.setFrozen(frozen);
         for (const session of sessions) session.mounted?.setFrozen(frozen);
       }
+      shellSession?.mounted && void (visible && !frozen ? shellSession.mounted.resume() : shellSession.mounted.pause()).catch(() => {});
       const mounted = active?.mounted;
       if (mounted) void (visible && !frozen ? mounted.resume() : mounted.pause()).catch(() => {});
     },
@@ -436,6 +629,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       stopped = true;
       generation++;
       clearTimeout(restartTimer);
+      clearTimeout(shellRestartTimer);
+      cutShell();
       for (const session of sessions) cut(session);
     },
   };
