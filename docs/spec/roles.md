@@ -2,7 +2,7 @@
 
 [仕様の目次](README.md)
 
-ホームバー、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
+シェル（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
 
 > [!NOTE]
 > 2026-11-01 に決めた構成です。今のコードは `role: "home"`・`role: "settings"` と、Régie が渡す `grants`（[regie/system.md](regie/system.md#権限)）で動いていて、まだこの形になっていません。役割の名前、キーの名前、関数名は、どれも **案** です。
@@ -20,15 +20,15 @@
 
 ```jsonc
 // app.json
-{ "id": "homebar", "name": "ホームバー", "roles": ["homebar"], "permissions": ["apps.list"] }
+{ "id": "shell", "name": "シェル", "roles": ["shell"], "permissions": ["apps.list"] }
 ```
 
 ```ts
 class Bar extends App {
   override onCreate(last: Last, api: Api): void {
-    const bar = api.get<HomebarApi>("homebar"); // 取れなければ null
-    if (bar == null) {
-      // api.why("homebar") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
+    const shell = api.get<ShellApi>("shell"); // 取れなければ null
+    if (shell == null) {
+      // api.why("shell") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
     }
   }
 }
@@ -38,26 +38,37 @@ class Bar extends App {
 - AS には動的な型がないので、`api.get<T>(key)` のように型を指定して取り出し、合わなければ null にする（決定）
 - `app.json` の欄は、今の `role`（文字列 1 つ）を `roles`（配列）にする（案）
 
-## ホームバー（決定 2026-11-01）
+## シェル（決定 2026-11-01）
 
-- 機能（アプリの切り替え、閉じる、戻る、ホームへ、起動中の一覧など）はカーネルが固定で持ち、`homebar` の API として渡す
-- 見た目と並びは、アプリが Décor で好きに作る
+Windows のエクスプローラーのような、OS の一番外側を受け持つアプリです（のぞみ 2026-11-01）。
+
+- 本当に最初に起動するアプリ。カーネルは起動の流れを終えたら、まずシェルを起動する
+- ホームバー、これから来る通知など、OS の大枠の UI を全部受け持つ
+- 大枠の中に「アプリの表示領域」を置く。ホームやほかのアプリは、カーネルがその領域に出す
+- 機能（アプリの切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知など）はカーネルが固定で持ち、`shell` の API として渡す
+- 見た目と並びは、シェルが Décor で好きに作る
 
 ```ts
-// 例（案）
+// 例（案）。appArea() はカーネルがアプリを出す場所
 override build(): View {
-  const items: View[] = [];
-  for (let i = 0; i < this.bar.running(); i++) items.push(buttonOf([appIcon(i)], switchTo).arg(i));
-  return row([button("ホーム", home), ...items]).gap();
+  const dock: View[] = [];
+  for (let i = 0; i < this.shell.running(); i++) dock.push(buttonOf([appIcon(i)], switchTo).arg(i));
+  return column([
+    appArea().grow(),
+    row([button("ホーム", home), ...dock]).gap(),
+  ]);
 }
 ```
 
-- 既定のホームバーは、今のまま Scene に埋め込む（カーネルの一部。[scene/shell.md](scene/shell.md#ホームバー案実装済み)）。役割 `homebar` のアプリを割り当てたときだけ、そちらを使う。役割 `homebar` の仕組みは、いじりたくなったときに作る（案、2026-11-01）
+- 役割の名前は `shell`（案）。部品 `appArea()` の名前も案
+- シェルもほかのアプリと同じく Worker の WASM で動き、DOM には触れない。アプリの表示領域の中身（アプリの DOM）は、シェルからは見えない
+- シェルは役割の割り当てで差し替えられる（設定アプリと違ってコアではない）
+- 今のホームバー（Scene が TS の Décor で描く。[scene/shell.md](scene/shell.md#ホームバー案実装済み)）は、既定のシェル（システムアプリ）に移す
 - 吹き出しとメニューのような重ね表示は、Décor にまだ部品がない。どう渡すかは未決
 
 ## 常駐する役割の落ちたとき（決定）
 
-ホームと同じ決まりにします（[lifecycle.md](lifecycle.md#落ちたとき決定)）。落ちたら起動し直し、落ち続けたらカーネルが直接描く最後の受け皿を出します。ホームバーのような常駐する役割は、スタックに数えません。
+ホームと同じ決まりにします（[lifecycle.md](lifecycle.md#落ちたとき決定)）。落ちたら起動し直し、落ち続けたらカーネルが直接描く最後の受け皿を出します。シェルの受け皿は、アプリの表示領域とホームへ戻るボタンだけの最低限の大枠です（案）。シェルのような常駐する役割は、スタックに数えません。
 
 ## 設定アプリ（決定 2026-11-01）
 
@@ -70,7 +81,7 @@ override build(): View {
 | 役割 | 仕事 | 常駐 |
 | --- | --- | --- |
 | `home` | ほかのアプリを並べて開く | いいえ（スタックに数える。今のまま） |
-| `homebar` | 画面の下の帯 | はい |
+| `shell` | OS の大枠（ホームバー、通知など）とアプリの表示領域 | はい |
 | `settings` | OS の設定、役割の割り当て | いいえ |
 
 ロック画面やキーボードなどは、要るようになったら足します。
@@ -79,8 +90,8 @@ override build(): View {
 
 | キー | 中身 | 届く相手 |
 | --- | --- | --- |
-| `homebar` | 切り替え、閉じる、ホームへ、起動中の一覧 | `homebar` に割り当てたアプリ |
-| `apps` | アプリの一覧、アイコン、開く（今の `apps.*`） | `home` と `homebar` に割り当てたアプリ |
+| `shell` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | シェル |
+| `apps` | アプリの一覧、アイコン、開く（今の `apps.*`） | ホームとシェル |
 | `os` | OS の設定、役割の割り当て、起動の履歴（今の `os.*`） | 設定アプリ |
 | `fs` | ファイルの木を読む・書く（範囲つき） | 権限を許したアプリ（デザイナー、エディタなど） |
 | `storage` | アプリごとのデータ（`/data/<id>/`） | すべてのアプリ |

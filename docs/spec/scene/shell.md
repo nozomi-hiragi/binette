@@ -54,7 +54,7 @@ function isInstalled(window: Window | null): boolean
 ## ホームバー（案・実装済み）
 
 > [!NOTE]
-> 既定のホームバーは、このまま Scene（カーネル）に埋め込みます。役割 `homebar` のアプリを割り当てたときだけ、そちらに差し替えます（[roles.md](../roles.md#ホームバー決定-2026-11-01)。差し替えを作る時期は案）。
+> ホームバーは、役割 `shell` のシステムアプリ（シェル）に移します（決定 2026-11-01、[roles.md](../roles.md#シェル決定-2026-11-01)）。下は今のコードの形です。
 
 - 高さ約 60px の淡い帯（`--bina-shell-background`）で、上に細い線を引く。外側は `nav`（aria-label「ホームバー」）のまま
 - 左端にホーム（家の線画、文字なし、36px、aria-label「ホームを開く」）。ホームが前面なら淡いアクセントの面と `aria-pressed="true"`
