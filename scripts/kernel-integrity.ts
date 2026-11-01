@@ -31,7 +31,7 @@ export function kernelIntegrity(): Plugin {
         if (!found) throw new Error("HTML にカーネルの script がありません。");
       },
     },
-    // SW は index.html をキャッシュから返すので、カーネルが変わったら sw.js の中身も変え、ブラウザに新しい SW を入れさせる
+    // SW は入口とカーネルをキャッシュから返すので、どれかが変わったら sw.js の中身も変え、ブラウザに新しい SW を入れさせる
     async closeBundle() {
       const sw = resolve(outDir, "sw.js");
       let source: string;
@@ -41,11 +41,21 @@ export function kernelIntegrity(): Plugin {
         if (error instanceof Deno.errors.NotFound) return;
         throw error;
       }
-      const kernel = await Deno.readFile(resolve(outDir, "regie.js"));
-      const worker = await Deno.readFile(resolve(outDir, "regie-worker.js"));
-      const both = new Uint8Array(kernel.byteLength + worker.byteLength);
-      both.set(kernel);
-      both.set(worker, kernel.byteLength);
+      // SW がキャッシュから返す固定物（入口・カーネル・アイコンなど）のどれかが変わったら版を変える。
+      const parts: Uint8Array[] = [];
+      for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js"]) {
+        let data: Uint8Array;
+        try {
+          data = await Deno.readFile(resolve(outDir, name));
+        } catch (error) {
+          if (error instanceof Deno.errors.NotFound && name !== "regie.js" && name !== "regie-worker.js") continue;
+          throw error;
+        }
+        parts.push(new TextEncoder().encode(`${name}\0${data.byteLength}\0`), data);
+      }
+      const both = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
+      let offset = 0;
+      for (const part of parts) { both.set(part, offset); offset += part.byteLength; }
       const stamp = hex(await crypto.subtle.digest("SHA-256", both)).slice(0, 16);
       const stamped = source.replace(/const CACHE = "([^"]+)";/, (_line, name) => `const CACHE = "${name}-${stamp}";`);
       if (stamped === source) throw new Error("sw.js にキャッシュの版がありません。");
