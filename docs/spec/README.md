@@ -11,6 +11,8 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 
 | ファイル | 内容 |
 | --- | --- |
+| [boot.md](boot.md) | 起動と配布。カーネルだけを配り、残りを取ってきてブラウザの中のファイルの木に置く形（決定 2026-11-01） |
+| [roles.md](roles.md) | 役割と API。シェル・ホーム・設定もふつうのアプリにし、役割に応じた API を辞書で渡す（決定 2026-11-01） |
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
 | [core.md](core.md) | `@binette/core`。パッケージの共通物（形式の型と検査、ライフサイクルの番号、DOM 操作の型） |
 | [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ、`App` クラス |
@@ -29,6 +31,8 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 - サーバーの処理やデータが要るアプリは、WAKE などで通信する。通信はアプリごとに分け、アプリは自分のサーバーサイドとしか通信できない
 - アプリは HTML ＋ AssemblyScript（AS）で書く方向で試す。TSX のような書き方（ASX）は後で考える
 - データのバックアップはサーバー側（Coulisses）に任せる
+- カーネルだけを配り、ほかの部品は HTTP で取ってきてブラウザの中に置いて動かす。目的は、アプリの上でアプリや OS の部品を作り・いじれること（決定 2026-11-01、[boot.md](boot.md)）
+- システムの部品（シェル、ホーム、設定）は、役割を持つふつうのアプリにする。シェルは最初に起動し、ホームバーや通知などの大枠と、アプリの表示領域を受け持つ（決定 2026-11-01、[roles.md](roles.md)）
 - 開発は binette のリポジトリだけで進める。版を固定して JSR に公開してから、EbinaStation（ebina-front・ebina-station）に入れる
 
 ## 呼び名と層（決定）
@@ -52,6 +56,9 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | Coulisses を WAKE と合わせて実装したもの | ebina-station（Station） |
 
 ## 単独で起動できるフロント（決定）
+
+> [!NOTE]
+> この節は今のコードの形です。[boot.md](boot.md) の構成（カーネルだけを配り、システムアプリは目録を見て取ってくる）に置き換えます。
 
 Binette は単独で起動できます。入口はリポジトリ直下の `index.html`・`vite.config.ts` と `src/main.ts` です。Régie と Scene を載せます。
 
@@ -83,6 +90,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
      ルートの OS（src/main.ts）
 ```
 
+- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene のうち、アプリの UI の描画と、カーネルが直接描く Apps・復旧画面はカーネルに入る。ホームバーなどの大枠は、役割 `shell` のシステムアプリ（シェル）に移す（決定 2026-11-01、名前は案。[roles.md](roles.md#ホームバー決定-2026-11-01)）
 - 宣言 UI の共通部分は Décor に置く（[decor.md](decor.md)、案）。Décor は core だけに依存し、Régie と Scene がそれぞれ差分と DOM への反映を使う。
 - システムの依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
 - ビルドは Régie に置く（[regie/build.md](regie/build.md)）。何を動かしてよいかの判断と同じ所に置くため。asc は重いので `@binette/regie/build` という別の入口にし、ビルドしない利用者は読まない
@@ -144,8 +152,8 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 - アプリのサーバーサイドの置き場所と動かし方
 - Réplique の呼び出しの形（終わったら呼ぶ関数を渡す形でよいか）
 - エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（`deno publish --dry-run` は通る。実際の公開と補完は未確認）
-- Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie/run.md](regie/run.md#blob-url-の-worker)）
-- asc の読み込みの重さ（約 13.6 MB、gzip で約 2.9 MB）をどうするか
+- Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie/run.md](regie/run.md#blob-url-の-worker)）。[boot.md](boot.md#配るファイル案) で `regie-worker.js` を別ファイルにすると決めた
+- asc の読み込みの重さ（約 13.6 MB、gzip で約 2.9 MB）をどうするか。[boot.md](boot.md#配るファイル案) で、カーネルに入れず、ファイルの木から取る部品にすると決めた
 
 ## 宣言的 UI（案）
 
