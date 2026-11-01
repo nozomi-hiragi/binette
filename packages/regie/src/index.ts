@@ -4,10 +4,10 @@
  * @packageDocumentation
  */
 export type { WorkerScope } from "./worker.ts";
-export { serveApp, workerSource } from "./worker.ts";
-export type { LaunchOptions, OsSnapshot, RegieApp, RegieWorker } from "./launch.ts";
-export { launchApp } from "./launch.ts";
-export type { AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord, LaunchRecord, SystemSettings, SystemStore } from "./store.ts";
+export { serveApp } from "./worker.ts";
+export type { ApiDenial, LaunchOptions, OsSnapshot, RegieApp, RegieWorker } from "./launch.ts";
+export { API_KEYS, launchApp } from "./launch.ts";
+export type { AppDataStore, AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord, LaunchRecord, SystemSettings, SystemStore } from "./store.ts";
 export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, installedAppKey, validateSystemSettings } from "./store.ts";
 export type { FileTree, IndexedDbFileTreeOptions } from "./fs.ts";
 export { createIndexedDbFileTree, createMemoryFileTree } from "./fs.ts";

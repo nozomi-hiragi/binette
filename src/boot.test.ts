@@ -21,7 +21,7 @@ async function fixture() {
   for (const name of ["home", "settings"]) {
     files.set(
       `system/apps/${name}/app.json`,
-      encode({ id: name, name, role: name, entry: { as: "main.ts" } }),
+      encode({ id: name, name, roles: [name], entry: { as: "main.ts" } }),
     );
     files.set(
       `system/apps/${name}/app.wasm`,
@@ -61,7 +61,11 @@ async function fixture() {
 Deno.test("起動は固定物を検証し、設定の上書きと古い固定アプリを使わない", async () => {
   const { tree, distribution } = await fixture();
   await tree.write("/user/apps/settings/app.wasm", new Uint8Array([99]));
-  const { apps, home } = await loadBootApps(tree, distribution);
+  const { apps, roles } = await loadBootApps(tree, distribution);
+  assertEquals(roles, {
+    home: installedAppKey("binette:system", "home"),
+    settings: installedAppKey("binette:system", "settings"),
+  });
   assertEquals(
     apps.find((app) => app.prebuilt?.manifest.id === "settings")?.prebuilt
       ?.wasm,
@@ -79,36 +83,11 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
       installedAt: 1,
     });
   }
-  const safe = bootAppStore(store, home);
+  const safe = bootAppStore(store);
   assertEquals((await safe.list()).map((app) => app.source), ["custom"]);
   assertEquals(
     await safe.get(installedAppKey("binette:system", "old")),
     undefined,
-  );
-  assertEquals(
-    (await safe.system.getSettings())?.home,
-    installedAppKey("binette:system", "home"),
-  );
-  await store.system.putSettings({ home: "custom-home" });
-  assertEquals((await safe.system.getSettings())?.home, home);
-  await store.put({
-    source: "custom",
-    key: installedAppKey("custom", "home"),
-    manifest: {
-      id: "home",
-      name: "custom home",
-      role: "home",
-      entry: { as: "main.ts" },
-    },
-    wasm: new Uint8Array(),
-    html: "",
-    icon: undefined,
-    installedAt: 1,
-  });
-  await store.system.putSettings({ home: installedAppKey("custom", "home") });
-  assertEquals(
-    (await safe.system.getSettings())?.home,
-    installedAppKey("custom", "home"),
   );
 });
 
@@ -135,7 +114,7 @@ Deno.test("改変した固定物と設定役割へのユーザーの差し替え
     encode({
       id: "fake",
       name: "fake",
-      role: "settings",
+      roles: ["settings"],
       entry: { as: "main.ts" },
     }),
   );
@@ -198,8 +177,8 @@ Deno.test("オフラインでも保存済みの配布物を検証してホーム
   const update = await distribution.checkUpdate();
   assertEquals(update.installedVersion, "1");
   assertEquals(update.updateAvailable, false);
-  const { apps, home } = await loadBootApps(tree, distribution);
-  assertEquals(home, installedAppKey("binette:system", "home"));
+  const { apps, roles } = await loadBootApps(tree, distribution);
+  assertEquals(roles.home, installedAppKey("binette:system", "home"));
   assertEquals(apps.map((app) => app.prebuilt?.manifest.id), [
     "home",
     "settings",

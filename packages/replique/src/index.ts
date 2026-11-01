@@ -169,10 +169,8 @@ export function __bina_listener_count(): i32 { return listeners.size; }
 /** テスト用に ID で保持中の要素数を返す */
 export function __bina_element_count(): i32 { return elements.size; }
 
-/** ホームだけが使えるアプリの一覧と起動 */
-export namespace apps {
-  /** img に OS のアプリアイコンを入れる */
-  export function icon(img: Element, i: i32): void { iconImport(img.handle, i); }
+// OS の呼び出しの入口。アプリは直接使わず、辞書 `Api` から取ったクラスを通す
+namespace hostApps {
   // @ts-ignore: decorator
   @external("binette", "apps.count")
   export declare function count(): i32;
@@ -187,8 +185,7 @@ export namespace apps {
   export declare function open(i: i32): void;
 }
 
-/** システムの設定アプリだけが使える OS の設定と起動の履歴 */
-export namespace os {
+namespace hostOs {
   // @ts-ignore: decorator
   @external("binette", "os.get")
   export declare function get(name: string): i32;
@@ -196,20 +193,20 @@ export namespace os {
   @external("binette", "os.set")
   export declare function set(name: string, value: i32): bool;
   // @ts-ignore: decorator
-  @external("binette", "os.home")
-  export declare function home(): string;
+  @external("binette", "os.role")
+  export declare function role(role: string): string;
   // @ts-ignore: decorator
-  @external("binette", "os.homeCount")
-  export declare function homeCount(): i32;
+  @external("binette", "os.candidateCount")
+  export declare function candidateCount(role: string): i32;
   // @ts-ignore: decorator
-  @external("binette", "os.homeName")
-  export declare function homeName(i: i32): string;
+  @external("binette", "os.candidateName")
+  export declare function candidateName(role: string, i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.homeId")
-  export declare function homeId(i: i32): string;
+  @external("binette", "os.candidateId")
+  export declare function candidateId(role: string, i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.setHome")
-  export declare function setHome(i: i32): void;
+  @external("binette", "os.assign")
+  export declare function assign(role: string, i: i32): void;
   // @ts-ignore: decorator
   @external("binette", "os.launchCount")
   export declare function launchCount(): i32;
@@ -219,6 +216,106 @@ export namespace os {
   // @ts-ignore: decorator
   @external("binette", "os.launchName")
   export declare function launchName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.updateAvailable")
+  export declare function updateAvailable(): bool;
+  // @ts-ignore: decorator
+  @external("binette", "os.update")
+  export declare function update(): void;
+}
+
+namespace hostStorage {
+  // @ts-ignore: decorator
+  @external("binette", "storage.has")
+  export declare function has(name: string): bool;
+  // @ts-ignore: decorator
+  @external("binette", "storage.read")
+  export declare function read(name: string): string | null;
+  // @ts-ignore: decorator
+  @external("binette", "storage.write")
+  export declare function write(name: string, value: string): bool;
+  // @ts-ignore: decorator
+  @external("binette", "storage.remove")
+  export declare function remove(name: string): void;
+  // @ts-ignore: decorator
+  @external("binette", "storage.count")
+  export declare function count(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "storage.name")
+  export declare function name(i: i32): string;
+}
+
+// @ts-ignore: decorator
+@external("binette", "api.why")
+declare function whyImport(key: string): i32;
+
+/** 辞書に載らなかった理由。Granted は、載っている */
+export enum Why { Granted, NotGranted, NotAssigned }
+
+/** `api.get<AppsApi>("apps")`。アプリの一覧と起動。ホーム（とシェル）の役割を割り当てられたアプリに届く */
+export class AppsApi {
+  /** img に OS のアプリアイコンを入れる */
+  icon(img: Element, i: i32): void { iconImport(img.handle, i); }
+  count(): i32 { return hostApps.count(); }
+  name(i: i32): string { return hostApps.name(i); }
+  id(i: i32): string { return hostApps.id(i); }
+  open(i: i32): void { hostApps.open(i); }
+}
+
+/** `api.get<OsApi>("os")`。OS の設定、役割の割り当て、起動の履歴、更新。設定アプリ（役割 settings）に届く */
+export class OsApi {
+  get(name: string): i32 { return hostOs.get(name); }
+  /** 範囲外と知らない名前は false を返して保存しない */
+  set(name: string, value: i32): bool { return hostOs.set(name, value); }
+  /** 役割に割り当てたアプリの ID。無ければ空 */
+  role(role: string): string { return hostOs.role(role); }
+  /** 役割に選べるアプリの数。割り当てを変えられない役割は 0 */
+  candidateCount(role: string): i32 { return hostOs.candidateCount(role); }
+  candidateName(role: string, i: i32): string { return hostOs.candidateName(role, i); }
+  candidateId(role: string, i: i32): string { return hostOs.candidateId(role, i); }
+  /** 役割に割り当てるアプリを、候補の番号で選ぶ */
+  assign(role: string, i: i32): void { hostOs.assign(role, i); }
+  launchCount(): i32 { return hostOs.launchCount(); }
+  launchTime(i: i32): f64 { return hostOs.launchTime(i); }
+  launchName(i: i32): string { return hostOs.launchName(i); }
+  /** 新しい版の `/system` があるか */
+  updateAvailable(): bool { return hostOs.updateAvailable(); }
+  /** `/system` を新しい版に入れ替えて、再読み込みする */
+  update(): void { hostOs.update(); }
+}
+
+/** `api.get<StorageApi>("storage")`。アプリごとのデータ（`/data/<id>/`）。名前は 1 つの部品で、中身は文字列。すべてのアプリに届く */
+export class StorageApi {
+  has(name: string): bool { return hostStorage.has(name); }
+  /** 無ければ null */
+  read(name: string): string | null { return hostStorage.read(name); }
+  /** 名前が空か長すぎる（256 文字を超える）ときは false を返して保存しない */
+  write(name: string, value: string): bool { return hostStorage.write(name, value); }
+  remove(name: string): void { hostStorage.remove(name); }
+  count(): i32 { return hostStorage.count(); }
+  /** 名前の辞書順の i 番目 */
+  name(i: i32): string { return hostStorage.name(i); }
+}
+
+/** `api.get<FsApi>("fs")`。ファイルの木。範囲の決め方が未決なので、キーだけ用意して今は誰にも届かない */
+export class FsApi {}
+
+/**
+ * OS が `onCreate` で渡す API の辞書。キーで取り出す。
+ * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi）を返す
+ */
+export class Api {
+  /** 届いていれば API を、キーが無いか型引数が合わないか、届いていなければ null を返す */
+  get<T>(key: string): T | null {
+    if (whyImport(key) != Why.Granted) return null;
+    if (key == "apps" && idof<T>() == idof<AppsApi>()) return changetype<T>(new AppsApi());
+    if (key == "os" && idof<T>() == idof<OsApi>()) return changetype<T>(new OsApi());
+    if (key == "storage" && idof<T>() == idof<StorageApi>()) return changetype<T>(new StorageApi());
+    if (key == "fs" && idof<T>() == idof<FsApi>()) return changetype<T>(new FsApi());
+    return null;
+  }
+  /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
+  why(key: string): Why { return whyImport(key); }
 }
 
 /** インスタンスの状態。None は前の記録が無いことを表す */
@@ -357,7 +454,7 @@ export function __bina_ui_value(build: i32, handler: i32, value: f64): void {
 /** アプリの大本。必要な知らせだけ上書きする */
 export class App {
   build(): View | null { return null; }
-  onCreate(_last: Last): void {}
+  onCreate(_last: Last, _api: Api): void {}
   onStart(_last: State): void {}
   onResume(): void {}
   onPause(): void {}
@@ -381,7 +478,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
   const app = application;
   if (app === null) return;
   switch (kind) {
-    case State.Create: app.onCreate(new Last(a, b != 0, lastPageImport(), new DestroyReason(lastKindImport(), lastCauseImport()))); break;
+    case State.Create: app.onCreate(new Last(a, b != 0, lastPageImport(), new DestroyReason(lastKindImport(), lastCauseImport())), new Api()); break;
     case State.Start: app.onStart(a); break;
     case State.Resume: app.onResume(); break;
     case State.Pause: app.onPause(); break;

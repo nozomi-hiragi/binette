@@ -28,12 +28,19 @@ export interface ProcessOptions {
   workerUrl?: LaunchOptions["workerUrl"];
   /** 起動中でもアプリを止める */
   signal?: AbortSignal;
-  /** アプリに渡す呼び出し */
-  grants?: { apps?: { id: string; name: string; icon?: string }[]; os?: LaunchOptions["os"] };
+  /** アプリに渡す API の辞書。載せたキーだけが届き、載せなかったキーの理由は denied に書く */
+  grants?: {
+    apps?: { id: string; name: string; icon?: string }[];
+    os?: LaunchOptions["os"];
+    storage?: LaunchOptions["storage"];
+    denied?: LaunchOptions["denied"];
+  };
   /** ホームが指定した番号のアプリを開く */
   onOpen?: (i: number) => void;
   onSet?: LaunchOptions["onSet"];
-  onSetHome?: LaunchOptions["onSetHome"];
+  onAssign?: LaunchOptions["onAssign"];
+  onUpdate?: LaunchOptions["onUpdate"];
+  onStorage?: LaunchOptions["onStorage"];
 }
 
 /** 状態を進めるアプリ */
@@ -87,7 +94,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   let frozen = false;
   let finishRequested = false;
   const openings: number[] = [];
-  const homes: number[] = [];
+  const assignments: [string, number][] = [];
   let queue = Promise.resolve();
   const enqueue = (action: () => Promise<void>): Promise<void> => {
     const result = queue.then(async () => { if (alive) await action(); });
@@ -102,7 +109,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     // deno-lint-ignore require-await -- キューが待つ Promise と、通知中の例外を拒否で返す契約を保つ。
     void enqueue(async () => {
       if (closing) return;
-      for (const i of homes.splice(0)) options.onSetHome?.(i);
+      for (const [role, i] of assignments.splice(0)) options.onAssign?.(role, i);
       if (finishRequested) { finishRequested = false; openings.length = 0; options.onFinish?.(); }
       else for (const i of openings.splice(0)) options.onOpen?.(i);
     });
@@ -121,8 +128,12 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     declarative: options.declarative,
     last,
     os: options.grants?.os,
+    storage: options.grants?.storage,
+    denied: options.grants?.denied,
     onSet: options.onSet,
-    onSetHome(i) { homes.push(i); notifyRequests(); },
+    onAssign(role, i) { assignments.push([role, i]); notifyRequests(); },
+    onUpdate: options.onUpdate,
+    onStorage: options.onStorage,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;

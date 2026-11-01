@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import type { DomOp } from "@binette/core";
-import { launchApp, serveApp, type RegieWorker, workerSource } from "../src/index.ts";
+import { launchApp, type OsSnapshot, serveApp, type RegieWorker } from "../src/index.ts";
 
 const source = `
 @external("binette", "dom.text")
@@ -109,12 +109,27 @@ Deno.test("init を送れなければ Worker を止めて reject する", async 
 });
 
 const homeSource = `
-import { document, apps } from "./replique";
-export function openApp(i: i32): void { apps.open(i); }
-export function count(): void { document.getElementById("count").textContent = apps.count().toString(); }
-export function name(i: i32): void { document.getElementById("name").textContent = apps.name(i); }
-export function id(i: i32): void { document.getElementById("id").textContent = apps.id(i); }
-export function icon(i: i32): void { apps.icon(document.createElement("img"), i); }
+import { document, Api, AppsApi } from "./replique";
+const api = new Api();
+function apps(): AppsApi { return api.get<AppsApi>("apps")!; }
+export function openApp(i: i32): void { apps().open(i); }
+export function count(): void { document.getElementById("count").textContent = apps().count().toString(); }
+export function name(i: i32): void { document.getElementById("name").textContent = apps().name(i); }
+export function id(i: i32): void { document.getElementById("id").textContent = apps().id(i); }
+export function icon(i: i32): void { apps().icon(document.createElement("img"), i); }
+`;
+
+/** 辞書を通さずに OS の呼び出しを直接使うアプリ */
+const directSource = `
+@external("binette", "apps.count")
+declare function count(): i32;
+@external("binette", "os.get")
+declare function osGet(name: string): i32;
+@external("binette", "storage.count")
+declare function storageCount(): i32;
+export function apps(): void { count(); }
+export function os(): void { osGet("stackSize"); }
+export function storage(): void { storageCount(); }
 `;
 
 Deno.test("一回の call の操作を一回で解決前に届け、例外の前の操作も届ける", async () => {
@@ -149,13 +164,52 @@ Deno.test("apps の文字列と icon と open を渡す", async () => {
   } finally { app.stop(); }
 });
 
-Deno.test("apps を渡さないと apps.* はすべてアプリを終了する", async () => {
+Deno.test("apps を渡さないと辞書の apps は null になり、辞書を通さない呼び出しはアプリを終了する", async () => {
   const wasm = await build(homeSource, true);
   for (const fn of ["count", "name", "id", "openApp", "icon"]) {
     const app = await launchApp(wasm, { createWorker });
-    try { await assertRejects(() => app.call(fn, 0), Error, "この呼び出しはホームのアプリだけが使えます。"); }
+    try { await assertRejects(() => app.call(fn, 0), Error, "アプリが中断しました"); }
     finally { app.stop(); }
   }
+  const direct = await build(directSource, true);
+  for (const [fn, key] of [["apps", "apps が届いた"], ["os", "os が届いた"], ["storage", "storage が届いた"]]) {
+    const exits: Error[] = [];
+    const app = await launchApp(direct, { createWorker, onExit: error => exits.push(error) });
+    try {
+      await assertRejects(() => app.call(fn), Error, key);
+      assertEquals(exits.length, 1);
+      await assertRejects(() => app.call(fn), Error, "止まっています");
+    } finally { app.stop(); }
+  }
+});
+
+const whySource = `
+import { document, Api, AppsApi, OsApi, StorageApi, FsApi, Why } from "./replique";
+const api = new Api();
+function text(value: string): void { document.getElementById("value").textContent = value; }
+function name(why: Why): string { return why == Why.Granted ? "Granted" : why == Why.NotGranted ? "NotGranted" : "NotAssigned"; }
+export function report(): void {
+  text([
+    name(api.why("apps")), api.get<AppsApi>("apps") != null ? "apps" : "-",
+    name(api.why("os")), api.get<OsApi>("os") != null ? "os" : "-",
+    name(api.why("storage")), api.get<StorageApi>("storage") != null ? "storage" : "-",
+    name(api.why("fs")), api.get<FsApi>("fs") != null ? "fs" : "-",
+    name(api.why("unknown")), api.get<AppsApi>("unknown") != null ? "unknown" : "-",
+    api.get<OsApi>("apps") != null ? "mismatch" : "-",
+  ].join(","));
+}
+`;
+
+Deno.test("辞書は届いたキーだけを取り出し、取れないキーの理由を why が返す", async () => {
+  const wasm = await build(whySource, true);
+  const texts: string[] = [];
+  const onDom = (ops: DomOp[]) => { for (const op of ops) if (op.op === "text") texts.push(op.value); };
+  const empty = await launchApp(wasm, { createWorker, onDom, denied: { apps: "NotAssigned", os: "NotAssigned", fs: "NotGranted" } });
+  try { await empty.call("report"); } finally { empty.stop(); }
+  assertEquals(texts.splice(0), ["NotAssigned,-,NotAssigned,-,NotGranted,-,NotGranted,-,NotAssigned,-,-"]);
+  const home = await launchApp(wasm, { createWorker, onDom, apps: [], storage: new Map(), denied: { os: "NotAssigned", fs: "NotGranted" } });
+  try { await home.call("report"); } finally { home.stop(); }
+  assertEquals(texts.splice(0), ["Granted,apps,NotAssigned,-,Granted,storage,NotGranted,-,NotAssigned,-,-"]);
 });
 
 Deno.test("空の apps は count が 0 で、範囲外の番号は終了する", async () => {
@@ -292,10 +346,14 @@ export function empty(): void {}`;
 
 /** 無限ループをメインとは別のスレッドで実行する */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
-  try { return new Worker(url, { type: "module" }); }
-  finally { URL.revokeObjectURL(url); }
+  return new Worker(new URL("../src/worker-entry.ts", import.meta.url), { type: "module" });
 }
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
 
 Deno.test("call の時間切れで Worker と待つ call をすべて終了し、一度だけ知らせる", async () => {
   const exits: Error[] = [];
@@ -343,18 +401,19 @@ export function finish(): void { app.finish(); document.getElementById("page").t
   }
 });
 
-Deno.test("launch のインスタンスは GC 後も上書きしたメソッドで OS の Last を受け取る", async () => {
-  const code = `import { App, Last, State, document, launch, __bina_lifecycle } from "./replique";
+Deno.test("launch のインスタンスは GC 後も上書きしたメソッドで OS の Last と辞書を受け取る", async () => {
+  const code = `import { Api, App, Last, State, StorageApi, document, launch, __bina_lifecycle } from "./replique";
 class TestApp extends App {
-  onCreate(last: Last): void {
+  onCreate(last: Last, api: Api): void {
     assert(last.state == State.Stop && !last.done);
+    assert(api.get<StorageApi>("storage") != null && api.get<StorageApi>("apps") == null);
     document.getElementById("log").textContent = "届いた";
   }
 }
 launch(new TestApp());
 export { __bina_lifecycle };`;
   const values: string[] = [];
-  const app = await launchApp(await build(code, true), { createWorker, onDom(ops) { for (const op of ops) if (op.op === "text") values.push(op.value); } });
+  const app = await launchApp(await build(code, true), { createWorker, storage: new Map(), onDom(ops) { for (const op of ops) if (op.op === "text") values.push(op.value); } });
   try {
     await app.call("__collect");
     await app.call("__bina_lifecycle", 1, 5, 0);
@@ -362,47 +421,52 @@ export { __bina_lifecycle };`;
   } finally { app.stop(); }
 });
 
-const osSource = `import { document, os } from "./replique";
+const osSource = `import { document, Api, OsApi } from "./replique";
+const api = new Api();
+function os(): OsApi { return api.get<OsApi>("os")!; }
 function text(value: string): void { document.getElementById("value").textContent = value; }
-export function get(): void { text(os.get("stackSize").toString()); }
-export function set(value: i32): void { text(os.set("stackSize", value).toString() + ":" + os.get("stackSize").toString()); }
-export function unknown(): void { text(os.set("unknown", 1).toString()); }
-export function home(): void { text(os.home()); }
-export function homeCount(): void { text(os.homeCount().toString()); }
-export function homeName(i: i32): void { text(os.homeName(i)); }
-export function homeId(i: i32): void { text(os.homeId(i)); }
-export function setHome(i: i32): void { os.setHome(i); text(os.home()); }
-export function launchCount(): void { text(os.launchCount().toString()); }
-export function launchTime(i: i32): void { text(os.launchTime(i).toString()); }
-export function launchName(i: i32): void { text(os.launchName(i)); }
+export function get(): void { text(os().get("stackSize").toString()); }
+export function set(value: i32): void { text(os().set("stackSize", value).toString() + ":" + os().get("stackSize").toString()); }
+export function unknown(): void { text(os().set("unknown", 1).toString()); }
+export function role(): void { text(os().role("home")); }
+export function candidateCount(role: i32): void { text(os().candidateCount(role == 0 ? "home" : role == 1 ? "settings" : "unknown").toString()); }
+export function candidateName(i: i32): void { text(os().candidateName("home", i)); }
+export function candidateId(i: i32): void { text(os().candidateId("home", i)); }
+export function assign(i: i32): void { os().assign("home", i); text(os().role("home")); }
+export function launchCount(): void { text(os().launchCount().toString()); }
+export function launchTime(i: i32): void { text(os().launchTime(i).toString()); }
+export function launchName(i: i32): void { text(os().launchName(i)); }
+export function updateAvailable(): void { text(os().updateAvailable().toString()); }
+export function update(): void { os().update(); }
 export function ranges(): void {
-  assert(!os.set("historyLimit", -1)); assert(os.set("historyLimit", 0));
-  assert(!os.set("stopDelay", -1)); assert(os.set("stopDelay", 0));
-  assert(!os.set("homeRetryWindow", -1)); assert(os.set("homeRetryWindow", 0));
-  assert(!os.set("callTimeout", 999)); assert(os.set("callTimeout", 1000));
-  assert(!os.set("destroyTimeout", 999)); assert(os.set("destroyTimeout", 1000));
+  assert(!os().set("historyLimit", -1)); assert(os().set("historyLimit", 0));
+  assert(!os().set("stopDelay", -1)); assert(os().set("stopDelay", 0));
+  assert(!os().set("homeRetryWindow", -1)); assert(os().set("homeRetryWindow", 0));
+  assert(!os().set("callTimeout", 999)); assert(os().set("callTimeout", 1000));
+  assert(!os().set("destroyTimeout", 999)); assert(os().set("destroyTimeout", 1000));
 }
 `;
 
-Deno.test("os を渡さないと os.* はすべてアプリを終了する", async () => {
+const snapshot = (): OsSnapshot => ({
+  settings: { stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 },
+  roles: { home: "key" }, candidates: { home: [] }, launches: [], updateAvailable: false,
+});
+
+Deno.test("os を渡さないと辞書の os は null で、辞書を通さずに呼ぶとアプリを終了する", async () => {
   const wasm = await build(osSource, true);
-  for (const name of ["get", "set", "unknown", "home", "homeCount", "homeName", "homeId", "setHome", "launchCount", "launchTime", "launchName"]) {
-    const exits: Error[] = [];
-    const app = await launchApp(wasm, { createWorker, onExit: error => exits.push(error) });
-    try {
-      await assertRejects(() => app.call(name, 0), Error, "システムの設定アプリだけ");
-      assertEquals(exits.length, 1);
-      await assertRejects(() => app.call("get"), Error, "止まっています");
-    } finally { app.stop(); }
+  for (const name of ["get", "set", "unknown", "role", "candidateCount", "candidateName", "candidateId", "assign", "launchCount", "launchTime", "launchName", "updateAvailable", "update"]) {
+    const app = await launchApp(wasm, { createWorker });
+    try { await assertRejects(() => app.call(name, 0), Error, "アプリが中断しました"); }
+    finally { app.stop(); }
   }
 });
 
-Deno.test("os の写し、同期の set、範囲の検査、ホームと履歴を読み書きする", async () => {
-  const texts: string[] = []; const changes: [string, number][] = []; const homes: number[] = [];
+Deno.test("os の写し、同期の set、範囲の検査、役割の割り当てと履歴と更新を読み書きする", async () => {
+  const texts: string[] = []; const changes: [string, number][] = []; const assigns: [string, number][] = []; let updates = 0;
   const app = await launchApp(await build(osSource, true), { createWorker,
-    os: { settings: { home: "key", stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 },
-      homes: [{ id: "key", name: "ホーム🏠" }, { id: "other", name: "別" }], launches: [{ time: 1234567890123, name: "設定" }, { time: 0, name: "unknown-key" }] },
-    onSet: (name, value) => changes.push([name, value]), onSetHome: i => homes.push(i),
+    os: { ...snapshot(), candidates: { home: [{ id: "key", name: "ホーム🏠" }, { id: "other", name: "別" }] },
+      launches: [{ time: 1234567890123, name: "設定" }, { time: 0, name: "unknown-key" }], updateAvailable: true },
+    onSet: (name, value) => changes.push([name, value]), onAssign: (role, i) => assigns.push([role, i]), onUpdate: () => updates++,
     onDom(ops) { for (const op of ops) if (op.op === "text") texts.push(op.value); },
   });
   try {
@@ -410,22 +474,48 @@ Deno.test("os の写し、同期の set、範囲の検査、ホームと履歴�
     assertEquals(texts.splice(0), ["3", "false:3", "false", "true:1", "1"]); assertEquals(changes.splice(0), [["stackSize", 1]]);
     await app.call("ranges");
     assertEquals(changes, [["historyLimit", 0], ["stopDelay", 0], ["homeRetryWindow", 0], ["callTimeout", 1000], ["destroyTimeout", 1000]]);
-    await app.call("home"); await app.call("homeCount"); await app.call("homeName", 0); await app.call("homeId", 1); await app.call("setHome", 1);
+    await app.call("role"); await app.call("candidateCount", 0); await app.call("candidateCount", 1); await app.call("candidateCount", 2);
+    await app.call("candidateName", 0); await app.call("candidateId", 1); await app.call("assign", 1);
     await app.call("launchCount"); await app.call("launchTime", 0); await app.call("launchName", 0); await app.call("launchName", 1);
-    assertEquals(texts, ["key", "2", "ホーム🏠", "other", "other", "2", "1234567890123.0", "設定", "unknown-key"]);
-    assertEquals(homes, [1]);
+    await app.call("updateAvailable"); await app.call("update");
+    assertEquals(texts, ["key", "2", "0", "0", "ホーム🏠", "other", "other", "2", "1234567890123.0", "設定", "unknown-key", "true"]);
+    assertEquals(assigns, [["home", 1]]);
+    assertEquals(updates, 1);
   } finally { app.stop(); }
 });
 
-Deno.test("os のホームと履歴の番号が範囲外ならアプリを終了する", async () => {
+Deno.test("os の候補と履歴の番号が範囲外ならアプリを終了する", async () => {
   const wasm = await build(osSource, true);
-  for (const name of ["homeName", "homeId", "setHome", "launchTime", "launchName"]) {
+  for (const name of ["candidateName", "candidateId", "assign", "launchTime", "launchName"]) {
     for (const i of [-1, 0]) {
-      const app = await launchApp(wasm, { createWorker, os: { settings: { home: "", stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 }, homes: [], launches: [] } });
+      const app = await launchApp(wasm, { createWorker, os: snapshot() });
       try { await assertRejects(() => app.call(name, i), Error, "番号が範囲外"); }
       finally { app.stop(); }
     }
   }
+});
+
+const storageSource = `import { document, Api, StorageApi } from "./replique";
+const api = new Api();
+function storage(): StorageApi { return api.get<StorageApi>("storage")!; }
+function text(value: string): void { document.getElementById("value").textContent = value; }
+export function read(): void { const value = storage().read("メモ"); text(value == null ? "null" : value); }
+export function write(): void { text(storage().write("メモ", "中身🏠").toString()); }
+export function writeBad(): void { text(storage().write("", "x").toString() + storage().write("a".repeat(257), "x").toString()); }
+export function remove(): void { storage().remove("メモ"); storage().remove("無い"); text(storage().count().toString()); }
+export function list(): void { let result = ""; for (let i = 0; i < storage().count(); i++) result += storage().name(i) + ","; text(result + storage().has("b").toString()); }
+`;
+
+Deno.test("storage は写しを読み、書き込みと削除を知らせ、名前の検査をする", async () => {
+  const texts: string[] = []; const writes: [string, string | null][] = [];
+  const app = await launchApp(await build(storageSource, true), { createWorker, storage: new Map([["メモ", "前の中身"], ["b", "2"], ["a", "1"]]),
+    onStorage: (name, value) => writes.push([name, value]), onDom(ops) { for (const op of ops) if (op.op === "text") texts.push(op.value); } });
+  try {
+    await app.call("read"); await app.call("write"); await app.call("read"); await app.call("writeBad"); await app.call("list");
+    await app.call("remove");
+    assertEquals(texts, ["前の中身", "true", "中身🏠", "falsefalse", "a,b,メモ,true", "2"]);
+    assertEquals(writes, [["メモ", "中身🏠"], ["メモ", null]]);
+  } finally { app.stop(); }
 });
 
 Deno.test("既定の独立 module Worker で起動して関数を呼べる", async () => {

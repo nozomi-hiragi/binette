@@ -1,4 +1,3 @@
-import { workerSource } from "../src/worker.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { parseAppManifest, type DomOp } from "@binette/core";
 import { createMemoryAppStore, installedAppKey, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
@@ -25,21 +24,26 @@ function createWorker(): RegieWorker {
 }
 /** 無限ループもメインを止めずに試せる、別スレッドの Worker */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
-  try { return new Worker(url, { type: "module" }); }
-  finally { URL.revokeObjectURL(url); }
+  return new Worker(new URL("../src/worker-entry.ts", import.meta.url), { type: "module" });
 }
-const source = `import { App, Last, State, DestroyReason, document, launch, apps } from "jsr:@binette/replique";
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
+const source = `import { Api, App, AppsApi, Last, State, DestroyReason, document, launch } from "jsr:@binette/replique";
+let appsApi: AppsApi | null = null;
 let log = "";
 function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
 class TestApp extends App {
-  onCreate(last: Last): void {
-
+  onCreate(last: Last, api: Api): void {
+    appsApi = api.get<AppsApi>("apps");
     record("create:" + last.state.toString());
     document.getElementById("page").textContent = this.page;
     document.getElementById("click").addEventListener("click", () => record("click"));
     document.getElementById("finish").addEventListener("click", () => test.finishNow());
-    document.getElementById("open").addEventListener("click", () => apps.open(0));
+    document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
   }
   onStart(last: State): void { record("start:" + last.toString()); }
   onResume(): void { record("resume"); }
@@ -66,7 +70,7 @@ async function build(code = source, home = false) {
     listFiles: () => [], stderr,
   });
   assert(!error && wasm, stderr.toString());
-  return { manifest: parseAppManifest(JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { role: "home" } : {}), entry: { html: "index.html", as: "main.ts" } })), html: "", wasm };
+  return { manifest: parseAppManifest(JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { roles: ["home"] } : {}), entry: { html: "index.html", as: "main.ts" } })), html: "", wasm };
 }
 
 /** プロセスの出力と置き場の寿命だけを記録する偽 UI */
@@ -123,7 +127,7 @@ function bar(result: Output, system: BinetteSystem, label: string) {
   if (close) void system.close(instance.id); else void system.open(instance.key);
 }
 async function stackFixtures() {
-  const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => apps.open(${i}));`).join("\n");
+  const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => appsApi!.open(${i}));`).join("\n");
   const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
   home.html += '<button id="open1">B</button><button id="open2">C</button>';
   const app = await build();
@@ -182,7 +186,7 @@ Deno.test("起動で固まるホームは、時間切れのあと開き直し続
 
 Deno.test("保存した設定は ShellOptions より優先し、スタック 1 ではホームも Destroy して戻ると起動", async () => {
   const element = output(); const store = createMemoryAppStore();
-  await store.system.putSettings({ home: "後続で使う設定", stackSize: 1, historyLimit: 2, stopDelay: 15 });
+  await store.system.putSettings({ roles: { home: "後続で使う設定" }, stackSize: 1, historyLimit: 2, stopDelay: 15 });
   const shell = await mountSystem(element, { apps: await stackFixtures(), store, createWorker, stackSize: 9, historyLimit: 9, stopDelay: 10000 });
   const home = activeHost(element);
   try {
@@ -194,7 +198,7 @@ Deno.test("保存した設定は ShellOptions より優先し、スタック 1 �
     const history = await store.system.listLaunches();
     assertEquals(history.map(r => JSON.parse(r.app)[1]), ["A", "home"]);
     assert(history.every(r => r.time > 0));
-    assertEquals((await store.system.getSettings())!.home, "後続で使う設定");
+    assertEquals((await store.system.getSettings())!.roles, { home: "後続で使う設定" });
   } finally { shell.stop(); }
 });
 
@@ -267,7 +271,7 @@ Deno.test("ホームが onPause で落ちても、開いたアプリから引き
 const builtHome = await build(source, true);
 const homeApp = { source: "binette:system", prebuilt: builtHome };
 const fixtures = ["設定", "設定の写し"].map((name, i) => {
-  const manifest = { ...builtHome.manifest, id: `settings-${i}`, name, role: "settings" as const };
+  const manifest = { ...builtHome.manifest, id: `settings-${i}`, name, roles: ["settings"] };
   return { ...builtHome, manifest, key: installedAppKey("binette:system", manifest.id), source: "binette:system", installedAt: 1, icon: undefined };
 });
 const apps = fixtures.map(fixture => ({ source: fixture.source, read: (path: string) => {
@@ -353,7 +357,7 @@ Deno.test("読み込み・保存の失敗があっても残りを渡し、重複
 });
 
 
-Deno.test("ホームは system かつ role home の最初のもの。別のホームも一覧に含めない", async () => {
+Deno.test("ホームは system かつ roles に home を持つ最初のもの。別のホームも一覧に含めない", async () => {
   const element = output();
   const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
   const shell = await startSystem({ ui: element.ui, createWorker, apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore() });
@@ -385,7 +389,7 @@ Deno.test("文字列のエラーは後続の update で再通知しない", asyn
 
 Deno.test("保存した home が無ければ system のホームを使う", async () => {
   const element = output(); const store = createMemoryAppStore();
-  await store.system.putSettings({ home: "missing" });
+  await store.system.putSettings({ roles: { home: "missing" } });
   const shell = await mountSystem(element, { apps: [homeApp], store, createWorker });
   try { assertEquals((await store.system.listLaunches())[0]!.app, installedAppKey(homeApp.source, builtHome.manifest.id)); }
   finally { shell.stop(); }
@@ -421,39 +425,45 @@ Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭
 });
 
 const permissionApp = await build(source + `
-import { os } from "jsr:@binette/replique";
-export function writeSetting(): void { os.set("historyLimit", 7); }
-export function selectHome(): void { os.setHome(0); }
-export function readHomes(): void { document.getElementById("homes").textContent = os.homeCount().toString(); }
+import { OsApi } from "jsr:@binette/replique";
+const osApi = new Api().get<OsApi>("os");
+export function hasOs(): void { document.getElementById("os").textContent = (osApi != null).toString(); }
+export function writeSetting(): void { osApi!.set("historyLimit", 7); }
+export function selectHome(): void { osApi!.assign("home", 0); }
+export function readHomes(): void { document.getElementById("homes").textContent = osApi!.candidateCount("home").toString(); }
 `);
 
-Deno.test("OS の権限はシステムの設定アプリだけが持ち、同梱の設定アプリや通常のシステムアプリは使えない", async () => {
-  for (const [source, role] of [["binette:system", "settings"], ["binette:bundled", "settings"], ["binette:system", undefined]] as const) {
+Deno.test("OS の API は system の settings の役割に割り当てたアプリだけに届き、同梱の設定アプリや通常のシステムアプリの辞書には載らない", async () => {
+  for (const [source, roles] of [["binette:system", ["settings"]], ["binette:bundled", ["settings"]], ["binette:system", undefined]] as const) {
+    const granted = source === "binette:system" && roles !== undefined;
     for (const action of ["writeSetting", "selectHome", "readHomes"]) {
       const element = output(); const store = createMemoryAppStore();
       let writes = 0;
       const putSettings = store.system.putSettings.bind(store.system);
       store.system.putSettings = async settings => { await putSettings(settings); writes++; };
-      const app = { source, prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, role } } };
+      const app = { source, prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, roles: roles as string[] | undefined } } };
       const bundledHome = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
       const bundledHomeKey = installedAppKey(bundledHome.source, bundledHome.prebuilt.manifest.id);
       const shell = await mountSystem(element, { apps: [bundledHome, homeApp, app], store, createWorker });
       try {
         await shell.open(installedAppKey(source, app.prebuilt.manifest.id));
         const process = element.active.process;
-        if (source === "binette:system" && role === "settings") {
+        await process.app.call("hasOs");
+        assertEquals(element.active.text.get("os"), String(granted));
+        if (granted) {
           await process.app.call(action);
           if (action !== "readHomes") await waitFor(() => writes === 1);
           if (action === "writeSetting") {
             assertEquals((await store.system.getSettings())!.historyLimit, 7);
           } else if (action === "selectHome") {
-            assertEquals((await store.system.getSettings())!.home, bundledHomeKey);
+            assertEquals((await store.system.getSettings())!.roles, { home: bundledHomeKey });
             await shell.openHome();
             assertEquals(element.view.instances.find(instance => instance.home)!.key, bundledHomeKey);
           } else assertEquals(element.active.text.get("homes"), "2");
           assertEquals(element.errors, []);
         } else {
-          await assertRejects(() => process.app.call(action), Error, "システムの設定アプリだけ");
+          // 辞書を通さない呼び出しは、権限のない呼び出しとしてアプリを終了する
+          await assertRejects(() => process.app.call(action), Error, "アプリが中断しました");
           assertEquals(await store.system.getSettings(), undefined);
           await shell.openHome();
           assertEquals(element.view.instances.find(instance => instance.home)!.key, installedAppKey(homeApp.source, builtHome.manifest.id));
@@ -468,7 +478,7 @@ Deno.test("同梱ホームは既定のホームにならず、明示的に選ぶ
   const bundledKey = installedAppKey(bundled.source, bundled.prebuilt.manifest.id);
   for (const selected of [false, true]) {
     const element = output(); const store = createMemoryAppStore();
-    if (selected) await store.system.putSettings({ home: bundledKey });
+    if (selected) await store.system.putSettings({ roles: { home: bundledKey } });
     const shell = await mountSystem(element, { apps: [bundled, homeApp], store, createWorker });
     try {
       assertEquals(element.view.instances.find(instance => instance.home)!.key,
@@ -477,4 +487,108 @@ Deno.test("同梱ホームは既定のホームにならず、明示的に選ぶ
       assertEquals(element.errors, []);
     } finally { shell.stop(); }
   }
+});
+
+Deno.test("役割の割り当ては、設定、ブートの既定、system の最初のものの順で選ぶ。名乗らないアプリは選ばない", async () => {
+  const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" } } };
+  const secondKey = installedAppKey(second.source, "second");
+  const homeKey = installedAppKey(homeApp.source, builtHome.manifest.id);
+  const homeOf = async (settings: { roles: Record<string, string> } | undefined, roles?: Record<string, string>) => {
+    const element = output(); const store = createMemoryAppStore();
+    if (settings) await store.system.putSettings(settings);
+    const shell = await mountSystem(element, { apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store, createWorker, roles });
+    try { return element.view.instances.find(instance => instance.home)!.key; } finally { shell.stop(); }
+  };
+  assertEquals(await homeOf(undefined), homeKey);
+  assertEquals(await homeOf(undefined, { home: secondKey }), secondKey);
+  assertEquals(await homeOf({ roles: { home: homeKey } }, { home: secondKey }), homeKey);
+  // 設定アプリは home を名乗っていないので、設定にあっても選ばない
+  assertEquals(await homeOf({ roles: { home: fixtures[0]!.key } }, { home: secondKey }), secondKey);
+});
+
+const storageApp = await build(source + `
+import { StorageApi } from "jsr:@binette/replique";
+const storageApi = new Api().get<StorageApi>("storage");
+export function save(): void { storageApi!.write("メモ", "保存した"); storageApi!.write("消す", "x"); storageApi!.remove("消す"); }
+export function load(): void { const value = storageApi!.read("メモ"); document.getElementById("memo").textContent = value == null ? "なし" : value; }
+`);
+
+Deno.test("storage はすべてのアプリに届き、アプリごとに /data/<id>/ へ保存して次の起動で読む", async () => {
+  const store = createMemoryAppStore();
+  const app = { source: "test", prebuilt: storageApp };
+  const other = { source: "test", prebuilt: { ...storageApp, manifest: { ...storageApp.manifest, id: "other" } } };
+  for (const expected of ["なし", "保存した"]) {
+    const element = output();
+    const shell = await mountSystem(element, { apps: [homeApp, app, other], store, createWorker });
+    try {
+      await shell.open(installedAppKey(app.source, storageApp.manifest.id));
+      await element.active.process.app.call("load");
+      assertEquals(element.active.text.get("memo"), expected);
+      if (expected === "なし") {
+        await element.active.process.app.call("save");
+        // 書き込みは呼び出しの外で順に保存される
+        for (let i = 0; i < 200 && (await store.data.read(storageApp.manifest.id)).size === 0; i++) await sleep(10);
+      }
+      assertEquals(element.errors, []);
+    } finally { shell.stop(); }
+  }
+  assertEquals(await store.data.read(storageApp.manifest.id), new Map([["メモ", "保存した"]]));
+  assertEquals(await store.data.read("other"), new Map());
+});
+
+Deno.test("保存待ちの書き込みがあるうちに開き直しても、書き込みのあとのデータを読む", async () => {
+  const store = createMemoryAppStore();
+  const write = store.data.write.bind(store.data);
+  store.data.write = async (...args) => { await sleep(100); return write(...args); };
+  const app = { source: "test", prebuilt: storageApp };
+  const key = installedAppKey(app.source, storageApp.manifest.id);
+  const element = output();
+  const shell = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+  try {
+    await shell.open(key);
+    await element.active.process.app.call("save");
+    const first = element.view.instances.find(instance => instance.key === key)!;
+    await shell.close(first.id);
+    await waitFor(() => !element.view.instances.some(instance => instance.key === key));
+    await shell.open(key);
+    await element.active.process.app.call("load");
+    assertEquals([element.active.text.get("memo"), element.errors], ["保存した", []]);
+  } finally { shell.stop(); }
+});
+
+const updateApp = await build(source + `
+import { OsApi } from "jsr:@binette/replique";
+const updateOs = new Api().get<OsApi>("os");
+export function update(): void { updateOs!.update(); document.getElementById("available").textContent = updateOs!.updateAvailable().toString(); }
+`);
+
+Deno.test("設定アプリの update は渡された更新を一度呼び、新しい版が無ければ updateAvailable は false", async () => {
+  for (const available of [true, false]) {
+    const element = output(); let applied = 0;
+    const settings = { source: "binette:system", prebuilt: { ...updateApp, manifest: { ...updateApp.manifest, id: "settings", roles: ["settings"] } } };
+    const shell = await mountSystem(element, { apps: [homeApp, settings], store: createMemoryAppStore(), createWorker,
+      update: available ? { apply: () => { applied++; return Promise.resolve(); } } : undefined });
+    try {
+      await shell.open(installedAppKey(settings.source, "settings"));
+      await element.active.process.app.call("update");
+      assertEquals(element.active.text.get("available"), String(available));
+      await waitFor(() => !available || applied === 1);
+      await sleep(20);
+      assertEquals([applied, element.errors], [available ? 1 : 0, []]);
+    } finally { shell.stop(); }
+  }
+});
+
+Deno.test("更新の失敗は report に届き、起動中のアプリを止めない", async () => {
+  const element = output();
+  const settings = { source: "binette:system", prebuilt: { ...updateApp, manifest: { ...updateApp.manifest, id: "settings", roles: ["settings"] } } };
+  const shell = await mountSystem(element, { apps: [homeApp, settings], store: createMemoryAppStore(), createWorker,
+    update: { apply: () => Promise.reject(new Error("更新に失敗")) } });
+  try {
+    await shell.open(installedAppKey(settings.source, "settings"));
+    await element.active.process.app.call("update");
+    await waitFor(() => element.errors.length === 1);
+    assertEquals((element.errors[0] as Error).message, "更新に失敗");
+    assertEquals(element.view.instances.length, 2);
+  } finally { shell.stop(); }
 });

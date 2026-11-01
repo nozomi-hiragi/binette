@@ -15,11 +15,18 @@ interface ProcessOptions {
   destroyTimeout?: number; // ミリ秒、既定 5000
   page?: string;
   persistence?: { store: SystemStore; key: string; historyLimit?: number };
-  /** 渡す呼び出し。省くと、その呼び出しはアプリを終了する例外になる（[権限](system.md#権限)） */
-  grants?: { apps?: { id: string; name: string; icon?: string }[]; os?: OsSnapshot };
+  /** アプリに渡す API の辞書。載せたキーだけが届く。省いたキーの理由は denied に書く。辞書を通さない呼び出しは、アプリを終了する例外になる（[権限](system.md#権限)） */
+  grants?: {
+    apps?: { id: string; name: string; icon?: string }[];
+    os?: OsSnapshot;
+    storage?: Map<string, string>;
+    denied?: Record<string, "NotGranted" | "NotAssigned">;
+  };
   onOpen?: (i: number) => void;
   onSet?: (name: string, value: number) => void;
-  onSetHome?: (i: number) => void;
+  onAssign?: (role: string, i: number) => void;
+  onUpdate?: () => void;
+  onStorage?: (name: string, value: string | null) => void;
   /** 今の呼び出しが終わってから、自分を閉じる */
   onFinish?: () => void;
   /** アプリを終了しない呼び出しの失敗 */
@@ -65,7 +72,7 @@ State・DestroyKind・DestroyCause の番号は core が持ちます（[core.md]
 
 Pause から stopDelay 後に Stop にします。setFrozen(true) でタイマーを解除して残り時間を覚え、false で残りから数え直します。resume・destroy・stop ではタイマーを解除します。
 
-setStopDelay(delay) は次の Pause から使う時間を変更します。今 Pause で進んでいる計時は変更しません。os と onSet は LaunchOptions に渡し、onSetHome は状態の通知と起動の完了後に通知します。渡してよいアプリの条件はシステムが確かめます（[system.md](system.md#権限)）。
+setStopDelay(delay) は次の Pause から使う時間を変更します。今 Pause で進んでいる計時は変更しません。grants の `os`・`storage` と onSet・onUpdate・onStorage は LaunchOptions に渡し、onAssign は状態の通知と起動の完了後に通知します。渡してよいアプリの条件はシステムが確かめます（[system.md](system.md#権限)）。
 
 onDestroy は destroyTimeout で Worker を止めます。Destroy 中は Régie の時間切れや終了も onError / onExit に流さず、エラー表示やホーム復帰を重複させません。二つの時間切れは先に来た方で終了します。Pause・Stop の失敗は通常の終了として扱います。
 

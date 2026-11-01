@@ -15,7 +15,7 @@ process.stop();
 - `attach(sink)` は DOM 操作の受け先をつなぎ、接続前に溜まった操作を先に渡します。`begin()` は Create → Start(Create) → Resume を知らせます
 - `dispatch(listener)` はイベントを届けるか判断してアプリに渡します
 - `process.app.call(name, ...args)` は関数を呼び、終わったら解決します。呼び出し中の DOM 操作は、解決より先に `attach` でつないだ受け先に届きます。無い関数は reject と onError、アプリの例外は終了して reject と onExit で知らせます
-- Worker は独立した URL の module Worker です。ブラウザの配布ビルドでは固定名 `regie-worker.js` を使い、Blob URL を必要としません。`workerUrl` で別の module Worker の URL も指定できます。`createWorker` があればそちらが優先されます。`workerSource()` は既存のテスト用に残しています。テストでは `createWorker` に同じスレッドの `MessageChannel` と `serveApp` をつないだものを渡せます
+- Worker は独立した URL の module Worker です。ブラウザの配布ビルドでは固定名 `regie-worker.js` を使い、Blob URL を必要としません。`workerUrl` で別の module Worker の URL も指定できます。`createWorker` があればそちらが優先されます。以前の `workerSource()` は廃止しました。テストでは `createWorker` に同じスレッドの `MessageChannel` と `serveApp` をつないだものを渡せます
 
 テストは、ルートの `deno task test` で行います。
 

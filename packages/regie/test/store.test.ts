@@ -1,5 +1,5 @@
-import { assertEquals, assertNotEquals, assertThrows } from "@std/assert";
-import { createMemoryAppStore, type InstalledApp, installedAppKey, validateSystemSettings, type SystemSettings } from "../src/index.ts";
+import { assertEquals, assertNotEquals, assertRejects, assertThrows } from "@std/assert";
+import { createAppStore, createMemoryAppStore, createMemoryFileTree, type InstalledApp, installedAppKey, validateSystemSettings, type SystemSettings } from "../src/index.ts";
 
 const app = (source: string, id: string): InstalledApp => ({
   key: installedAppKey(source, id), source,
@@ -52,10 +52,10 @@ Deno.test("OS の記録はアプリごとに分かれ、設定と履歴も写し
   assertEquals((await store.getLast("a"))!.reason.kind, 1); assertEquals(await store.getLast("b"), undefined);
   const last = (await store.getLast("a"))!; last.page = "変更";
   assertEquals((await store.getLast("a"))!.page, "ページ");
-  const settings = { home: "home", stackSize: 2, callTimeout: 99 };
+  const settings = { roles: { home: "home" }, stackSize: 2, callTimeout: 99 };
   await store.putSettings(settings); settings.stackSize = 8;
-  const saved = (await store.getSettings())!; saved.home = "変更";
-  assertEquals(await store.getSettings(), { home: "home", stackSize: 2, callTimeout: 99 });
+  const saved = (await store.getSettings())!; saved.roles!.home = "変更";
+  assertEquals(await store.getSettings(), { roles: { home: "home" }, stackSize: 2, callTimeout: 99 });
   await store.putSettings({}); assertEquals(await store.getSettings(), {});
   for (let i = 0; i < 105; i++) await store.recordLaunch({ time: i, app: `app${i}` });
   const history = await store.listLaunches(); assertEquals(history.length, 100); assertEquals(history[0]!.time, 5);
@@ -70,7 +70,7 @@ Deno.test("OS の設定は知らない名前と範囲外を拒み、保存済み
   const store = createMemoryAppStore().system;
   await store.putSettings({ stackSize: 2 });
   for (const value of [{ unknown: 1 }, { stackSize: 0 }, { stackSize: 1.5 }, { historyLimit: -1 }, { historyLimit: 0.5 },
-    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { home: 1 }]) {
+    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { home: "旧名" }, { roles: "home" }, { roles: { home: 1 } }, { roles: ["home"] }, { roles: null }]) {
     const settings = value as Partial<SystemSettings>;
     assertThrows(() => validateSystemSettings(settings));
     assertThrows(() => store.putSettings(settings));
@@ -94,8 +94,8 @@ Deno.test("ファイルの木を共有してアプリと OS の記録を読み�
   await Promise.all(Array.from({ length: 20 }, (_, time) =>
     (time % 2 ? first : second).system.recordLaunch({ time, app: apps[0]!.key })));
   assertEquals((await second.system.listLaunches()).map(record => record.time), Array.from({ length: 20 }, (_, i) => i));
-  await first.system.putSettings({ home: "shared" });
-  assertEquals(await second.system.getSettings(), { home: "shared" });
+  await first.system.putSettings({ roles: { home: "shared" } });
+  assertEquals(await second.system.getSettings(), { roles: { home: "shared" } });
   await tree.write("/data/system/settings.json", new TextEncoder().encode('{"stackSize":4}'));
   assertEquals(await first.system.getSettings(), { stackSize: 4 });
 });
@@ -131,4 +131,29 @@ Deno.test("アプリは索引なしで記録とバイナリを保存し、一覧
   assertEquals(await tree.read(appFilePaths(updated.manifest.id, updated.source).wasm), updated.wasm);
   assertEquals((await store.list()).length, values.length);
   for (const key of ["missing", "null", "{}", '["one"]', '[1,2]', '[ "z", "id" ]']) assertEquals(await store.get(key), undefined);
+});
+
+Deno.test("アプリごとのデータは /data/<id>/ に名前ごとに保存し、system の ID は拒む", async () => {
+  const { createMemoryFileTree } = await import("../src/fs.ts");
+  const { createAppStore } = await import("../src/store.ts");
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree).data;
+  assertEquals(await store.read("io.example.app"), new Map());
+  await store.write("io.example.app", "メモ/1", "中身🏠");
+  await store.write("io.example.app", "b", "2");
+  await store.write("other", "b", "別");
+  assertEquals(await store.read("io.example.app"), new Map([["b", "2"], ["メモ/1", "中身🏠"]]));
+  assertEquals(await tree.list("/data/io.example.app"), ["/data/io.example.app/%E3%83%A1%E3%83%A2%2F1", "/data/io.example.app/b"]);
+  await store.write("io.example.app", "b", null);
+  await store.write("io.example.app", "無い", null);
+  assertEquals([...(await store.read("io.example.app")).keys()], ["メモ/1"]);
+  assertEquals(await store.read("other"), new Map([["b", "別"]]));
+  await assertRejects(() => store.read("system"), Error, "system");
+  await assertRejects(() => store.write("system", "settings.json", "x"), Error, "system");
+});
+
+Deno.test("保存済みの旧い home を roles.home に読み替える", async () => {
+  const tree = createMemoryFileTree();
+  await tree.write("/data/system/settings.json", new TextEncoder().encode(JSON.stringify({ home: "a", stackSize: 2 })));
+  assertEquals(await createAppStore(tree).system.getSettings(), { stackSize: 2, roles: { home: "a" } });
 });

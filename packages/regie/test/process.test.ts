@@ -1,4 +1,3 @@
-import { workerSource } from "../src/worker.ts";
 import { assert, assertEquals, assertStrictEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, startProcess } from "../src/index.ts";
 import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
@@ -23,21 +22,26 @@ function createWorker(): RegieWorker {
 }
 /** 無限ループもメインを止めずに試せる、別スレッドの Worker */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
-  try { return new Worker(url, { type: "module" }); }
-  finally { URL.revokeObjectURL(url); }
+  return new Worker(new URL("../src/worker-entry.ts", import.meta.url), { type: "module" });
 }
-const source = `import { App, Last, State, DestroyReason, document, launch, apps } from "jsr:@binette/replique";
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
+const source = `import { Api, App, AppsApi, Last, State, DestroyReason, document, launch } from "jsr:@binette/replique";
+let appsApi: AppsApi | null = null;
 let log = "";
 function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
 class TestApp extends App {
-  onCreate(last: Last): void {
-
+  onCreate(last: Last, api: Api): void {
+    appsApi = api.get<AppsApi>("apps");
     record("create:" + last.state.toString());
     document.getElementById("page").textContent = this.page;
     document.getElementById("click").addEventListener("click", () => record("click"));
     document.getElementById("finish").addEventListener("click", () => test.finishNow());
-    document.getElementById("open").addEventListener("click", () => apps.open(0));
+    document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
   }
   onStart(last: State): void { record("start:" + last.toString()); }
   onResume(): void { record("resume"); }
@@ -50,7 +54,7 @@ const test = new TestApp();
 launch(test);`;
 async function build(code = source, home = false) {
   const files: Record<string, string> = {
-    "app.json": JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { role: "home" } : {}), entry: { html: "index.html", as: "main.ts" } }),
+    "app.json": JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { roles: ["home"] } : {}), entry: { html: "index.html", as: "main.ts" } }),
     "index.html": '<p id="log"></p><p id="page"></p><button id="click">click</button><button id="finish">finish</button><button id="open">open</button>',
     "main.ts": code,
   };
@@ -149,9 +153,9 @@ Deno.test("onStart(Stop) で finish したら onResume を呼ばずに閉じる"
   } finally { mounted.stop(); }
 });
 
-const lastSource = `import { App, Last, document, launch } from "jsr:@binette/replique";
+const lastSource = `import { Api, App, Last, document, launch } from "jsr:@binette/replique";
 class TestApp extends App {
-  onCreate(last: Last): void {
+  onCreate(last: Last, _api: Api): void {
     document.getElementById("page").textContent = last.state.toString() + "," + last.done.toString() + "," + last.page + "," + last.reason.kind.toString() + "," + last.reason.cause.toString();
   }
 }
@@ -196,8 +200,9 @@ for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeo
     const element = output(); const system = createMemoryAppStore().system;
     const state = phase.startsWith("Create") ? State.Create : phase === "Stop" ? State.Stop : State.Destroy;
     const method = state === State.Create ? "Create" : state === State.Stop ? "Stop" : "Destroy";
-    const code = source.replace(`on${method}(${method === "Create" ? "last: Last" : method === "Destroy" ? "reason: DestroyReason" : ""}): void {`,
-      `on${method}(${method === "Create" ? "last: Last" : method === "Destroy" ? "reason: DestroyReason" : ""}): void { ${phase.endsWith("Timeout") ? "while (true) {}" : 'throw new Error("記録の途中");'}`);
+    const parameters = method === "Create" ? "last: Last, api: Api" : method === "Destroy" ? "reason: DestroyReason" : "";
+    const code = source.replace(`on${method}(${parameters}): void {`,
+      `on${method}(${parameters}): void { ${phase.endsWith("Timeout") ? "while (true) {}" : 'throw new Error("記録の途中");'}`);
     const persistence = { store: system, key: "test" };
     let mounted: Awaited<ReturnType<typeof begin>> | undefined;
     let exits = 0;
@@ -221,7 +226,7 @@ for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeo
 
 
 Deno.test("リスナーの解除と部分木の解放は Worker 越しに届き、古い番号を再利用しない", async () => {
-  const code = `import { App, Last, document, Element, Event, launch, __bina_listener_count, __bina_element_count } from "jsr:@binette/replique";
+  const code = `import { Api, App, Last, document, Element, Event, launch, __bina_listener_count, __bina_element_count } from "jsr:@binette/replique";
 let count = 0;
 let parent = document.createElement("div");
 let child = document.createElement("button");
@@ -251,7 +256,7 @@ export function stress(): void {
   assert(__bina_listener_count() == listenerCount);
   assert(__bina_element_count() == elementCount);
 }
-class TestApp extends App { onCreate(_last: Last): void { setup(); } }
+class TestApp extends App { onCreate(_last: Last, _api: Api): void { setup(); } }
 launch(new TestApp());`;
   const ops: DomOp[] = [];
   const mounted = await startProcess((await build(code)).wasm, { createWorker });
@@ -290,13 +295,13 @@ launch(new TestApp());`;
 });
 
 Deno.test("宣言 UI の連続クリックはすべて届き、再描画は差分だけを送る", async () => {
-  const code = `import { App, Last, document, launch } from "jsr:@binette/replique";
+  const code = `import { Api, App, Last, document, launch } from "jsr:@binette/replique";
 import { View, column, text, button } from "jsr:@binette/replique/ui";
 let count = 0;
 function increment(): void { count++; }
 function add(value: i32): void { count += value; }
 class Counter extends App {
-  onCreate(_last: Last): void { document.createElement("div").textContent = "ignored"; }
+  onCreate(_last: Last, _api: Api): void { document.createElement("div").textContent = "ignored"; }
   build(): View { return column([text("count:" + count.toString()), button("+1", increment), button("+5", add).arg(5), text("quote:\\" newline:\\n")]); }
 }
 launch(new Counter());`;

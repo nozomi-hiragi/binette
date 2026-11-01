@@ -110,7 +110,7 @@ assertThrows(() => parseAppManifest("{"), BinetteError);
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
   "src/index.html": '<p id="count">0</p>',
-  "src/main.ts": 'import { App, Last, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last): void { document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
+  "src/main.ts": 'import { Api, App, Last, Why, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last, api: Api): void { assert(api.why("unknown") == Why.NotAssigned); document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
 };
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
 const decorAs = await Deno.readTextFile(new URL("../packages/decor/src/as.ts", import.meta.url));
@@ -181,7 +181,7 @@ const ui: SystemUi = {
   report(error) { throw error; },
 };
 const system = await startSystem({
-  apps: [{ source: "binette:system", prebuilt: { ...built, manifest: { ...built.manifest, role: "home" } } }],
+  apps: [{ source: "binette:system", prebuilt: { ...built, manifest: { ...built.manifest, roles: ["home"] } } }],
   store: createMemoryAppStore(), ui, createWorker,
 });
 assertEquals(views.at(-1)?.instances.length, 0);

@@ -5,7 +5,6 @@ import { createUiDom } from "../src/index.ts";
 // AS のアプリを Régie で組み立て、本物の Worker を経て描く。Régie はテストでだけ使う
 import { type RegieWorker, startProcess } from "../../regie/src/index.ts";
 import { buildApp } from "../../regie/src/build.ts";
-import { workerSource } from "../../regie/src/worker.ts";
 
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -15,9 +14,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
   assert(condition(), "待っても状態が変わりませんでした");
 }
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
-  try { return new Worker(url, { type: "module" }); }
-  finally { URL.revokeObjectURL(url); }
+  return new Worker(new URL("../../regie/src/worker-entry.ts", import.meta.url), { type: "module" });
 }
 
 Deno.test("AS の見た目の修飾は Worker を経てクラスと属性になり、状態の変化で付け外しされる", async () => {

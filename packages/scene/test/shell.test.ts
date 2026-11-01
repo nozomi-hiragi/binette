@@ -410,19 +410,18 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("os は system の role settings だけに渡し、ほかのアプリが呼ぶと終了する", async () => {
-  for (const [source, role] of [["elsewhere", "settings"], ["binette:system", undefined]]) {
+Deno.test("os は system の役割 settings に割り当てたアプリだけに届き、ほかのアプリの辞書には載らない", async () => {
+  for (const [source, roles] of [["elsewhere", ["settings"]], ["binette:system", undefined]] as const) {
     const window = new Window(); const element = elementIn(window); const worker = workers(); const errors: unknown[] = [];
     const fixture = fixtures[0]!;
-    const app = { source: source!, prebuilt: { ...fixture, manifest: { ...fixture.manifest, role } } };
+    const app = { source, prebuilt: { ...fixture, manifest: { ...fixture.manifest, roles: roles as string[] | undefined } } };
     const shell = await mountShell(element, { apps: [homeApp, app], store: createMemoryAppStore(), createWorker: worker.createWorker, onError: e => errors.push(e) });
     try {
       element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
-      await waitFor(() => errors.length === 1);
-      assert((errors[0] as Error).message.includes("システムの設定アプリだけ"));
-      assertEquals(worker.terminated, 1);
+      await waitFor(() => element.querySelector("[data-bina-key=settings-unavailable]") !== null);
+      assertEquals(errors, []);
+      assertEquals(worker.terminated, 0);
       assertEquals(element.querySelectorAll("[data-bina-key=debug]").length, 0);
-      assertEquals(element.querySelector<HTMLElement>(".bina-shell-app")!.hidden, false);
     } finally { shell.stop(); await window.happyDOM.close(); }
   }
 });
@@ -461,7 +460,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     await waitFor(() => errors.length === 0);
     shell.stop();
     const saved = (await store.system.getSettings())!;
-    assertEquals(saved, { home: "", stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
+    assertEquals(saved, { roles: {}, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
     shell = await mountShell(element, options);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6 && worker.live === 1);
@@ -504,7 +503,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
     assertEquals(element.querySelector("[data-bina-key=homes] button")!.textContent, "ホーム（使用中）");
     element.querySelectorAll<HTMLButtonElement>("[data-bina-key=homes] button")[1]!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key=homes] button")[1]!.textContent === "別のホーム（使用中）" && worker.live === 1);
-    assertEquals((await store.system.getSettings())!.home, otherKey);
+    assertEquals((await store.system.getSettings())!.roles, { home: otherKey });
     const old = (await store.system.getLast(installedAppKey(homeApp.source, builtHome.manifest.id)))!;
     assertEquals({ state: old.state, done: old.done, reason: old.reason }, { state: 6, done: true, reason: { kind: 0, cause: 0 } });
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
@@ -539,11 +538,12 @@ Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で�
 
 Deno.test("os.set の範囲外と知らない名前は false になり、SystemStore に保存しない", async () => {
   const files: Record<string, string> = {
-    "app.json": JSON.stringify({ id: "bad-settings", name: "検査用設定", role: "settings", entry: { html: "index.html", as: "main.ts" } }),
+    "app.json": JSON.stringify({ id: "bad-settings", name: "検査用設定", roles: ["settings"], entry: { html: "index.html", as: "main.ts" } }),
     "index.html": '<p id="checked"></p>',
-    "main.ts": `import { App, Last, document, launch, os } from "jsr:@binette/replique";
+    "main.ts": `import { Api, App, Last, OsApi, document, launch } from "jsr:@binette/replique";
 class Settings extends App {
-  onCreate(_last: Last): void {
+  onCreate(_last: Last, api: Api): void {
+    const os = api.get<OsApi>("os")!;
     assert(!os.set("unknown", 1)); assert(!os.set("home", 1)); assert(!os.set("stackSize", 0));
     assert(!os.set("historyLimit", -1)); assert(!os.set("stopDelay", -1)); assert(!os.set("homeRetryWindow", -1));
     assert(!os.set("callTimeout", 999)); assert(!os.set("destroyTimeout", 999));
@@ -615,7 +615,7 @@ Deno.test("読み込み・保存の失敗があっても残りを渡し、重複
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("ホームは system かつ role home の最初のもの。別のホームも一覧に含めない", async () => {
+Deno.test("ホームは system かつ roles に home を持つ最初のもの。別のホームも一覧に含めない", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers();
   const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
   const shell = await mountShell(element, { apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore(), createWorker: worker.createWorker });

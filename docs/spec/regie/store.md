@@ -62,6 +62,21 @@ interface AppStore {
 
 版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。入手元の検証や権限の確認はまだしません。
 
+## アプリごとのデータ（案・実装済み）
+
+`AppStore.data` で `/data/<アプリの ID>/<名前>` を読み書きします。ID と名前は `encodeURIComponent` で符号化して 1 つの部品にします（空文字と `.`・`..` は別に表す）。名前は階層にならず、中身は文字列（UTF-8）だけです。ID `system` は OS の記録（`/data/system/`）と同じ場所なので拒みます。
+
+```ts
+interface AppDataStore {
+  /** 名前から中身への写し */
+  read(id: string): Promise<Map<string, string>>;
+  /** value が null なら消す */
+  write(id: string, name: string, value: string | null): Promise<void>;
+}
+```
+
+システムはアプリを起動するときに `read` で写しを作って Worker に渡し、`write` は順に呼びます（[Réplique の StorageApi](../replique.md#storageapi)）。容量の上限は未決です。
+
 ## SystemStore（案・実装済み）
 
 AppStore.system で同じファイルの木の OS の記録を読み書きします。最後の状態・履歴・設定は `/data/system/` 以下に置きます（配置は案）。IndexedDB は DB を v3 に上げて files 表を作り、旧 apps・system 表の記録を移します。旧表は残します。各書き込みはトランザクションの完了まで待ちます。
@@ -75,7 +90,7 @@ interface LifecycleRecord {
 }
 interface LaunchRecord { time: number; app: string } // Unix epoch ミリ秒、installedAppKey
 interface SystemSettings {
-  home: string; // installedAppKey。既定 "" は system のホーム
+  roles: Record<string, string>; // 役割 → installedAppKey。既定 {} はブートの既定の割り当て（[system.md](system.md#役割の割り当て実装済み形は案)）
   stackSize: number; // 既定 3
   stopDelay: number; // 既定 10000 ミリ秒
   callTimeout: number; // 既定 5000 ミリ秒
@@ -95,4 +110,4 @@ interface SystemStore {
 
 getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。IndexedDB では履歴の読み足しと書き込みを同じトランザクションにし、同時に起動しても失いません。
 
-putSettings は全体を置き換えます。部分的に保存でき、省いた項目はシステムの既定を使います。home は文字列、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。
+putSettings は全体を置き換えます。部分的に保存でき、省いた項目はシステムの既定を使います。roles は役割から installedAppKey への文字列の写し、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。getSettings は、v0.2.0 の途中まで保存していた home を roles.home に読み替えて返します。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。

@@ -1,5 +1,5 @@
 import type { AppManifest } from "@binette/core";
-import { appFilePaths } from "./app-files.ts";
+import { appFilePaths, decodeAppPathSegment, encodeAppPathSegment } from "./app-files.ts";
 import { createIndexedDbFileTree, createMemoryFileTree, type FileTree } from "./fs.ts";
 
 /** インストールしたアプリのビルド結果 */
@@ -20,9 +20,19 @@ export interface InstalledApp {
 export interface AppStore {
   /** 同じ保存先の OS の記録 */
   readonly system: SystemStore;
+  /** アプリごとのデータ（`/data/<id>/`） */
+  readonly data: AppDataStore;
   list(): Promise<InstalledApp[]>;
   get(key: string): Promise<InstalledApp | undefined>;
   put(app: InstalledApp): Promise<void>;
+}
+
+/** アプリごとのデータ。名前は 1 つの部品で、中身は文字列。アプリの ID は `system` を使えない（OS の記録と同じ場所のため） */
+export interface AppDataStore {
+  /** 名前から中身への写し */
+  read(id: string): Promise<Map<string, string>>;
+  /** value が null なら消す */
+  write(id: string, name: string, value: string | null): Promise<void>;
 }
 
 /** 最後に呼んだライフサイクル。番号は Réplique の enum と共通 */
@@ -38,7 +48,8 @@ export interface LaunchRecord { time: number; app: string }
 
 /** OS の設定。時間はミリ秒 */
 export interface SystemSettings {
-  home: string;
+  /** 役割から割り当てたアプリの installedAppKey への写し。空ならブートの既定 */
+  roles: Record<string, string>;
   stackSize: number;
   stopDelay: number;
   callTimeout: number;
@@ -49,7 +60,7 @@ export interface SystemSettings {
 
 /** 保存が無いときの OS の既定値 */
 export const DEFAULT_SYSTEM_SETTINGS: Readonly<SystemSettings> = Object.freeze({
-  home: "", stackSize: 3, stopDelay: 10000, callTimeout: 5000,
+  roles: {}, stackSize: 3, stopDelay: 10000, callTimeout: 5000,
   destroyTimeout: 5000, historyLimit: 100, homeRetryWindow: 5000,
 });
 
@@ -72,8 +83,10 @@ const historySize = (limit: number) => {
 /** OS の設定の範囲を確かめる */
 export function validateSystemSettings(settings: Partial<SystemSettings>): void {
   for (const [key, value] of Object.entries(settings)) {
-    if (key === "home") {
-      if (typeof value !== "string") throw new Error("home は文字列にしてください。");
+    if (key === "roles") {
+      if (typeof value !== "object" || value === null || Array.isArray(value) || !Object.values(value).every(app => typeof app === "string")) {
+        throw new Error("roles は役割からアプリへの文字列の写しにしてください。");
+      }
     } else if (!["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(key) ||
       typeof value !== "number" || !Number.isFinite(value) || value < 0 ||
       ((key === "stackSize" || key === "historyLimit") && !Number.isInteger(value)) ||
@@ -95,6 +108,10 @@ const decode = <T>(value: Uint8Array | undefined): T | undefined =>
   value === undefined ? undefined : JSON.parse(decoder.decode(value)) as T;
 const launchesPath = "/data/system/launches.json";
 const settingsPath = "/data/system/settings.json";
+const dataDirectory = (id: string) => {
+  if (id === "system") throw new Error("system はアプリの ID に使えません。");
+  return `/data/${encodeAppPathSegment(id)}`;
+};
 const lastPath = (key: string) => `/data/system/last/${encodeURIComponent(key)}.json`;
 type StoredApp = Omit<InstalledApp, "wasm">;
 
@@ -122,10 +139,30 @@ export function createAppStore(tree: FileTree): AppStore {
           return encode(size ? launches.slice(-size) : []);
         });
       },
-      getSettings: async () => decode<Partial<SystemSettings>>(await tree.read(settingsPath)),
+      async getSettings() {
+        const settings = decode<Partial<SystemSettings> & { home?: unknown }>(await tree.read(settingsPath));
+        if (settings === undefined || !("home" in settings)) return settings;
+        // v0.2.0 の途中まで使っていた home を roles.home に読み替える
+        const { home, ...rest } = settings;
+        return typeof home === "string" ? { ...rest, roles: { home, ...rest.roles } } : rest;
+      },
       putSettings(settings) {
         validateSystemSettings(settings);
         return tree.write(settingsPath, encode(settings));
+      },
+    },
+    data: {
+      async read(id) {
+        const directory = dataDirectory(id);
+        const names = (await tree.list(directory)).filter(path => path.startsWith(`${directory}/`));
+        const values = await tree.readFiles(names);
+        const result = new Map<string, string>();
+        names.forEach((path, i) => { if (values[i] !== undefined) result.set(decodeAppPathSegment(path.slice(directory.length + 1)), decoder.decode(values[i])); });
+        return result;
+      },
+      async write(id, name, value) {
+        const path = `${dataDirectory(id)}/${encodeAppPathSegment(name)}`;
+        await (value === null ? tree.delete(path) : tree.write(path, encoder.encode(value)));
       },
     },
     async list() {

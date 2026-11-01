@@ -3,10 +3,10 @@
 Binette のアプリ（AssemblyScript）が Régie を呼ぶライブラリです。document API と要素・イベントの管理を持ち、WASM の import（binette モジュール）は Régie が受け持ちます。
 
 ```ts
-import { App, Last, document, launch } from "jsr:@binette/replique";
+import { Api, App, Last, document, launch } from "jsr:@binette/replique";
 
 class Example extends App {
-  onCreate(_last: Last): void {
+  onCreate(_last: Last, _api: Api): void {
     document.getElementById("details").addEventListener("click", () => example.showDetails());
   }
   showDetails(): void {
@@ -17,7 +17,7 @@ const example = new Example();
 launch(example);
 ```
 
-Element は textContent・className、appendChild・remove・addEventListener を持ちます。同じ id は同じ Element を返し、無い id は何もしません。getter は最後に書いた値（まだなら空文字列）です。Event.currentTarget はリスナーを付けた Element です。apps.icon(img, i) はホーム用のアイコン表示です。
+Element は textContent・className、appendChild・remove・addEventListener を持ちます。同じ id は同じ Element を返し、無い id は何もしません。getter は最後に書いた値（まだなら空文字列）です。Event.currentTarget はリスナーを付けた Element です。`onCreate` の第 2 引数 `api` は、そのアプリに届く API の辞書です。`api.get<AppsApi>("apps")`（ホーム）、`api.get<OsApi>("os")`（設定アプリ）、`api.get<StorageApi>("storage")`（すべてのアプリ）のように型とキーで取り出し、届いていなければ null です。`api.why(key)` は理由（NotGranted か NotAssigned）を返します。
 
 アプリはパッケージを自分では持ち込まず、Scene がソースを差し込み、入口に __bina_event・__bina_lifecycle の再 export を足します。bina.ts の生成は廃止しました。
 

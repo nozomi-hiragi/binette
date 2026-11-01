@@ -21,11 +21,11 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 ## 使い方（実装済み）
 
 ```ts
-import { App, Last, document, launch } from "jsr:@binette/replique";
+import { Api, App, Last, document, launch } from "jsr:@binette/replique";
 
 class Counter extends App {
   private value: i32 = 0;
-  onCreate(_last: Last): void {
+  onCreate(_last: Last, _api: Api): void {
     document.getElementById("increment").addEventListener("click", () => counter.increment());
   }
   increment(): void {
@@ -52,7 +52,7 @@ export class Last {
   constructor(readonly state: State, readonly done: boolean, readonly page: string, readonly reason: DestroyReason) {}
 }
 export class App {
-  onCreate(last: Last): void {}
+  onCreate(last: Last, api: Api): void {}
   onStart(last: State): void {}
   onResume(): void {}
   onPause(): void {}
@@ -68,6 +68,8 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 `launch` はトップレベルで一回だけ呼びます。グローバルにインスタンスを保持して GC から守り、仮想メソッドで通知します。二回目は例外でアプリを終了します。呼ばなければ状態の通知は何もせず、document とイベントは使えます。従来の `export function start()` は呼びません。
 
 `this.page` は今のページの識別子です。`finish()` は今の呼び出しの完了後、Pause → Stop → Destroy（User・App）でホームに戻します。`onStart` の引数は Create または Stop です。Last は OS が各メソッドの前後に保存した最後の記録です。初回だけ None・done=true・page=""・reason=User/Os です。途中で落ちたメソッドは done=false が残ります。
+
+`onCreate` の第 2 引数 `api` は、そのアプリに届く API の辞書です（[API の辞書](#api-の辞書実装済み形は案)）。古い `onCreate(last: Last)` の形は、AS がオーバーロードを認めないためコンパイルエラーになります。引数が 1 つの上書きは、`api: Api` を足して移行してください（決定。互換の形は用意しない）。
 
 `__bina_lifecycle` の kind は State、Create の a/b は last.state/last.done、Start の a は前の State、Destroy の a/b は kind/cause です。Last のページと理由は import で受け取ります。Régie のビルドが入口に再 export を足し、`__bina_event` と同じく OS から call します。
 
@@ -85,8 +87,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 | `Element.removeEventListener(type: string, listener: (event: Event) => void): void` | 同じ要素・種類・関数の登録を解除する |
 | `Event.type: string`（readonly） | イベントの種類 |
 | `Event.currentTarget: Element`（readonly） | リスナーを付けた Element |
-| `apps.count(): i32` / `apps.name(i: i32): string` / `apps.id(i: i32): string` / `apps.open(i: i32): void` | ホーム用のアプリ一覧と起動 |
-| `apps.icon(img: Element, i: i32): void` | img に OS が持つアプリアイコンを入れる |
+| `Api.get<T>(key: string): T \| null` / `Api.why(key: string): Why` | API の辞書。[下](#api-の辞書実装済み形は案)に書く |
 | `__bina_event(listener: i32): void` | リスナー番号で Event を作って呼ぶ。Régie のビルドが入口からの再 export を差し込む |
 | `__bina_listener_count(): i32` / `__bina_element_count(): i32` | テスト用に保持中のリスナー数・id の要素数を返す |
 
@@ -118,36 +119,72 @@ Element の中身は i32 の handle です。id とリスナーは Map で保持
 | `apps.count` | なし（i32 を返す） |
 | `apps.name` / `apps.id` | i（文字列ポインタを返す） |
 | `apps.open` | i |
+| `os.get` / `os.set` | name、name と value |
+| `os.role` | role（文字列ポインタを返す） |
+| `os.candidateCount` | role |
+| `os.candidateName` / `os.candidateId` | role, i（文字列ポインタを返す） |
+| `os.assign` | role, i |
+| `os.launchCount` / `os.launchTime` / `os.launchName` | なし、i、i |
+| `os.updateAvailable` / `os.update` | なし |
+| `storage.has` / `storage.read` / `storage.write` / `storage.remove` | name、name（文字列ポインタか 0 を返す）、name と value、name |
+| `storage.count` / `storage.name` | なし、i |
+| `api.why` | key（0 は届いている、1 は NotGranted、2 は NotAssigned） |
 | `app.page` / `app.lastPage` | なし（文字列ポインタを返す） |
 | `app.lastKind` / `app.lastCause` | なし（i32 を返す。今はどちらも 0） |
 | `app.finish` | なし（自分を閉じる要求） |
 
-`apps.*` は apps が無ければ例外、番号の範囲外も例外でアプリを終了します。任意の URL や SVG をアプリから渡す API はありません。
+アプリは `apps.*`・`os.*`・`storage.*` の import を直接は使わず、辞書から取ったクラスを通します。辞書に載っていないキーの import を直接呼ぶと（辞書を通さない呼び出し）、権限のない呼び出しとして例外でアプリを終了します（[regie/run.md](regie/run.md#メッセージ実装済み)）。番号の範囲外も例外です。任意の URL や SVG をアプリから渡す API はありません。
 
-### 設定アプリの os.*（案・実装済み）
+## API の辞書（実装済み、形は案）
 
-入手元が `binette:system` で app.json の `role` が `"settings"` のアプリだけに渡します。ほかのアプリが呼ぶと例外でアプリを終了します。`binette` モジュールの同名の WASM import に対応します。
+[役割と API](roles.md) の辞書です。OS が `onCreate(last, api)` の第 2 引数で渡します。AS には動的な型がないので、`api.get<T>(key)` の型引数 `T` とキーが合う既知のクラスを返します。届いていない、キーを知らない、型引数が合わないときは null です。
 
 ```ts
-export namespace os {
-  export function get(name: string): i32;
-  export function set(name: string, value: i32): bool;
-  export function home(): string;
-  export function homeCount(): i32;
-  export function homeName(i: i32): string;
-  export function homeId(i: i32): string;
-  export function setHome(i: i32): void;
-  export function launchCount(): i32;
-  export function launchTime(i: i32): f64;
-  export function launchName(i: i32): string;
+export enum Why { Granted, NotGranted, NotAssigned }
+export class Api {
+  get<T>(key: string): T | null;
+  why(key: string): Why;
 }
 ```
 
+- `why` は取れない理由を返します。`NotGranted` は権限がない、`NotAssigned` はそのキーを持つ役割に割り当てられていません。取れるなら `Granted` です。知らないキーはどの役割にも属さないので `NotAssigned` です（案）
+- 辞書の中身は起動のときに決まり、その場では変わりません。ホームの割り当てを設定アプリで変えると、前のホームは Destroy され、新しいホームが次の起動から `apps` を受け取ります（ほかの役割の変え方は未決）
+- `Api` はコンストラクタを持つので `new Api()` でも作れますが、辞書の中身は `onCreate` で渡すものと同じです。トップレベルの初期化（`_start`）から使ってもかまいません
+
+| キー | クラス | 届く相手 | 内容 |
+| --- | --- | --- | --- |
+| `apps` | `AppsApi` | ホーム（とシェル） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
+| `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、`role(role)`・`candidateCount(role)`・`candidateName(role, i)`・`candidateId(role, i)`・`assign(role, i)`、`launchCount()`・`launchTime(i)`・`launchName(i)`、`updateAvailable()`・`update()` |
+| `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリごとのデータ（`/data/<id>/`） |
+| `fs` | `FsApi` | 誰にも届かない（案） | 空のクラス。範囲の決め方が未決なので、キーだけ用意している |
+
+```ts
+class Home extends App {
+  onCreate(_last: Last, api: Api): void {
+    const apps = api.get<AppsApi>("apps");
+    if (apps == null) { /* api.why("apps") で NotAssigned などを見る */ }
+  }
+}
+```
+
+### OsApi
+
+設定アプリ（役割 settings に割り当てられたアプリ）だけに届きます。`binette` モジュールの同名の WASM import に対応します。
+
 - get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
-- home は実際に使うホームの installedAppKey（`JSON.stringify([source, manifest.id])`）。設定が空・無効なら system のホームのキーです。homeCount/homeName/homeId は、保存済みの role home の候補数・名前・キーです。入手元を問いません。setHome はその番号を保存し、Worker の home も更新します。番号の範囲外は例外です
+- `role(role)` は役割に割り当てたアプリの installedAppKey（`JSON.stringify([source, manifest.id])`）です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・installedAppKey です。割り当てを変えられるのは `home` だけ（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ installedAppKey。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
-- home/homeName/homeId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
+- `updateAvailable()` は設定アプリの起動時に、新しい版の `/system` があったかです。`update()` は OS に更新を頼みます。OS は `/system` を入れ替えて再読み込みします。完了や失敗は戻りません（失敗は OS のエラー表示に出ます）。更新を渡されていないときの `update()` は何もしません
+- role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
+
+### StorageApi
+
+アプリごとのデータ（`/data/<アプリの ID>/`）です。名前は 1 つの部品（`/` を含めてもよいが、階層にはならない）で、1〜256 文字。中身は文字列だけです。
+
+- 起動のときにアプリのデータを Worker に写し、`read`・`has`・`count`・`name(i)`（名前の辞書順）はその写しから返します。`write`・`remove` は写しを更新して OS に知らせ、OS が順に保存します。完了は待てません
+- `read` は無ければ null です。`write` は名前が空か 256 文字を超えるとき false を返して保存しません。無い名前の `remove` は何もしません
+- 容量の上限と、ほかのタブや窓との同時書き込みの扱いは未決です。アプリの ID `system` は使えません（OS の記録と同じ場所のため）
 
 `@external("binette", "dom.text")` と `// @ts-ignore: decorator` で import を宣言します。型検査は Deno と asc の両方で行います。AS235（クラスや名前空間自体は WASM の export にならない）は想定した警告です。
 
@@ -155,7 +192,7 @@ export namespace os {
 
 - 最初の HTML の検査（on* 属性など。別作業）
 - setAttribute・style・value・input イベント・click 以外のイベント
-- storage・server などの呼び出しと権限。結果を受け取る方法は未決
+- `fs`（ファイルの木）の範囲の決め方と、権限を許す流れ。server の呼び出し。結果を受け取る方法は未決
 
 ## AS で書くときの制約
 

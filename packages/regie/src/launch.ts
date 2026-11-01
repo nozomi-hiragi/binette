@@ -1,12 +1,23 @@
 import type { DomOp } from "@binette/core";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
-/** 設定アプリの起動時に渡す写し。ホームの id は installedAppKey */
+/** 設定アプリの起動時に渡す写し。アプリの id は installedAppKey */
 export interface OsSnapshot {
-  settings: SystemSettings;
-  homes: { id: string; name: string }[];
+  settings: Omit<SystemSettings, "roles">;
+  /** 役割に割り当てたアプリ */
+  roles: Record<string, string>;
+  /** 役割ごとの選べるアプリ。割り当てを変えられる役割だけが載る */
+  candidates: Record<string, { id: string; name: string }[]>;
   launches: { time: number; name: string }[];
+  /** 新しい版の `/system` があるか */
+  updateAvailable: boolean;
 }
+
+/** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
+export type ApiDenial = "NotGranted" | "NotAssigned";
+
+/** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
+export const API_KEYS = ["apps", "os", "storage", "fs"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -29,13 +40,22 @@ export interface LaunchOptions {
   onFinish?: () => void;
   /** _start または一回の call で溜めた操作。完了通知より先に届く */
   onDom?: (ops: DomOp[]) => void;
-  /** ホームへ渡すアプリ。省略時は apps.* を使えない */
+  /** 辞書の `apps`。ホームとシェルに渡すアプリ。省略時は apps.* を使えない */
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
-  /** システムの設定アプリだけに渡す。省略時は os.* を使えない */
+  /** 辞書の `os`。設定アプリだけに渡す。省略時は os.* を使えない */
   os?: OsSnapshot;
   onSet?: (name: string, value: number) => void;
-  onSetHome?: (i: number) => void;
+  /** 役割に割り当てるアプリを、候補の番号で選ぶ */
+  onAssign?: (role: string, i: number) => void;
+  /** 「更新」を押された */
+  onUpdate?: () => void;
+  /** 辞書の `storage`。アプリごとのデータの写し。省略時は storage.* を使えない */
+  storage?: Map<string, string>;
+  /** データの書き込み。value が null なら削除 */
+  onStorage?: (name: string, value: string | null) => void;
+  /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted として扱う */
+  denied?: Record<string, ApiDenial>;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
   /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
@@ -80,7 +100,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   let initTimer: ReturnType<typeof setTimeout> | undefined;
   let finishing = false;
   const openings: number[] = [];
-  const homes: number[] = [];
+  const assignments: [string, number][] = [];
   let nextId = 1;
   let stopped = false;
   let rejectLaunch: ((error: Error) => void) | undefined;
@@ -104,7 +124,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const expired = () => exit(new Error("アプリが応答しないので終了しました。"));
   const notifyRequests = () => {
     if (rejectLaunch || pending.size || stopped) return;
-    for (const i of homes.splice(0)) options.onSetHome?.(i);
+    for (const [role, i] of assignments.splice(0)) options.onAssign?.(role, i);
     if (finishing) { finishing = false; openings.length = 0; options.onFinish?.(); }
     else for (const i of openings.splice(0)) options.onOpen?.(i);
   };
@@ -120,7 +140,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -150,8 +170,10 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": openings.push(data.i!); break;
-        case "os.set": options.onSet?.(data.name!, data.value!); break;
-        case "os.setHome": homes.push(data.i!); break;
+        case "os.set": options.onSet?.(data.name!, data.value as number); break;
+        case "os.assign": assignments.push([data.role!, data.i!]); break;
+        case "os.update": options.onUpdate?.(); break;
+        case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
         case "finish": finishing = true; break;
         case "done": {
           clearTimeout(pending.get(data.id!)?.timer);
@@ -176,7 +198,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

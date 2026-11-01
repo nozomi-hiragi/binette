@@ -2,6 +2,7 @@ import { DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
 import type { BuildOptions } from "./build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
+import type { ApiDenial } from "./launch.ts";
 import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -13,6 +14,10 @@ export type SystemApp = { source: string } & (
 /** システムの設定 */
 export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
+  /** 役割の既定の割り当て（役割 → installedAppKey）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
+  roles?: Record<string, string>;
+  /** 新しい版の `/system` があるとき、設定アプリの「更新」で入れ替える処理 */
+  update?: { apply(): Promise<void> };
   store: AppStore;
   ui: SystemUi;
   homeRetryWindow?: number;
@@ -45,17 +50,32 @@ export interface BinetteSystem {
   stop(): void;
 }
 
+/**
+ * API の辞書のキーごとの届け先。roles は割り当てを受けた役割のどれか、permission は app.json の permissions に書く権限。
+ * どちらも無いキーはすべてのアプリに届く。権限を許す流れは未決なので、permission のキーは今は誰にも届かない。
+ */
+const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
+  apps: { roles: ["home", "shell"] },
+  os: { roles: ["settings"] },
+  storage: {},
+  fs: { permission: "fs" },
+};
+/** 設定アプリで割り当てを変えられる役割。設定は固定で、シェルは後で足す */
+const ASSIGNABLE_ROLES = ["home"];
+const SYSTEM_SOURCE = "binette:system";
+
 const HOME_RESTART_FIRST = 100;
 const HOME_RESTART_MAX = 1000;
 
 /** インストールと設定とホームの選択を済ませる。ホームは openHome で開く */
 export async function startSystem(options: SystemOptions): Promise<BinetteSystem> {
-  const settings = { ...DEFAULT_SYSTEM_SETTINGS };
+  const settings = { ...DEFAULT_SYSTEM_SETTINGS, roles: {} as Record<string, string> };
   for (const key of ["stackSize", "historyLimit", "callTimeout", "stopDelay", "destroyTimeout", "homeRetryWindow"] as const) {
     if (options[key] !== undefined) settings[key] = options[key];
   }
-  Object.assign(settings, await options.store.system.getSettings());
-  validateSystemSettings(settings);
+  const stored = await options.store.system.getSettings();
+  validateSystemSettings(stored ?? {});
+  Object.assign(settings, stored, { roles: { ...stored?.roles } });
   const page = crypto.randomUUID();
   let frozen = false;
   let visible = true;
@@ -133,17 +153,26 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   // ホーム候補は、今回渡されたアプリ以外も含めて保存先から探す
   const available = new Map(installedApps.map(app => [app.key, app]));
   for (const app of await options.store.list()) if (!available.has(app.key)) available.set(app.key, app);
-  const homes = [...available.values()].filter(app => app.manifest.role === "home");
-  let home = homes.find(app => app.key === settings.home) ?? homes.find(app => app.source === "binette:system");
-  const apps = installedApps.filter(app => app.manifest.role !== "home");
+  // 役割の割り当ては 2 段。名乗った（manifest.roles）アプリが候補になり、設定、ブートの既定、入手元が system の順で選ぶ
+  const holders = (role: string) => [...available.values()].filter(app => app.manifest.roles?.includes(role));
+  const candidates = (role: string) => ASSIGNABLE_ROLES.includes(role) ? holders(role) : [];
+  const assign = (role: string): InstalledApp | undefined => {
+    const list = role === "settings" ? holders(role).filter(app => app.source === SYSTEM_SOURCE) : holders(role);
+    const chosen = ASSIGNABLE_ROLES.includes(role) ? settings.roles[role] : undefined;
+    return list.find(app => app.key === chosen) ?? list.find(app => app.key === options.roles?.[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
+  };
+  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings") };
+  let home = assigned.home;
+  const apps = installedApps.filter(app => !app.manifest.roles?.includes("home"));
+  const updateAvailable = options.update !== undefined;
   let saving = Promise.resolve();
   const saveSettings = () => {
-    const copy = { ...settings };
+    const copy = { ...settings, roles: { ...settings.roles } };
     saving = saving.then(() => options.store.system.putSettings(copy)).catch(report);
   };
   const setSetting = (name: string, value: number) => {
     if (stopped || !["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name)) return;
-    const key = name as Exclude<keyof SystemSettings, "home">;
+    const key = name as Exclude<keyof SystemSettings, "roles">;
     try {
       validateSystemSettings({ [key]: value });
       if (!Number.isInteger(value) || ((key === "callTimeout" || key === "destroyTimeout") && value < 1000)) return;
@@ -152,11 +181,13 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     if (key === "stopDelay") for (const session of sessions) session.mounted?.setStopDelay(value);
     saveSettings();
   };
-  const selectHome = async (i: number) => {
-    if (stopped || !Number.isInteger(i) || !homes[i]) return;
+  /** 設定アプリが、役割に割り当てるアプリを候補の番号で選ぶ */
+  const selectRole = async (role: string, i: number) => {
+    const list = candidates(role);
+    if (stopped || role !== "home" || !Number.isInteger(i) || !list[i]) return;
     const previous = home;
-    home = homes[i]!;
-    settings.home = home.key;
+    home = assigned.home = list[i]!;
+    settings.roles.home = home.key;
     saveSettings();
     resetHomeFailures();
     homeUnavailable = false;
@@ -165,6 +196,30 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       for (const session of [...sessions]) if (session.installed.key === previous?.key) await close(session, DestroyKind.User, DestroyCause.Os);
     }
     renderBar();
+  };
+  /** アプリに届く辞書のキーと、届かないキーの理由 */
+  const apiOf = (installed: InstalledApp) => {
+    const keys = new Set<string>();
+    const denied: Record<string, ApiDenial> = {};
+    for (const [key, rule] of Object.entries(API_RULES)) {
+      if (rule.roles) {
+        if (rule.roles.some(role => assigned[role]?.key === installed.key)) keys.add(key);
+        else denied[key] = "NotAssigned";
+      } else if (rule.permission) denied[key] = "NotGranted";
+      else keys.add(key);
+    }
+    return { keys, denied };
+  };
+  /** 設定アプリの起動時に渡す OS の写し */
+  const osSnapshot = (launches: { time: number; name: string }[]) => {
+    const { roles: _roles, ...numeric } = settings;
+    return {
+      settings: numeric,
+      roles: Object.fromEntries(Object.entries(assigned).flatMap(([role, app]) => app ? [[role, app.key]] : [])),
+      candidates: Object.fromEntries(ASSIGNABLE_ROLES.map(role => [role, candidates(role).map(app => ({ id: app.key, name: app.manifest.name }))])),
+      launches,
+      updateAvailable,
+    };
   };
   function renderBar(clearError = false) {
     options.ui.update({
@@ -260,10 +315,15 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     active = started;
     renderBar(clearStatus);
     try {
-      const atSettings = installed.source === "binette:system" && installed.manifest.role === "settings";
-      const launches = atSettings ? (await options.store.system.listLaunches()).reverse().map(record => ({
+      const api = apiOf(installed);
+      const launches = api.keys.has("os") ? (await options.store.system.listLaunches()).reverse().map(record => ({
         time: record.time, name: available.get(record.app)?.manifest.name ?? record.app,
       })) : [];
+      if (!sessions.has(started) || stopped) return;
+      // アプリごとのデータの読み込みに失敗したら、storage だけ載せない
+      // 前の起動で積んだ書き込みを待ってから読む（古いスナップショットを渡さない）
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(installed.manifest.id)).catch(() => undefined) : undefined;
+      if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
       const mounted = await startProcess(installed.wasm, {
         declarative: installed.manifest.entry.html === undefined,
@@ -291,22 +351,27 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           started.finish = true;
           if (started.mounted) void close(started, DestroyKind.User, DestroyCause.App);
         },
-        ...(atSettings ? {
-          grants: { os: { settings: { ...settings, home: home?.key ?? settings.home }, homes: homes.map(app => ({ id: app.key, name: app.manifest.name })), launches } },
-          onSet: setSetting,
-          onSetHome(i: number) { void selectHome(i).catch(report); },
-        } : {}),
-        ...(atHome ? {
-          grants: { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) },
-          onOpen(i: number) {
-            if (active !== started || !Number.isInteger(i) || !apps[i]) return;
-            void show(apps[i]!, false);
-          },
-        } : {}),
+        grants: {
+          denied: api.denied,
+          ...(api.keys.has("apps") ? { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) } : {}),
+          ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
+          ...(storage ? { storage } : {}),
+        },
+        onOpen(i: number) {
+          if (!api.keys.has("apps") || active !== started || !Number.isInteger(i) || !apps[i]) return;
+          void show(apps[i]!, false);
+        },
+        onSet(name: string, value: number) { if (api.keys.has("os")) setSetting(name, value); },
+        onAssign(role: string, i: number) { if (api.keys.has("os")) void selectRole(role, i).catch(report); },
+        onUpdate() { if (api.keys.has("os")) void options.update?.apply().catch(report); },
+        onStorage(name: string, value: string | null) {
+          if (!api.keys.has("storage")) return;
+          saving = saving.then(() => options.store.data.write(installed.manifest.id, name, value)).catch(report);
+        },
       });
       if (!sessions.has(started) || stopped) { mounted.stop(); return; }
       started.view = options.ui.present({ id: started.id, app: installed, home: atHome,
-        apps: atHome ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
+        apps: api.keys.has("apps") ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
       }, mounted);
       renderBar();
       await mounted.begin();
