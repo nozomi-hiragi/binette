@@ -77,3 +77,58 @@ Deno.test("OS の設定は知らない名前と範囲外を拒み、保存済み
     assertEquals(await store.getSettings(), { stackSize: 2 });
   }
 });
+
+Deno.test("ファイルの木を共有してアプリと OS の記録を読み書きする", async () => {
+  const { createMemoryFileTree } = await import("../src/fs.ts");
+  const { createAppStore } = await import("../src/store.ts");
+  const tree = createMemoryFileTree();
+  const first = createAppStore(tree);
+  const second = createAppStore(tree);
+  const apps = [app("z/source", "../x"), app("a/source", "../x"), app("", "")];
+  await Promise.all(apps.map((value, index) => (index % 2 ? first : second).put(value)));
+  assertEquals((await first.list()).map(value => value.key).sort(), apps.map(value => value.key).sort());
+  for (const value of apps) assertEquals(await second.get(value.key), value);
+  const paths = await tree.list("/apps");
+  assertEquals(paths.length, 6);
+  assertEquals(paths.every(path => path.endsWith("/record.json") || path.endsWith("/app.wasm")), true);
+  await Promise.all(Array.from({ length: 20 }, (_, time) =>
+    (time % 2 ? first : second).system.recordLaunch({ time, app: apps[0]!.key })));
+  assertEquals((await second.system.listLaunches()).map(record => record.time), Array.from({ length: 20 }, (_, i) => i));
+  await first.system.putSettings({ home: "shared" });
+  assertEquals(await second.system.getSettings(), { home: "shared" });
+  await tree.write("/data/system/settings.json", new TextEncoder().encode('{"stackSize":4}'));
+  assertEquals(await first.system.getSettings(), { stackSize: 4 });
+});
+
+Deno.test("アプリは索引なしで記録とバイナリを保存し、一覧をパス順に返す", async () => {
+  const { createMemoryFileTree } = await import("../src/fs.ts");
+  const { createAppStore } = await import("../src/store.ts");
+  const { appFilePaths, encodeAppPathSegment, decodeAppPathSegment } = await import("../src/app-files.ts");
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const values = [app("z", "id"), app("a", "id"), ...["", ".", "..", "%", "a/b", "日本語"].map(value => app(value, value))];
+  for (const value of values) {
+    assertEquals(decodeAppPathSegment(encodeAppPathSegment(value.source)), value.source);
+    await store.put(value);
+    const paths = appFilePaths(value.manifest.id, value.source);
+    assertEquals(await tree.read(paths.wasm), value.wasm);
+    const record = JSON.parse(new TextDecoder().decode(await tree.read(paths.record)));
+    assertEquals("wasm" in record, false);
+    assertEquals(await store.get(value.key), value);
+  }
+  assertEquals(await tree.list("/data/apps"), []);
+  await tree.write("/apps/unrelated.txt", new Uint8Array([1]));
+  await tree.write("/apps/other/source/record.json", new TextEncoder().encode("{}"));
+  const expected = [...values].sort((a, b) => {
+    const left = appFilePaths(a.manifest.id, a.source).record;
+    const right = appFilePaths(b.manifest.id, b.source).record;
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+  assertEquals(await store.list(), expected);
+  const updated = { ...values[0]!, html: "更新", wasm: new Uint8Array([9, 8]), icon: undefined };
+  await store.put(updated);
+  assertEquals(await store.get(updated.key), updated);
+  assertEquals(await tree.read(appFilePaths(updated.manifest.id, updated.source).wasm), updated.wasm);
+  assertEquals((await store.list()).length, values.length);
+  for (const key of ["missing", "null", "{}", '["one"]', '[1,2]', '[ "z", "id" ]']) assertEquals(await store.get(key), undefined);
+});
