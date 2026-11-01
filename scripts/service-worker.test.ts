@@ -2,18 +2,18 @@ import { assertEquals, assertRejects } from "@std/assert";
 
 const source = await Deno.readTextFile(new URL("../public/sw.js", import.meta.url));
 const BASE = "https://example.test/binette/";
-const CACHE = "binette-v0.2.0-1";
+const CACHE = "binette-v0.2.0-2";
 type Fetcher = (request: Request) => Promise<Response>;
 type TestEvent = { request?: Request; waitUntil(promise: Promise<unknown>): void; respondWith(promise: Promise<Response>): void };
 
-function setup() {
+function setup(base = BASE) {
   const handlers = new Map<string, (event: TestEvent) => void>();
   const stored = new Map<string, Map<string, Response>>();
   let skipped = 0;
   let claimed = 0;
   let network: Fetcher = () => Promise.resolve(new Response("ネット"));
   const requests: string[] = [];
-  const key = (request: Request | URL | string) => new URL(request instanceof Request ? request.url : String(request), BASE).href;
+  const key = (request: Request | URL | string) => new URL(request instanceof Request ? request.url : String(request), base).href;
   const open = (name: string) => {
     if (!stored.has(name)) stored.set(name, new Map());
     const entries = stored.get(name)!;
@@ -24,7 +24,7 @@ function setup() {
     };
   };
   const worker = {
-    location: new URL("sw.js", BASE),
+    location: new URL("sw.js", base),
     skipWaiting() { skipped++; return Promise.resolve(); },
     clients: { claim() { claimed++; return Promise.resolve(); } },
     addEventListener(type: string, listener: (event: TestEvent) => void) { handlers.set(type, listener); },
@@ -46,7 +46,7 @@ function setup() {
     return { response, done: () => Promise.all(pending) };
   }
   function request(path: string, navigate = false, method = "GET") {
-    const request = new Request(new URL(path, BASE), { method });
+    const request = new Request(new URL(path, base), { method });
     if (navigate) Object.defineProperty(request, "mode", { value: "navigate" });
     return dispatch("fetch", request);
   }
@@ -117,4 +117,30 @@ Deno.test("SW は未保存の GET をネットから保存し、別オリジン�
   for (const method of ["POST", "PUT", "DELETE", "HEAD"]) assertEquals(sw.request("api", false, method).response, undefined);
   assertEquals(sw.request("https://other.test/asset.js").response, undefined);
   assertEquals(sw.requests, [BASE + "assets/home-hash.binapp"]);
+});
+
+Deno.test("SW はルート・サブパスの目録と system 配布物をキャッシュから切り離す", async () => {
+  for (const base of ["https://example.test/", BASE, "https://example.test/nested/binette/"]) {
+    const sw = setup(base);
+    const paths = ["manifest.json", "manifest.json?version=2", "system/boot.json", "system/apps/home/app.wasm", "system/bundled/designer/icon.svg", "system/"];
+    for (const path of paths) {
+      await sw.open(CACHE).put(path, new Response("古い配布物"));
+      for (const navigate of [false, true]) {
+        const event = sw.request(path, navigate);
+        // respondWith しないので、ブラウザが通常のネットワーク取得を行う。
+        assertEquals(event.response, undefined);
+        await event.done();
+      }
+      assertEquals(await (await sw.open(CACHE).match(path))!.text(), "古い配布物");
+    }
+    assertEquals(sw.requests, []);
+    // 名前が似た通常のファイルや、別の配信ベースには従来どおり応答する。
+    for (const path of ["manifest.webmanifest", "manifest.json.bak", "systematic/file", "assets/system/file", "other/manifest.json"]) {
+      await sw.open(CACHE).put(path, new Response("保存済み"));
+      const event = sw.request(path);
+      assertEquals(await (await event.response!).text(), "保存済み");
+      await event.done();
+      assertEquals(await (await sw.open(CACHE).match(path))!.text(), "ネット");
+    }
+  }
 });

@@ -5,7 +5,7 @@
 
 /** @type {ServiceWorkerGlobalScope} */
 const worker = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
-const CACHE = "binette-v0.2.0-1";
+const CACHE = "binette-v0.2.0-2";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 
 worker.addEventListener("install", event => {
@@ -47,7 +47,11 @@ async function navigate(request, cache) {
 
 worker.addEventListener("fetch", event => {
   const request = event.request;
-  if (request.method !== "GET" || new URL(request.url).origin !== worker.location.origin) return;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== worker.location.origin) return;
+  // 目録と固定物は取得側で版とハッシュを確かめるため、SW のキャッシュを通さない。
+  const base = new URL("./", worker.location.href);
+  if (url.pathname === `${base.pathname}manifest.json` || url.pathname.startsWith(`${base.pathname}system/`)) return;
   const cache = caches.open(CACHE);
   if (request.mode === "navigate") {
     event.respondWith(cache.then(cache => navigate(request, cache)));

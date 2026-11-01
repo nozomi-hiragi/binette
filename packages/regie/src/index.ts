@@ -11,6 +11,8 @@ export type { AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord,
 export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, installedAppKey, validateSystemSettings } from "./store.ts";
 export type { FileTree, IndexedDbFileTreeOptions } from "./fs.ts";
 export { createIndexedDbFileTree, createMemoryFileTree } from "./fs.ts";
+export type { RecoveryAction, SystemDistribution, SystemDistributionOptions, SystemManifest, SystemUpdate } from "./distribution.ts";
+export { createSystemDistribution, parseSystemManifest, SYSTEM_MANIFEST_PATH } from "./distribution.ts";
 export type { ProcessOptions, Process } from "./process.ts";
 export { startProcess } from "./process.ts";
 export type { SystemApp, SystemOptions, SystemUi, SystemView, BinetteSystem } from "./system.ts";
