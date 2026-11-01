@@ -570,6 +570,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       mounted.setStopDelay(settings.stopDelay);
       session.startedAt = performance.now();
       mounted.setFrozen(frozen);
+      // 隠れている間に起動し終えたシェルは、ふつうのアプリと同じく Pause に戻す
+      if (!visible || frozen) await mounted.pause().catch(() => {});
+      if (shellSession !== session || stopped) return;
       shellUnavailable = false;
       renderBar();
     } catch (error) {

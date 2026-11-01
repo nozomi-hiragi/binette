@@ -279,9 +279,11 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         } catch (error) {
           ops = [];
           exited = true;
-          scope.postMessage({ type: "fail", message: messageOf(error), exit: true });
+          scope.postMessage({ type: "fail", id: data.id, message: messageOf(error), exit: true });
+          return;
         }
       }
+      scope.postMessage({ type: "done", id: data.id });
     } else if (data.type === "call") {
       if (!instance) {
         scope.postMessage({ type: "fail", id: data.id, message: "アプリがまだ起動していません。" });
