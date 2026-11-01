@@ -22,8 +22,10 @@ export interface ProcessOptions {
   onError?: (error: unknown) => void;
   /** startProcess の完了後にアプリが終了したとき */
   onExit?: (error: Error) => void;
-  /** Worker を作る関数。省略すると Régie の Blob URL の Worker */
+  /** Worker を作る関数。省略すると Régie の独立した module Worker */
   createWorker?: LaunchOptions["createWorker"];
+  /** module Worker の URL。createWorker があればそちらを優先する */
+  workerUrl?: LaunchOptions["workerUrl"];
   /** 起動中でもアプリを止める */
   signal?: AbortSignal;
   /** アプリに渡す呼び出し */
@@ -112,6 +114,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   const initialOps: DomOp[] = [];
   const app = await launchApp(wasm, {
     createWorker: options.createWorker,
+    workerUrl: options.workerUrl,
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,

@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { kernelIntegrity } from "./scripts/kernel-integrity.ts";
 
 // このファイルのフォルダ。Vite は設定を Deno の上で読むので import.meta.dirname が使える
 const here = import.meta.dirname!;
@@ -8,9 +9,18 @@ export default defineConfig({
   base: "./",
   // build:system が静的ファイルと生成した目録をここにまとめる。
   publicDir: ".binapp/public",
+  plugins: [kernelIntegrity()],
+  worker: {
+    format: "es",
+    rollupOptions: { output: { entryFileNames: "regie-worker.js" } },
+  },
   build: {
+    minify: true,
     assetsInlineLimit: 0,
-    rollupOptions: { external: ["assemblyscript/asc"] },
+    rollupOptions: {
+      external: ["assemblyscript/asc"],
+      output: { entryFileNames: "regie.js", codeSplitting: false },
+    },
   },
   resolve: {
     alias: {

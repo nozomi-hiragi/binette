@@ -24,6 +24,7 @@ if (new URL(location.href).searchParams.has("recovery")) {
   const errors: unknown[] = [];
   const shell = await mountShell(container, {
     apps,
+    workerUrl: import.meta.env.PROD ? new URL("./regie-worker.js", document.baseURI) : undefined,
     store: bootAppStore(createAppStore(tree), home, apps.flatMap(app => app.prebuilt?.manifest.role === "home" ? [installedAppKey(app.source, app.prebuilt.manifest.id)] : [])),
     onError(error) { console.error(error); if (booting) errors.push(error); },
   });
