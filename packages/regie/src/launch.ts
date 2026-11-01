@@ -188,7 +188,12 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               });
             },
             syncShell(snapshot) {
-              if (!stopped) worker.postMessage({ type: "shell.sync", shell: snapshot });
+              if (stopped) return;
+              // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "shell.sync", id, shell: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             stop,
           });
