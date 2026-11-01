@@ -49,12 +49,13 @@ export interface BuiltApp {
   wasm: Uint8Array;
 }
 
-const NODE_MODULES = "node_modules/";
+const LIBRARY_PREFIXES = ["node_modules/", "/node_modules/", "~lib/"];
 
 /** asc が読みに来るファイルの名前から、`libraries` の指定子を探す。`node_modules/<指定子>.ts` か `node_modules/<指定子>/index.ts` */
 function findLibrary(libraries: Record<string, string>, name: string): string | null {
-  if (!name.startsWith(NODE_MODULES)) return null;
-  const path = name.slice(NODE_MODULES.length);
+  const prefix = LIBRARY_PREFIXES.find(prefix => name.startsWith(prefix));
+  if (prefix === undefined) return null;
+  const path = name.slice(prefix.length);
   for (const suffix of [".ts", "/index.ts"]) {
     if (!path.endsWith(suffix)) continue;
     const specifier = path.slice(0, -suffix.length);
@@ -86,10 +87,12 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   // 初期化を instantiate の中で走らせず、Régie が _start で呼ぶ
   const { error } = await asc.main([entry, "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
     readFile: async (name) => {
+      // ブラウザ版 asc は /node_modules/ からも探す。ここでは渡されたライブラリだけを返し、アプリの外は読まない。
+      if (LIBRARY_PREFIXES.some(prefix => name.startsWith(prefix))) return findLibrary(libraries, name);
       const path = appPath(name);
       if (path === null) return null;
       if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value } from "jsr:@binette/replique";\n';
-      if (path.startsWith(NODE_MODULES)) return findLibrary(libraries, path);
+      if (LIBRARY_PREFIXES.some(prefix => path.startsWith(prefix))) return findLibrary(libraries, path);
       if (!path.endsWith(".ts")) return null;
       try { return await read(path) ?? null; } catch { return null; }
     },

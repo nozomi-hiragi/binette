@@ -60,6 +60,8 @@ interface AppStore {
 - `createAppStore(tree)` は指定した `FileTree` を使う。`/apps/<ID>/<入手元>/` に、WASM をそのまま `app.wasm`、残りの記録を `record.json` として置き、2 ファイルを原子的に書く。ID と入手元は `encodeURIComponent` で符号化し、空文字と `.`・`..` は正規パスと衝突しないよう別に表す。保存形式と配置は案
 - `list` は `/apps` 以下の記録ファイルを探す。索引は持たず、一覧はパス順に返す。`get` は key の入手元と ID からパスを求めて直接読む
 
+ソースをファイルの木に置く場合は `/apps/<ID>/app.json` とソース・アイコンを保持し、`buildStoredApp` で `/apps/<ID>/build/app.wasm`・`index.html` を生成します。起動との互換のため、同時に従来の `/apps/<ID>/<入手元>/record.json`・`app.wasm` にも記録します。配置、同じ ID を持つ入手元どうしの扱い、ソースの取得方法は案です。
+
 版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。入手元の検証や権限の確認はまだしません。
 
 ## アプリごとのデータ（案・実装済み）

@@ -4,6 +4,12 @@
 
 アプリの AS を WASM にし、インストールできる形にする部分です。どのコードを動かしてよいかの検証もここに足していきます（今は検証をしていません。[下](#検証案)）。ビルドはカーネルの仕事とします（のぞみ 2026-10-28）。実装は `packages/regie/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` にあります。
 
+## ブラウザでのビルド（案）
+
+`buildAppInWorker` は目録で検証した `/system/tools/asc.js` と `/system/libraries/replique.ts` を受け取り、独立した module Worker で `buildApp` を実行します。検証した asc のバイトから Worker 内で Blob URL を作って読み、URL を再取得しません。Décor の AS ソースは既存の `buildApp` が渡します。呼び出し側はソースを読む関数と `SystemDistribution` を渡し、Worker の URL・時間切れ・中止などを指定できます。`libraries` で Réplique を含むライブラリを指定できます。
+
+`buildStoredApp` は `/apps/<id>/` のソースを読み、ID と `app.json` が一致することを確かめてから `/apps/<id>/build/app.wasm` と `index.html`、AppStore の記録をまとめて保存します。既存の `startSystem` のソースを読む経路にも、`browserBuild` を指定すると Worker を使えます。この `read` 経路は従来どおりソースを自動保存しないため、ファイルの木に置く操作は呼び出し側が行います。現在の起動側は `browserBuild` を渡していません。システムアプリのビルド済み WASM はこの経路を通しません。パス、API、インストール時にソースをどのように取得するかは案です。
+
 ## loadCompiler
 
 ```ts
@@ -91,6 +97,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Régie 
 | `entry.as` と同じパス | アプリの AS のソースにイベントとライフサイクルの再 export を末尾追加したもの |
 | `node_modules/<指定子>.ts` | `libraries[<指定子>]`（あれば） |
 | `node_modules/<指定子>/index.ts` | `libraries[<指定子>]`（あれば） |
+| `/node_modules/<指定子>.ts`・`~lib/<指定子>.ts` と各 `index.ts` | ブラウザ向け asc が要求するライブラリも同じ辞書から返す |
 | そのほかの `.ts` で終わるパス | `read(パス)` の結果。reject したら `null` |
 | それ以外（`asconfig.json` など） | `null`（無い） |
 

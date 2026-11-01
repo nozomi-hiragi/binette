@@ -115,6 +115,13 @@ const dataDirectory = (id: string) => {
 const lastPath = (key: string) => `/data/system/last/${encodeURIComponent(key)}.json`;
 type StoredApp = Omit<InstalledApp, "wasm">;
 
+/** 成果物と同じトランザクションにまとめられる、起動用の保存ファイル。 */
+export function installedAppFiles(app: InstalledApp): Map<string, Uint8Array> {
+  const { wasm, ...record } = app;
+  const paths = appFilePaths(app.manifest.id, app.source);
+  return new Map([[paths.record, encode(record)], [paths.wasm, wasm.slice()]]);
+}
+
 /** 同じファイルの木にアプリと OS の記録を保存する。一覧はパス順に返す。 */
 export function createAppStore(tree: FileTree): AppStore {
   const readApp = async (recordPath: string): Promise<InstalledApp | undefined> => {
@@ -178,9 +185,7 @@ export function createAppStore(tree: FileTree): AppStore {
       return await readApp(appFilePaths(parts[1], parts[0]).record);
     },
     async put(app) {
-      const { wasm, ...record } = app;
-      const paths = appFilePaths(app.manifest.id, app.source);
-      await tree.writeFiles(new Map([[paths.record, encode(record)], [paths.wasm, wasm.slice()]]));
+      await tree.writeFiles(installedAppFiles(app));
     },
   };
 }
