@@ -164,6 +164,8 @@ async function fileResponse(encoded) {
     if (!(data instanceof Uint8Array)) throw new Error("ファイルの形式が不正です。");
     return new Response(data.slice(), { headers: {
       "Content-Type": mime(path), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+      // /user の HTML や SVG を直接開いても、スクリプトを動かさず、OS と同じオリジンにもしない。
+      "Content-Security-Policy": "sandbox",
     } });
   } catch { return failure(500, "ファイルの読み込みまたは検証に失敗しました。"); }
 }

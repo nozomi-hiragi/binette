@@ -240,6 +240,7 @@ Deno.test("SW の fs は root とサブパスで user を優先し、設定と�
       assertEquals(response.headers.get("Content-Type"), type);
       assertEquals(response.headers.get("Cache-Control"), "no-store");
       assertEquals(response.headers.get("X-Content-Type-Options"), "nosniff");
+      assertEquals(response.headers.get("Content-Security-Policy"), "sandbox");
     }
     sw.files.delete("/user/apps/home/icon.svg");
     assertEquals(await (await sw.request("fs/apps/home/icon.svg").response!).text(), "固定");
