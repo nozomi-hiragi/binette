@@ -321,7 +321,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       })) : [];
       if (!sessions.has(started) || stopped) return;
       // アプリごとのデータの読み込みに失敗したら、storage だけ載せない
-      const storage = api.keys.has("storage") ? await options.store.data.read(installed.manifest.id).catch(() => undefined) : undefined;
+      // 前の起動で積んだ書き込みを待ってから読む（古いスナップショットを渡さない）
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(installed.manifest.id)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
       const mounted = await startProcess(installed.wasm, {
