@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "binette": "0.2",
   "name": "設定",
-  "role": "settings",
+  "roles": ["settings"],
   "icon": "icon.svg",
   "entry": {
     "as": "src/main.ts"

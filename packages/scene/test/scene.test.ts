@@ -8,14 +8,14 @@ const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("..
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
   "index.html": '<p id="count">0</p><button id="button">+1</button>',
-  "main.ts": `import { App, Last, launch, document, Event } from "jsr:@binette/replique";
+  "main.ts": `import { Api, App, Last, launch, document, Event } from "jsr:@binette/replique";
 let value = 0;
 export function initialize(): void { document.getElementById("button").addEventListener("click", increment); }
 function increment(event: Event): void {
  assert(event.type == "click"); assert(event.currentTarget === document.getElementById("button"));
  value++; document.getElementById("count").textContent = value.toString();
 }
-class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+class TestApp extends App { onCreate(_last: Last, _api: Api): void { initialize(); } }
 launch(new TestApp());`,
 };
 const read = (path: string) => Promise.resolve(files[path]!);
@@ -59,7 +59,8 @@ Deno.test("document の同じ id は同じ Element で、クリックの current
 });
 
 Deno.test("作成・追加・削除、文字と class の読み書き、アイコンを反映する", async () => {
-  const source = `import { document, apps, Element, Event } from "jsr:@binette/replique";
+  const source = `import { Api, AppsApi, document, Element, Event } from "jsr:@binette/replique";
+const apps = new Api().get<AppsApi>("apps")!;
 const tiles = document.getElementById("tiles");
 const button = document.createElement("BUTTON");
 const indices = new Map<Element, i32>();
@@ -77,8 +78,8 @@ function open(event: Event): void { assert(event.currentTarget === button); apps
 export function remove(): void { button.remove(); }
 export function again(): void { tiles.appendChild(button); button.textContent = "文字だけ"; }
 export function clearIcon(): void { apps.icon(document.getElementById("old-icon"), 1); apps.icon(tiles, 0); }
-import { App, Last, launch } from "jsr:@binette/replique";
-class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+import { Api, App, Last, launch } from "jsr:@binette/replique";
+class TestApp extends App { onCreate(_last: Last, _api: Api): void { initialize(); } }
 launch(new TestApp());
 `;
   const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<div id="tiles"><p>消える</p></div><img id="old-icon" src="old">', "main.ts": source }[path]!), { libraries });
@@ -149,8 +150,8 @@ export function initialize(): void {
  document.getElementById(${JSON.stringify(special)}).textContent = "特殊";
 }
 export function update(): void { e.textContent = "再検索"; }
-import { App, Last, launch } from "jsr:@binette/replique";
-class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+import { Api, App, Last, launch } from "jsr:@binette/replique";
+class TestApp extends App { onCreate(_last: Last, _api: Api): void { initialize(); } }
 launch(new TestApp());
 `;
   const built = await buildApp(path => Promise.resolve({ ...files, "index.html": '<p id="same"></p>', "main.ts": source }[path]!), { libraries });
@@ -179,8 +180,8 @@ export function initialize(): void {
  document.getElementById("button").addEventListener("input", () => {});
 }
 export function next(): void { document.getElementById("count").textContent = "続く"; }
-import { App, Last, launch } from "jsr:@binette/replique";
-class TestApp extends App { onCreate(_last: Last): void { initialize(); } }
+import { Api, App, Last, launch } from "jsr:@binette/replique";
+class TestApp extends App { onCreate(_last: Last, _api: Api): void { initialize(); } }
 launch(new TestApp());`;
   const built = await buildApp(path => Promise.resolve({ ...files, "main.ts": source }[path]!), { libraries });
   const window = new Window(); const element = window.document.createElement("div") as unknown as HTMLElement;

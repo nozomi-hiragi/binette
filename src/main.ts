@@ -1,5 +1,5 @@
 /// <reference path="./env.d.ts" />
-import { createAppStore, createIndexedDbFileTree, createSystemDistribution, installedAppKey } from "@binette/regie";
+import { createAppStore, createIndexedDbFileTree, createSystemDistribution } from "@binette/regie";
 import { mountShell } from "@binette/scene";
 import { bootAppStore, loadBootApps } from "./boot.ts";
 import { showRecovery } from "./recovery.ts";
@@ -19,27 +19,25 @@ if (new URL(location.href).searchParams.has("recovery")) {
 } else try {
   const update = await distribution.checkUpdate();
   if (update.installedVersion === undefined) await distribution.install(update.manifest);
-  const { apps, home } = await loadBootApps(tree, distribution);
+  const { apps, roles } = await loadBootApps(tree, distribution);
+  const updatable = update.updateAvailable && update.installedVersion !== undefined;
   let booting = true;
   const errors: unknown[] = [];
   const shell = await mountShell(container, {
     apps,
     workerUrl: import.meta.env.PROD ? new URL("./regie-worker.js", document.baseURI) : undefined,
-    store: bootAppStore(createAppStore(tree), home, apps.flatMap(app => app.prebuilt?.manifest.role === "home" ? [installedAppKey(app.source, app.prebuilt.manifest.id)] : [])),
+    roles,
+    // 設定アプリの「更新」で /system を入れ替えて、新しい版で読み込み直す
+    update: updatable ? { async apply() { await distribution.install(update.manifest); location.reload(); } } : undefined,
+    store: bootAppStore(createAppStore(tree)),
     onError(error) { console.error(error); if (booting) errors.push(error); },
   });
   booting = false;
   if (errors.length) { shell.stop(); throw errors[0]; }
-  if (update.updateAvailable && update.installedVersion !== undefined) {
+  if (updatable) {
     const notice = document.createElement("p");
     notice.setAttribute("role", "status");
-    notice.textContent = "Binette の新しい版があります。復旧画面から /system を取り直すと更新できます。";
-    const link = document.createElement("a");
-    const url = new URL(location.href);
-    url.searchParams.set("recovery", "");
-    link.href = url.href;
-    link.textContent = "復旧画面を開く";
-    notice.append(" ", link);
+    notice.textContent = "Binette の新しい版があります。ホームから設定を開き、「更新」を押してください。";
     container.append(notice);
   }
   import.meta.hot?.dispose(() => shell.stop());

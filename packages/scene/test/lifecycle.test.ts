@@ -1,4 +1,3 @@
-import { workerSource } from "../../regie/src/worker.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
@@ -27,21 +26,26 @@ function createWorker(): RegieWorker {
 }
 /** 無限ループもメインを止めずに試せる、別スレッドの Worker */
 function realWorker(): RegieWorker {
-  const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
-  try { return new Worker(url, { type: "module" }); }
-  finally { URL.revokeObjectURL(url); }
+  return new Worker(new URL("../../regie/src/worker-entry.ts", import.meta.url), { type: "module" });
 }
-const source = `import { App, Last, State, DestroyReason, document, launch, apps } from "jsr:@binette/replique";
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
+const source = `import { Api, App, AppsApi, Last, State, DestroyReason, document, launch } from "jsr:@binette/replique";
+let appsApi: AppsApi | null = null;
 let log = "";
 function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
 class TestApp extends App {
-  onCreate(last: Last): void {
-
+  onCreate(last: Last, api: Api): void {
+    appsApi = api.get<AppsApi>("apps");
     record("create:" + last.state.toString());
     document.getElementById("page").textContent = this.page;
     document.getElementById("click").addEventListener("click", () => record("click"));
     document.getElementById("finish").addEventListener("click", () => test.finishNow());
-    document.getElementById("open").addEventListener("click", () => apps.open(0));
+    document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
   }
   onStart(last: State): void { record("start:" + last.toString()); }
   onResume(): void { record("resume"); }
@@ -54,7 +58,7 @@ const test = new TestApp();
 launch(test);`;
 async function build(code = source, home = false) {
   const files: Record<string, string> = {
-    "app.json": JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { role: "home" } : {}), entry: { html: "index.html", as: "main.ts" } }),
+    "app.json": JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { roles: ["home"] } : {}), entry: { html: "index.html", as: "main.ts" } }),
     "index.html": '<p id="log"></p><p id="page"></p><button id="click">click</button><button id="finish">finish</button><button id="open">open</button>',
     "main.ts": code,
   };
@@ -154,7 +158,7 @@ for (const state of ["pause", "stop"] as const) {
 }
 
 async function stackFixtures() {
-  const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => apps.open(${i}));`).join("\n");
+  const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => appsApi!.open(${i}));`).join("\n");
   const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
   home.html += '<button id="open1">B</button><button id="open2">C</button>';
   const app = await build();

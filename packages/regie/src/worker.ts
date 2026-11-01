@@ -1,6 +1,6 @@
 import { createUiDiffer } from "@binette/decor";
 import type { DomOp } from "@binette/core";
-import type { OsSnapshot } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -11,9 +11,6 @@ export interface WorkerScope {
 /**
  * Worker の中でアプリの WASM を動かす。メインスレッドの {@link launchApp} とやりとりする。
  *
- * workerSource() が Décor の差分関数とこの関数を toString() で埋め込む。
- * 差分関数を引数で渡すので、圧縮後の import の名前には依存しない。
- *
  * @param scope Worker の `self`、または同じスレッドで試すための `MessagePort`
  */
 export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = createUiDiffer): void {
@@ -21,6 +18,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let instance: WebAssembly.Instance | undefined;
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
+  let storage: Map<string, string> | undefined;
+  let denied: Record<string, ApiDenial> = {};
   let page = "";
   let declarative = false;
   let last = { page: "", reason: { kind: 0, cause: 0 } };
@@ -31,8 +30,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     if (declarative) ops = ops.filter(op => op.op.startsWith("ui-"));
     if (ops.length) { scope.postMessage({ type: "dom", ops }); ops = []; }
   };
+  // 辞書に載らなかったキーを呼ぶと、アプリを終了する（辞書を通さない呼び出しは、権限のない呼び出しと同じ扱い）
   const homeApps = () => {
-    if (apps === undefined) throw new Error("この呼び出しはホームのアプリだけが使えます。");
+    if (apps === undefined) throw new Error("この呼び出しは apps が届いたアプリだけが使えます。");
     return apps;
   };
   const appAt = (i: number) => {
@@ -41,21 +41,27 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     return values[i]!;
   };
   const system = () => {
-    if (os === undefined) throw new Error("この呼び出しはシステムの設定アプリだけが使えます。");
+    if (os === undefined) throw new Error("この呼び出しは os が届いたシステムの設定アプリだけが使えます。");
     return os;
   };
-  const homeAt = (i: number) => {
-    const homes = system().homes;
-    if (!Number.isInteger(i) || i < 0 || i >= homes.length) throw new Error("ホームの番号が範囲外です。");
-    return homes[i]!;
+  const candidates = (role: string) => Object.hasOwn(system().candidates, role) ? system().candidates[role]! : [];
+  const candidateAt = (role: string, i: number) => {
+    const list = candidates(role);
+    if (!Number.isInteger(i) || i < 0 || i >= list.length) throw new Error("候補の番号が範囲外です。");
+    return list[i]!;
   };
+  const files = () => {
+    if (storage === undefined) throw new Error("この呼び出しは storage が届いたアプリだけが使えます。");
+    return storage;
+  };
+  const granted = (key: string) => key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
     return launches[i]!;
   };
   // toString() で作る Worker なので、OS と同じ設定 API の範囲をここでも確かめる
-  const settingName = (name: string): name is Exclude<keyof OsSnapshot["settings"], "home"> =>
+  const settingName = (name: string): name is keyof OsSnapshot["settings"] =>
     ["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name);
   /** __new はメモリを伸ばすことがあるので、確保してから buffer を読む */
   const writeString = (value: string): number => {
@@ -93,17 +99,58 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "os.set", name, value });
         return true;
       },
-      "os.home": () => writeString(system().settings.home),
-      "os.homeCount": () => system().homes.length,
-      "os.homeName": (i: number) => writeString(homeAt(i).name),
-      "os.homeId": (i: number) => writeString(homeAt(i).id),
-      "os.setHome": (i: number) => {
-        system().settings.home = homeAt(i).id;
-        scope.postMessage({ type: "os.setHome", i });
+      "os.role": (role: number) => {
+        const roles = system().roles;
+        const name = readString(role);
+        return writeString(Object.hasOwn(roles, name) ? roles[name]! : "");
+      },
+      "os.candidateCount": (role: number) => candidates(readString(role)).length,
+      "os.candidateName": (role: number, i: number) => writeString(candidateAt(readString(role), i).name),
+      "os.candidateId": (role: number, i: number) => writeString(candidateAt(readString(role), i).id),
+      "os.assign": (role: number, i: number) => {
+        const name = readString(role);
+        system().roles[name] = candidateAt(name, i).id;
+        scope.postMessage({ type: "os.assign", role: name, i });
+      },
+      "os.updateAvailable": () => system().updateAvailable,
+      "os.update": () => {
+        system();
+        scope.postMessage({ type: "os.update" });
       },
       "os.launchCount": () => system().launches.length,
       "os.launchTime": (i: number) => launchAt(i).time,
       "os.launchName": (i: number) => writeString(launchAt(i).name),
+      "storage.has": (name: number) => files().has(readString(name)),
+      "storage.read": (name: number) => {
+        const value = files().get(readString(name));
+        return value === undefined ? 0 : writeString(value);
+      },
+      "storage.write": (name: number, value: number) => {
+        const key = readString(name);
+        // 名前は 1 つの部品で、長すぎる名前と空の名前は受けない
+        if (!key || key.length > 256) return false;
+        const text = readString(value);
+        files().set(key, text);
+        scope.postMessage({ type: "storage.write", name: key, value: text });
+        return true;
+      },
+      "storage.remove": (name: number) => {
+        const key = readString(name);
+        if (files().delete(key)) scope.postMessage({ type: "storage.write", name: key, value: null });
+      },
+      "storage.count": () => files().size,
+      "storage.name": (i: number) => {
+        const names = [...files().keys()].sort();
+        if (!Number.isInteger(i) || i < 0 || i >= names.length) throw new Error("データの番号が範囲外です。");
+        return writeString(names[i]!);
+      },
+      // 辞書の中身。0 は届いている、1 は NotGranted、2 は NotAssigned。知らないキーはどの役割にもないので NotAssigned
+      "api.why": (key: number) => {
+        const name = readString(key);
+        if (granted(name)) return 0;
+        if (!(API_KEYS as readonly string[]).includes(name)) return 2;
+        return denied[name] === "NotAssigned" ? 2 : 1;
+      },
       "app.page": () => writeString(page),
       "app.lastPage": () => writeString(last.page),
       "app.lastKind": () => last.reason.kind,
@@ -140,11 +187,13 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; denied?: Record<string, ApiDenial> };
     if (data.type === "init") {
       try {
         apps = data.apps;
         os = data.os;
+        storage = data.storage;
+        denied = data.denied ?? {};
         page = data.page ?? "";
         declarative = data.declarative ?? false;
         last = data.last ?? last;
@@ -220,7 +269,3 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     }
   });
 }
-
-/** import を持たない Worker 用のソース。 */
-/** Worker のソース。serveApp と Décor の差分関数を埋め込み、`self` で動かす */
-export function workerSource(): string { return `(${serveApp.toString()})(self, ${createUiDiffer.toString()})`; }

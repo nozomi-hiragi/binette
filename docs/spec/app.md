@@ -64,7 +64,7 @@ apps/settings/
 | `name` | 文字列 | 必須 | 表示名 |
 | `description` | 文字列 | 任意 | 説明 |
 | `icon` | 文字列 | 任意 | アイコンのパス。SVG 1 枚 |
-| `role` | 文字列 | 任意 | `"home"` はホームの候補。`"settings"` は入手元が `binette:system` の場合だけ os.* を使える設定アプリ（実装済み、形は案）。役割の配列 `roles` に変え、届く API を役割で決める形にする（決定 2026-11-01、名前は案。[roles.md](roles.md)） |
+| `roles` | 文字列の配列 | 任意 | 名乗る役割（実装済み、名前は案）。`"home"` はホームの候補、`"settings"` は設定アプリ（入手元が `binette:system` のものだけ割り当てられる）。名乗っただけでは API は届かず、設定とブートの既定で割り当てられたアプリにだけ、その役割の API が届く（[roles.md](roles.md)）。旧名の `role`（文字列 1 つ）は読み替えずにエラーにする（案） |
 | `entry` | オブジェクト | 必須 | 入口の HTML・CSS・AS（下の表） |
 | `permissions` | オブジェクト | 任意 | 使う権限の名前 → `{ "reason": 用途の説明 }`。説明はインストール画面に出す |
 | `server` | オブジェクト | 任意 | `{ "required": 真偽値 }`。サーバーサイドを使うか。`required: false` なら、サーバーが無くても動く |
@@ -80,13 +80,13 @@ apps/settings/
 | `css` | 文字列 | 任意 | 見た目の CSS のパス |
 | `as` | 文字列 | 必須 | 動きの AS のパス |
 
-- どの欄を必須にするか、`version`・`binette` を必須にするかは未決。今のコードは上の表の「必須」と、任意の `icon`・`role`・`entry.css` の型を確かめる
+- どの欄を必須にするか、`version`・`binette` を必須にするかは未決。今のコードは上の表の「必須」と、任意の `icon`・`roles`・`entry.css` の型を確かめる
 - `.bina`（v0.1 の画面の定義）との関係は未決
 - 依存ライブラリの固定（lock）の形は未決
 
 ### 読み込みと検査（実装済み）
 
-`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` と、任意の `icon`・`role` の型で、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
+`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` と、任意の `icon`・`roles` の型で、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
 
 検査は次の順に行い、最初に見つかった誤りで止めます。誤りは `BinetteError`（`code` は `"invalid_format"`）で、`message` は次のとおりです。
 
@@ -105,9 +105,10 @@ apps/settings/
 | 11 | `entry.css` があって、文字列でない | `entry の css は文字列で指定してください。` |
 | 12 | `entry.as` が文字列でないか、空文字列 | `entry の as にはファイルのパスを指定してください。` |
 | 13 | `icon` があって、文字列でない | `icon は文字列で指定してください。` |
-| 14 | `role` があって、文字列でない | `role は文字列で指定してください。` |
+| 14 | `roles` があって、文字列の配列でない（要素が文字列でない場合を含む） | `roles は文字列の配列で指定してください。` |
+| 15 | 旧名の `role` がある | `role は roles（文字列の配列）に変わりました。` |
 
-- 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜14）で誤りになる
+- 「無い」は、そのオブジェクト自身がその欄を持たないこと（`Object.hasOwn` が偽）。値が `null` や `undefined` の欄は「ある」とみなし、型の検査（6〜14）で誤りになる。15 は欄が「ある」だけで誤りにする
 - パスの形（`..` を含む、絶対 URL など）はまだ確かめない
 - `entry.css` は検査するが、今は読まない
 
@@ -124,7 +125,7 @@ apps/settings/
 
 ## システムアプリ（実装済み）
 
-システムアプリ（OS の機能を持つアプリ）と通常の同梱アプリは、インストールの手順を通らず、OS と一緒にビルドして配ります。扱いは [apps/](apps/README.md) にあります。ホーム（`role: "home"`）は [apps/home.md](apps/home.md) です。
+システムアプリ（OS の機能を持つアプリ）と通常の同梱アプリは、インストールの手順を通らず、OS と一緒にビルドして配ります。扱いは [apps/](apps/README.md) にあります。ホーム（`roles: ["home"]`）は [apps/home.md](apps/home.md) です。
 
 ## インストール（案）
 
@@ -152,4 +153,4 @@ apps/settings/
 
 画面は通常の id を document.getElementById で参照し、アプリ自身が変更とクリックを扱います（決定 2026-10-27）。bina 属性の解釈と bina.ts の生成は無くしました。API は [Réplique](replique.md)、まだしていない最初の HTML 検査・setAttribute・style・value・input / click 以外のイベントは [mount.md](scene/mount.md) を見てください。
 
-起動は AS のトップレベルで `App` の派生クラスを `launch` に一回渡します。OS は `_start` → HTML → onCreate(Last) → onStart(Create) → onResume の順に進めます。最初の画面は onCreate で作り、従来の `export function start()` は呼びません。this.page でページの識別子を読み、this.finish() で自分を閉じられます（[lifecycle.md](lifecycle.md)、[replique.md](replique.md)）。
+起動は AS のトップレベルで `App` の派生クラスを `launch` に一回渡します。OS は `_start` → HTML → onCreate(Last, Api) → onStart(Create) → onResume の順に進めます。最初の画面は onCreate で作り、従来の `export function start()` は呼びません。this.page でページの識別子を読み、this.finish() で自分を閉じられます（[lifecycle.md](lifecycle.md)、[replique.md](replique.md)）。

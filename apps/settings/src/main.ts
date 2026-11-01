@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { App, launch, os } from "jsr:@binette/replique";
+import { Api, App, Last, OsApi, launch } from "jsr:@binette/replique";
 import { View, button, column, row, show, text } from "jsr:@binette/replique/ui";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
@@ -31,10 +31,25 @@ function utc(time: f64): string {
   return pad(year, 4) + "-" + pad(month) + "-" + pad(day) + " " + pad(within / 3600) + ":" + pad(within / 60 % 60) + ":" + pad(within % 60);
 }
 
+// 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
+let osApi: OsApi | null = null;
 let details = false;
+let updating = false;
 function showDetails(): void { details = true; }
-function chooseHome(index: i32): void { os.setHome(index); }
+function chooseHome(index: i32): void {
+  const os = osApi;
+  if (os == null) return;
+  os.assign("home", index);
+}
+function update(): void {
+  const os = osApi;
+  if (os == null || updating) return;
+  updating = true;
+  os.update();
+}
 function change(change: i32): void {
+  const os = osApi;
+  if (os == null) return;
   const i = change / 2;
   const value = os.get(names[i]);
   // i32 の上限を越える加算もしない
@@ -44,10 +59,15 @@ function change(change: i32): void {
 }
 
 class Settings extends App {
+  override onCreate(_last: Last, api: Api): void { osApi = api.get<OsApi>("os"); }
+
   override build(): View {
+    const os = osApi;
+    if (os == null) return column([text("設定を使えません。")]).padding(16).key("settings-unavailable");
+    const available = os.updateAvailable() ? true : false;
     const homes: View[] = [];
-    for (let i: i32 = 0; i < os.homeCount(); i++) {
-      homes.push(button(os.homeName(i) + (os.homeId(i) == os.home() ? "（使用中）" : ""), chooseHome).arg(i).padding(12).key("home-" + i.toString()));
+    for (let i: i32 = 0; i < os.candidateCount("home"); i++) {
+      homes.push(button(os.candidateName("home", i) + (os.candidateId("home", i) == os.role("home") ? "（使用中）" : ""), chooseHome).arg(i).padding(12).key("home-" + i.toString()));
     }
     const debug: View[] = [];
     for (let i: i32 = 0; i < names.length; i++) {
@@ -70,6 +90,14 @@ class Settings extends App {
         text("Binette について").heading(2).key("about-title"), text("Binette — 仕様の版 0.2"),
         button("詳しく", showDetails).key("details"),
         column([show(details, text("ブラウザだけで動く、アプリの土台です。"))]).key("description"),
+      ]).gap(8),
+      column([
+        text("更新").heading(2).key("update-title"),
+        show(available, column([
+          text(updating ? "更新しています。完了すると再読み込みします。" : "Binette の新しい版があります。").key("update-text"),
+          button("更新", update).enabled(!updating).key("update"),
+        ]).gap(8).key("update-box")),
+        show(!available, text("最新の版です。").key("update-latest")),
       ]).gap(8),
       column([text("ホーム").heading(2).key("home-title"), column(homes).gap(8).key("homes")]).gap(8),
       column([text("デバッグ").heading(2).key("debug-title"), column(debug).gap(8).key("debug")]).gap(8),

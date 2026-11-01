@@ -2,6 +2,15 @@
 
 ## v0.2.0（未リリース）
 
+- 役割と API の辞書を実装する（[docs/spec/roles.md](docs/spec/roles.md)、形と名前は案）。
+  - `app.json` の `role`（文字列）を `roles`（文字列の配列）に変える。旧名の `role` は読み替えず `BinetteError` にする。apps/home・apps/settings の `app.json`、テスト、仕様を合わせた
+  - 役割の割り当て: 初回は `system/boot.json` の既定（カーネルが `SystemOptions.roles` に渡す）、そのあとは `SystemSettings.roles`（役割 → installedAppKey。以前の `home` を置き換える）。名乗っただけでは API は届かず、割り当てられたアプリにだけ届く。変えられるのは設定アプリの `OsApi.assign` だけで、設定の役割は固定
+  - Réplique: `onCreate(last, api)` に変える。古い `onCreate(last)` の上書きは AS のコンパイルエラーになるので、`api: Api` を足して移行する。`Api`（`get<T>(key)`、`why(key)`）、`Why`、`AppsApi`・`OsApi`・`StorageApi`・`FsApi` を追加し、`apps`・`os` の名前空間は外す。`OsApi` は `home`・`homeCount`・`homeName`・`homeId`・`setHome` を `role`・`candidateCount`・`candidateName`・`candidateId`・`assign` に置き換え、`updateAvailable`・`update` を足す
+  - Régie: `ProcessOptions.grants` と `LaunchOptions` に `storage`・`denied`（辞書に載せなかった理由）、`onAssign`・`onUpdate`・`onStorage` を足し、`onSetHome` を `onAssign` に変える。`OsSnapshot` の `homes` を `roles`・`candidates`・`updateAvailable` に、`SystemSettings.home` を `roles` に変える。`AppStore.data`（`/data/<id>/`）、`SystemOptions.roles`・`SystemOptions.update` を追加。辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を呼ぶと、従来どおりアプリを終了する
+  - 設定アプリに「更新」を追加する。新しい版があるとき、押すと `/system` を入れ替えて再読み込みする。起動画面の「復旧画面を開く」の知らせは、設定アプリへの案内に変えた
+  - `storage`（アプリごとのデータ）を足す。`fs` はキーだけで、今は誰にも届かない
+- Régie: `workerSource()`（Blob URL 用の Worker のソース文字列）を公開 API から削除する。Worker は `regie-worker.js`（開発では `worker-entry.ts`）の module Worker か、`createWorker` に `serveApp` をつないだもので作る
+
 - カーネルを固定名の `regie.js` と `regie-worker.js` に分け、入口に SRI を付ける。Service Worker は入口とカーネルをオフライン用に保持し、ファイルの木を `./fs/` から返す（URL と Worker の改変検知方法は案）
 
 - 目録とハッシュでシステムを配布・検査し、ファイルの木から起動する。更新の検出と復旧画面を追加（目録の形と同梱アプリの置き方は案）
@@ -37,7 +46,7 @@
 - Décor の TS に関数の部品 `component`、状態の `useState`、片付け付きの `useEffect` を追加。状態の更新は root の再描画をマイクロタスクにまとめる（案）。AS と JSX は対象外
 
 - 宣言 UI の木・差分・DOM への反映・AS の部品を `@binette/decor`（Décor）へ切り出す。`jsr:@binette/replique/ui` は互換の入口として再エクスポートする。普通の TS ページ向けに `mount(element)` と、返した root の `render(view)`・`unmount()` を追加する（案）。JSX は含めない
-- Régie: `workerSource()` を公開する。`serveApp` は Décor の差分関数を引数で受け取るので、自分で Worker を作るときは `serveApp.toString()` ではなく `workerSource()` を使う
+- Régie: `serveApp` は Décor の差分関数を引数で受け取る
 
 - 宣言 UI に `.heading(level)` と `.list()` を追加（読み上げでも見出し・一覧になる）。OS の部品の CSS をアプリによらない汎用のものにし、テーマの変数を `--bina-ui-*` にそろえる。`--bina-home-*` は使わない
 - 宣言的 UI に input・grid・minWidth・appIcon・show を追加し、ホームと設定を宣言的 UI に移行する（案）

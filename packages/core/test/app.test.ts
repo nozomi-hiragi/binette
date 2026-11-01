@@ -45,16 +45,22 @@ Deno.test("形式が正しくない app.json は BinetteError になる", () => 
   }
 });
 
-Deno.test("role は任意の文字列で、ほかの型は BinetteError になる", () => {
-  assertEquals(parseAppManifest(JSON.stringify(manifest)).role, undefined);
-  for (const role of ["home", "settings", "", "unknown"]) {
-    assertEquals(parseAppManifest(JSON.stringify({ ...manifest, role })).role, role);
+Deno.test("roles は任意の文字列の配列で、ほかの型は BinetteError になる", () => {
+  assertEquals(parseAppManifest(JSON.stringify(manifest)).roles, undefined);
+  for (const roles of [[], ["home"], ["home", "settings", "", "unknown"]]) {
+    assertEquals(parseAppManifest(JSON.stringify({ ...manifest, roles })).roles, roles);
   }
-  for (const role of [null, 1, true, [], {}]) {
-    const error = assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, role })), BinetteError);
+  for (const roles of [null, 1, true, "home", {}, [1], ["home", null]]) {
+    const error = assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, roles })), BinetteError);
     assertEquals(error.code, "invalid_format");
-    assertEquals(error.message, "role は文字列で指定してください。");
+    assertEquals(error.message, "roles は文字列の配列で指定してください。");
   }
+});
+
+Deno.test("旧名の role は読み替えずに拒む", () => {
+  const error = assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, role: "home" })), BinetteError);
+  assertEquals(error.code, "invalid_format");
+  assertEquals(error.message, "role は roles（文字列の配列）に変わりました。");
 });
 
 Deno.test("entry.html を省略できる", () => {

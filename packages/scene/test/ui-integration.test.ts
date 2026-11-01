@@ -123,7 +123,7 @@ launch(new IconApp());`,
       assertEquals(host.querySelector("script"), null);
     } finally { home.stop(); }
     const errors: unknown[] = [];
-    await assertRejects(() => mountStartedApp(host, built, { createWorker, declarative: true, onError: error => errors.push(error) }), Error, "ホームのアプリだけ");
+    await assertRejects(() => mountStartedApp(host, built, { createWorker, declarative: true, onError: error => errors.push(error) }), Error, "apps が届いた");
     assertEquals(host.querySelector("img"), null);
   } finally { await window.happyDOM.close(); }
 });

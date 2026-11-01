@@ -136,7 +136,7 @@ async function withDatabase(fixture: ReturnType<typeof databaseFixture>, test: (
 
 for (const version of [1, 2]) Deno.test(`IndexedDB migrates v${version} apps and OS records to files and preserves them across connections`, async () => {
   const record = { state: 4, done: false, page: "ページ", reason: { kind: 1, cause: 2 } };
-  const settings = { stackSize: 2, historyLimit: 2, home: installed.key };
+  const settings = { stackSize: 2, historyLimit: 2, roles: { home: installed.key } };
   const fixture = databaseFixture(installed, version, new Map<string, unknown>([
     [`last:${installed.key}`, record], ["settings", settings], ["launches", [{ time: 0, app: installed.key }]],
   ]));

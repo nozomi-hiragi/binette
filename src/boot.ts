@@ -18,7 +18,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 export async function loadBootApps(
   tree: FileTree,
   distribution: SystemDistribution,
-): Promise<{ apps: SystemApp[]; home: string }> {
+): Promise<{ apps: SystemApp[]; roles: Record<string, string> }> {
   const required = async (path: string, system = false) => {
     const value =
       await (system
@@ -37,8 +37,8 @@ export async function loadBootApps(
     throw new Error("boot.json の役割の割り当てが不正です。");
   }
   const apps: SystemApp[] = [];
-  let home: string | undefined;
-  let settings = false;
+  // 役割の既定の割り当て（役割 → installedAppKey）
+  const roles: Record<string, string> = {};
   const keys = new Set<string>();
   const saved = await tree.read(SYSTEM_MANIFEST_PATH);
   if (!saved) throw new Error("保存された目録がありません。");
@@ -58,12 +58,12 @@ export async function loadBootApps(
       const original = parseAppManifest(
         decoder.decode(await required(`${directory}/app.json`, true)),
       );
-      const coreSettings = source === SYSTEM && original.role === "settings";
+      const coreSettings = source === SYSTEM && original.roles?.includes("settings") === true;
       const manifest = coreSettings ? original : parseAppManifest(
         decoder.decode(await required(`${directory}/app.json`)),
       );
       if (
-        source === SYSTEM && manifest.role === "settings" &&
+        source === SYSTEM && manifest.roles?.includes("settings") &&
         (!coreSettings || manifest.id !== boot.roles.settings)
       ) {
         throw new Error("設定アプリの役割は固定の割り当てから変更できません。");
@@ -75,9 +75,9 @@ export async function loadBootApps(
       keys.add(key);
       if (
         source === SYSTEM && manifest.id === boot.roles.home &&
-        manifest.role === "home"
-      ) home = key;
-      if (coreSettings && manifest.id === boot.roles.settings) settings = true;
+        manifest.roles?.includes("home")
+      ) roles.home = key;
+      if (coreSettings && manifest.id === boot.roles.settings) roles.settings = key;
       const [wasm, html, icon] = await Promise.all([
         required(`${directory}/app.wasm`, coreSettings),
         required(`${directory}/index.html`, coreSettings),
@@ -96,37 +96,18 @@ export async function loadBootApps(
       });
     }
   }
-  if (!home || !settings) {
+  if (!roles.home || !roles.settings) {
     throw new Error(
       "boot.json に指定されたホームまたは設定アプリがありません。",
     );
   }
-  return { apps, home };
+  return { apps, roles };
 }
 
 /** 古い配布物の保存済みコードを、起動候補へ戻さない。通常のインストール済みアプリは残す。 */
-export function bootAppStore(
-  store: AppStore,
-  home: string,
-  homes: readonly string[] = [home],
-): AppStore {
+export function bootAppStore(store: AppStore): AppStore {
   return {
     ...store,
-    system: {
-      ...store.system,
-      async getSettings() {
-        const settings = await store.system.getSettings();
-        const selected = settings?.home;
-        const installed = selected && !homes.includes(selected)
-          ? await store.get(selected)
-          : undefined;
-        const valid = selected &&
-          (homes.includes(selected) ||
-            (installed && !fixed(installed.source) &&
-              installed.manifest.role === "home"));
-        return { ...settings, home: valid ? selected : home };
-      },
-    },
     async list() {
       return (await store.list()).filter((app) => !fixed(app.source));
     },

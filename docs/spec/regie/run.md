@@ -52,11 +52,17 @@ interface LaunchOptions {
   last?: LifecycleRecord; // 前回の記録。省略時の page は空文字列、reason は User/Os
   onFinish?: () => void;
   onDom?: (ops: DomOp[]) => void;
+  // 辞書のキーごとの入力。省略したキーはアプリに届かない
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
   os?: OsSnapshot;
   onSet?: (name: string, value: number) => void;
-  onSetHome?: (i: number) => void;
+  onAssign?: (role: string, i: number) => void;
+  onUpdate?: () => void;
+  storage?: Map<string, string>;
+  onStorage?: (name: string, value: string | null) => void; // value が null なら削除
+  /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted */
+  denied?: Record<string, "NotGranted" | "NotAssigned">;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: Error) => void;
   /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
@@ -69,17 +75,22 @@ interface LaunchOptions {
   signal?: AbortSignal;
 }
 interface OsSnapshot {
-  settings: SystemSettings;
-  homes: { id: string; name: string }[]; // id は installedAppKey
+  settings: Omit<SystemSettings, "roles">;
+  roles: Record<string, string>; // 役割に割り当てたアプリの installedAppKey
+  candidates: Record<string, { id: string; name: string }[]>; // 役割ごとの選べるアプリ。id は installedAppKey
   launches: { time: number; name: string }[]; // 新しい順
+  updateAvailable: boolean; // 新しい版の /system があるか
 }
+type ApiDenial = "NotGranted" | "NotAssigned";
+const API_KEYS = ["apps", "os", "storage", "fs"] as const;
 ```
 
 - `signal` が中断されたら Worker を止め、起動や呼び出しの待ちを reject する。中断済みなら Worker は作らない
 - `onDom` は `dom` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
 - `onExit` は起動後にアプリが終了したときだけ呼びます。`stop()` や `signal` では呼びません
 - `onError` は終了しない `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
-- `os` は設定アプリに渡す起動時の写しです。渡す条件はシステム（[system.md](system.md#権限)）が確かめます。省略した場合の os.* は例外でアプリを終了します。API と範囲は [Réplique](../replique.md#設定アプリの-os案実装済み) を参照してください。onSet はメッセージが来たとき、onSetHome は呼び出しの完了後に通知します。プロセスはさらに状態の通知と起動の完了を待って知らせ、システムがホームを変更します
+- `apps`・`os`・`storage` は、API の辞書（[Réplique](../replique.md#api-の辞書実装済み形は案)）のキーに載せる起動時の入力です。渡す条件はシステム（[system.md](system.md#権限)）が確かめます。省略したキーは辞書に載らず、アプリの `api.get` は null を返します。辞書を通さずにその import を直接呼ぶと、例外でアプリを終了します。`denied` は載せなかったキーの理由（`api.why` が返す）で、書かれていないキーは NotGranted です。`fs` はキーだけあり、今は誰にも載りません
+- onSet・onStorage・onUpdate はメッセージが来たときに通知します。onAssign は呼び出しの完了後に通知します。プロセスはさらに状態の通知と起動の完了を待って知らせ、システムが役割の割り当てを変更します。API と範囲は [Réplique](../replique.md#api-の辞書実装済み形は案) を参照してください
 
 ### RegieWorker
 
@@ -121,13 +132,12 @@ interface WorkerScope {
   addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
 }
 function serveApp(scope: WorkerScope, differ?: typeof createUiDiffer): void
-function workerSource(): string
 ```
 
 Worker の側の処理です。Worker の `self` か、テストでは `MessageChannel` の片方を渡します。
 
-- `serveApp` は Worker の入口から呼びます。`workerSource()` にも `toString()` で埋め込みます。宣言 UI の差分は Décor の `createUiDiffer` を引数 `differ` で受け取り、ほかの外の import や関数は参照しません
-- 自分で Worker を作るときは、`serveApp.toString()` ではなく `workerSource()` を使います。`workerSource()` は `serveApp` と `createUiDiffer` を埋め込み、`self` で動かすソースを返します（案）
+- `serveApp` は Worker の入口（`worker-entry.ts`、本番の `regie-worker.js`）から呼びます。宣言 UI の差分は Décor の `createUiDiffer` を引数 `differ` で受け取ります
+- 自分で Worker を作るときは、`workerUrl` に module Worker の URL を渡すか、`createWorker` で `serveApp` をつないだものを渡します。以前の `workerSource()`（Blob URL 用のソース文字列）は廃止しました
 
 ### 独立した Worker のファイル
 
@@ -138,7 +148,7 @@ const worker = new Worker(url, { type: "module" });
 ```
 
 - 本番ビルドでは `regie-worker.js` に出力します。Binette は Blob URL を使わないため、CSP の `worker-src blob:` は要りません
-- `workerSource()` は自分で Worker を作る利用者のために引き続き公開します。Worker の改変検知方法は [起動と配布](../boot.md#改変の検知決定-2026-11-01) を参照してください
+- Worker の改変検知方法は [起動と配布](../boot.md#改変の検知決定-2026-11-01) を参照してください
 
 ## メッセージ（実装済み）
 
@@ -146,7 +156,7 @@ const worker = new Worker(url, { type: "module" });
 
 | `type` | 欄 | 意味 |
 | --- | --- | --- |
-| `init` | `wasm: ArrayBuffer`, `page: string`, `last?: LifecycleRecord`, `apps?: { id: string; name: string }[]`, `os?: OsSnapshot` | WASM を起動する。1 つの Worker に 1 回だけ送る |
+| `init` | `wasm: ArrayBuffer`, `page: string`, `last?: LifecycleRecord`, `apps?: { id: string; name: string }[]`, `os?: OsSnapshot`, `storage?: Map<string, string>`, `denied?: Record<string, ApiDenial>` | WASM を起動する。1 つの Worker に 1 回だけ送る。辞書に載るキーは、渡された `apps`・`os`・`storage` |
 | `call` | `id: number`, `name: string`, `args: number[]` | export の `name` に可変長の数値引数を渡す |
 
 Worker → メインスレッド:
@@ -158,7 +168,9 @@ Worker → メインスレッド:
 | `dom` | `ops: DomOp[]` | 一回分の DOM 操作 |
 | `apps.open` | `i: number` | アプリを開く |
 | `os.set` | `name: string`, `value: number` | 数の設定を変更する。Worker と OS の両方で範囲を確かめる |
-| `os.setHome` | `i: number` | ホームの候補から選ぶ |
+| `os.assign` | `role: string`, `i: number` | 役割に割り当てるアプリを、候補の番号で選ぶ |
+| `os.update` | なし | `/system` の更新を頼む |
+| `storage.write` | `name: string`, `value: string \| null` | アプリごとのデータを書く。null は削除 |
 | `finish` | なし | アプリが自分を閉じる |
 | `done` | `id: number` | `call` を呼び終えた |
 | `fail` | `id: number`, `message: string`, `exit?: boolean` | `call` が失敗した。`exit: true` ならアプリを終了する |
@@ -194,6 +206,10 @@ Régie が WASM に渡すのは `binette` の [Réplique の import](../replique
 ### DOM の配送（案・実装済み）
 
 `dom.*` と `apps.icon` はその場では送らず配列に溜めます。`_start` 後の ready 前、および各 call 後の done / fail 前に `{ type: "dom", ops }` を一回送ります。空なら送りません。call の例外でもそこまでの操作を送り、初期化失敗時は捨てます。`onDom` は launchApp / call の解決・拒否より先に届きます。
+
+### 辞書を通さない呼び出し（実装済み）
+
+アプリの `Api` は import `api.why(key)` で、キーが載っているか（0）、NotGranted（1）、NotAssigned（2）を Worker に聞きます。載っていないキーを取ろうとしても、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を直接呼んだときは、従来の決まりのまま例外でアプリを終了します（`この呼び出しは apps が届いたアプリだけが使えます。` など）。つまり、辞書は「使えるか調べる」ための入口で、権限の強制は import 側が続けて受け持ちます。
 
 `apps.open` と `app.finish` の import は即時にメッセージを送ります。メインは ready または待つ call の完了まで要求を保留し、DOM 操作が届いたあとに onOpen / onFinish を呼びます。同じ呼び出しの finish は open より優先します。
 

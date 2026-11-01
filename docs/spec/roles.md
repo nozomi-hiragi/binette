@@ -5,7 +5,7 @@
 シェル（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
 
 > [!NOTE]
-> 2026-11-01 に決めた構成です。今のコードは `role: "home"`・`role: "settings"` と、Régie が渡す `grants`（[regie/system.md](regie/system.md#権限)）で動いていて、既定のホームと設定は `system/boot.json` に置きますが、辞書 API とシェルはまだこの形になっていません。役割の名前、キーの名前、関数名は、どれも **案** です。
+> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`api.get<T>`、`api.why`）・`apps`・`os`・`storage` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。シェルはまだ実装していません。役割の名前、キーの名前、関数名は、どれも **案** です。
 
 ## 方針（決定 2026-11-01）
 
@@ -24,6 +24,17 @@
 ```
 
 ```ts
+// 実装済みの例（ホーム）。シェルは後で足す
+class Home extends App {
+  override onCreate(last: Last, api: Api): void {
+    const apps = api.get<AppsApi>("apps"); // 取れなければ null
+    if (apps == null) {
+      // api.why("apps") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
+    }
+  }
+}
+
+// 案（シェル）
 class Bar extends App {
   override onCreate(last: Last, api: Api): void {
     const shell = api.get<ShellApi>("shell"); // 取れなければ null
@@ -36,7 +47,22 @@ class Bar extends App {
 
 - 辞書は `onCreate(last, api)` の引数で渡す（決定）。アプリは `launch(new X())` で自分で `new` するので、コンストラクタには OS から渡せないため
 - AS には動的な型がないので、`api.get<T>(key)` のように型を指定して取り出し、合わなければ null にする（決定）
-- `app.json` の欄は、今の `role`（文字列 1 つ）を `roles`（配列）にする（案）
+- `app.json` の欄は `roles`（文字列の配列）にした（実装済み、名前は案）。旧名の `role`（文字列 1 つ）は読み替えず、エラーにして書き直してもらう（案。まだ公開していない形のため）
+- 古い `onCreate(last)` の上書きは、AS がオーバーロードを認めないためコンパイルエラーになる。`api: Api` を足して移行する（決定）。互換の形は用意しない
+
+## 役割の割り当て（実装済み、形は案）
+
+名乗った（`roles`）アプリのうち、どれを割り当てるかを 2 段で決めます（[regie/system.md](regie/system.md#役割の割り当て実装済み形は案)）。
+
+1. 初回は `system/boot.json` の既定（`roles.home`・`roles.settings` にアプリの ID）。カーネルがブートのとき、これを `SystemOptions.roles`（役割 → installedAppKey）にして Régie に渡す
+2. そのあとは設定（SystemStore の `settings.roles`、役割 → installedAppKey）が優先する。割り当てを変えられるのは設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` だけ
+3. どちらも使えなければ、入手元が `binette:system` の、その役割を名乗る最初のアプリ
+
+`settings` は固定で、設定では変えられません（設定アプリは入手元が `binette:system` のものだけ。ブートでも `/user` の上書きを拒む）。キーごとの届け先は Régie の表（`API_RULES`）で決まります。
+
+## 許可されていない呼び出し（実装済み）
+
+辞書は「使えるかを調べる入口」です。載っていないキーを `api.get` しても、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を直接呼んだときは、今までどおり例外でアプリを終了します（[regie/run.md](regie/run.md#辞書を通さない呼び出し実装済み)）。強制は import 側が続けて受け持つので、辞書を迂回しても権限は増えません。
 
 ## シェル（決定 2026-11-01）
 
@@ -86,19 +112,22 @@ override build(): View {
 
 ロック画面やキーボードなどは、要るようになったら足します。
 
-## API のキーの候補（案）
+## API のキー
 
-| キー | 中身 | 届く相手 |
-| --- | --- | --- |
-| `shell` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | シェル |
-| `apps` | アプリの一覧、アイコン、開く（今の `apps.*`） | ホームとシェル |
-| `os` | OS の設定、役割の割り当て、起動の履歴（今の `os.*`） | 設定アプリ |
-| `fs` | ファイルの木を読む・書く（範囲つき） | 権限を許したアプリ（デザイナー、エディタなど） |
-| `storage` | アプリごとのデータ（`/data/<id>/`） | すべてのアプリ |
+| キー | 中身 | 届く相手 | 状態 |
+| --- | --- | --- | --- |
+| `shell` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | シェル | 案（未実装） |
+| `apps` | アプリの一覧、アイコン、開く（`AppsApi`） | ホームとシェル | 実装済み（ホームだけ） |
+| `os` | OS の設定、役割の割り当て、起動の履歴、更新（`OsApi`） | 設定アプリ | 実装済み |
+| `fs` | ファイルの木を読む・書く（範囲つき。`FsApi`） | 権限を許したアプリ（デザイナー、エディタなど） | キーだけ。今は誰にも届かない |
+| `storage` | アプリごとのデータ（`/data/<id>/`。`StorageApi`） | すべてのアプリ | 実装済み（読む・書く・一覧・削除） |
 
 ## 未決のこと
 
 - 役割とキーの名前、一覧
-- `permissions` の書き方と、ユーザーに許可を聞く流れ
+- `permissions` の書き方（今の `app.json` の型は名前 → `{ reason }` の辞書、上の例は配列）と、ユーザーに許可を聞く流れ。権限による NotGranted は `fs` だけが使う
 - `fs` の範囲の決め方（どのパスを読める・書けるか）
-- 今の `grants` と、許可していない呼び出しでアプリを終了する決まり（[regie/run.md](regie/run.md)）を、辞書の形とどう合わせるか
+- `storage` の容量の上限と、ほかのタブや窓との同時書き込み
+- 知らないキーの `api.why`（今は NotAssigned）
+- 割り当てを変えたとき、変わる前のアプリの API を取り上げる流れ（ホームは前のものを Destroy する。ほかの役割は未決）
+- 更新の完了や失敗を設定アプリに返す方法
