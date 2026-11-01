@@ -56,3 +56,26 @@ Deno.test("ビルドは sw.js のキャッシュの版にカーネルのハッ�
     await Deno.remove(publicDir, { recursive: true });
   }
 });
+
+Deno.test("ビルドは入口のほかの固定物が変わっても sw.js のキャッシュの版を変える", async () => {
+  const stamps: string[] = [];
+  for (const icon of ["<svg>a</svg>", "<svg>b</svg>"]) {
+    const outDir = await Deno.makeTempDir({ prefix: "binette-kernel-test-" });
+    const publicDir = await Deno.makeTempDir({ prefix: "binette-public-test-" });
+    try {
+      await Deno.writeTextFile(`${publicDir}/sw.js`, 'const CACHE = "binette-test";\n');
+      await Deno.writeTextFile(`${publicDir}/icon.svg`, icon);
+      await build({
+        configFile: new URL("../vite.config.ts", import.meta.url).pathname,
+        publicDir,
+        logLevel: "silent",
+        build: { outDir },
+      });
+      stamps.push((await Deno.readTextFile(`${outDir}/sw.js`)).match(/const CACHE = "([^"]+)";/)![1]!);
+    } finally {
+      await Deno.remove(outDir, { recursive: true });
+      await Deno.remove(publicDir, { recursive: true });
+    }
+  }
+  assert(stamps[0] !== stamps[1]);
+});
