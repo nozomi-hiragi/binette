@@ -536,6 +536,26 @@ Deno.test("storage はすべてのアプリに届き、アプリごとに /data/
   assertEquals(await store.data.read("other"), new Map());
 });
 
+Deno.test("保存待ちの書き込みがあるうちに開き直しても、書き込みのあとのデータを読む", async () => {
+  const store = createMemoryAppStore();
+  const write = store.data.write.bind(store.data);
+  store.data.write = async (...args) => { await sleep(100); return write(...args); };
+  const app = { source: "test", prebuilt: storageApp };
+  const key = installedAppKey(app.source, storageApp.manifest.id);
+  const element = output();
+  const shell = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+  try {
+    await shell.open(key);
+    await element.active.process.app.call("save");
+    const first = element.view.instances.find(instance => instance.key === key)!;
+    await shell.close(first.id);
+    await waitFor(() => !element.view.instances.some(instance => instance.key === key));
+    await shell.open(key);
+    await element.active.process.app.call("load");
+    assertEquals([element.active.text.get("memo"), element.errors], ["保存した", []]);
+  } finally { shell.stop(); }
+});
+
 const updateApp = await build(source + `
 import { OsApi } from "jsr:@binette/replique";
 const updateOs = new Api().get<OsApi>("os");
