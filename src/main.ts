@@ -1,43 +1,48 @@
 /// <reference path="./env.d.ts" />
-import { createIndexedDbAppStore, parsePrebuiltApp } from "@binette/regie";
+import { createAppStore, createIndexedDbFileTree, createSystemDistribution, installedAppKey } from "@binette/regie";
 import { mountShell } from "@binette/scene";
+import { bootAppStore, loadBootApps } from "./boot.ts";
+import { showRecovery } from "./recovery.ts";
 
 // Service Worker は本番の OS だけが持つ。アプリには登録する呼び出しを渡さない
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   void navigator.serviceWorker.register(new URL("./sw.js", document.baseURI), { scope: "./" }).catch(console.error);
 }
 
-/** アプリの入手元。OS を更新しても変えない */
-const SYSTEM = "binette:system";
-const BUNDLED = "binette:bundled";
-const systemUrls = import.meta.glob<string>("../.binapp/system/*.binapp", { query: "?url", import: "default", eager: true });
-const bundledUrls = import.meta.glob<string>("../.binapp/bundled/*.binapp", { query: "?url", import: "default", eager: true });
-// スクリプトと同じ UTF-16 コード単位の辞書順。拡張子を除いて比べる
-const appName = (key: string) => key.slice(0, -".binapp".length);
-const urls = ([[SYSTEM, systemUrls], [BUNDLED, bundledUrls]] as const).flatMap(([source, appUrls]) =>
-  Object.keys(appUrls).sort((a, b) => appName(a) < appName(b) ? -1 : appName(a) > appName(b) ? 1 : 0).map((key) => ({ source, url: appUrls[key]! }))
-);
-
 const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
+const tree = createIndexedDbFileTree();
+const distribution = createSystemDistribution(tree, { manifestUrl: new URL("./manifest.json", document.baseURI), origin: location.origin });
 
-try {
-  const apps = await Promise.all(urls.map(async ({ source, url }) => {
-    const response = await fetch(new URL(url, location.href));
-    if (!response.ok) throw new Error(`アプリを取得できません（${response.status}）。`);
-    // 配信の URL は中身のハッシュで変わるので、source には使わない
-    return { source, prebuilt: parsePrebuiltApp(await response.text()) };
-  }));
+if (new URL(location.href).searchParams.has("recovery")) {
+  showRecovery(container, distribution);
+} else try {
+  const update = await distribution.checkUpdate();
+  if (update.installedVersion === undefined) await distribution.install(update.manifest);
+  const { apps, home } = await loadBootApps(tree, distribution);
+  let booting = true;
+  const errors: unknown[] = [];
   const shell = await mountShell(container, {
     apps,
-    store: createIndexedDbAppStore(),
-    onError(error) { console.error(error); },
+    store: bootAppStore(createAppStore(tree), home, apps.flatMap(app => app.prebuilt?.manifest.role === "home" ? [installedAppKey(app.source, app.prebuilt.manifest.id)] : [])),
+    onError(error) { console.error(error); if (booting) errors.push(error); },
   });
+  booting = false;
+  if (errors.length) { shell.stop(); throw errors[0]; }
+  if (update.updateAvailable && update.installedVersion !== undefined) {
+    const notice = document.createElement("p");
+    notice.setAttribute("role", "status");
+    notice.textContent = "Binette の新しい版があります。復旧画面から /system を取り直すと更新できます。";
+    const link = document.createElement("a");
+    const url = new URL(location.href);
+    url.searchParams.set("recovery", "");
+    link.href = url.href;
+    link.textContent = "復旧画面を開く";
+    notice.append(" ", link);
+    container.append(notice);
+  }
   import.meta.hot?.dispose(() => shell.stop());
 } catch (error) {
   console.error(error);
-  const message = document.createElement("p");
-  message.setAttribute("role", "alert");
-  message.textContent = "Binette を読み込めませんでした。再読み込みしてください。";
-  container.replaceChildren(message);
+  showRecovery(container, distribution, error);
 }

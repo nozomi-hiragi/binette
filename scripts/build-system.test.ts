@@ -1,32 +1,35 @@
-import { assertEquals, assertRejects } from "@std/assert";
-import { buildApps, buildFolder, appNames } from "./build-system.ts";
-import { parsePrebuiltApp } from "../packages/regie/src/prebuilt.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import { appNames, buildApps, buildFolder, type SystemManifest, systemManifest } from "./build-system.ts";
 
 const replique = new URL("../packages/replique/src/index.ts", import.meta.url).pathname;
 async function app(root: string, name: string): Promise<void> {
   await Deno.mkdir(`${root}/${name}`, { recursive: true });
-  await Deno.writeTextFile(`${root}/${name}/app.json`, JSON.stringify({ id: name, name, entry: { html: "index.html", as: "main.ts" } }));
-  await Deno.writeTextFile(`${root}/${name}/index.html`, "<p>例</p>");
+  await Deno.writeTextFile(`${root}/${name}/app.json`, JSON.stringify({ id: name, name, icon: "assets/picture.svg", entry: { html: "view.html", as: "main.ts" } }));
+  await Deno.mkdir(`${root}/${name}/assets`);
+  await Deno.writeTextFile(`${root}/${name}/assets/picture.svg`, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  await Deno.writeTextFile(`${root}/${name}/view.html`, "<p>例</p>");
   await Deno.writeTextFile(`${root}/${name}/main.ts`, 'import { App, launch } from "jsr:@binette/replique"; launch(new App());');
 }
-Deno.test("システムアプリだけをフォルダ名順で書き出し、古い .binapp を消す", async () => {
+Deno.test("アプリをフォルダ名順で固定名のファイルへ書き出し、古い生成物を消す", async () => {
   const dir = await Deno.makeTempDir();
   try {
     await app(dir, "a-b");
     await app(dir, "a");
     await Deno.mkdir(`${dir}/ignored`);
-    await Deno.mkdir(`${dir}/out`);
+    await Deno.mkdir(`${dir}/out/removed`, { recursive: true });
     await Deno.writeTextFile(`${dir}/out/old.binapp`, "古い");
-    await Deno.writeTextFile(`${dir}/out/keep.txt`, "残す");
     assertEquals(await buildFolder(dir, `${dir}/out`, replique), ["a", "a-b"]);
-    const files = Array.from(Deno.readDirSync(`${dir}/out`), (entry) => entry.name).sort();
-    assertEquals(files, ["a-b.binapp", "a.binapp", "keep.txt"]);
+    assertEquals(Array.from(Deno.readDirSync(`${dir}/out`), (entry) => entry.name).sort(), ["a", "a-b"]);
     for (const name of ["a", "a-b"]) {
-      assertEquals(parsePrebuiltApp(await Deno.readTextFile(`${dir}/out/${name}.binapp`)).manifest.id, name);
+      const output = `${dir}/out/${name}`;
+      assertEquals(Array.from(Deno.readDirSync(output), (entry) => entry.name).sort(), ["app.json", "app.wasm", "icon.svg", "index.html"]);
+      const manifest = JSON.parse(await Deno.readTextFile(`${output}/app.json`));
+      assertEquals(manifest.id, name);
+      assertEquals(manifest.icon, "icon.svg");
+      assertEquals(await Deno.readTextFile(`${output}/index.html`), "<p>例</p>");
+      assertEquals(await Deno.readTextFile(`${output}/icon.svg`), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+      assert(WebAssembly.validate(await Deno.readFile(`${output}/app.wasm`)));
     }
-    await Deno.remove(`${dir}/a-b`, { recursive: true });
-    assertEquals(await buildFolder(dir, `${dir}/out`, replique), ["a"]);
-    assertEquals(Array.from(Deno.readDirSync(`${dir}/out`), (entry) => entry.name).sort(), ["a.binapp", "keep.txt"]);
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
 Deno.test("システムアプリの失敗はフォルダ名を示す", async () => {
@@ -40,44 +43,77 @@ Deno.test("システムアプリの失敗はフォルダ名を示す", async () 
     assertEquals(result.code, 1);
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
-
 Deno.test("実際のシステムアプリは HTML なしで宣言 UI をビルドする", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    const root = new URL("../apps", import.meta.url).pathname;
-    assertEquals(await buildFolder(root, dir, replique), ["home", "settings"]);
+    assertEquals(await buildFolder(new URL("../apps", import.meta.url).pathname, dir, replique), ["home", "settings"]);
     for (const name of ["home", "settings"]) {
-      const built = parsePrebuiltApp(await Deno.readTextFile(`${dir}/${name}.binapp`));
-      assertEquals(built.manifest.entry.html, undefined);
-      assertEquals(built.html, "");
+      const manifest = JSON.parse(await Deno.readTextFile(`${dir}/${name}/app.json`));
+      assertEquals(manifest.entry.html, undefined);
+      assertEquals(await Deno.readTextFile(`${dir}/${name}/index.html`), "");
     }
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
-
-Deno.test("システムアプリと同梱アプリの出力を分け、同梱アプリが空でも古い生成物を消す", async () => {
+Deno.test("目録は全ファイルのバイト数と SHA-256 を持ち、版は内容とパスだけで変わる", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    await Deno.mkdir(`${dir}/apps`);
-    await Deno.mkdir(`${dir}/bundled`);
-    await Deno.mkdir(`${dir}/.binapp/bundled`, { recursive: true });
-    await Deno.writeTextFile(`${dir}/.binapp/old.binapp`, "古い");
-    await Deno.writeTextFile(`${dir}/.binapp/keep.txt`, "残す");
-    await Deno.writeTextFile(`${dir}/.binapp/bundled/removed.binapp`, "古い");
-    await buildApps(dir);
-    assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp`), (entry) => entry.name).sort(), ["bundled", "keep.txt", "system"]);
-    assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp/bundled`)), []);
-    // フォルダ名が同じでも、一方の出力を消すときに他方を残す。
+    await Deno.mkdir(`${dir}/nested`);
+    await Deno.writeTextFile(`${dir}/z`, "例");
+    await Deno.writeFile(`${dir}/nested/a`, new Uint8Array([0, 255]));
+    const manifest = await systemManifest(dir);
+    assertEquals(manifest.files.map((file) => file.path), ["system/nested/a", "system/z"]);
+    assertEquals(manifest.files.map((file) => file.size), [2, 3]);
+    for (const file of manifest.files) {
+      const bytes = await Deno.readFile(`${dir}/${file.path.slice(7)}`);
+      const expected = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      assertEquals(file.sha256, expected);
+    }
+    assert(/^[0-9a-f]{64}$/.test(manifest.version));
+    await Deno.utime(`${dir}/z`, new Date(), new Date());
+    assertEquals(await systemManifest(dir), manifest);
+    await Deno.rename(`${dir}/z`, `${dir}/b`);
+    const renamed = await systemManifest(dir);
+    assert(renamed.version !== manifest.version);
+    await Deno.writeTextFile(`${dir}/b`, "別");
+    assert((await systemManifest(dir)).version !== renamed.version);
+  } finally { await Deno.remove(dir, { recursive: true }); }
+});
+Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同梱アプリ・古い生成物を扱う", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
     await Deno.mkdir(`${dir}/packages/replique/src`, { recursive: true });
     await Deno.symlink(replique, `${dir}/packages/replique/src/index.ts`);
-    await app(`${dir}/apps`, "same");
-    await app(`${dir}/bundled`, "same");
+    await Deno.mkdir(`${dir}/public`);
+    await Deno.writeTextFile(`${dir}/public/sw.js`, "// static");
+    await app(`${dir}/apps`, "home");
+    await app(`${dir}/apps`, "settings");
+    await app(`${dir}/bundled`, "home");
+    await Deno.mkdir(`${dir}/.binapp/bundled`, { recursive: true });
+    await Deno.writeTextFile(`${dir}/.binapp/old.binapp`, "古い");
+    await Deno.writeTextFile(`${dir}/.binapp/bundled/removed.binapp`, "古い");
+    await Deno.writeTextFile(`${dir}/.binapp/keep.txt`, "残す");
     await buildApps(dir);
-    for (const kind of ["system", "bundled"]) {
-      assertEquals(parsePrebuiltApp(await Deno.readTextFile(`${dir}/.binapp/${kind}/same.binapp`)).manifest.id, "same");
-    }
-    await Deno.remove(`${dir}/bundled/same`, { recursive: true });
-    await buildApps(dir);
+    const out = `${dir}/.binapp/public`;
+    const first: SystemManifest = JSON.parse(await Deno.readTextFile(`${out}/manifest.json`));
+    assertEquals(first, await systemManifest(`${out}/system`));
+    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "home", settings: "settings" } });
+    assertEquals(await Deno.readTextFile(`${out}/sw.js`), "// static");
+    assertEquals(Array.from(Deno.readDirSync(`${dir}/public`), (entry) => entry.name), ["sw.js"]);
+    assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp`), (entry) => entry.name).sort(), ["bundled", "keep.txt", "public"]);
     assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp/bundled`)), []);
-    assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp/system`), (entry) => entry.name), ["same.binapp"]);
+    assert(first.files.some((file) => file.path === "system/apps/home/app.wasm"));
+    assert(first.files.some((file) => file.path === "system/bundled/home/app.wasm"));
+    await buildApps(dir);
+    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/manifest.json`)), first);
+    await Deno.remove(`${dir}/bundled/home`, { recursive: true });
+    await Deno.writeTextFile(`${out}/obsolete.txt`, "古い");
+    await buildApps(dir);
+    assertEquals(Array.from(Deno.readDirSync(`${out}/system/bundled`)), []);
+    assertEquals(Array.from(Deno.readDirSync(out), (entry) => entry.name).sort(), ["manifest.json", "sw.js", "system"]);
+    const latest = await Deno.readTextFile(`${out}/manifest.json`);
+    assert(JSON.parse(latest).version !== first.version);
+    await Deno.writeTextFile(`${dir}/apps/home/app.json`, "{");
+    await assertRejects(() => buildApps(dir), Error, "システムアプリ「home」");
+    assertEquals(await Deno.readTextFile(`${out}/manifest.json`), latest);
   } finally { await Deno.remove(dir, { recursive: true }); }
 });

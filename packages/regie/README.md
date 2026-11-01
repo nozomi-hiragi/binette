@@ -19,6 +19,29 @@ process.stop();
 
 テストは、ルートの `deno task test` で行います。
 
+`createSystemDistribution(tree, { manifestUrl, origin, fetch? })` は配布目録と固定物を扱います。`origin` はページの `location.origin` を渡します。目録とファイルは同じオリジンから取り、リダイレクトは許しません。テストでは `fetch` を差し替えられます。
+
+```ts
+const distribution = createSystemDistribution(tree, {
+  manifestUrl: new URL("manifest.json", location.href),
+  origin: location.origin,
+});
+const update = await distribution.checkUpdate();
+if (update.installedVersion === undefined) {
+  await distribution.install(update.manifest); // 初回だけ自動導入
+}
+const wasm = await distribution.readOverlay("/apps/home/app.wasm");
+// 既存の導入がある場合は、設定で更新を選んでから install(update.manifest) を呼ぶ。
+```
+
+`checkUpdate()` は目録だけを取り、`{ manifest, installedVersion, updateAvailable }` を返します。版が異なると `updateAvailable` が true になります。取得できないときは保存目録と目録に載る全固定物を検査し、問題がなければ保存版を更新なしとして返します。保存版がない場合や検査に失敗した場合はエラーになります。`install(manifest?)` は新目録にハッシュと大きさが一致する保存済みファイルを再利用し、足りない分を取得・検査してから `/system` 全体を `replaceSystem` で入れ替えます。目録も予約パス `/system/.manifest.json` に同時保存するため、取得・検査・置換が失敗した場合は以前の版を保ちます。
+
+固定物の読み込みは `readSystem("/system/...")`、重ね合わせは `readOverlay("/apps/...")` を使います。システムのファイルは保存目録と同じ時点で読み、毎回ハッシュと大きさを検査します。目録にあるファイルの欠落・改変や、目録にない固定物は例外にします。目録にも実体にもないパスは undefined を返します。`/user` の上書きは検査対象外で、設定アプリ `/apps/settings/` には適用しません。
+
+`recover("clear-user")` は `/user` の変更を消し、`recover("refetch-system")` は全固定物を取得し直してから置換し、`recover("clear-all")` はファイルの木をすべて消します。削除操作はファイルごとなので、途中で保存先が失敗した場合は部分削除になることがあります。復旧後の再起動や画面は呼び出し側で行います。
+
+`checkUpdate()` で取得したネット目録が保存版と同版なら、ファイルの順序を除いた全内容の一致も検査します。確認・導入した目録はそのインスタンスでも保持し、後の読み込みで保存目録の変更も検知します。保存目録自体の署名は現在の仕様にはなく、配布元の HTTPS と同じオリジンを信頼します。更新を保留した旧版、またはネット目録による確認前の旧版では、保存目録と本体の同時改変を検知できません。
+
 仕様は [docs/spec/regie/](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/regie/README.md) にあります。
 
 `@binette/core` の `DomOp` は byId・create・text・class・append・remove・listen・icon の判別共用体です。_start と call の操作は完了通知前に一回届きます。空の操作は送らず、call の例外までの操作も送ります。apps.open と finish の要求は、現在の呼び出しの完了後に onOpen / onFinish へ届けます。
