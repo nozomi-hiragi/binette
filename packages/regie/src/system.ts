@@ -11,7 +11,7 @@ export type SystemApp = { source: string } & (
 );
 
 /** システムの設定 */
-export interface SystemOptions extends Pick<ProcessOptions, "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
+export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
   store: AppStore;
   ui: SystemUi;
@@ -268,6 +268,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const mounted = await startProcess(installed.wasm, {
         declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
+        workerUrl: options.workerUrl,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
         destroyTimeout: settings.destroyTimeout,

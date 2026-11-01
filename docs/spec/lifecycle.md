@@ -81,7 +81,7 @@ OS がページに読まれるたびに、そのページの識別子を作り�
 ### Service Worker（決定）
 
 - OS（Binette）が 1 つだけ持つ。アプリには登録させない。Service Worker はそのサイトのすべての通信を横取りできるため
-- 役目は、オフラインのキャッシュ。将来は、プッシュ通知などで、ページが閉じていても短時間だけ起こされる
+- 役目は、入口とカーネルのオフラインキャッシュと、ファイルの木の URL への応答。将来は、プッシュ通知などで、ページが閉じていても短時間だけ起こされる
 - ずっと動き続けることはできない（ブラウザが数十秒で止める）ので、画面なしで動き続ける処理には使えない
 - 将来、アプリが「通知が来たらこの関数を呼んで」と頼み、その中でアプリの WASM を画面なしで短く動かす形はとれる（未決）
 
@@ -89,9 +89,9 @@ OS がページに読まれるたびに、そのページの識別子を作り�
 
 - ルートの OS が本番だけ `sw.js` を scope `./` で登録する。開発サーバーでは登録しない。アプリには登録の API を渡さない
 - `manifest.webmanifest` は name・short_name が Binette、display が standalone、start_url・scope が `./`。背景色とテーマ色は index.html の白に合わせ、自作の B の SVG を使う。SW・マニフェスト・アイコンは Vite の publicDir から dist 直下へ写す。URL は相対指定でサブパスにも置ける
-- `binette-v0.2.0-1` に版付きのキャッシュを作る。install で `./`・`./index.html`・マニフェスト・アイコンを入れて skipWaiting、activate で古い `binette-` のキャッシュだけを消して clients.claim する
-- ページの読み込み（navigate）はネットを先に試し、成功時にキャッシュを更新する。通信や HTTP の失敗では同じ URL のキャッシュ、それが無ければ `./`・`./index.html` の順に返す
-- 同じオリジンのほかの GET はキャッシュを先に返し、裏で取り直して置き換える（stale-while-revalidate）。未保存ならネットから取って保存する。成功した応答だけを保存し、別のオリジンと GET 以外には触らない。ハッシュ付き JS や `.binapp` は SW の制御下で取得したときに入るため、初回の登録直後はオンラインで再読み込みしてからオフラインで使う
+- 版付きキャッシュに入口、`regie.js`、`regie-worker.js`、マニフェスト、アイコンを保持する。入口とカーネルはキャッシュを優先し、SW の版を更新すると新しい組に切り替える。activate では古い `binette-` のキャッシュを消す
+- `./fs/` への GET は IndexedDB のファイルの木から返す。論理パスは `/user` を `/system` に重ね、`/apps/settings` は `/system` のみを見る。`./fs/system/…` は `/system` を直接読む。`/system` の応答は保存目録の SHA-256 で検証する。パスと応答の形は案
+- 配布元の `manifest.json` と `system/` の固定物は SW のキャッシュを通さず、カーネルが目録とハッシュを検証する。別のオリジンと GET 以外には触らない
 
 ## アプリの状態（決定）
 
@@ -343,7 +343,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | --- | --- |
 | モードの見分け、透かし、インストールが要る操作のアラート | isInstalled と installed の上書き、display-mode の change、appinstalled、透かし、ホームバーのインストールボタン、prompt と手順の dialog、requireInstall を実装。保存はいつも IndexedDB で、これは決まりどおり。インストールを必須とする操作自体はまだ無い |
 | ページの識別子、ページで起きること | startSystem ごとに UUID を作り、this.page で渡す。hidden で Pause、visible で Resume。blur だけでは移さず、freeze の間は Stop の時間を数えない |
-| Service Worker | 本番の OS だけが登録。マニフェストと自作アイコンを同梱。版付きキャッシュ、navigate はネット優先、同じオリジンのほかの GET は stale-while-revalidate。開発では登録しない。プッシュ通知は未実装 |
+| Service Worker | 本番の OS だけが登録。入口とカーネルの版付きキャッシュ、ファイルの木を返す `./fs/` を実装。開発では登録しない。プッシュ通知は未実装 |
 | アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない。起動の途中のクリックは Resume のあとに届ける（[scene/mount.md](scene/mount.md)） |
 | 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
 | スタック | 既定 3（ホームを含む）。画面を隠して Pause にし、DOM と Worker を残す。残っていれば Resume、Stop なら Start(Stop) → Resume。上限を超えたら、前面以外で最も長く前面に出ていないものを Stop → Destroy（System・Stack） |
@@ -376,7 +376,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 
 - インストールボタンはライブのときだけホームバーの右端。beforeinstallprompt を保持して prompt を呼び、無ければ閉じるボタン付きの dialog に手順を出す。閉じた記録は保存しない
 - マニフェスト・自作の B の SVG・sw.js を dist 直下へ置く。本番だけ OS が相対 URL と scope ./ で SW を登録し、開発では登録しない
-- SW の版付きキャッシュ、install の最低限のシェル、skipWaiting、activate の古い binette- の削除と clients.claim。navigate はネット優先、同じオリジンのほかの GET は stale-while-revalidate。別のオリジンと GET 以外には触らない
+- SW の版付きキャッシュとファイルの木からの応答。別のオリジンと GET 以外には触らない
 
 アプリの状態と時間
 

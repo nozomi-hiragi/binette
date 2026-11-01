@@ -427,3 +427,23 @@ Deno.test("os のホームと履歴の番号が範囲外ならアプリを終了
     }
   }
 });
+
+Deno.test("既定の独立 module Worker で起動して関数を呼べる", async () => {
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(source), { onDom: (ops) => texts.push(ops) });
+  try {
+    await app.call("hello");
+    assert(texts.flat().some((op) => op.op === "text" && op.value === "値"));
+  } finally { app.stop(); }
+});
+
+Deno.test("明示した Worker URL で起動し、createWorker は URL より優先する", async () => {
+  const wasm = await build(source);
+  for (const options of [
+    { workerUrl: new URL("../src/worker-entry.ts", import.meta.url) },
+    { workerUrl: "invalid:ignored", createWorker },
+  ]) {
+    const app = await launchApp(wasm, options);
+    try { await app.call("hello"); } finally { app.stop(); }
+  }
+});

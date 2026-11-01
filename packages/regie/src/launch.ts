@@ -1,5 +1,4 @@
 import type { DomOp } from "@binette/core";
-import { workerSource } from "./worker.ts";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
 /** 設定アプリの起動時に渡す写し。ホームの id は installedAppKey */
@@ -41,8 +40,10 @@ export interface LaunchOptions {
   onError?: (error: Error) => void;
   /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
   onExit?: (error: Error) => void;
-  /** Worker を作る関数。省略すると Blob URL の Worker。テストでは同じスレッドの `MessageChannel` を渡す */
+  /** Worker を作る関数。省略すると独立した module Worker。テストでは同じスレッドの `MessageChannel` を渡す */
   createWorker?: () => RegieWorker;
+  /** module Worker の URL。createWorker があればそちらを優先する */
+  workerUrl?: string | URL;
   /** 起動中でも Worker を止める */
   signal?: AbortSignal;
 }
@@ -57,13 +58,10 @@ export interface RegieApp {
   stop(): void;
 }
 
-/** 関数の `toString()` から Blob URL の Worker を作る。ワーカーのファイルの場所に頼らない */
-function createBlobWorker(): RegieWorker {
-  const source = workerSource();
-  const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-  const worker = new Worker(url);
-  URL.revokeObjectURL(url);
-  return worker;
+/** 独立した URL の Worker。Vite は本番でこの入口を固定名へ書き出す */
+function createModuleWorker(url?: string | URL): RegieWorker {
+  if (url !== undefined) return new Worker(url, { type: "module" });
+  return new Worker(new URL("./worker-entry.ts", import.meta.url), { type: "module" });
 }
 
 /**
@@ -76,7 +74,7 @@ function createBlobWorker(): RegieWorker {
  */
 export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions = {}): Promise<RegieApp> {
   if (options.signal?.aborted) return Promise.reject(new Error("アプリを止めました。"));
-  const worker = (options.createWorker ?? createBlobWorker)();
+  const worker = options.createWorker ? options.createWorker() : createModuleWorker(options.workerUrl);
   const pending = new Map<number, { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   const timeout = options.callTimeout ?? 5000;
   let initTimer: ReturnType<typeof setTimeout> | undefined;

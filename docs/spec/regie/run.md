@@ -33,7 +33,7 @@ function launchApp(wasm: Uint8Array | ArrayBuffer, options?: LaunchOptions): Pro
 
 アプリの WASM を Worker で起動します。
 
-1. `options.createWorker` で Worker を作る。省略すると、下の「Blob URL の Worker」を作る
+1. `options.createWorker` で Worker を作る。省略すると `options.workerUrl`、さらに省略すると下の「独立した Worker のファイル」を使う
 2. Worker の `message` を受け始めてから、`{ type: "init", wasm, page, apps?, os? }` を送る。`wasm` は写しを作って transfer する（`Uint8Array`（大きなバッファの一部を見るものを含む）なら `new Uint8Array(wasm).buffer`、`ArrayBuffer` なら `wasm.slice(0)`）。呼び出し側のバッファは変わらない。`postMessage` が投げたら、Worker を止め（`stop()` と同じ）、そのエラーで reject する
 3. `ready` が来たら `RegieApp` で解決する
 4. `failed` が来たら Worker を止め（`stop()` と同じ）、`failed` の `message` を持つ `Error` で reject する
@@ -61,8 +61,10 @@ interface LaunchOptions {
   onError?: (error: Error) => void;
   /** 起動後にアプリが終了したとき。stop や signal では呼ばない */
   onExit?: (error: Error) => void;
-  /** Worker を作る関数。省略すると Blob URL の Worker */
+  /** Worker を作る関数。省略すると独立した module Worker */
   createWorker?: () => RegieWorker;
+  /** module Worker の URL。createWorker があればそちらを優先 */
+  workerUrl?: string | URL;
   /** 起動中でも Worker を止める */
   signal?: AbortSignal;
 }
@@ -124,23 +126,19 @@ function workerSource(): string
 
 Worker の側の処理です。Worker の `self` か、テストでは `MessageChannel` の片方を渡します。
 
-- `serveApp` は、`toString()` で取り出して Worker のソースにします。宣言 UI の差分は Décor の `createUiDiffer` を引数 `differ` で受け取り、ほかの外の import や関数は参照しません
+- `serveApp` は Worker の入口から呼びます。`workerSource()` にも `toString()` で埋め込みます。宣言 UI の差分は Décor の `createUiDiffer` を引数 `differ` で受け取り、ほかの外の import や関数は参照しません
 - 自分で Worker を作るときは、`serveApp.toString()` ではなく `workerSource()` を使います。`workerSource()` は `serveApp` と `createUiDiffer` を埋め込み、`self` で動かすソースを返します（案）
 
-### Blob URL の Worker
+### 独立した Worker のファイル
 
-`createWorker` を省略すると、次の Worker を作ります。
+`createWorker` を省略すると、`workerUrl` で指定した URL、または Régie に同梱する入口から module Worker を作ります。
 
 ```ts
-const source = workerSource();
-const url = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
-const worker = new Worker(url); // classic Worker
-URL.revokeObjectURL(url);
+const worker = new Worker(url, { type: "module" });
 ```
 
-- ワーカーのファイルの置き場所に頼らないので、JSR から読んだ .ts をそのまま使う場合でも、バンドラーでまとめた場合でも、設定なしで動きます
-- そのかわり、Content Security Policy を使うページでは `worker-src blob:` を許す必要があります
-- Worker の作り方をこのままにするかは未決です
+- 本番ビルドでは `regie-worker.js` に出力します。Binette は Blob URL を使わないため、CSP の `worker-src blob:` は要りません
+- `workerSource()` は自分で Worker を作る利用者のために引き続き公開します。Worker の改変検知方法は [起動と配布](../boot.md#改変の検知決定-2026-11-01) を参照してください
 
 ## メッセージ（実装済み）
 
