@@ -21,3 +21,7 @@ export type { PrebuiltApp } from "./prebuilt.ts";
 export { parsePrebuiltApp, stringifyPrebuiltApp } from "./prebuilt.ts";
 export type { BrowserBuildOptions } from "./browser-build.ts";
 export { buildAppInWorker, buildStoredApp } from "./browser-build.ts";
+
+export { createProviderLists } from "./lists.ts";
+export type { ProviderLists, ProviderListsOptions } from "./lists.ts";
+export type { ProviderListRegistration } from "./store.ts";

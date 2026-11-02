@@ -7,7 +7,7 @@ export interface FileTree {
   readFiles(paths: readonly string[]): Promise<(Uint8Array | undefined)[]>;
   write(path: string, data: Uint8Array): Promise<void>;
   /** すべての検証とコピーを終えてから、ひとまとまりとして保存する。 */
-  writeFiles(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  writeFiles(files: ReadonlyMap<string, Uint8Array>, remove?: readonly string[]): Promise<void>;
   list(prefix: string): Promise<string[]>;
   delete(path: string): Promise<void>;
   replaceSystem(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
@@ -119,8 +119,11 @@ export function createMemoryFileTree(): FileTree {
       files.set(path, data.slice());
       return Promise.resolve();
     },
-    writeFiles(input) {
+    writeFiles(input, remove = []) {
       const updates = writableFiles(input);
+      const deletions = [...remove];
+      for (const path of deletions) writable(path);
+      for (const path of deletions) files.delete(path);
       for (const [path, data] of updates) files.set(path, data);
       return Promise.resolve();
     },
@@ -262,6 +265,7 @@ export function createIndexedDbFileTree(
     readFiles(paths) {
       const requested = [...paths];
       for (const path of requested) validatePath(path);
+      if (requested.length === 0) return Promise.resolve([]);
       return run<(Uint8Array | undefined)[]>("readonly", (store, set) => {
         const values: (Uint8Array | undefined)[] = new Array(requested.length);
         set(values);
@@ -280,9 +284,12 @@ export function createIndexedDbFileTree(
         store.put(value, path);
       });
     },
-    writeFiles(input) {
+    writeFiles(input, remove = []) {
       const updates = writableFiles(input);
+      const deletions = [...remove];
+      for (const path of deletions) writable(path);
       return run<void>("readwrite", (store) => {
+        for (const path of deletions) store.delete(path);
         for (const [path, data] of updates) store.put(data, path);
       });
     },

@@ -62,7 +62,7 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 - `instances` の `key` は完全なアプリ ID です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
 - `SystemOptions` は `BuildOptions` を継承し、`compiler` と `libraries` を受け取ります。`read` のアプリをビルドするときだけビルドの入口を dynamic import します。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
-- 文字の表示や DOM は一切持ちません。`SystemUi` を差し替えれば、DOM なしでテストできます
+- 文字の表示は持ちません。提供リストの HTML の解析には DOMParser を使い、テストではパーサーを差し替えられます
 
 ## インストール
 
@@ -73,7 +73,13 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 3. `prebuilt` は版にかかわらず毎回保存し直す。保存済みの `installedAt` は保つ。compiler は呼ばない
 4. `read` は同じ版が保存済みなら使い回す。無いか版が違うときだけ [ビルド](build.md) し、HTML・WASM・SVG・manifest・日時を保存する。アイコンのパスは `iconPath` で検査する
 
-インストール・更新する対象と通常のアプリの一覧は `apps` で渡したものです。1 つの保存に失敗しても残りを扱い、`ui.report` に知らせます。システムアプリは `.binapp` を同梱し、ブラウザでは asc を読みません。
+同梱アプリのインストール・更新対象は `apps` で渡したものです。通常のアプリの一覧には保存済みの提供リストのアプリも含みます。1 つの保存に失敗しても残りを扱い、`ui.report` に知らせます。システムアプリは `.binapp` を同梱し、ブラウザでは asc を読みません。
+
+## 提供リスト（実装済み、形は案）
+
+`createProviderLists` と `BinetteSystem.lists` は Régie 内部の TypeScript API です。リストの一覧・登録・削除・取得・インストール・更新確認を扱い、アプリに渡す Réplique API や管理画面はまだありません。`system/boot.json` の既定リストは削除できず、追加分は SystemStore に保存します。`allowHttpLists` は既定 false のデバッグ設定で、設定画面には出しません。
+
+HTML は DOMParser で読み、link があればその JSON を優先し、失敗しても埋め込みには戻しません。インストール時は ID を照合し、ブラウザ用コンパイラでビルドして整合性を検証します。ファイルキーと取得したファイルに対するフォルダキーに対応し、`/` キーは未対応として拒否します。更新確認は起動時と 30 分ごとに行い、リストの版文字列が異なると更新します。移転時はアプリの ID と保存データ、役割、履歴などを引き継ぎます（[アプリの識別子と提供リスト](../app-id.md)）。
 
 ## 役割の割り当て（実装済み、形は案）
 
