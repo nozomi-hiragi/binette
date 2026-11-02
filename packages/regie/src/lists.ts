@@ -121,7 +121,6 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
       const path = key.replace(/\/$/, "");
       if (appPath(path) !== path || path.includes("?") || path.includes("#")) throw new Error(`integrity のパスが正しくありません: ${key}`);
     }
-    if (Object.hasOwn(entry.integrity ?? {}, "/")) throw new Error("integrity の /（アプリ全体）はまだ対応していません。");
     if (!options.browserBuild) throw new Error("提供リストのアプリにはブラウザ用コンパイラが必要です。");
     const base = new URL(entry.source);
     if (!base.pathname.endsWith("/")) base.pathname += "/";

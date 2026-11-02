@@ -128,7 +128,7 @@ Deno.test("ブラウザ Worker で親とサブのアイコン・import・CSS を
   } finally { await f.stop(); }
 });
 
-Deno.test("ID の不一致・ハッシュ不一致・未対応の / はインストールを保存せず、日本語で拒否する", async () => {
+Deno.test("ID の不一致・ハッシュ不一致はインストールを保存せず、日本語で拒否する", async () => {
   const f = await fixture({}, true);
   try {
     await f.lists.add(listUrl);
@@ -137,10 +137,67 @@ Deno.test("ID の不一致・ハッシュ不一致・未対応の / はインス
     f.responses.set(sourceUrl + "app.json", sources["app.json"]);
     for (const key of ["src/", "app.json", "/", "missing/"]) {
       f.responses.set(listUrl, html([entry("1", { [key]: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" })]));
-      await assertRejects(() => f.lists.install(listUrl, "memo"), Error, key === "/" ? "まだ対応していません" : key === "missing/" ? "ファイルがありません" : "ハッシュが合いません");
+      await assertRejects(() => f.lists.install(listUrl, "memo"), Error, key === "missing/" ? "ファイルがありません" : "ハッシュが合いません");
       assertEquals(await f.store.list(), []);
     }
   } finally { await f.stop(); }
+});
+
+Deno.test("CLI の / とフォルダキーは install の取得ファイルと一致し、未読ファイルを除外し、不一致なら更新を保存しない", async () => {
+  const f = await fixture({}, true);
+  const dir = await Deno.makeTempDir({ prefix: "binette-root-integrity-" });
+  try {
+    await Deno.mkdir(`${dir}/src`);
+    for (const [path, text] of Object.entries(sources)) await Deno.writeTextFile(`${dir}/${path}`, text);
+    await Deno.writeTextFile(`${dir}/unused.txt`, "未読");
+    await Deno.writeTextFile(`${dir}/src/unread.ts`, "ビルドでは読まない");
+    const run = async (keys: string[] = []) => {
+      const output = await new Deno.Command(Deno.execPath(), {
+        args: ["run", "-A", new URL("../src/cli.ts", import.meta.url).pathname, "integrity", dir, ...keys,
+          "--replique", new URL("../../replique/src/index.ts", import.meta.url).pathname], stdout: "piped", stderr: "piped",
+      }).output();
+      assert(output.success, new TextDecoder().decode(output.stderr));
+      return JSON.parse(new TextDecoder().decode(output.stdout)) as Record<string, string>;
+    };
+    const integrity = await run();
+    const files = Object.entries(sources).map(([path, text]) => ({ path, bytes: encoder.encode(text) }));
+    assertEquals(integrity, { "/": await computeIntegrity(files, "/") });
+    await Deno.writeTextFile(`${dir}/unused.txt`, "変更しても未読");
+    assertEquals(await run(), integrity);
+    // 明示ファイルキーを併記した場合だけ、そのファイルも / の対象になる。
+    const extra = await run(["/", "unused.txt"]);
+    assert(extra["/"] !== integrity["/"]);
+    f.responses.set(sourceUrl + "unused.txt", "変更しても未読");
+    f.responses.set(listUrl, html([entry("root", extra)]));
+    await f.lists.add(listUrl);
+    const installed = await f.lists.install(listUrl, "memo");
+    assertEquals(installed.listVersion, "root");
+    assert(f.requests.includes(sourceUrl + "unused.txt"));
+    f.responses.set(listUrl, html([entry("root-only", integrity)]));
+    await f.lists.check();
+    assertEquals((await f.store.get(installed.key))?.listVersion, "root-only");
+    assertEquals(f.errors, []);
+    const folder = await run(["src/"]);
+    assertEquals(folder, { "src/": await computeIntegrity(files, "src/") });
+    await Deno.writeTextFile(`${dir}/src/unread.ts`, "変更しても未読");
+    assertEquals(await run(["src/"]), folder);
+    f.responses.set(listUrl, html([entry("folder", folder)]));
+    assertEquals((await f.lists.install(listUrl, "memo")).listVersion, "folder");
+    assert(!f.requests.includes(sourceUrl + "src/unread.ts"));
+    // 同じフォルダの明示ファイルキーは、フォルダのハッシュにも含める。
+    const folderExtra = await run(["src/", "src/unread.ts"]);
+    assert(folderExtra["src/"] !== folder["src/"]);
+    f.responses.set(sourceUrl + "src/unread.ts", "変更しても未読");
+    f.responses.set(listUrl, html([entry("folder-extra", folderExtra)]));
+    assertEquals((await f.lists.install(listUrl, "memo")).listVersion, "folder-extra");
+    const before = await f.store.get(installed.key);
+    f.responses.set(sourceUrl + "src/value.ts", "export const value: i32 = 43;");
+    f.responses.set(listUrl, html([entry("changed", integrity)]));
+    await f.lists.check();
+    assertEquals(await f.store.get(installed.key), before);
+    assertEquals(f.errors.length, 1);
+    assert(String(f.errors[0]).includes("ハッシュが合いません: /"));
+  } finally { await Deno.remove(dir, { recursive: true }); await f.stop(); }
 });
 
 const fakeApp = (source = listUrl): InstalledApp => ({ key: source + "#memo", source, manifest, icon: undefined, html: "", wasm: new Uint8Array(), installedAt: 1, listVersion: "list-version" });
