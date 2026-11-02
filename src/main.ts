@@ -40,7 +40,7 @@ try {
   }
   let reloading = false;
   const updater = createUpdater(distribution, registration ? browserKernels(registration, current) : {
-    current, check(kernel) { return kernel && kernel !== current ? Promise.reject(new Error("カーネルを更新できません。")) : Promise.resolve(); }, activate() { return Promise.resolve(); },
+    current, check(kernel) { return current && kernel && kernel !== current ? Promise.reject(new Error("カーネルを更新できません。")) : Promise.resolve(); }, activate() { return Promise.resolve(); },
   }, () => { if (!reloading) { reloading = true; location.reload(); } });
   await updater.boot();
   const { apps, roles } = await loadBootApps(tree, distribution);

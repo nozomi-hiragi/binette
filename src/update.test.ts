@@ -84,6 +84,13 @@ Deno.test("起動時の kernel 不一致は一致するシステムがなけれ�
   await assertRejects(() => updater.boot(), Error, "実行中のカーネル");
 });
 
+Deno.test("開発時（カーネルの印なし）は kernel 付きの目録でも起動する", async () => {
+  const f = await fixture();
+  const updater = createUpdater(f.distribution, { current: undefined, check: () => Promise.resolve(), activate: () => Promise.resolve() }, () => {});
+  await updater.boot();
+  assertEquals(updater.snapshot().current, "0.2.0+old");
+});
+
 Deno.test("label/kernel のない旧目録を読み、検証済み staging を切替できる", async () => {
   const f = await fixture();
   const old = (await f.distribution.installed())!;

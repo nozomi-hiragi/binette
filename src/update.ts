@@ -27,8 +27,10 @@ export function createUpdater(distribution: SystemDistribution, kernels: KernelU
       // 起動前のオンライン同版照合と、オフライン時の保存物検証も維持する。
       const found = await distribution.checkUpdate();
       let installed = await distribution.installed();
-      if (!installed || (installed.kernel !== undefined && installed.kernel !== kernels.current)) {
-        if (found.manifest.kernel !== undefined && found.manifest.kernel !== kernels.current) {
+      // 開発時は入口にカーネルの印が無いので、組の照合をしない
+      const paired = (kernel: string | undefined) => kernels.current === undefined || kernel === undefined || kernel === kernels.current;
+      if (!installed || !paired(installed.kernel)) {
+        if (!paired(found.manifest.kernel)) {
           throw new Error("実行中のカーネルと組になるシステムを取得できません。");
         }
         await distribution.install(found.manifest);
