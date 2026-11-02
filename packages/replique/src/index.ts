@@ -217,6 +217,21 @@ namespace hostOs {
   @external("binette", "os.launchName")
   export declare function launchName(i: i32): string;
   // @ts-ignore: decorator
+  @external("binette", "os.updatePhase")
+  export declare function updatePhase(): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.updateCurrent")
+  export declare function updateCurrent(): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.updateNext")
+  export declare function updateNext(): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.openRecovery")
+  export declare function openRecovery(): void;
+  // @ts-ignore: decorator
+  @external("binette", "os.checkUpdate")
+  export declare function checkUpdate(): void;
+  // @ts-ignore: decorator
   @external("binette", "os.updateAvailable")
   export declare function updateAvailable(): bool;
   // @ts-ignore: decorator
@@ -279,6 +294,11 @@ export class OsApi {
   launchTime(i: i32): f64 { return hostOs.launchTime(i); }
   launchName(i: i32): string { return hostOs.launchName(i); }
   /** 新しい版の `/system` があるか */
+  updatePhase(): string { return hostOs.updatePhase(); }
+  updateCurrent(): string { return hostOs.updateCurrent(); }
+  updateNext(): string { return hostOs.updateNext(); }
+  openRecovery(): void { hostOs.openRecovery(); }
+  checkUpdate(): void { hostOs.checkUpdate(); }
   updateAvailable(): bool { return hostOs.updateAvailable(); }
   /** `/system` を新しい版に入れ替えて、再読み込みする */
   update(): void { hostOs.update(); }

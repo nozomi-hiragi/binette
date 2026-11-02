@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type ShellSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type ShellSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -41,6 +41,8 @@ export interface ProcessOptions {
   onSet?: LaunchOptions["onSet"];
   onAssign?: LaunchOptions["onAssign"];
   onUpdate?: LaunchOptions["onUpdate"];
+  onCheckUpdate?: LaunchOptions["onCheckUpdate"];
+  onOpenRecovery?: LaunchOptions["onOpenRecovery"];
   onStorage?: LaunchOptions["onStorage"];
   onShellOpen?: LaunchOptions["onShellOpen"];
   onShellClose?: LaunchOptions["onShellClose"];
@@ -69,6 +71,7 @@ export interface Process {
   dispatchUiValue(handle: number, value: number, version?: number): void;
   /** シェルの状態（起動中アプリ一覧や前面）の更新を知らせる */
   syncShell?(snapshot: ShellSnapshot): void;
+  syncOs?(snapshot: OsSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -144,6 +147,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onSet: options.onSet,
     onAssign(role, i) { assignments.push([role, i]); notifyRequests(); },
     onUpdate: options.onUpdate,
+    onCheckUpdate: options.onCheckUpdate,
+    onOpenRecovery: options.onOpenRecovery,
     onStorage: options.onStorage,
     onShellOpen: options.onShellOpen,
     onShellClose: options.onShellClose,
@@ -328,6 +333,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       if (frozen) cancelTimer();
       else armTimer();
     },
+    syncOs(snapshot) { running?.syncOs?.(snapshot); },
     syncShell(snapshot) { running?.syncShell?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,

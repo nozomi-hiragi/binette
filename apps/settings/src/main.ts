@@ -34,7 +34,7 @@ function utc(time: f64): string {
 // 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
 let osApi: OsApi | null = null;
 let details = false;
-let updating = false;
+
 function showDetails(): void { details = true; }
 function chooseHome(index: i32): void {
   const os = osApi;
@@ -48,9 +48,16 @@ function chooseShell(index: i32): void {
 }
 function update(): void {
   const os = osApi;
-  if (os == null || updating) return;
-  updating = true;
+  if (os == null) return;
   os.update();
+}
+function openRecovery(): void {
+  const os = osApi;
+  if (os != null) os.openRecovery();
+}
+function checkUpdate(): void {
+  const os = osApi;
+  if (os != null) os.checkUpdate();
 }
 function change(change: i32): void {
   const os = osApi;
@@ -70,6 +77,19 @@ class Settings extends App {
     const os = osApi;
     if (os == null) return column([text("設定を使えません。")]).padding(16).key("settings-unavailable");
     const available = os.updateAvailable() ? true : false;
+    const phase = os.updatePhase();
+    const updating = phase == "applying";
+    const checking = phase == "checking";
+    const downloading = phase == "downloading";
+    const next = os.updateNext();
+    let status = "最新の版です。";
+    if (phase == "check-failed") status = "確認に失敗";
+    else if (phase == "download-failed") status = "ダウンロードに失敗";
+    else if (phase == "apply-failed") status = "更新に失敗";
+    else if (updating) status = "更新しています。完了すると再読み込みします。";
+    else if (checking) status = "確認しています…";
+    else if (downloading) status = "ダウンロード中…";
+    else if (available) status = "Binette の新しい版があります。";
     const homes: View[] = [];
     for (let i: i32 = 0; i < os.candidateCount("home"); i++) {
       const selected = os.candidateId("home", i) == os.role("home");
@@ -119,9 +139,13 @@ class Settings extends App {
       column([
         text("更新").heading(2).key("update-title"),
         column([
-          show(available, listTile("ソフトウェア・アップデート", updating ? "更新しています。完了すると再読み込みします。" : "Binette の新しい版があります。", null,
-            button(updating ? "更新中…" : "更新", update).variant("primary").enabled(!updating).key("update")).key("update-box")),
-          show(!available, listTile("ソフトウェア・アップデート", "最新の版です。", null, text("✓").tone("success")).key("update-latest")),
+          listTile("ソフトウェア・アップデート", status).key("update-status"),
+          text(os.updateCurrent() + (next.length > 0 ? " → " + next : "")).small().tone("muted").key("update-version"),
+          row([
+            show(available || updating, button(updating ? "更新中…" : "更新", update).variant("primary").enabled(available && !updating).key("update")),
+            button(phase == "download-failed" ? "再試行" : "今すぐ確認", checkUpdate).variant("ghost").enabled(!checking && !downloading && !updating).key("check-update"),
+          ]).key("update-actions"),
+          button("復旧画面を開く", openRecovery).variant("ghost").key("open-recovery"),
         ]).surface("card").key("update-card"),
       ]).key("update-section"),
       column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),

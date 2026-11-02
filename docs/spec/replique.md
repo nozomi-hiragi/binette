@@ -155,7 +155,7 @@ export class Api {
 | --- | --- | --- | --- |
 | `shell` | `ShellApi` | シェル | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知は入口だけ（[apps/shell.md](apps/shell.md)） |
 | `apps` | `AppsApi` | ホーム（とシェル） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
-| `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、`role(role)`・`candidateCount(role)`・`candidateName(role, i)`・`candidateId(role, i)`・`assign(role, i)`、`launchCount()`・`launchTime(i)`・`launchName(i)`、`updateAvailable()`・`update()` |
+| `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリごとのデータ（`/data/<id>/`） |
 | `fs` | `FsApi` | 誰にも届かない（案） | 空のクラス。範囲の決め方が未決なので、キーだけ用意している |
 
@@ -176,7 +176,7 @@ class Home extends App {
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
 - `role(role)` は役割に割り当てたアプリの installedAppKey（`JSON.stringify([source, manifest.id])`）です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・installedAppKey です。割り当てを変えられるのは `home` と `shell`（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ installedAppKey。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
-- `updateAvailable()` は設定アプリの起動時に、新しい版の `/system` があったかです。`update()` は OS に更新を頼みます。OS は `/system` を入れ替えて再読み込みします。完了や失敗は戻りません（失敗は OS のエラー表示に出ます）。更新を渡されていないときの `update()` は何もしません
+- `updateAvailable()` は準備済みの新しい版があるかです。`updateCurrent()`・`updateNext()` は現在と新しい版の表示用の文字列、`updatePhase()` は確認や更新の状態です。`checkUpdate()` は確認を、`update()` は準備済みの組への更新を、`openRecovery()` は復旧画面を開くことを OS に頼みます。状態の変化は設定アプリに同期され、画面を描き直します。呼び出し名と状態の形は案です
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
 
 ### StorageApi

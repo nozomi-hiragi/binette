@@ -703,3 +703,58 @@ Deno.test("ライブの透かしはアプリ表示領域と最低限の大枠を
     assertEquals(dialog.open, true);
   } finally { ui.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("設定の更新状態は Worker へ同期して描き直し、確認と復旧の操作を OS に届ける", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  let state = { phase: "latest", current: "0.2.0+old", next: "", available: false };
+  let changed = () => {};
+  let checked = 0; let recovered = 0; let removed = false;
+  const shell = await mountShell(element, { apps: [homeApp, ...apps], store: createMemoryAppStore(), libraries, createWorker: worker.createWorker,
+    update: {
+      snapshot: () => state,
+      subscribe(listener) { changed = listener; return () => { removed = true; }; },
+      apply: () => Promise.resolve(), check() { checked++; return Promise.resolve(); }, openRecovery() { recovered++; },
+    },
+  });
+  try {
+    await waitFor(() => element.querySelector('[data-bina-key="home-grid"]') !== null);
+    element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await waitFor(() => element.querySelector('[data-bina-key="update-status"]') !== null);
+    assert(element.textContent!.includes("最新の版です。"));
+    const checkButton = () => element.querySelector<HTMLButtonElement>('[data-bina-key="check-update"]')!;
+    const updateButton = () => element.querySelector<HTMLButtonElement>('[data-bina-key="update"]');
+    state = { ...state, phase: "checking" };
+    changed();
+    await waitFor(() => element.textContent!.includes("確認しています…"));
+    assertEquals(checkButton().disabled, true);
+    state = { ...state, phase: "downloading", next: "0.2.0+new" };
+    changed();
+    await waitFor(() => element.textContent!.includes("ダウンロード中…"));
+    assert(element.textContent!.includes("0.2.0+old → 0.2.0+new"));
+    assertEquals(checkButton().disabled, true);
+    assertEquals(updateButton()!.hidden, true);
+    assertEquals(updateButton()!.disabled, true);
+    checkButton().click();
+    assertEquals(checked, 0);
+    state = { ...state, phase: "download-failed" };
+    changed();
+    await waitFor(() => element.textContent!.includes("ダウンロードに失敗"));
+    assertEquals(updateButton()!.hidden, true);
+    assertEquals(updateButton()!.disabled, true);
+    assertEquals(checkButton().disabled, false);
+    assertEquals(checkButton().textContent, "再試行");
+    checkButton().click();
+    await waitFor(() => checked === 1);
+    state = { phase: "ready", current: "0.2.0+old", next: "0.2.0+new", available: true }; changed();
+    await waitFor(() => updateButton()?.hidden === false);
+    assertEquals(updateButton()!.disabled, false);
+    element.querySelector<HTMLButtonElement>('[data-bina-key="check-update"]')!.click();
+    await waitFor(() => checked === 2);
+    element.querySelector<HTMLButtonElement>('[data-bina-key="open-recovery"]')!.click();
+    await waitFor(() => recovered === 1);
+    state = { ...state, phase: "check-failed", available: false }; changed();
+    await waitFor(() => element.textContent!.includes("確認に失敗"));
+    assertEquals(worker.live, 2);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+  assertEquals(removed, true);
+});

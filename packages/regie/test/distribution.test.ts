@@ -45,6 +45,35 @@ function distribution(tree: FileTree, fetch: typeof globalThis.fetch) {
   });
 }
 
+Deno.test("固定物は8秒を超えても取得でき、目録だけに短い取得制限を掛ける", async () => {
+  const tree = createMemoryFileTree();
+  const source = await fixture();
+  let manifestSignal: AbortSignal | null | undefined;
+  let fileSignal: AbortSignal | null | undefined;
+  const fetcher: typeof globalThis.fetch = async (input, options) => {
+    if (new URL(String(input)).pathname.endsWith("manifest.json")) {
+      manifestSignal = options?.signal;
+    } else {
+      fileSignal = options?.signal;
+      const started = performance.now();
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 8100);
+        options?.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(options.signal?.reason);
+        }, { once: true });
+      });
+      assertEquals(performance.now() - started >= 8000, true);
+    }
+    return await source.fetch(input, options);
+  };
+  const api = distribution(tree, fetcher);
+  await api.install();
+  assertEquals(manifestSignal instanceof AbortSignal, true);
+  assertEquals(fileSignal, undefined);
+  assertEquals(await api.readSystem("/system/apps/home/app.wasm"), source.data);
+});
+
 Deno.test("Manifest validates types, canonical system paths, unique files, hash and size", () => {
   const file = { path: "system/boot.json", sha256: "a".repeat(64), size: 0 };
   const valid = { version: "1", files: [file] };

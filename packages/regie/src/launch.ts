@@ -11,6 +11,7 @@ export interface OsSnapshot {
   launches: { time: number; name: string }[];
   /** 新しい版の `/system` があるか */
   updateAvailable: boolean;
+  updateState?: { phase: string; current: string; next: string; available: boolean };
 }
 
 /** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
@@ -67,6 +68,8 @@ export interface LaunchOptions {
   onAssign?: (role: string, i: number) => void;
   /** 「更新」を押された */
   onUpdate?: () => void;
+  onCheckUpdate?: () => void;
+  onOpenRecovery?: () => void;
   /** 辞書の `storage`。アプリごとのデータの写し。省略時は storage.* を使えない */
   storage?: Map<string, string>;
   /** データの書き込み。value が null なら削除 */
@@ -103,6 +106,7 @@ export interface RegieApp {
   call(name: string, ...args: (number | string)[]): Promise<void>;
   /** シェルの状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
   syncShell?(snapshot: ShellSnapshot): void;
+  syncOs?(snapshot: OsSnapshot): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -187,6 +191,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
                 catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
               });
             },
+            syncOs(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "os.sync", id, os: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
             syncShell(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
@@ -209,6 +220,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "apps.open": openings.push(data.i!); break;
         case "os.set": options.onSet?.(data.name!, data.value as number); break;
         case "os.assign": assignments.push([data.role!, data.i!]); break;
+        case "os.openRecovery": options.onOpenRecovery?.(); break;
+        case "os.checkUpdate": options.onCheckUpdate?.(); break;
         case "os.update": options.onUpdate?.(); break;
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
         case "shell.open": options.onShellOpen?.(data.i!); break;

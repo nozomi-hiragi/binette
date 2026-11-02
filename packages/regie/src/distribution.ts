@@ -3,6 +3,8 @@ import type { FileTree } from "./fs.ts";
 /** 同一オリジンから配布する固定物の目録。パスは system/ から始める。 */
 export interface SystemManifest {
   version: string;
+  label?: string;
+  kernel?: string;
   files: { path: string; sha256: string; size: number }[];
 }
 
@@ -23,8 +25,11 @@ export type RecoveryAction = "clear-user" | "refetch-system" | "clear-all";
 
 export interface SystemDistribution {
   /** 取得できない場合だけ、検証した保存済み配布物を更新なしとして返す。 */
-  checkUpdate(): Promise<SystemUpdate>;
+  checkUpdate(online?: boolean): Promise<SystemUpdate>;
   install(manifest?: SystemManifest): Promise<void>;
+  /** 現行版を変えずに取得・検証し、切替操作を返す。 */
+  prepare(manifest: SystemManifest): Promise<{ commit(): Promise<void> }>;
+  installed(): Promise<SystemManifest | undefined>;
   readSystem(path: string): Promise<Uint8Array | undefined>;
   readOverlay(path: string): Promise<Uint8Array | undefined>;
   recover(action: RecoveryAction): Promise<void>;
@@ -51,13 +56,18 @@ export function parseSystemManifest(value: unknown): SystemManifest {
   if (typeof value !== "object" || value === null) {
     throw new Error("目録はオブジェクトにしてください。");
   }
-  const { version, files } = value as Record<string, unknown>;
+  const { version, files, label, kernel } = value as Record<string, unknown>;
   if (typeof version !== "string" || !version.trim() || !Array.isArray(files)) {
     throw new Error("目録の version と files が不正です。");
+  }
+  for (const [name, value] of [["label", label], ["kernel", kernel]]) {
+    if (value !== undefined && (typeof value !== "string" || !value.trim())) throw new Error(`目録の ${name} が不正です。`);
   }
   const seen = new Set<string>();
   return {
     version,
+    ...(label === undefined ? {} : { label: label as string }),
+    ...(kernel === undefined ? {} : { kernel: kernel as string }),
     files: files.map((value) => {
       if (typeof value !== "object" || value === null) {
         throw new Error("目録のファイルが不正です。");
@@ -125,7 +135,7 @@ export function createSystemDistribution(
   sameOrigin(manifestUrl);
   const fetcher = options.fetch ?? globalThis.fetch;
   let trustedManifest: SystemManifest | undefined;
-  const fetchBytes = async (url: URL) => {
+  const fetchBytes = async (url: URL, manifest = false) => {
     sameOrigin(url);
     let response: Response;
     try {
@@ -133,6 +143,8 @@ export function createSystemDistribution(
         redirect: "error",
         credentials: "same-origin",
         cache: "no-store",
+        // 目録だけ短く待つ。大きな固定物の取得には時間制限を掛けない。
+        ...(manifest ? { signal: AbortSignal.timeout(8000) } : {}),
       });
     } catch (cause) {
       throw new DistributionUnavailable(`取得に失敗しました: ${url.pathname}`, {
@@ -161,8 +173,8 @@ export function createSystemDistribution(
     }
   };
   const fetchManifest = async () =>
-    decodeManifest(await fetchBytes(manifestUrl));
-  const install = async (input?: SystemManifest, refetch = false) => {
+    decodeManifest(await fetchBytes(manifestUrl, true));
+  const prepare = async (input?: SystemManifest, refetch = false) => {
     const manifest = input === undefined
       ? await fetchManifest()
       : parseSystemManifest(input);
@@ -183,8 +195,10 @@ export function createSystemDistribution(
       files.set(`/${file.path}`, data);
     }
     files.set(SYSTEM_MANIFEST_PATH, encoder.encode(JSON.stringify(manifest)));
-    await tree.replaceSystem(files);
-    trustedManifest = manifest;
+    return { async commit() {
+      await tree.replaceSystem(files);
+      trustedManifest = manifest;
+    } };
   };
   const readSystem = async (path: string) => {
     if (
@@ -212,12 +226,12 @@ export function createSystemDistribution(
     return data;
   };
   return {
-    async checkUpdate() {
+    async checkUpdate(online = false) {
       let manifest: SystemManifest;
       try {
         manifest = await fetchManifest();
       } catch (error) {
-        if (!(error instanceof DistributionUnavailable)) throw error;
+        if (online || !(error instanceof DistributionUnavailable)) throw error;
         const saved = await tree.read(SYSTEM_MANIFEST_PATH);
         if (!saved) throw error;
         const installed = decodeManifest(saved);
@@ -242,10 +256,15 @@ export function createSystemDistribution(
       return {
         manifest,
         installedVersion,
-        updateAvailable: installedVersion !== manifest.version,
+        updateAvailable: installedVersion !== manifest.version || installed?.kernel !== manifest.kernel,
       };
     },
-    install: (manifest) => install(manifest),
+    install: async (manifest) => { await (await prepare(manifest)).commit(); },
+    prepare: (manifest) => prepare(manifest),
+    async installed() {
+      const saved = await tree.read(SYSTEM_MANIFEST_PATH);
+      return saved ? decodeManifest(saved) : undefined;
+    },
     readSystem,
     async readOverlay(path) {
       if (!path.startsWith("/") || !canonical(path.slice(1))) {
@@ -260,7 +279,7 @@ export function createSystemDistribution(
     async recover(action) {
       switch (action) {
         case "refetch-system":
-          await install(undefined, true);
+          await (await prepare(undefined, true)).commit();
           return;
         case "clear-user":
           for (const path of await tree.list("/user")) await tree.delete(path);

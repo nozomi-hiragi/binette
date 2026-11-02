@@ -2,6 +2,7 @@ import { resolve } from "@std/path";
 import { copy } from "@std/fs";
 import { buildApp } from "../packages/regie/src/build.ts";
 import { iconPath } from "../packages/regie/src/paths.ts";
+import { kernelVersion, systemLabel } from "./system-metadata.ts";
 
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
@@ -9,6 +10,8 @@ const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value
 /** 配布するファイルの目録。パスは配布元からの相対パス */
 export interface SystemManifest {
   version: string;
+  label?: string;
+  kernel?: string;
   files: { path: string; sha256: string; size: number }[];
 }
 
@@ -139,6 +142,10 @@ export async function buildApps(root: string): Promise<void> {
     await Deno.mkdir(resolve(system, "libraries"));
     await Deno.copyFile(replique, resolve(system, "libraries/replique.ts"));
     const manifest = await systemManifest(system);
+    const { version } = JSON.parse(await Deno.readTextFile(resolve(root, "packages/regie/deno.json")));
+    if (typeof version !== "string" || !version) throw new Error("Régie のパッケージの版がありません。");
+    manifest.kernel = kernelVersion(await Deno.readTextFile(resolve(root, "public/sw.js")));
+    manifest.label = await systemLabel(version, manifest.version, manifest.kernel);
     const publicDir = resolve(root, ".binapp/public");
     await remove(publicDir);
     try { await copy(resolve(root, "public"), publicDir); }
