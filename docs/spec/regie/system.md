@@ -59,15 +59,17 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 ```
 
 - `startSystem` は、インストールと設定の読み込みとホームの選択までを済ませて解決します。ホームはまだ開きません。呼ぶ側はシステム UI をつなぎ（ボタンとページの知らせ）、今のページの様子を `setPage` で渡してから `openHome()` を呼びます。ホームの起動中に押されたボタンやページの知らせも、そのまま受けられるようにするためです
-- `instances` の `key` は installedAppKey です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
+- `instances` の `key` は完全なアプリ ID です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
 - `SystemOptions` は `BuildOptions` を継承し、`compiler` と `libraries` を受け取ります。`read` のアプリをビルドするときだけビルドの入口を dynamic import します。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
 - 文字の表示や DOM は一切持ちません。`SystemUi` を差し替えれば、DOM なしでテストできます
 
 ## インストール
 
+親の `sub` から起動できる入口を作る。名前・アイコン・役割・一覧への表示は各サブアプリの欄を使い、WASM・保存領域・権限は親と共有する。起動は入口ごとに別の Worker とスタック項目にする。`listed: false` はホーム一覧から隠す。
+
 1. `prebuilt` の manifest、または `read("app.json")` を検査した manifest を使う
-2. `installedAppKey(source, manifest.id)` で保存先を引く。同じ key は重ねない
+2. 入手元と `manifest.id` から完全なアプリ ID を作り、保存先を引く。同じ key は重ねない
 3. `prebuilt` は版にかかわらず毎回保存し直す。保存済みの `installedAt` は保つ。compiler は呼ばない
 4. `read` は同じ版が保存済みなら使い回す。無いか版が違うときだけ [ビルド](build.md) し、HTML・WASM・SVG・manifest・日時を保存する。アイコンのパスは `iconPath` で検査する
 
@@ -77,8 +79,8 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 
 役割（`app.json` の `roles`）は名乗るだけでは効きません。割り当てを受けたアプリにだけ、その役割の API が届きます（[役割と API](../roles.md)）。
 
-- `store.list()` も読み、今回保存したアプリと合わせて、`manifest.roles` にその役割を含むものを候補にする。入手元は問わない。設定（`settings`）の役割は、候補が入手元 `binette:system` のアプリだけ
-- 割り当ては 3 段で選ぶ。(1) 設定 `roles[役割]`（installedAppKey）が候補にあればそれ、(2) `SystemOptions.roles[役割]`（ブートの既定。`system/boot.json` から読んだもの）が候補にあればそれ、(3) 入手元が `binette:system` の最初の候補。無ければホームは `ui.report` にエラーを出す。設定の役割は (1) を使わない（コアで差し替えられない）
+- `store.list()` も読み、今回保存したアプリと合わせて、親と各サブアプリの `roles` にその役割を含むものを候補にする。`listed: false` のサブアプリも候補に含む。入手元は問わない。設定（`settings`）の役割は、候補が入手元 `binette:system` のアプリだけ
+- 割り当ては 3 段で選ぶ。(1) 設定 `roles[役割]`（完全なアプリ ID）が候補にあればそれ、(2) `SystemOptions.roles[役割]`（ブートの既定。`system/boot.json` から読んだもの）が候補にあればそれ、(3) 入手元が `binette:system` の最初の候補。無ければホームは `ui.report` にエラーを出す。設定の役割は (1) を使わない（コアで差し替えられない）
 - 設定を変えられるのは、設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` と `cadre`。ホームでは、その場で `roles.home` を保存し、前のホームを User・Os で Destroy する。設定アプリは開いたまま、以後のホームへ戻る動きは新しいホームを使い、`apps` も新しいホームだけに渡す。失敗の計時も消す。ホーム候補と履歴の名前の解決は `store.list()` 全件を含む
 - 保存した割り当てのアプリが無い（削除された、名乗らなくなった）ときは、次の段に進む。保存した値は消さない
 

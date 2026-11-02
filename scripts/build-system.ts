@@ -49,8 +49,17 @@ export async function buildFolder(root: string, out: string, replique: string, l
       const read = (path: string) => Deno.readTextFile(resolve(source, path));
       const built = await buildApp(read, { libraries: { "jsr:@binette/replique": await Deno.readTextFile(replique) } });
       const icon = iconPath(built.manifest.icon);
+      // サブのアイコンも固定名にし、親のアイコンや実行物と衝突させない。
+      const subFiles: { path: string; source: string }[] = [];
+      const sub = built.manifest.sub === undefined ? undefined : Object.fromEntries(Object.entries(built.manifest.sub).map(([id, entry]) => {
+        const source = iconPath(entry.icon);
+        if (source === undefined) return [id, entry];
+        const path = `sub-icons/${subFiles.length}.svg`;
+        subFiles.push({ path, source });
+        return [id, { ...entry, icon: path }];
+      }));
       // app.json は既存の AppManifest として読める形を保つ。実行物の名前は固定。
-      const manifest = { ...built.manifest, ...(icon === undefined ? {} : { icon: "icon.svg" }) };
+      const manifest = { ...built.manifest, ...(icon === undefined ? {} : { icon: "icon.svg" }), ...(sub === undefined ? {} : { sub }) };
       const target = resolve(out, name);
       await Deno.mkdir(target, { recursive: true });
       await Deno.writeFile(resolve(target, "app.json"), encode(manifest));
@@ -58,6 +67,8 @@ export async function buildFolder(root: string, out: string, replique: string, l
       await Deno.writeTextFile(resolve(target, "index.html"), built.html);
       if (built.css !== undefined) await Deno.writeTextFile(resolve(target, "style.css"), built.css);
       if (icon !== undefined) await Deno.writeTextFile(resolve(target, "icon.svg"), await read(icon));
+      if (subFiles.length) await Deno.mkdir(resolve(target, "sub-icons"), { recursive: true });
+      for (const file of subFiles) await Deno.writeTextFile(resolve(target, file.path), await read(file.source));
     } catch (error) {
       throw new Error(`${label}「${name}」を書き出せません。${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }

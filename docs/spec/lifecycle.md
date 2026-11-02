@@ -183,7 +183,7 @@ Cadre が落ちたときも、ホームと同じ `homeRetryWindow` と 100 → 2
 Android の既定のホームアプリと同じ形にします。
 
 - アプリは、`app.json` の `"roles": ["home"]` で「ホームになれる」と手を挙げるだけ。手を挙げただけでは `apps` は届かず、割り当てられたアプリにだけ届く（[roles.md](roles.md)）
-- どのアプリをホームにするかは、OS の設定のオブジェクトの `roles.home`（`installedAppKey(source, manifest.id)`）に記録する。OS は起動のときにこれを読んで、立ち上げるアプリを知る
+- どのアプリをホームにするかは、OS の設定のオブジェクトの `roles.home`（完全なアプリ ID）に記録する。OS は起動のときにこれを読んで、立ち上げるアプリを知る
 - `roles.home` が空のとき、またはそのアプリが無いときは、初回の既定（`system/boot.json` の `roles.home`）、無ければ `roles` に `home` を持つシステムアプリを使う（案・実装済み）。選んでいたホームを削除したら、`roles.home` を空に戻す（案）
 - `roles.home` を変えられるのは、役割 settings に割り当てられた設定アプリ（入手元が `binette:system`）だけ（`os.assign("home", i)`）。保存済みの `roles` に `home` を持つアプリの中から、入手元を問わず選ぶ（案・実装済み）
 - 選んだらその場で保存し、以後のホームバー・前面を閉じたとき・finish・異常終了からの復帰は新しいホームを使う。前のホームのインスタンスは Stop → Destroy（User・Os）で捨てる。設定アプリは開いたままにする（案・実装済み）
@@ -347,13 +347,13 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 | アプリの状態 | `_start` → HTML → Create → Start(Create) → Resume。Pause・Stop の間はイベントを届けない。起動の途中のクリックは Resume のあとに届ける（[scene/mount.md](scene/mount.md)） |
 | 時間切れ | 呼び出しと _start は既定 5 秒で終了。onDestroy は既定 5 秒で打ち切り、エラーを出さない。Pause から既定 10 秒で Stop |
 | スタック | 既定 3（ホームを含む）。画面を隠して Pause にし、DOM と Worker を残す。残っていれば Resume、Stop なら Start(Stop) → Resume。上限を超えたら、前面以外で最も長く前面に出ていないものを Stop → Destroy（System・Stack） |
-| 起動の履歴、最後の状態 | SystemStore に保存。各メソッドの前後に state・done・page・reason を書き、次の Create に渡す。初回は None・done=true。起動のたびに日時と installedAppKey を記録し、既定 100 件を残す。前面に出すだけでは記録しない |
+| 起動の履歴、最後の状態 | SystemStore に保存。各メソッドの前後に state・done・page・reason を書き、次の Create に渡す。初回は None・done=true。起動のたびに日時と 完全なアプリ ID を記録し、既定 100 件を残す。前面に出すだけでは記録しない |
 | Destroy の理由、自分を閉じる | 実装済み。finish は今の呼び出しのあと Pause → Stop → Destroy（User・App）でホームに戻る。ホーム自身なら起動し直す |
 | 落ちたとき | 状態を知らせずに捨て、前面ならホームに戻ってエラーを出す。隠れたアプリなら前面を変えずにエラーを出す。ホームの終了や起動失敗はホームを起動し直す。最初の落ちから 5 秒（`homeRetryWindow`）を過ぎても落ち続けたら Apps を出す |
 | Apps | OS が DOM を直接描く。ホームの一覧と同じアプリ（ホーム・Cadre 候補以外、設定を含む）の名前を文字コード順に縦に並べる。スタックやホームバーの一覧には入れない。開いたアプリを閉じたら Apps に戻り、ホームバーの「ホーム」で計時を消してホームを再試行する |
 | `App` クラス | launch で一回だけ渡し、6 つのメソッドを上書きできる。二回の launch はアプリの終了 |
 | デバッグメニュー | 設定アプリの − ＋ と `OsApi` を実装。値は SystemStore に保存し、上の表の時点から使う。システムの作り直しでも残り、SystemOptions より優先する |
-| ホームの選び方 | installedAppKey を `roles.home` に保存。保存済みの `roles` に home を持つアプリを入手元に関係なく選べる。空・見つからない場合はブートの既定、無ければ system のホーム。変更後は新しいホームに `apps` を渡し、前のホームは User・Os で Destroy。アプリの削除が無いので、削除時に `roles.home` を空にする処理はまだ無い（[regie/system.md](regie/system.md)） |
+| ホームの選び方 | 完全なアプリ ID を `roles.home` に保存。保存済みの `roles` に home を持つアプリを入手元に関係なく選べる。空・見つからない場合はブートの既定、無ければ system のホーム。変更後は新しいホームに `apps` を渡し、前のホームは User・Os で Destroy。アプリの削除が無いので、削除時に `roles.home` を空にする処理はまだ無い（[regie/system.md](regie/system.md)） |
 
 ## 今はやらないこと
 
@@ -425,7 +425,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 26. `State`・`Last`・`DestroyReason` の形（上の表）
 27. デバッグメニューで決めた値は保存する
 28. 値の変更が効く時点は「値を変えたときに効く所」の表のとおり。画面は − ＋、履歴は UTC の日時と名前
-29. home の識別子は installedAppKey。変更したら前のホームを User・Os で Destroy し、以後の復帰と apps.* は新しいホームへ渡す
+29. home の識別子は 完全なアプリ ID。変更したら前のホームを User・Os で Destroy し、以後の復帰と apps.* は新しいホームへ渡す
 
 ## 未決
 

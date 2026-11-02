@@ -120,16 +120,18 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Régie 
 | `version` | 形式の版 `"0.2"` |
 | `manifest` | app.json のオブジェクト |
 | `html` | HTML の文字列 |
+| `css` | CSS の文字列。無ければ欄なし |
 | `icon` | SVG の文字列。無ければ欄なし |
+| `subIcons` | サブアプリの識別子から SVG の文字列への写し。無ければ欄なし |
 | `wasm` | WASM のバイト列を base64 にした文字列 |
 
-公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; icon?: string; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
+公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; css?: string; icon?: string; subIcons?: Record<string, string>; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
 
 ```sh
 deno run -A packages/regie/src/cli.ts build apps/settings --out .binapp/system/settings.binapp --replique packages/replique/src/index.ts
 ```
 
-CLI は `packages/regie/src/cli.ts`（入口 `@binette/regie/cli`）にあります。CLI は `buildApp` を呼び、SVG も読んで書き出します。アイコンのパスはインストールと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
+CLI は `packages/regie/src/cli.ts`（入口 `@binette/regie/cli`）にあります。CLI は `buildApp` を呼び、親とサブアプリの SVG も読んで書き出します。アイコンのパスはインストールと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
 
 `deno task build:system`（`scripts/build-system.ts`）は `apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/system/<フォルダ名>.binapp` に書き出します。同じ処理で `bundled/` から `.binapp/bundled/<フォルダ名>.binapp` も作り、空の `bundled/` でも成功します。app.json の無いフォルダは無視します。各出力先と移行前の `.binapp/` 直下の古い `.binapp` は書き出す前に消し、失敗時はフォルダ名を出して終了コード 1 にします。フォルダ名は UTF-16 コード単位の辞書順（`<`・`>`）で比べます。このフォルダは gitignore に入れ、生成物はコミットしません。`deno task start` と `deno task build` は先にこのタスクを実行します。Binette は Vite の `import.meta.glob` で同梱した `.binapp` を fetch し、ブラウザでは asc を読みません。
 

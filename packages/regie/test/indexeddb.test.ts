@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { createIndexedDbFileTree } from "../src/fs.ts";
-import { createIndexedDbAppStore, installedAppKey, type InstalledApp } from "../src/index.ts";
+import { createIndexedDbAppStore, appId, type InstalledApp } from "../src/index.ts";
 
 /** Deno に無い IndexedDB の要求・トランザクション・版更新の境界を代用する。 */
 function databaseFixture(installed: InstalledApp, initialVersion = 1, system = new Map<string, unknown>()) {
@@ -121,7 +121,7 @@ function databaseFixture(installed: InstalledApp, initialVersion = 1, system = n
 }
 
 const installed: InstalledApp = {
-  key: installedAppKey("test", "a"), source: "test", manifest: { id: "a", name: "A", entry: { html: "index.html", as: "main.ts" } },
+  key: appId("https://example.test/apps/", "a"), source: "https://example.test/apps/", manifest: { id: "a", name: "A", entry: { html: "index.html", as: "main.ts" } },
   html: "<p>以前のアプリ</p>", wasm: new Uint8Array([1, 2, 3]), icon: undefined, installedAt: 1,
 };
 
@@ -147,8 +147,8 @@ for (const version of [1, 2]) Deno.test(`IndexedDB migrates v${version} apps and
     assertEquals(fixture.opened, [3]);
     assertEquals(fixture.tables.has("files"), true);
     const tree = createIndexedDbFileTree();
-    const recordPath = "/apps/a/test/record.json";
-    const wasmPath = "/apps/a/test/app.wasm";
+    const recordPath = `/apps/${encodeURIComponent(installed.key)}/record.json`;
+    const wasmPath = `/apps/${encodeURIComponent(installed.key)}/app.wasm`;
     const { wasm, ...metadata } = installed;
     assertEquals(JSON.parse(new TextDecoder().decode(await tree.read(recordPath))), JSON.parse(JSON.stringify(metadata)));
     assertEquals(await tree.read(wasmPath), wasm);

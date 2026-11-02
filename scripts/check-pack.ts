@@ -108,14 +108,14 @@ assertThrows(() => parseAppManifest("{"), BinetteError);
 
 // 公開物のファイルだけで、AS をビルドして Worker 相当（MessageChannel）で動かす
 const files: Record<string, string> = {
-  "app.json": JSON.stringify({ id: "example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
+  "app.json": JSON.stringify({ id: "example-counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
   "src/index.html": '<p id="count">0</p>',
   "src/main.ts": 'import { Api, App, Last, Why, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last, api: Api): void { assert(api.why("unknown") == Why.NotAssigned); document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
 };
 const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
 const decorAs = await Deno.readTextFile(new URL("../packages/decor/src/as.ts", import.meta.url));
 const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique, "jsr:@binette/decor/as": decorAs } });
-assertEquals(built.manifest.id, "example.counter");
+assertEquals(built.manifest.id, "example-counter");
 // AS の新しい入口と Réplique の互換入口を、公開物だけで解決する。
 const uiFiles: Record<string, string> = {
   ...files,

@@ -1,23 +1,26 @@
 import { assertEquals, assertNotEquals, assertRejects, assertThrows } from "@std/assert";
-import { createAppStore, createMemoryAppStore, createMemoryFileTree, type InstalledApp, installedAppKey, validateSystemSettings, type SystemSettings } from "../src/index.ts";
+import { createAppStore, createMemoryAppStore, createMemoryFileTree, type InstalledApp, appId, validateSystemSettings, type SystemSettings } from "../src/index.ts";
 
 const app = (source: string, id: string): InstalledApp => ({
-  key: installedAppKey(source, id), source,
+  key: appId(source, id), source,
   manifest: { id, name: "アプリ", version: "0.1.0", entry: { html: "index.html", as: "main.ts" } },
   icon: "<svg/>", html: "<p>アプリ</p>", wasm: new Uint8Array([1, 2, 3]), installedAt: 123,
 });
 
-Deno.test("入手元と ID の区切りは衝突しない", () => {
-  assertEquals(installedAppKey("a", "b"), '["a","b"]');
-  assertNotEquals(installedAppKey("a:b", "c"), installedAppKey("a", "b:c"));
+Deno.test("完全な ID は URL を正規化し、埋め込みは生の ID を使う", () => {
+  assertEquals(appId("https://EXAMPLE.test:443/apps/", "メモ"), "https://example.test/apps/#%E3%83%A1%E3%83%A2");
+  assertEquals(appId("binette:system", "cadre"), "cadre");
+  assertEquals(appId("binette:bundled", "io.github.nozomi-hiragi.binette.home"), "io.github.nozomi-hiragi.binette.home");
+  assertThrows(() => appId("binette:system", "other.invalid"));
+  assertNotEquals(appId("https://one.test/", "memo"), appId("https://two.test/", "memo"));
 });
 
 Deno.test("メモリ版は一覧・取得・上書きができ、入手元ごとに分かれる", async () => {
   const store = createMemoryAppStore();
   assertEquals(await store.list(), []);
   assertEquals(await store.get("missing"), undefined);
-  const first = app("first", "x");
-  const second = app("second", "x");
+  const first = app("https://first.test/", "x");
+  const second = app("https://second.test/", "x");
   await store.put(first);
   await store.put(second);
   assertEquals(await store.get(first.key), first);
@@ -29,7 +32,7 @@ Deno.test("メモリ版は一覧・取得・上書きができ、入手元ごと
 
 Deno.test("メモリ版の読み書きで保存した値を共有しない", async () => {
   const store = createMemoryAppStore();
-  const original = app("source", "x");
+  const original = app("https://source.test/", "x");
   const expected = structuredClone(original);
   await store.put(original);
   original.manifest.name = "変更";
@@ -84,7 +87,7 @@ Deno.test("ファイルの木を共有してアプリと OS の記録を読み�
   const tree = createMemoryFileTree();
   const first = createAppStore(tree);
   const second = createAppStore(tree);
-  const apps = [app("z/source", "../x"), app("a/source", "../x"), app("", "")];
+  const apps = [app("https://z.test/source", "x/y"), app("https://a.test/source", "x/y"), app("binette:system", "raw")];
   await Promise.all(apps.map((value, index) => (index % 2 ? first : second).put(value)));
   assertEquals((await first.list()).map(value => value.key).sort(), apps.map(value => value.key).sort());
   for (const value of apps) assertEquals(await second.get(value.key), value);
@@ -106,7 +109,7 @@ Deno.test("アプリは索引なしで記録とバイナリを保存し、一覧
   const { appFilePaths, encodeAppPathSegment, decodeAppPathSegment } = await import("../src/app-files.ts");
   const tree = createMemoryFileTree();
   const store = createAppStore(tree);
-  const values = [app("z", "id"), app("a", "id"), ...["", ".", "..", "%", "a/b", "日本語"].map(value => app(value, value))];
+  const values = [app("https://z.test/", "id"), app("https://a.test/", "id"), ...["%", "a/b", "日本語"].map(value => app("https://example.test/", value))];
   for (const value of values) {
     assertEquals(decodeAppPathSegment(encodeAppPathSegment(value.source)), value.source);
     await store.put(value);

@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { parseAppManifest, type DomOp } from "@binette/core";
-import { createMemoryAppStore, installedAppKey, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
+import { createMemoryAppStore, appId, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
 import asc from "assemblyscript/asc";
 import { loadCompiler, type Compiler } from "../src/build.ts";
 
@@ -131,13 +131,13 @@ async function stackFixtures() {
   const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
   home.html += '<button id="open1">B</button><button id="open2">C</button>';
   const app = await build();
-  return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "test", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
+  return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "https://example.test/apps/", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
 }
 
 Deno.test("ホームに戻っても画面を残し、finish は User・App で閉じる。ページの識別子は共有する", async () => {
   const builtHome = await build(source, true), built = await build();
   const element = output(); const errors = element.errors;
-  const cadre = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "test", prebuilt: built }], store: createMemoryAppStore(), createWorker });
+  const cadre = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "https://example.test/apps/", prebuilt: built }], store: createMemoryAppStore(), createWorker });
   const page = activeHost(element).text.get("page");
   const home = activeHost(element);
   try {
@@ -196,7 +196,7 @@ Deno.test("保存した設定は ShellOptions より優先し、スタック 1 �
     bar(element, cadre, "ホームを開く"); await waitFor(() => activeHost(element) !== a && !a.connected && !!logOf(element)?.endsWith("resume;"));
     assert(activeHost(element) !== home); assert(logOf(element)!.startsWith("create:6;"));
     const history = await store.system.listLaunches();
-    assertEquals(history.map(r => JSON.parse(r.app)[1]), ["A", "home"]);
+    assertEquals(history.map(r => r.app), ["https://example.test/apps/#A", "home"]);
     assert(history.every(r => r.time > 0));
     assertEquals((await store.system.getSettings())!.roles, { home: "後続で使う設定" });
   } finally { cadre.stop(); }
@@ -272,7 +272,7 @@ const builtHome = await build(source, true);
 const homeApp = { source: "binette:system", prebuilt: builtHome };
 const fixtures = ["設定", "設定の写し"].map((name, i) => {
   const manifest = { ...builtHome.manifest, id: `settings-${i}`, name, roles: ["settings"] };
-  return { ...builtHome, manifest, key: installedAppKey("binette:system", manifest.id), source: "binette:system", installedAt: 1, icon: undefined };
+  return { ...builtHome, manifest, key: appId("binette:system", manifest.id), source: "binette:system", installedAt: 1, icon: undefined };
 });
 const apps = fixtures.map(fixture => ({ source: fixture.source, read: (path: string) => {
   assertEquals(path, "app.json"); return Promise.resolve(JSON.stringify(fixture.manifest));
@@ -361,7 +361,7 @@ Deno.test("ホームは system かつ roles に home を持つ最初のもの。
   const element = output();
   const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
   const cadre = await startSystem({ ui: element.ui, createWorker, apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore() });
-  try { await cadre.openHome(); assertEquals(element.homeApps!.map(app => app.name), ["設定"]); assertEquals(element.view.instances.find(instance => instance.home)!.key, installedAppKey(homeApp.source, builtHome.manifest.id)); }
+  try { await cadre.openHome(); assertEquals(element.homeApps!.map(app => app.name), ["設定"]); assertEquals(element.view.instances.find(instance => instance.home)!.key, appId(homeApp.source, builtHome.manifest.id)); }
   finally { cadre.stop(); }
 });
 
@@ -391,7 +391,7 @@ Deno.test("保存した home が無ければ system のホームを使う", asyn
   const element = output(); const store = createMemoryAppStore();
   await store.system.putSettings({ roles: { home: "missing" } });
   const cadre = await mountSystem(element, { apps: [homeApp], store, createWorker });
-  try { assertEquals((await store.system.listLaunches())[0]!.app, installedAppKey(homeApp.source, builtHome.manifest.id)); }
+  try { assertEquals((await store.system.listLaunches())[0]!.app, appId(homeApp.source, builtHome.manifest.id)); }
   finally { cadre.stop(); }
 });
 
@@ -443,10 +443,10 @@ Deno.test("OS の API は system の settings の役割に割り当てたアプ�
       store.system.putSettings = async settings => { await putSettings(settings); writes++; };
       const app = { source, prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, roles: roles as string[] | undefined } } };
       const bundledHome = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
-      const bundledHomeKey = installedAppKey(bundledHome.source, bundledHome.prebuilt.manifest.id);
+      const bundledHomeKey = appId(bundledHome.source, bundledHome.prebuilt.manifest.id);
       const cadre = await mountSystem(element, { apps: [bundledHome, homeApp, app], store, createWorker });
       try {
-        await cadre.open(installedAppKey(source, app.prebuilt.manifest.id));
+        await cadre.open(appId(source, app.prebuilt.manifest.id));
         const process = element.active.process;
         await process.app.call("hasOs");
         assertEquals(element.active.text.get("os"), String(granted));
@@ -466,7 +466,7 @@ Deno.test("OS の API は system の settings の役割に割り当てたアプ�
           await assertRejects(() => process.app.call(action), Error, "アプリが中断しました");
           assertEquals(await store.system.getSettings(), undefined);
           await cadre.openHome();
-          assertEquals(element.view.instances.find(instance => instance.home)!.key, installedAppKey(homeApp.source, builtHome.manifest.id));
+          assertEquals(element.view.instances.find(instance => instance.home)!.key, appId(homeApp.source, builtHome.manifest.id));
         }
       } finally { cadre.stop(); }
     }
@@ -475,14 +475,14 @@ Deno.test("OS の API は system の settings の役割に割り当てたアプ�
 
 Deno.test("同梱ホームは既定のホームにならず、明示的に選ぶと使える", async () => {
   const bundled = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
-  const bundledKey = installedAppKey(bundled.source, bundled.prebuilt.manifest.id);
+  const bundledKey = appId(bundled.source, bundled.prebuilt.manifest.id);
   for (const selected of [false, true]) {
     const element = output(); const store = createMemoryAppStore();
     if (selected) await store.system.putSettings({ roles: { home: bundledKey } });
     const cadre = await mountSystem(element, { apps: [bundled, homeApp], store, createWorker });
     try {
       assertEquals(element.view.instances.find(instance => instance.home)!.key,
-        selected ? bundledKey : installedAppKey(homeApp.source, builtHome.manifest.id));
+        selected ? bundledKey : appId(homeApp.source, builtHome.manifest.id));
       assertEquals(element.homeApps, []);
       assertEquals(element.errors, []);
     } finally { cadre.stop(); }
@@ -491,8 +491,8 @@ Deno.test("同梱ホームは既定のホームにならず、明示的に選ぶ
 
 Deno.test("役割の割り当ては、設定、ブートの既定、system の最初のものの順で選ぶ。名乗らないアプリは選ばない", async () => {
   const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" } } };
-  const secondKey = installedAppKey(second.source, "second");
-  const homeKey = installedAppKey(homeApp.source, builtHome.manifest.id);
+  const secondKey = appId(second.source, "second");
+  const homeKey = appId(homeApp.source, builtHome.manifest.id);
   const homeOf = async (settings: { roles: Record<string, string> } | undefined, roles?: Record<string, string>) => {
     const element = output(); const store = createMemoryAppStore();
     if (settings) await store.system.putSettings(settings);
@@ -515,24 +515,24 @@ export function load(): void { const value = storageApi!.read("メモ"); documen
 
 Deno.test("storage はすべてのアプリに届き、アプリごとに /data/<id>/ へ保存して次の起動で読む", async () => {
   const store = createMemoryAppStore();
-  const app = { source: "test", prebuilt: storageApp };
-  const other = { source: "test", prebuilt: { ...storageApp, manifest: { ...storageApp.manifest, id: "other" } } };
+  const app = { source: "https://example.test/apps/", prebuilt: storageApp };
+  const other = { source: "https://example.test/apps/", prebuilt: { ...storageApp, manifest: { ...storageApp.manifest, id: "other" } } };
   for (const expected of ["なし", "保存した"]) {
     const element = output();
     const cadre = await mountSystem(element, { apps: [homeApp, app, other], store, createWorker });
     try {
-      await cadre.open(installedAppKey(app.source, storageApp.manifest.id));
+      await cadre.open(appId(app.source, storageApp.manifest.id));
       await element.active.process.app.call("load");
       assertEquals(element.active.text.get("memo"), expected);
       if (expected === "なし") {
         await element.active.process.app.call("save");
         // 書き込みは呼び出しの外で順に保存される
-        for (let i = 0; i < 200 && (await store.data.read(storageApp.manifest.id)).size === 0; i++) await sleep(10);
+        for (let i = 0; i < 200 && (await store.data.read(appId(app.source, storageApp.manifest.id))).size === 0; i++) await sleep(10);
       }
       assertEquals(element.errors, []);
     } finally { cadre.stop(); }
   }
-  assertEquals(await store.data.read(storageApp.manifest.id), new Map([["メモ", "保存した"]]));
+  assertEquals(await store.data.read(appId(app.source, storageApp.manifest.id)), new Map([["メモ", "保存した"]]));
   assertEquals(await store.data.read("other"), new Map());
 });
 
@@ -540,8 +540,8 @@ Deno.test("保存待ちの書き込みがあるうちに開き直しても、書
   const store = createMemoryAppStore();
   const write = store.data.write.bind(store.data);
   store.data.write = async (...args) => { await sleep(100); return write(...args); };
-  const app = { source: "test", prebuilt: storageApp };
-  const key = installedAppKey(app.source, storageApp.manifest.id);
+  const app = { source: "https://example.test/apps/", prebuilt: storageApp };
+  const key = appId(app.source, storageApp.manifest.id);
   const element = output();
   const cadre = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
   try {
@@ -569,7 +569,7 @@ Deno.test("設定アプリの update は渡された更新を一度呼び、新�
     const cadre = await mountSystem(element, { apps: [homeApp, settings], store: createMemoryAppStore(), createWorker,
       update: available ? { apply: () => { applied++; return Promise.resolve(); } } : undefined });
     try {
-      await cadre.open(installedAppKey(settings.source, "settings"));
+      await cadre.open(appId(settings.source, "settings"));
       await element.active.process.app.call("update");
       assertEquals(element.active.text.get("available"), String(available));
       await waitFor(() => !available || applied === 1);
@@ -585,7 +585,7 @@ Deno.test("更新の失敗は report に届き、起動中のアプリを止め�
   const cadre = await mountSystem(element, { apps: [homeApp, settings], store: createMemoryAppStore(), createWorker,
     update: { apply: () => Promise.reject(new Error("更新に失敗")) } });
   try {
-    await cadre.open(installedAppKey(settings.source, "settings"));
+    await cadre.open(appId(settings.source, "settings"));
     await element.active.process.app.call("update");
     await waitFor(() => element.errors.length === 1);
     assertEquals((element.errors[0] as Error).message, "更新に失敗");
@@ -612,5 +612,61 @@ launch(new Cadre());`);
     const settled = starts;
     await sleep(400);
     assertEquals(starts, settled);
+  } finally { system.stop(); }
+});
+
+Deno.test("サブは独立した Worker と履歴を持ち、完全 ID の保存領域と権限を親と共有する", async () => {
+  const code = source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.getElementById("sub").textContent = api.sub(); document.getElementById("why").textContent = api.why("fs").toString();') + `
+import { StorageApi } from "jsr:@binette/replique";
+const storage = new Api().get<StorageApi>("storage");
+export function saveShared(): void { storage!.write("shared", "共通"); }
+export function readShared(): void { const value = storage!.read("shared"); document.getElementById("shared").textContent = value == null ? "なし" : value; }
+`;
+  const built = await build(code);
+  const app = { source: "https://example.test/list/", prebuilt: { ...built, subIcons: { child: "<svg>child</svg>" }, manifest: { ...built.manifest, id: "parent", permissions: { fs: { reason: "編集" } }, sub: {
+    child: { name: "子", icon: "child.svg" }, secret: { name: "隠れたホーム", roles: ["home"], listed: false },
+  } } } };
+  const store = createMemoryAppStore(); const element = output();
+  const system = await mountSystem(element, { apps: [homeApp, app, { source: "binette:system", prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, id: "settings", roles: ["settings"] } } }], store, createWorker, stackSize: 5 });
+  try {
+    assertEquals(element.homeApps!.map(app => app.id), ["https://example.test/list/#parent", "https://example.test/list/#parent.child", "settings"]);
+    await system.open("https://example.test/list/#parent");
+    const parent = element.active;
+    assertEquals(parent.text.get("sub"), "");
+    await parent.process.app.call("saveShared");
+    await system.open("https://example.test/list/#parent.child");
+    const child = element.active;
+    assert(child !== parent);
+    assertEquals(child.text.get("sub"), "child");
+    assertEquals(child.text.get("why"), parent.text.get("why"));
+    await child.process.app.call("readShared");
+    assertEquals(child.text.get("shared"), "共通");
+    assertEquals(element.view.instances.find(i => i.name === "子")!.icon, "<svg>child</svg>");
+    assertEquals(await store.data.read("https://example.test/list/#parent"), new Map([["shared", "共通"]]));
+    assertEquals(await store.data.read("https://example.test/list/#parent.child"), new Map());
+    assertEquals((await store.list()).filter(app => app.source === "https://example.test/list/").length, 1);
+    await system.open("settings");
+    await element.active.process.app.call("readHomes");
+    assertEquals(element.active.text.get("homes"), "2");
+    await system.open("https://example.test/list/#parent.secret");
+    assertEquals(element.active.text.get("sub"), "secret");
+    assertEquals((await store.system.listLaunches()).map(r => r.app), ["home", "https://example.test/list/#parent", "https://example.test/list/#parent.child", "settings", "https://example.test/list/#parent.secret"]);
+    assert(await store.system.getLast("https://example.test/list/#parent.child"));
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("保存した完全 ID の割り当てで非表示のサブアプリをホームにできる", async () => {
+  const built = await build(source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.getElementById("sub").textContent = api.sub();'));
+  const app = { source: "https://example.test/other/", prebuilt: { ...built, manifest: { ...built.manifest, sub: { home: { name: "別のホーム", listed: false, roles: ["home"] } } } } };
+  const store = createMemoryAppStore();
+  await store.system.putSettings({ roles: { home: "https://example.test/other/#test.home" } });
+  const element = output();
+  const system = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+  try {
+    assertEquals(element.view.instances.find(app => app.home)!.key, "https://example.test/other/#test.home");
+    assertEquals(element.active.text.get("sub"), "home");
+    assertEquals(element.homeApps!.map(app => app.id), ["https://example.test/other/#test"]);
+    assertEquals(element.errors, []);
   } finally { system.stop(); }
 });

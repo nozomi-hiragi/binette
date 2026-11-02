@@ -1,7 +1,7 @@
 import type { DomOp } from "@binette/core";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
-/** 設定アプリの起動時に渡す写し。アプリの id は installedAppKey */
+/** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
   settings: Omit<SystemSettings, "roles">;
   /** 役割に割り当てたアプリ */
@@ -50,6 +50,8 @@ export interface LaunchOptions {
   callTimeout?: number;
   /** 今のページの識別子 */
   page?: string;
+  /** サブアプリの識別子。親として開いたら空文字列 */
+  sub?: string;
   /** HTML を持たない宣言的 UI アプリ */
   declarative?: boolean;
   /** 前回の最後の記録 */
@@ -255,7 +257,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

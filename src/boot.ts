@@ -1,8 +1,8 @@
-import { parseAppManifest } from "@binette/core";
+import { formatAppId, normalizeAppIdentifier, parseAppId, parseAppManifest } from "@binette/core";
 import {
   type AppStore,
   type FileTree,
-  installedAppKey,
+  appId,
   parseSystemManifest,
   SYSTEM_MANIFEST_PATH,
   type SystemApp,
@@ -37,8 +37,14 @@ export async function loadBootApps(
   ) {
     throw new Error("boot.json の役割の割り当てが不正です。");
   }
+  const roleKeys: Record<string, string> = {};
+  for (const [role, id] of Object.entries(boot.roles)) {
+    if (typeof id !== "string") throw new Error("boot.json の役割の割り当てが不正です。");
+    try { roleKeys[role] = formatAppId(parseAppId(id)); }
+    catch { roleKeys[role] = appId(SYSTEM, id); }
+  }
   const apps: SystemApp[] = [];
-  // 役割の既定の割り当て（役割 → installedAppKey）
+  // 役割の既定の割り当て（役割 → appId）
   const roles: Record<string, string> = {};
   const keys = new Set<string>();
   const saved = await tree.read(SYSTEM_MANIFEST_PATH);
@@ -59,30 +65,24 @@ export async function loadBootApps(
       const original = parseAppManifest(
         decoder.decode(await required(`${directory}/app.json`, true)),
       );
-      const coreSettings = source === SYSTEM && original.roles?.includes("settings") === true;
+      const declaresSettings = (app: typeof original) => app.roles?.includes("settings") || Object.values(app.sub ?? {}).some(sub => sub.roles?.includes("settings"));
+      const coreSettings = source === SYSTEM && declaresSettings(original) === true;
       const manifest = coreSettings ? original : parseAppManifest(
         decoder.decode(await required(`${directory}/app.json`)),
       );
-      if (
-        source === SYSTEM && manifest.roles?.includes("settings") &&
-        (!coreSettings || manifest.id !== boot.roles.settings)
-      ) {
-        throw new Error("設定アプリの役割は固定の割り当てから変更できません。");
+      const entries = [{ id: manifest.id, roles: manifest.roles }, ...Object.entries(manifest.sub ?? {}).map(([id, sub]) => ({ id: `${manifest.id}.${normalizeAppIdentifier(id)}`, roles: sub.roles }))];
+      for (const entry of entries) {
+        const key = entry.id === manifest.id ? appId(source, manifest.id) : `${appId(source, manifest.id)}.${entry.id.slice(manifest.id.length + 1)}`;
+        if (keys.has(key)) throw new Error(`アプリの ID が重複しています: ${entry.id}`);
+        keys.add(key);
+        if (source !== SYSTEM) continue;
+        if (entry.roles?.includes("settings") && (!coreSettings || key !== roleKeys.settings)) {
+          throw new Error("設定アプリの役割は固定の割り当てから変更できません。");
+        }
+        for (const role of ["home", "cadre", "settings"]) {
+          if (key === roleKeys[role] && entry.roles?.includes(role)) roles[role] = key;
+        }
       }
-      const key = installedAppKey(source, manifest.id);
-      if (keys.has(key)) {
-        throw new Error(`アプリの ID が重複しています: ${manifest.id}`);
-      }
-      keys.add(key);
-      if (
-        source === SYSTEM && manifest.id === boot.roles.home &&
-        manifest.roles?.includes("home")
-      ) roles.home = key;
-      if (
-        source === SYSTEM && manifest.id === boot.roles.cadre &&
-        manifest.roles?.includes("cadre")
-      ) roles.cadre = key;
-      if (coreSettings && manifest.id === boot.roles.settings) roles.settings = key;
       const [wasm, html, css, icon] = await Promise.all([
         required(`${directory}/app.wasm`, coreSettings),
         required(`${directory}/index.html`, coreSettings),
@@ -93,10 +93,19 @@ export async function loadBootApps(
           ? undefined
           : required(`${directory}/icon.svg`, coreSettings),
       ]);
+      const subIcons: Record<string, string> = {};
+      for (const [id, sub] of Object.entries(manifest.sub ?? {})) {
+        if (sub.icon !== undefined) {
+          // サブの相対パスは親のフォルダ内だけを許す。
+          if (sub.icon.startsWith("/") || sub.icon.split("/").includes("..") || sub.icon.includes("%") || sub.icon.includes("\\") || sub.icon.includes(":")) throw new Error("サブアプリのアイコンのパスが不正です。");
+          subIcons[id] = decoder.decode(await required(`${directory}/${sub.icon}`, coreSettings));
+        }
+      }
       apps.push({
         source,
         prebuilt: {
           manifest,
+          subIcons,
           wasm,
           html: decoder.decode(html),
           ...(css === undefined ? {} : { css: decoder.decode(css) }),

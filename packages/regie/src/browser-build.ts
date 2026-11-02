@@ -4,7 +4,7 @@ import type { FileTree } from "./fs.ts";
 import type { RegieWorker } from "./launch.ts";
 import { appPath, iconPath } from "./paths.ts";
 import { encodeAppPathSegment } from "./app-files.ts";
-import { installedAppFiles, installedAppKey, type InstalledApp } from "./store.ts";
+import { installedAppFiles, appId, type InstalledApp } from "./store.ts";
 
 /** 検証したコンパイラを独立した Worker で動かす設定。 */
 export interface BrowserBuildOptions extends Pick<BuildOptions, "libraries"> {
@@ -96,8 +96,14 @@ export async function buildStoredApp(
   const built = await buildAppInWorker(read, { ...options, distribution });
   if (built.manifest.id !== id) throw new Error("app.json の ID と保存先の ID が一致しません。");
   const icon = iconPath(built.manifest.icon);
+  const subIcons: Record<string, string> = {};
+  for (const [id, sub] of Object.entries(built.manifest.sub ?? {})) {
+    const path = iconPath(sub.icon);
+    if (path !== undefined) subIcons[id] = await read(path);
+  }
   const installed: InstalledApp = {
-    ...built, key: installedAppKey(source, id), source,
+    ...built, key: appId(source, id), source,
+    ...(Object.keys(subIcons).length ? { subIcons } : {}),
     icon: icon === undefined ? undefined : await read(icon), installedAt: Date.now(),
   };
   const files = installedAppFiles(installed);

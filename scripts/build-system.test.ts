@@ -35,6 +35,20 @@ Deno.test("アプリをフォルダ名順で固定名のファイルへ書き出
     }
   } finally { await Deno.remove(dir, { recursive: true }); }
 });
+Deno.test("サブアプリのアイコンを配布物に含め、衝突しないパスにする", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await app(dir, "parent");
+    const path = `${dir}/parent/app.json`;
+    const manifest = JSON.parse(await Deno.readTextFile(path));
+    manifest.sub = { child: { name: "子", icon: "assets/picture.svg" } };
+    await Deno.writeTextFile(path, JSON.stringify(manifest));
+    await buildFolder(dir, `${dir}/out`, replique);
+    const built = JSON.parse(await Deno.readTextFile(`${dir}/out/parent/app.json`));
+    assertEquals(built.sub.child.icon, "sub-icons/0.svg");
+    assertEquals(await Deno.readTextFile(`${dir}/out/parent/sub-icons/0.svg`), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  } finally { await Deno.remove(dir, { recursive: true }); }
+});
 Deno.test("システムアプリの失敗はフォルダ名を示す", async () => {
   const dir = await Deno.makeTempDir();
   try {

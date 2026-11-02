@@ -14,7 +14,12 @@ export async function writePrebuiltApp(dir: string, out: string, replique: strin
   const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text) : read(path), {
     libraries: { "jsr:@binette/replique": await Deno.readTextFile(replique) },
   });
-  const output = stringifyPrebuiltApp({ ...built, icon: icon === undefined ? undefined : await read(icon) });
+  const subIcons: Record<string, string> = {};
+  for (const [id, sub] of Object.entries(manifest.sub ?? {})) {
+    const path = iconPath(sub.icon);
+    if (path !== undefined) subIcons[id] = await read(path);
+  }
+  const output = stringifyPrebuiltApp({ ...built, ...(Object.keys(subIcons).length ? { subIcons } : {}), icon: icon === undefined ? undefined : await read(icon) });
   const path = resolve(out);
   await Deno.mkdir(dirname(path), { recursive: true });
   await Deno.writeTextFile(path, output);

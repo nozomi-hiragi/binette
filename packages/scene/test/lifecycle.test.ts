@@ -112,7 +112,7 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
       : source.replace('record("destroy:" + reason.kind.toString() + ":" + reason.cause.toString());', 'while (true) {}');
     const built = await build(code), home = await build(source, true);
     const window = new Window(); const element = host(window); const errors: unknown[] = []; let launches = 0;
-    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "test", prebuilt: built }], store: createMemoryAppStore(), createWorker() { launches++; return realWorker(); },
+    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "https://example.test/apps/", prebuilt: built }], store: createMemoryAppStore(), createWorker() { launches++; return realWorker(); },
       // CI の遅い機械でも、ふつうの呼び出しが打ち切られないだけの余裕を持たせる
       callTimeout: phase === "destroy" ? 2500 : 500, destroyTimeout: phase === "destroy-regie" ? 2500 : 500, onError: e => errors.push(e) });
     try {
@@ -140,7 +140,7 @@ for (const state of ["pause", "stop"] as const) {
   Deno.test(state + " の例外は続く終了通知を呼ばず、ホームへ一度だけエラーを出す", async () => {
     const code = source.replace(`record("${state}");`, `record("${state}"); throw new Error("終了前の例外");`);
     const window = new Window(); const element = host(window); const errors: unknown[] = [];
-    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: await build(source, true) }, { source: "test", prebuilt: await build(code) }], store: createMemoryAppStore(), createWorker, stopDelay: 20, onError: e => errors.push(e) });
+    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: await build(source, true) }, { source: "https://example.test/apps/", prebuilt: await build(code) }], store: createMemoryAppStore(), createWorker, stopDelay: 20, onError: e => errors.push(e) });
     try {
       const home = activeHost(element); click(element, "open");
       await waitFor(() => activeHost(element) !== home && logOf(element) === "create:0;start:1;resume;");
@@ -159,7 +159,7 @@ async function stackFixtures() {
   const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
   home.html += '<button id="open1">B</button><button id="open2">C</button>';
   const app = await build();
-  return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "test", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
+  return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "https://example.test/apps/", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
 }
 // 公開システム API で切り替えと終了を行う
 const bar = (element: HTMLElement, label: string) => label.endsWith("を閉じる")
@@ -301,7 +301,7 @@ Deno.test("mountApp のエラーは前面の更新では残り、次の show で
   const window = new Window(); const element = host(window); const errors: unknown[] = [];
   const home = await build(source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.createElement("script");'), true);
   const app = await build();
-  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "test", prebuilt: app }],
+  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "https://example.test/apps/", prebuilt: app }],
     store: createMemoryAppStore(), createWorker, onError: error => errors.push(error) });
   try {
     const status = element.querySelector<HTMLElement>("[role=status]")!;
