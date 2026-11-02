@@ -2,7 +2,7 @@
 
 ## v0.2.0（未リリース）
 
-- Régie に提供リストの登録・取得、アプリのインストール、起動時と 30 分ごとの更新確認、`movedTo` による ID の付け替えを追加する。`http:` はデバッグ設定でのみ許可する。整合性はファイルと取得済みファイルを対象にしたフォルダを検証し、`/` は未対応として拒否する（[仕様](docs/spec/app-id.md)）
+- Régie に提供リストの登録・取得、アプリのインストール、起動時と 30 分ごとの更新確認、`movedTo` による ID の付け替えを追加する。`http:` はデバッグ設定でのみ許可する。整合性は取得した全ファイルを対象にした `/` と、ファイル・取得済みファイルを対象にしたフォルダを検証する（[仕様](docs/spec/app-id.md)）
 
 - 破壊的変更: 埋め込みアプリの ID を `io.github.nozomi-hiragi.binette.cadre` → `cadre`、`io.github.nozomi-hiragi.binette.home` → `cadre.home`、`io.github.nozomi-hiragi.binette.settings` → `cadre.settings`、`io.github.nozomi-hiragi.binette.designer` → `designer` に変更する。`apps/home`・`apps/settings` を `apps/cadre` に統合し、ホーム・設定は `sub` として親の AS の入口・CSS を共有する。画面とホームバーの見た目は維持する
 - `system/boot.json` の役割の既定を `cadre`・`cadre.home`・`cadre.settings` にし、`lists: []` を出力する。designer は `bundled/designer` の同梱のままにする。設定の上書きを防ぐため、`/user` の重ね合わせから `/apps/cadre` パッケージ全体を保護する
@@ -14,9 +14,9 @@
 - `@binette/core` にアプリの識別子と提供リストの関数を追加する（[docs/spec/app-id.md](docs/spec/app-id.md)）。
   - `normalizeAppIdentifier`・`normalizeAppListUrl`・`formatAppId`・`parseAppId`: 識別子の % エンコードの正規化、提供リストの URL の検査、完全な ID（URL の ID・生の ID・サブアプリ）の組み立てと分解
   - `findAppList`・`parseAppList`: 提供リストの HTML から `<link rel="binette-apps">` か埋め込みの JSON を探し、JSON を検査する（`source` の解決、`integrity` の形、`movedTo`）。HTML を読む DOM は呼び出し側が渡す
-  - `hashFile`・`hashFolder`・`computeIntegrity`・`verifyIntegrity`: `integrity` のハッシュ（`sha256-<base64>`）の計算と検証。フォルダのハッシュのバイト列のつなぎ方は暫定（`UTF-8(パス) 0x00 UTF-8(バイト数) 0x00 中身`）
+  - `hashFile`・`hashFolder`・`computeIntegrity`・`verifyIntegrity`: `integrity` のハッシュ（`sha256-<base64>`）の計算と検証。フォルダのハッシュのバイト列のつなぎ方（`UTF-8(パス) 0x00 UTF-8(バイト数) 0x00 中身`）
   - `parseAppManifest` が `sub`（サブアプリ）と `id` の識別子の規則（`.` を含まない）を検査する
-- Régie の CLI に `integrity <アプリのフォルダ> [キー...]` を追加する。キーごとのハッシュを JSON で出す（既定のキーは `/`）。名前が `.` で始まるファイルとフォルダ、シンボリックリンクは含めない
+- Régie の CLI に `integrity <アプリのフォルダ> [キー...]` を追加する。キーごとのハッシュを JSON で出す（既定のキーは `/`）。`/` とフォルダキーは `--replique <AS のパス>` を指定してビルドし、インストールで取得するファイルを対象にする
 
 - 仕様: アプリの識別子と提供リストを追加する（[docs/spec/app-id.md](docs/spec/app-id.md)、一部実装済み）。完全な ID は提供リストの URL ＋ `#` ＋ 識別子。提供リストは HTML で、`<link rel="binette-apps">` の JSON か埋め込みの JSON を読む。Cadre（ユーザー向けには「枠アプリ」）を独立したアプリにし、ホームと設定をそのサブアプリにする
 

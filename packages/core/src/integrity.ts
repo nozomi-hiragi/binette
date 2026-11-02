@@ -29,7 +29,6 @@ export function hashFile(bytes: Uint8Array): Promise<string> {
  * `folder` の下の全ファイルを、フォルダからの相対パスの UTF-16 コード単位の順
  * （JavaScript の `<` での比較）に並べ、ファイルごとに「パス・中身のバイト数・中身」をつないだものの SHA-256。
  *
- * 暫定の決め: 仕様はつなぎ方のバイト列を決めていないので、
  * `UTF-8(パス) 0x00 UTF-8(バイト数の 10 進) 0x00 中身` をファイルの数だけ続ける。
  *
  * @param files アプリの全ファイル

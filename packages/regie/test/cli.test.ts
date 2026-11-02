@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
-import { computeIntegrity, hashFile } from "@binette/core";
+import { hashFile } from "@binette/core";
 import { collectAppFiles, computeAppIntegrity } from "../src/cli.ts";
 
 async function withApp(run: (dir: string) => Promise<void>): Promise<void> {
@@ -25,18 +25,18 @@ Deno.test("フォルダを再帰で集め、. で始まるものは含めない"
   });
 });
 
-Deno.test("integrity: 既定は / で、キーごとのハッシュを返す", async () => {
+Deno.test("integrity: / とフォルダキーには Réplique を指定し、ファイルキーは直接読む", async () => {
   await withApp(async (dir) => {
-    const files = [
-      { path: "app.json", bytes: new TextEncoder().encode("{}") },
-      { path: "src/main.ts", bytes: new TextEncoder().encode("main") },
-      { path: "src/sub/a.ts", bytes: new TextEncoder().encode("a") },
-    ];
-    assertEquals(await computeAppIntegrity(dir), { "/": await computeIntegrity(files, "/") });
-    assertEquals(await computeAppIntegrity(dir, ["src/", "app.json"]), {
-      "src/": await computeIntegrity(files, "src/"),
+    await assertRejects(() => computeAppIntegrity(dir), Error, "--replique");
+    await assertRejects(() => computeAppIntegrity(dir, ["src/"]), Error, "フォルダキーのハッシュには --replique");
+    await Deno.writeTextFile(join(dir, ".hidden"), "hidden");
+    assertEquals(await computeAppIntegrity(dir, ["app.json", ".hidden"]), {
       "app.json": await hashFile(new TextEncoder().encode("{}")),
+      ".hidden": await hashFile(new TextEncoder().encode("hidden")),
     });
+    for (const key of ["../outside", "src/../app.json", "app.json?query", "app.json#fragment", "%61pp.json", "", "../", "src/../src/", "src/?query/", "src/#fragment/", "%73rc/", "//"]) {
+      await assertRejects(() => computeAppIntegrity(dir, [key]), Error, "integrity のパスが正しくありません");
+    }
     await assertRejects(() => computeAppIntegrity(dir, ["nope.ts"]));
   });
 });
