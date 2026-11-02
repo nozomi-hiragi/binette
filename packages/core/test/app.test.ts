@@ -66,3 +66,33 @@ Deno.test("旧名の role は読み替えずに拒む", () => {
 Deno.test("entry.html を省略できる", () => {
   assertEquals(parseAppManifest(JSON.stringify({ ...manifest, entry: { as: "src/main.ts" } })).entry, { as: "src/main.ts" });
 });
+
+Deno.test("sub を読み、識別子を正規化する", () => {
+  const app = parseAppManifest(JSON.stringify({
+    id: "cadre", name: "Cadre", entry: { as: "src/main.ts" },
+    sub: { home: { name: "ホーム", icon: "home.svg", roles: ["home"] }, "設定": { name: "設定", listed: false } },
+  }));
+  assertEquals(app.sub, {
+    home: { name: "ホーム", icon: "home.svg", roles: ["home"] },
+    "%E8%A8%AD%E5%AE%9A": { name: "設定", listed: false },
+  });
+  assertEquals(parseAppManifest(JSON.stringify({ ...manifest, sub: {} })).sub, {});
+  assertEquals(parseAppManifest(JSON.stringify(manifest)).sub, undefined);
+});
+
+Deno.test("sub の形が正しくないと BinetteError", () => {
+  const sub = (value: unknown) => parseAppManifest(JSON.stringify({ ...manifest, sub: value }));
+  for (const bad of [null, [], "x", { "a.b": { name: "n" } }, { "": { name: "n" } }, { "%2e": { name: "n" } },
+    { a: null }, { a: {} }, { a: { name: "" } }, { a: { name: "n", icon: 1 } }, { a: { name: "n", roles: "home" } },
+    { a: { name: "n", listed: "yes" } }, { "a%e3": { name: "n" }, "a%E3": { name: "n" } }]) {
+    assertEquals(assertThrows(() => sub(bad), BinetteError).code, "invalid_format");
+  }
+});
+
+Deno.test("strictId のときだけ、id の . を誤りにする", () => {
+  assertEquals(parseAppManifest(JSON.stringify(manifest)).id, manifest.id);
+  assertEquals(parseAppManifest(JSON.stringify({ ...manifest, id: "memo" }), { strictId: true }).id, "memo");
+  for (const id of ["io.github.example", "a%2Eb"]) {
+    assertEquals(assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, id }), { strictId: true }), BinetteError).code, "invalid_format");
+  }
+});

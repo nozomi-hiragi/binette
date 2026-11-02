@@ -188,4 +188,5 @@ ID は、アプリをどう入れたかで分けます。
 - `app.json` の `id` は作者が書く自由な文字列（例 `io.github.nozomi-hiragi.binette.home`）。逆ドメインの部分は自己申告で、配信元とは関係がない
 - Régie はアプリを `installedAppKey(source, id)`（`JSON.stringify([source, id])`）で区別する（[regie/store.md](regie/store.md)）。役割の割り当てや起動の履歴もこのキーを使う
 - 入手元はシステムアプリが `binette:system`、同梱アプリが `binette:bundled`（[apps/](apps/README.md)）。Cadre・ホーム・設定は別々のシステムアプリで、designer は同梱アプリ
-- 提供リスト、サブアプリ、`api.sub()`、`system/boot.json` の `lists` は無い
+- 提供リスト、サブアプリ、`api.sub()`、`system/boot.json` の `lists` は、Régie やアプリにはまだ無い
+- `@binette/core` には、識別子・提供リストの URL・完全な ID の正規化と組み立て、提供リストの読み取り、`app.json` の `sub` の検査、`integrity` の計算と検証の関数がある。Régie の CLI には `integrity` コマンドがある。Régie とアプリはまだ使っていない（`app.json` の `id` の `.` の検査も、`parseAppManifest` の `strictId` を渡したときだけ）
