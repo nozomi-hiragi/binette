@@ -264,6 +264,10 @@ namespace hostStorage {
 @external("binette", "api.why")
 declare function whyImport(key: string): i32;
 
+// @ts-ignore: decorator
+@external("binette", "api.sub")
+declare function subImport(): string;
+
 /** 辞書に載らなかった理由。Granted は、載っている */
 export enum Why { Granted, NotGranted, NotAssigned }
 
@@ -363,6 +367,8 @@ export class CadreApi {
  * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi、`cadre` は CadreApi）を返す
  */
 export class Api {
+  /** 起動したサブアプリの識別子。親として開いたときは空文字列 */
+  sub(): string { return subImport(); }
   /** 届いていれば API を、キーが無いか型引数が合わないか、届いていなければ null を返す */
   get<T>(key: string): T | null {
     if (whyImport(key) != Why.Granted) return null;

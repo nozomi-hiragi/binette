@@ -12,9 +12,11 @@ export interface ProcessOptions {
   destroyTimeout?: number;
   /** 今のページの識別子 */
   page?: string;
+  /** サブアプリの識別子。親として開いたら空文字列 */
+  sub?: string;
   /** HTML を持たない宣言的 UI アプリ */
   declarative?: boolean;
-  /** 最後の状態と起動の履歴の保存先。key は installedAppKey */
+  /** 最後の状態と起動の履歴の保存先。key は 完全な ID */
   persistence?: { store: SystemStore; key: string; historyLimit?: number };
   /** 今の呼び出しが終わってから、自分を閉じる */
   onFinish?: () => void;
@@ -138,6 +140,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,
+    sub: options.sub,
     declarative: options.declarative,
     last,
     os: options.grants?.os,

@@ -6,6 +6,7 @@
     "./packages/scene",
     "./packages/coulisses",
     "./packages/replique",
+    "./packages/replique/test",
     "./apps/home",
     "./apps/settings",
     "./apps/cadre",

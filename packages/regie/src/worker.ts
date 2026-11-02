@@ -22,6 +22,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let cadre: CadreSnapshot | undefined;
   let denied: Record<string, ApiDenial> = {};
   let page = "";
+  let sub = "";
   let declarative = false;
   let last = { page: "", reason: { kind: 0, cause: 0 } };
   let ops: DomOp[] = [];
@@ -155,6 +156,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         return writeString(names[i]!);
       },
       // 辞書の中身。0 は届いている、1 は NotGranted、2 は NotAssigned。知らないキーはどの役割にもないので NotAssigned
+      "api.sub": () => writeString(sub),
       "api.why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;
@@ -251,7 +253,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; denied?: Record<string, ApiDenial> };
     if (data.type === "init") {
       try {
         apps = data.apps;
@@ -260,6 +262,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         cadre = data.cadre;
         denied = data.denied ?? {};
         page = data.page ?? "";
+        sub = data.sub ?? "";
         declarative = data.declarative ?? false;
         last = data.last ?? last;
         ops = [];

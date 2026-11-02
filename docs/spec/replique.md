@@ -87,6 +87,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 | `Element.removeEventListener(type: string, listener: (event: Event) => void): void` | 同じ要素・種類・関数の登録を解除する |
 | `Event.type: string`（readonly） | イベントの種類 |
 | `Event.currentTarget: Element`（readonly） | リスナーを付けた Element |
+| `Api.sub(): string` | 起動したサブアプリの識別子。親なら空文字列 |
 | `Api.get<T>(key: string): T \| null` / `Api.why(key: string): Why` | API の辞書。[下](#api-の辞書実装済み形は案)に書く |
 | `__bina_event(listener: i32): void` | リスナー番号で Event を作って呼ぶ。Régie のビルドが入口からの再 export を差し込む |
 | `__bina_listener_count(): i32` / `__bina_element_count(): i32` | テスト用に保持中のリスナー数・id の要素数を返す |
@@ -142,6 +143,7 @@ Element の中身は i32 の handle です。id とリスナーは Map で保持
 ```ts
 export enum Why { Granted, NotGranted, NotAssigned }
 export class Api {
+  sub(): string;
   get<T>(key: string): T | null;
   why(key: string): Why;
 }
@@ -174,8 +176,8 @@ class Home extends App {
 
 - get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
-- `role(role)` は役割に割り当てたアプリの installedAppKey（`JSON.stringify([source, manifest.id])`）です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・installedAppKey です。割り当てを変えられるのは `home` と `cadre`（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
-- launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ installedAppKey。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
+- `role(role)` は役割に割り当てたアプリの完全なアプリ ID です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・完全なアプリ ID です。割り当てを変えられるのは `home` と `cadre`（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
+- launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ完全なアプリ ID。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
 - `updateAvailable()` は準備済みの新しい版があるかです。`updateCurrent()`・`updateNext()` は現在と新しい版の表示用の文字列、`updatePhase()` は確認や更新の状態です。`checkUpdate()` は確認を、`update()` は準備済みの組への更新を、`openRecovery()` は復旧画面を開くことを OS に頼みます。状態の変化は設定アプリに同期され、画面を描き直します。呼び出し名と状態の形は案です
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
 

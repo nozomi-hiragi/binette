@@ -51,16 +51,16 @@ interface AppStore {
 }
 ```
 
-- `installedAppKey(source, id)` は `JSON.stringify([source, id])` を返す。`key` はこれを使う。入手元と ID の区切りが衝突しない形にする
+- `appId(source, id)` が返す `key` は完全なアプリ ID。埋め込みは生の ID、提供リストからのものは正規化したリスト URL ＋ `#` ＋識別子を使う。旧 `[source, id]` キーは移行しない
 - `icon` は SVG の文字列。無ければ `undefined`
 - `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ
 - `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
 - `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
 - `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
-- `createAppStore(tree)` は指定した `FileTree` を使う。`/apps/<ID>/<入手元>/` に、WASM をそのまま `app.wasm`、残りの記録を `record.json` として置き、2 ファイルを原子的に書く。ID と入手元は `encodeURIComponent` で符号化し、空文字と `.`・`..` は正規パスと衝突しないよう別に表す。保存形式と配置は案
-- `list` は `/apps` 以下の記録ファイルを探す。索引は持たず、一覧はパス順に返す。`get` は key の入手元と ID からパスを求めて直接読む
+- `createAppStore(tree)` は指定した `FileTree` を使う。`/apps/<完全な ID>/` に、WASM をそのまま `app.wasm`、残りの記録を `record.json` として置き、2 ファイルを原子的に書く。ID は `encodeURIComponent` で符号化し、空文字と `.`・`..` は正規パスと衝突しないよう別に表す。保存形式と配置は案
+- `list` は `/apps` 以下の記録ファイルを探す。索引は持たず、一覧はパス順に返す。`get` は一覧から key が一致する記録を探す
 
-ソースをファイルの木に置く場合は `/apps/<ID>/app.json` とソース・アイコンを保持し、`buildStoredApp` で `/apps/<ID>/build/app.wasm`・`index.html` を生成します。起動との互換のため、同時に従来の `/apps/<ID>/<入手元>/record.json`・`app.wasm` にも記録します。配置、同じ ID を持つ入手元どうしの扱い、ソースの取得方法は案です。
+ソースをファイルの木に置く場合は `/apps/<ID>/app.json` とソース・アイコンを保持し、`buildStoredApp` で `/apps/<ID>/build/app.wasm`・`index.html` を生成します。起動との互換のため、同時に `/apps/<完全な ID>/record.json`・`app.wasm` にも記録します。配置、同じ ID を持つ入手元どうしの扱い、ソースの取得方法は案です。
 
 版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。入手元の検証や権限の確認はまだしません。
 
@@ -77,7 +77,7 @@ interface AppDataStore {
 }
 ```
 
-システムはアプリを起動するときに `read` で写しを作って Worker に渡し、`write` は順に呼びます（[Réplique の StorageApi](../replique.md#storageapi)）。容量の上限は未決です。
+サブアプリは親の完全な ID を使い、親と保存領域を共有します。システムはアプリを起動するときに `read` で写しを作って Worker に渡し、`write` は順に呼びます（[Réplique の StorageApi](../replique.md#storageapi)）。容量の上限は未決です。
 
 ## SystemStore（案・実装済み）
 
@@ -90,9 +90,9 @@ interface LifecycleRecord {
   page: string;
   reason: { kind: number; cause: number }; // DestroyKind・DestroyCause
 }
-interface LaunchRecord { time: number; app: string } // Unix epoch ミリ秒、installedAppKey
+interface LaunchRecord { time: number; app: string } // Unix epoch ミリ秒、完全なアプリ ID
 interface SystemSettings {
-  roles: Record<string, string>; // 役割 → installedAppKey。既定 {} はブートの既定の割り当て（[system.md](system.md#役割の割り当て実装済み形は案)）
+  roles: Record<string, string>; // 役割 → 完全なアプリ ID。既定 {} はブートの既定の割り当て（[system.md](system.md#役割の割り当て実装済み形は案)）
   stackSize: number; // 既定 3
   stopDelay: number; // 既定 10000 ミリ秒
   callTimeout: number; // 既定 5000 ミリ秒
@@ -112,4 +112,4 @@ interface SystemStore {
 
 getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。IndexedDB では履歴の読み足しと書き込みを同じトランザクションにし、同時に起動しても失いません。
 
-putSettings は全体を置き換えます。部分的に保存でき、省いた項目はシステムの既定を使います。roles は役割から installedAppKey への文字列の写し、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。getSettings は、v0.2.0 の途中まで保存していた home を roles.home に読み替えて返します。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。
+putSettings は全体を置き換えます。部分的に保存でき、省いた項目はシステムの既定を使います。roles は役割から 完全なアプリ ID への文字列の写し、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。getSettings は、v0.2.0 の途中まで保存していた home を roles.home に読み替えて返します。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。

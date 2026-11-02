@@ -8,6 +8,8 @@ const app: PrebuiltApp = {
 };
 Deno.test(".binapp は全バイトと日本語、任意の icon を往復できる", () => {
   assertEquals(parsePrebuiltApp(stringifyPrebuiltApp(app)), app);
+  const withSub = { ...app, subIcons: { home: "<svg>ホーム</svg>" } };
+  assertEquals(parsePrebuiltApp(stringifyPrebuiltApp(withSub)), withSub);
   const { icon: _, ...withoutIcon } = app;
   assertEquals(parsePrebuiltApp(stringifyPrebuiltApp(withoutIcon)), withoutIcon);
   assertEquals(parsePrebuiltApp(stringifyPrebuiltApp({ ...withoutIcon, wasm: new Uint8Array() })).wasm, new Uint8Array());
@@ -15,7 +17,7 @@ Deno.test(".binapp は全バイトと日本語、任意の icon を往復でき�
 Deno.test(".binapp の形式名・版・欄・manifest の誤りは日本語の Error", () => {
   const valid = JSON.parse(stringifyPrebuiltApp(app));
   for (const text of ["{", "null", "[]", ...[
-    { format: "other" }, { version: "0.3" }, { html: null }, { icon: null }, { css: null }, { wasm: 1 }, { wasm: "!" },
+    { format: "other" }, { version: "0.3" }, { html: null }, { icon: null }, { subIcons: null }, { subIcons: [] }, { subIcons: { home: 1 } }, { css: null }, { wasm: 1 }, { wasm: "!" },
     { wasm: "a" }, { manifest: null }, { manifest: { ...app.manifest, name: 1 } },
   ].map((patch) => JSON.stringify({ ...valid, ...patch }))]) {
     const error = assertThrows(() => parsePrebuiltApp(text), Error);
@@ -52,5 +54,16 @@ Deno.test("CLI はフォルダ外のアイコンをビルド前に拒む", async
     } catch (error) {
       assertEquals((error as Error).message, "アプリのアイコンは app.json のフォルダ内の相対パスにしてください。");
     }
+  } finally { await Deno.remove(dir, { recursive: true }); }
+});
+
+Deno.test("CLI build はサブアプリのアイコンも .binapp に含める", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(`${dir}/app.json`, JSON.stringify({ id: "parent", name: "親", entry: { as: "main.ts" }, sub: { child: { name: "子", icon: "child.svg" } } }));
+    await Deno.writeTextFile(`${dir}/main.ts`, "export function main(): void {}");
+    await Deno.writeTextFile(`${dir}/child.svg`, "<svg>子</svg>");
+    const path = await writePrebuiltApp(dir, `${dir}/out.binapp`, new URL("../../replique/src/index.ts", import.meta.url).pathname);
+    assertEquals(parsePrebuiltApp(await Deno.readTextFile(path)).subIcons, { child: "<svg>子</svg>" });
   } finally { await Deno.remove(dir, { recursive: true }); }
 });

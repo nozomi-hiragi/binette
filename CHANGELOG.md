@@ -2,14 +2,17 @@
 
 ## v0.2.0（未リリース）
 
-- `@binette/core` にアプリの識別子と提供リストの関数を追加する（[docs/spec/app-id.md](docs/spec/app-id.md)、まだ Régie やアプリは使わない）。
+- 破壊的変更: Régie のアプリのキーを `installedAppKey(source, id)`（`JSON.stringify([source, id])`）から `appId(source, id)` が返す完全なアプリ ID に変更する。役割の割り当て・起動履歴・ライフサイクルの記録も同じ ID を使う。旧キーの保存データは移行しないため、読めなくなることがある
+- `app.json` の `sub` を起動可能な入口として扱う。サブアプリは親と保存領域・権限を共有し、別の Worker とスタック項目で動く。`listed: false` はホームの一覧から隠すが、役割の候補には含める。Réplique の `Api.sub()` はサブアプリの識別子を返し、親では空文字列を返す
+
+- `@binette/core` にアプリの識別子と提供リストの関数を追加する（[docs/spec/app-id.md](docs/spec/app-id.md)）。
   - `normalizeAppIdentifier`・`normalizeAppListUrl`・`formatAppId`・`parseAppId`: 識別子の % エンコードの正規化、提供リストの URL の検査、完全な ID（URL の ID・生の ID・サブアプリ）の組み立てと分解
   - `findAppList`・`parseAppList`: 提供リストの HTML から `<link rel="binette-apps">` か埋め込みの JSON を探し、JSON を検査する（`source` の解決、`integrity` の形、`movedTo`）。HTML を読む DOM は呼び出し側が渡す
   - `hashFile`・`hashFolder`・`computeIntegrity`・`verifyIntegrity`: `integrity` のハッシュ（`sha256-<base64>`）の計算と検証。フォルダのハッシュのバイト列のつなぎ方は暫定（`UTF-8(パス) 0x00 UTF-8(バイト数) 0x00 中身`）
   - `parseAppManifest` が `sub`（サブアプリ）を検査する。`{ strictId: true }` を渡すと `id` も識別子の規則（`.` を含まない）で検査する。既定では今までどおり検査しない
 - Régie の CLI に `integrity <アプリのフォルダ> [キー...]` を追加する。キーごとのハッシュを JSON で出す（既定のキーは `/`）。名前が `.` で始まるファイルとフォルダ、シンボリックリンクは含めない
 
-- 仕様: アプリの識別子と提供リストを追加する（[docs/spec/app-id.md](docs/spec/app-id.md)、実装はまだ）。完全な ID は提供リストの URL ＋ `#` ＋ 識別子。提供リストは HTML で、`<link rel="binette-apps">` の JSON か埋め込みの JSON を読む。Cadre（ユーザー向けには「枠アプリ」）を独立したアプリにし、ホームと設定をそのサブアプリにする
+- 仕様: アプリの識別子と提供リストを追加する（[docs/spec/app-id.md](docs/spec/app-id.md)、一部実装済み）。完全な ID は提供リストの URL ＋ `#` ＋ 識別子。提供リストは HTML で、`<link rel="binette-apps">` の JSON か埋め込みの JSON を読む。Cadre（ユーザー向けには「枠アプリ」）を独立したアプリにし、ホームと設定をそのサブアプリにする
 
 - 破壊的変更: 役割・API キー `shell` を `cadre`、`ShellApi`・`ShellSnapshot`・`ShellInstance` を `CadreApi`・`CadreSnapshot`・`CadreInstance` に変更し、関連する起動・同期 API と Worker の `shell.*`・`__bina_shell_sync` も `cadre.*`・`__bina_cadre_sync` に改名する。システムアプリと boot の役割も `shell` から `cadre` に変える。
 

@@ -76,8 +76,8 @@ interface LaunchOptions {
 }
 interface OsSnapshot {
   settings: Omit<SystemSettings, "roles">;
-  roles: Record<string, string>; // 役割に割り当てたアプリの installedAppKey
-  candidates: Record<string, { id: string; name: string }[]>; // 役割ごとの選べるアプリ。id は installedAppKey
+  roles: Record<string, string>; // 役割に割り当てたアプリの 完全なアプリ ID
+  candidates: Record<string, { id: string; name: string }[]>; // 役割ごとの選べるアプリ。id は 完全なアプリ ID
   launches: { time: number; name: string }[]; // 新しい順
   updateAvailable: boolean; // 新しい版の /system があるか
 }

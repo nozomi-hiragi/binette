@@ -3,7 +3,7 @@ import {
   createAppStore,
   createMemoryFileTree,
   createSystemDistribution,
-  installedAppKey,
+  appId,
   type SystemManifest,
 } from "@binette/regie";
 import { Window } from "happy-dom";
@@ -12,7 +12,7 @@ import { showRecovery } from "./recovery.ts";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value));
-async function fixture() {
+async function fixture(subApps = false, subHome = "home") {
   const tree = createMemoryFileTree();
   const files = new Map<string, Uint8Array>([[
     "system/boot.json",
@@ -29,6 +29,16 @@ async function fixture() {
     );
     files.set(`system/apps/${name}/index.html`, new Uint8Array());
     files.set(`system/apps/${name}/style.css`, new TextEncoder().encode("p { color: red }"));
+  }
+  if (subApps) {
+    files.set("system/boot.json", encode({ roles: { cadre: "cadre", home: `cadre.${subHome}`, settings: "cadre.settings" } }));
+    files.set("system/apps/cadre/app.json", encode({ id: "cadre", name: "枠", roles: ["cadre"], entry: { as: "main.ts" }, sub: {
+      [subHome]: { name: "ホーム", roles: ["home"], icon: "home.svg" },
+      settings: { name: "設定", roles: ["settings"], listed: false, icon: "settings.svg" },
+    } }));
+    files.set("system/apps/cadre/home.svg", new TextEncoder().encode("<svg>home</svg>"));
+    files.set("system/apps/cadre/settings.svg", new TextEncoder().encode("<svg>settings</svg>"));
+    for (const path of [...files.keys()]) if (path.startsWith("system/apps/home/") || path.startsWith("system/apps/settings/")) files.delete(path);
   }
   const manifest: SystemManifest = { version: "1", files: [] };
   for (const [path, data] of files) {
@@ -65,9 +75,9 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
   const { apps, roles } = await loadBootApps(tree, distribution);
   assertEquals(apps.find(app => app.prebuilt?.manifest.id === "cadre")?.prebuilt?.css, "p { color: red }");
   assertEquals(roles, {
-    home: installedAppKey("binette:system", "home"),
-    settings: installedAppKey("binette:system", "settings"),
-    cadre: installedAppKey("binette:system", "cadre"),
+    home: appId("binette:system", "home"),
+    settings: appId("binette:system", "settings"),
+    cadre: appId("binette:system", "cadre"),
   });
   assertEquals(
     apps.find((app) => app.prebuilt?.manifest.id === "settings")?.prebuilt
@@ -75,10 +85,10 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
     new Uint8Array([0, 97, 115, 109]),
   );
   const store = createAppStore(tree);
-  for (const source of ["binette:system", "binette:bundled", "custom"]) {
+  for (const source of ["binette:system", "binette:bundled", "https://custom.test/"]) {
     await store.put({
       source,
-      key: installedAppKey(source, "old"),
+      key: appId(source, "old"),
       manifest: { id: "old", name: "old", entry: { as: "main.ts" } },
       wasm: new Uint8Array([99]),
       html: "",
@@ -87,9 +97,9 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
     });
   }
   const safe = bootAppStore(store);
-  assertEquals((await safe.list()).map((app) => app.source), ["custom"]);
+  assertEquals((await safe.list()).map((app) => app.source), ["https://custom.test/"]);
   assertEquals(
-    await safe.get(installedAppKey("binette:system", "old")),
+    await safe.get(appId("binette:system", "old")),
     undefined,
   );
 });
@@ -181,10 +191,29 @@ Deno.test("オフラインでも保存済みの配布物を検証してホーム
   assertEquals(update.installedVersion, "1");
   assertEquals(update.updateAvailable, false);
   const { apps, roles } = await loadBootApps(tree, distribution);
-  assertEquals(roles.home, installedAppKey("binette:system", "home"));
+  assertEquals(roles.home, appId("binette:system", "home"));
   assertEquals(apps.map((app) => app.prebuilt?.manifest.id), [
     "cadre",
     "home",
     "settings",
   ]);
+});
+
+Deno.test("ブートはサブの役割とアイコンを読み、設定サブの親を上書きから守る", async () => {
+  const { tree, distribution } = await fixture(true);
+  await tree.write("/user/apps/cadre/app.wasm", new Uint8Array([99]));
+  await tree.write("/user/apps/cadre/home.svg", new TextEncoder().encode("偽物"));
+  const { apps, roles } = await loadBootApps(tree, distribution);
+  assertEquals(roles, { cadre: "cadre", home: "cadre.home", settings: "cadre.settings" });
+  assertEquals(apps[0]!.prebuilt?.subIcons, { home: "<svg>home</svg>", settings: "<svg>settings</svg>" });
+  assertEquals(apps[0]!.prebuilt?.wasm, new Uint8Array([0, 97, 115, 109]));
+});
+
+Deno.test("ブートのサブ ID は日本語と小文字の % エンコードを正規化する", async () => {
+  for (const id of ["メモ", "%e3%83%a1%e3%83%a2"]) {
+    const { tree, distribution } = await fixture(true, id);
+    const { apps, roles } = await loadBootApps(tree, distribution);
+    assertEquals(roles.home, "cadre.%E3%83%A1%E3%83%A2");
+    assertEquals(apps[0]!.prebuilt?.subIcons?.["%E3%83%A1%E3%83%A2"], "<svg>home</svg>");
+  }
 });

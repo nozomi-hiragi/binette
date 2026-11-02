@@ -3,7 +3,7 @@
 [仕様の目次](README.md)
 
 > [!NOTE]
-> 2026-11-02 にのぞみが決めた構成です（この節の中身はすべて決定）。まだ実装していません。今のコードの形は [今のコードとの差](#今のコードとの差) にあります。App URL（`/<ID>`）、アプリマネージャ、リストの署名は、この仕様では決めません（[あとで足すもの](#あとで足すもの)）。
+> 2026-11-02 にのぞみが決めた構成です（この節の中身はすべて決定）。一部を実装しています。今のコードの形は [今のコードとの差](#今のコードとの差) にあります。App URL（`/<ID>`）、アプリマネージャ、リストの署名は、この仕様では決めません（[あとで足すもの](#あとで足すもの)）。
 
 ## 方針
 
@@ -183,10 +183,8 @@ ID は、アプリをどう入れたかで分けます。
 
 ## 今のコードとの差
 
-今のコードは次のままです。
+今のコードでは、Régie は完全なアプリ ID を保存・役割の割り当て・起動履歴に使い、`sub` の各入口と `api.sub()` に対応しています。サブアプリは親と保存領域と権限を共有し、別の Worker で動きます。
 
-- `app.json` の `id` は作者が書く自由な文字列（例 `io.github.nozomi-hiragi.binette.home`）。逆ドメインの部分は自己申告で、配信元とは関係がない
-- Régie はアプリを `installedAppKey(source, id)`（`JSON.stringify([source, id])`）で区別する（[regie/store.md](regie/store.md)）。役割の割り当てや起動の履歴もこのキーを使う
-- 入手元はシステムアプリが `binette:system`、同梱アプリが `binette:bundled`（[apps/](apps/README.md)）。Cadre・ホーム・設定は別々のシステムアプリで、designer は同梱アプリ
-- 提供リスト、サブアプリ、`api.sub()`、`system/boot.json` の `lists` は、Régie やアプリにはまだ無い
-- `@binette/core` には、識別子・提供リストの URL・完全な ID の正規化と組み立て、提供リストの読み取り、`app.json` の `sub` の検査、`integrity` の計算と検証の関数がある。Régie の CLI には `integrity` コマンドがある。Régie とアプリはまだ使っていない（`app.json` の `id` の `.` の検査も、`parseAppManifest` の `strictId` を渡したときだけ）
+- 入手元はシステムアプリが `binette:system`、同梱アプリが `binette:bundled`（[apps/](apps/README.md)）。Cadre・ホーム・設定はまだ別々のシステムアプリで、designer は同梱アプリ。現在のマニフェストの `.` を含む ID は暫定的にそのまま生 ID に使い、後の変更で整理する
+- 提供リストの登録・インストールと `system/boot.json` の `lists` はまだ無い
+- `@binette/core` に識別子・提供リストの URL・完全な ID の正規化と組み立て、提供リストの読み取り、`app.json` の `sub` の検査、`integrity` の計算と検証の関数がある。Régie の CLI には `integrity` コマンドがある

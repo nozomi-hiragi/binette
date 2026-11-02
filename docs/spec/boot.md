@@ -81,7 +81,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 }
 ```
 
-`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg` を置きます。同梱アプリの配置と入手元は案です。既定の Cadre は `apps/cadre` です。
+`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg`・サブアプリの `sub-icons/<番号>.svg` を置きます。サブアイコンのパスは配布時に書き換え、目録にも含めます。同梱アプリの配置と入手元は案です。既定の Cadre は `apps/cadre` です。
 
 ## アプリの置き方（決定 2026-11-01）
 

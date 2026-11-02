@@ -8,7 +8,7 @@ export { serveApp } from "./worker.ts";
 export type { ApiDenial, LaunchOptions, OsSnapshot, RegieApp, RegieWorker } from "./launch.ts";
 export { API_KEYS, launchApp } from "./launch.ts";
 export type { AppDataStore, AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord, LaunchRecord, SystemSettings, SystemStore } from "./store.ts";
-export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, installedAppKey, validateSystemSettings } from "./store.ts";
+export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, appId, validateSystemSettings } from "./store.ts";
 export type { FileTree, IndexedDbFileTreeOptions } from "./fs.ts";
 export { createIndexedDbFileTree, createMemoryFileTree } from "./fs.ts";
 export type { RecoveryAction, SystemDistribution, SystemDistributionOptions, SystemManifest, SystemUpdate } from "./distribution.ts";

@@ -1,12 +1,20 @@
+import { appId } from "./app-key.ts";
+export { appId } from "./app-key.ts";
 import type { AppManifest } from "@binette/core";
 import { appFilePaths, decodeAppPathSegment, encodeAppPathSegment } from "./app-files.ts";
 import { createIndexedDbFileTree, createMemoryFileTree, type FileTree } from "./fs.ts";
 
 /** インストールしたアプリのビルド結果 */
 export interface InstalledApp {
-  /** JSON.stringify([source, manifest.id]) */
+  /** アプリの完全な ID */
   key: string;
   source: string;
+  /** サブアプリの親の完全な ID。保存領域と権限を共有する */
+  parentKey?: string;
+  sub?: string;
+  listed?: boolean;
+  /** サブアプリの識別子から SVG の文字列への写し */
+  subIcons?: Record<string, string>;
   manifest: AppManifest;
   /** SVG の文字列。無ければ undefined */
   icon: string | undefined;
@@ -45,12 +53,12 @@ export interface LifecycleRecord {
   reason: { kind: number; cause: number };
 }
 
-/** インスタンスを作った日時（Unix epoch ミリ秒）と installedAppKey */
+/** インスタンスを作った日時（Unix epoch ミリ秒）と完全な ID */
 export interface LaunchRecord { time: number; app: string }
 
 /** OS の設定。時間はミリ秒 */
 export interface SystemSettings {
-  /** 役割から割り当てたアプリの installedAppKey への写し。空ならブートの既定 */
+  /** 役割から割り当てたアプリの完全な ID への写し。空ならブートの既定 */
   roles: Record<string, string>;
   stackSize: number;
   stopDelay: number;
@@ -66,7 +74,7 @@ export const DEFAULT_SYSTEM_SETTINGS: Readonly<SystemSettings> = Object.freeze({
   destroyTimeout: 5000, historyLimit: 100, homeRetryWindow: 5000,
 });
 
-/** アプリの記録と OS の設定。アプリのキーは installedAppKey を使う */
+/** アプリの記録と OS の設定。アプリのキーは完全な ID を使う */
 export interface SystemStore {
   getLast(key: string): Promise<LifecycleRecord | undefined>;
   putLast(key: string, record: LifecycleRecord): Promise<void>;
@@ -98,11 +106,6 @@ export function validateSystemSettings(settings: Partial<SystemSettings>): void 
   }
 }
 
-/** 入手元と ID の区切りが衝突しないキー */
-export function installedAppKey(source: string, id: string): string {
-  return JSON.stringify([source, id]);
-}
-
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const encode = (value: unknown): Uint8Array => encoder.encode(JSON.stringify(value));
@@ -131,9 +134,12 @@ export function createAppStore(tree: FileTree): AppStore {
     if (record === undefined || wasm === undefined) return undefined;
     let app: StoredApp | undefined;
     try { app = decode<StoredApp>(record); } catch { return undefined; }
-    if (!app || typeof app.source !== "string" || typeof app.manifest?.id !== "string" ||
-      appFilePaths(app.manifest.id, app.source).record !== recordPath) return undefined;
-    return { ...app, icon: app.icon, wasm };
+    try {
+      if (!app || typeof app.source !== "string" || typeof app.manifest?.id !== "string" ||
+        app.key !== appId(app.source, app.manifest.id) ||
+        appFilePaths(app.manifest.id, app.source).record !== recordPath) return undefined;
+      return { ...app, icon: app.icon, wasm };
+    } catch { return undefined; }
   };
   return {
     system: {
@@ -175,16 +181,13 @@ export function createAppStore(tree: FileTree): AppStore {
       },
     },
     async list() {
-      const paths = (await tree.list("/apps")).filter(path => /^\/apps\/[^/]+\/[^/]+\/record\.json$/.test(path));
+      const paths = (await tree.list("/apps")).filter(path => /^\/apps\/[^/]+\/record\.json$/.test(path));
       const apps = await Promise.all(paths.map(readApp));
       return apps.filter((app): app is InstalledApp => app !== undefined);
     },
     async get(key) {
-      let parts: unknown;
-      try { parts = JSON.parse(key); } catch { return undefined; }
-      if (!Array.isArray(parts) || parts.length !== 2 || !parts.every(part => typeof part === "string")) return undefined;
-      if (installedAppKey(parts[0], parts[1]) !== key) return undefined;
-      return await readApp(appFilePaths(parts[1], parts[0]).record);
+      // キーは完全な ID。旧い [source, id] の記録は移行しない。
+      return await readApp(`/apps/${encodeAppPathSegment(key)}/record.json`);
     },
     async put(app) {
       await tree.writeFiles(installedAppFiles(app));

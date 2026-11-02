@@ -1,15 +1,15 @@
-import { DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
+import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
 import type { ApiDenial, CadreSnapshot } from "./launch.ts";
-import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
+import { type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
 export type SystemApp = { source: string } & (
   | { read: (path: string) => Promise<string>; prebuilt?: never }
-  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string; css?: string }; read?: never }
+  | { prebuilt: Pick<InstalledApp, "manifest" | "html" | "wasm"> & { icon?: string; css?: string; subIcons?: Record<string, string> }; read?: never }
 );
 
 /** システムの設定 */
@@ -17,7 +17,7 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
   apps: SystemApp[];
   /** 指定するとソースのビルドを検証済みコンパイラの Worker で行う。 */
   browserBuild?: BrowserBuildOptions;
-  /** 役割の既定の割り当て（役割 → installedAppKey）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
+  /** 役割の既定の割り当て（役割 → appId）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
   roles?: Record<string, string>;
   /** 新しい版の `/system` があるとき、設定アプリの「更新」で入れ替える処理 */
   update?: {
@@ -167,7 +167,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     try {
       const text = app.prebuilt === undefined ? await app.read("app.json") : undefined;
       const manifest = app.prebuilt?.manifest ?? parseAppManifest(text!);
-      const key = installedAppKey(app.source, manifest.id);
+      const key = appId(app.source, manifest.id);
       if (seen.has(key)) continue;
       let installed = await options.store.get(key);
       if (app.prebuilt !== undefined) {
@@ -186,6 +186,18 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, ...(built.css === undefined ? {} : { css: built.css }), wasm: built.wasm, installedAt: Date.now() };
         await options.store.put(installed);
       }
+      // サブアプリのアイコンも親の配布物から読み、親と同じ記録に保存する。
+      const subIcons: Record<string, string> = { ...app.prebuilt?.subIcons };
+      if (app.prebuilt === undefined) {
+        for (const [id, sub] of Object.entries(installed.manifest.sub ?? {})) {
+          const path = iconPath(sub.icon);
+          if (path !== undefined) subIcons[id] = await app.read(path);
+        }
+      }
+      if (Object.keys(subIcons).length) {
+        installed = { ...installed, subIcons };
+        await options.store.put(installed);
+      }
       installedApps.push(installed);
       seen.add(key);
     } catch (error) { report(error); }
@@ -193,6 +205,21 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   // ホーム候補は、今回渡されたアプリ以外も含めて保存先から探す
   const available = new Map(installedApps.map(app => [app.key, app]));
   for (const app of await options.store.list()) if (!available.has(app.key)) available.set(app.key, app);
+  // 親のバイナリ・権限を使う独立した起動口。保存するのは親の成果物だけ。
+  const entries = (parent: InstalledApp): InstalledApp[] => [parent, ...Object.entries(parent.manifest.sub ?? {}).map(([id, sub]) => ({
+    ...parent,
+    key: `${parent.key}.${normalizeAppIdentifier(id)}`,
+    parentKey: parent.key,
+    sub: normalizeAppIdentifier(id),
+    listed: sub.listed ?? true,
+    icon: parent.subIcons?.[id],
+    manifest: { ...parent.manifest, id: `${parent.manifest.id}.${normalizeAppIdentifier(id)}`, name: sub.name, icon: sub.icon, roles: sub.roles, sub: undefined },
+  }))];
+  const parents = [...available.values()];
+  for (const parent of parents) for (const entry of entries(parent).slice(1)) {
+    if (available.has(entry.key)) throw new Error(`アプリの ID が重複しています: ${entry.key}`);
+    available.set(entry.key, entry);
+  }
   // 役割の割り当ては 2 段。名乗った（manifest.roles）アプリが候補になり、設定、ブートの既定、入手元が system の順で選ぶ
   const holders = (role: string) => [...available.values()].filter(app => app.manifest.roles?.includes(role));
   const candidates = (role: string) => ASSIGNABLE_ROLES.includes(role) ? holders(role) : [];
@@ -204,7 +231,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre") };
   let home = assigned.home;
   let cadre = assigned.cadre;
-  const apps = installedApps.filter(app => !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
+  const apps = installedApps.flatMap(entries).filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
   const updateAvailable = options.update !== undefined;
   let saving = Promise.resolve();
   const saveSettings = () => {
@@ -394,11 +421,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (!sessions.has(started) || stopped) return;
       // アプリごとのデータの読み込みに失敗したら、storage だけ載せない
       // 前の起動で積んだ書き込みを待ってから読む（古いスナップショットを渡さない）
-      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(installed.manifest.id)).catch(() => undefined) : undefined;
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(installed.parentKey ?? installed.key)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
       const updateAtStart = options.update?.snapshot?.();
       const mounted = await startProcess(installed.wasm, {
+        sub: installed.sub,
         declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
@@ -426,7 +454,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         grants: {
           denied: api.denied,
-          ...(api.keys.has("apps") ? { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) } : {}),
+          ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
           ...(storage ? { storage } : {}),
         },
@@ -441,12 +469,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onUpdate() { if (api.keys.has("os")) void options.update?.apply().catch(report); },
         onStorage(name: string, value: string | null) {
           if (!api.keys.has("storage")) return;
-          saving = saving.then(() => options.store.data.write(installed.manifest.id, name, value)).catch(report);
+          saving = saving.then(() => options.store.data.write(installed.parentKey ?? installed.key, name, value)).catch(report);
         },
       });
       if (!sessions.has(started) || stopped) { mounted.stop(); return; }
       started.view = options.ui.present({ id: started.id, app: installed, home: atHome,
-        apps: api.keys.has("apps") ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
+        apps: api.keys.has("apps") ? apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) : undefined,
       }, mounted);
       renderBar();
       await mounted.begin();
@@ -502,10 +530,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     cadreSession = session;
     try {
       const api = apiOf(selectedCadre);
-      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedCadre.manifest.id)).catch(() => undefined) : undefined;
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedCadre.parentKey ?? selectedCadre.key)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (cadreSession !== session || stopped) return;
       const mounted = await startProcess(selectedCadre.wasm, {
+        sub: selectedCadre.sub,
         declarative: selectedCadre.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
@@ -541,11 +570,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           denied: api.denied,
           cadre: cadreSnapshot(),
           ...(storage ? { storage } : {}),
-          ...(api.keys.has("apps") ? { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) } : {}),
+          ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
         },
         onStorage(name, value) {
           if (!api.keys.has("storage")) return;
-          saving = saving.then(() => options.store.data.write(selectedCadre.manifest.id, name, value)).catch(report);
+          saving = saving.then(() => options.store.data.write(selectedCadre.parentKey ?? selectedCadre.key, name, value)).catch(report);
         },
         onCadreOpen(id) {
           const target = [...sessions].find(s => s.id === id && !s.home && !s.closing);
@@ -573,7 +602,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (cadreSession !== session || stopped) { mounted.stop(); return; }
       session.view = options.ui.present({
         id: session.id, app: selectedCadre, home: false, cadre: true,
-        apps: api.keys.has("apps") ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
+        apps: api.keys.has("apps") ? apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) : undefined,
       }, mounted);
       await mounted.begin();
       if (cadreSession !== session || stopped) { mounted.stop(); session.view.remove(); return; }

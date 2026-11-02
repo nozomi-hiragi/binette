@@ -48,7 +48,7 @@ async function fixture(compiler?: Uint8Array) {
 
 Deno.test("検証した ESM を独立 Worker で読み、ソースを保存した場所へ成果物を残し AppStore から起動する", async () => {
   const { tree, distribution } = await fixture();
-  const installed = await buildStoredApp(tree, distribution, manifest.id, "local", { workerUrl });
+  const installed = await buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl });
   const stored = await createAppStore(tree).get(installed.key);
   assert(stored);
   assertEquals(stored.manifest, manifest);
@@ -66,11 +66,11 @@ Deno.test("startSystem の read 経路も browserBuild の Worker でビルド�
   const presented: string[] = [];
   const errors: unknown[] = [];
   const system = await startSystem({
-    apps: [{ source: "local", read: path => Promise.resolve(sources[path]!) }],
+    apps: [{ source: "https://example.test/local/", read: path => Promise.resolve(sources[path]!) }],
     browserBuild: { distribution, workerUrl }, store: createAppStore(tree),
     ui: { update() {}, report(error) { errors.push(error); }, present({ app }) { presented.push(app.manifest.id); return { remove() {} }; } },
   });
-  try { await system.open('["local","source-app"]'); assertEquals(presented, [manifest.id]); }
+  try { await system.open("https://example.test/local/#source-app"); assertEquals(presented, [manifest.id]); }
   finally { system.stop(); }
   assertEquals(errors.map(String), ["Error: ホームのシステムアプリがありません。"]);
 });
@@ -100,21 +100,21 @@ Deno.test("asc と Réplique の欠損・改ざん・目録外は Worker の生�
 
 Deno.test("コンパイラの不正な ESM と AS エラーは保存せず次のビルドでやり直せる", async () => {
   const invalid = await fixture(encoder.encode("export const main = 1;"));
-  await assertRejects(() => buildStoredApp(invalid.tree, invalid.distribution, manifest.id, "local", { workerUrl }), Error, "ESM が不正");
+  await assertRejects(() => buildStoredApp(invalid.tree, invalid.distribution, manifest.id, "https://example.test/local/", { workerUrl }), Error, "ESM が不正");
   const { tree, distribution } = await fixture();
   await tree.write("/apps/source-app/src/main.ts", encoder.encode('export const bad: i32 = "文字";'));
-  await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, "local", { workerUrl }), Error, "TS2322");
+  await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl }), Error, "TS2322");
   assertEquals((await createAppStore(tree).list()).length, 0);
   assertEquals(await tree.read("/apps/source-app/build/app.wasm"), undefined);
   await tree.write("/apps/source-app/src/main.ts", encoder.encode(source));
-  assert(WebAssembly.validate(new Uint8Array((await buildStoredApp(tree, distribution, manifest.id, "local", { workerUrl })).wasm)));
+  assert(WebAssembly.validate(new Uint8Array((await buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl })).wasm)));
 });
 
 Deno.test("保存先と異なる ID やフォルダ外の入口は成果物を保存しない", async () => {
   for (const change of [{ id: "different" }, { entry: { as: "../outside.ts" } }]) {
     const { tree, distribution } = await fixture();
     await tree.write("/apps/source-app/app.json", encoder.encode(JSON.stringify({ ...manifest, ...change })));
-    await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, "local", { workerUrl }));
+    await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl }));
     assertEquals((await createAppStore(tree).list()).length, 0);
     assertEquals(await tree.read("/apps/source-app/build/app.wasm"), undefined);
   }
@@ -122,11 +122,11 @@ Deno.test("保存先と異なる ID やフォルダ外の入口は成果物を�
 
 Deno.test("保存トランザクションの失敗では以前の成果物と記録を残す", async () => {
   const { tree, distribution } = await fixture();
-  const before = await buildStoredApp(tree, distribution, manifest.id, "local", { workerUrl });
+  const before = await buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl });
   const previous = await tree.read("/apps/source-app/build/app.wasm");
   const failing: FileTree = { ...tree, writeFiles() { return Promise.reject(new Error("保存失敗")); } };
   await tree.write("/apps/source-app/src/value.ts", encoder.encode('export const value: string = "変更";'));
-  await assertRejects(() => buildStoredApp(failing, distribution, manifest.id, "local", { workerUrl }), Error, "保存失敗");
+  await assertRejects(() => buildStoredApp(failing, distribution, manifest.id, "https://example.test/local/", { workerUrl }), Error, "保存失敗");
   assertEquals(await createAppStore(tree).get(before.key), before);
   assertEquals(await tree.read("/apps/source-app/build/app.wasm"), previous);
 });
@@ -151,4 +151,13 @@ Deno.test("時間切れ・中止・送信失敗・Worker 異常でも Worker を
     }));
     assertEquals(terminated, 1);
   }
+});
+
+Deno.test("保存したビルド結果はサブアプリの SVG も完全 ID の記録へ残す", async () => {
+  const { tree, distribution } = await fixture();
+  await tree.write("/apps/source-app/app.json", encoder.encode(JSON.stringify({ ...manifest, sub: { child: { name: "子", icon: "child.svg" } } })));
+  await tree.write("/apps/source-app/child.svg", encoder.encode("<svg>子</svg>"));
+  const installed = await buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl });
+  assertEquals(installed.key, "https://example.test/local/#source-app");
+  assertEquals((await createAppStore(tree).get(installed.key))!.subIcons, { child: "<svg>子</svg>" });
 });

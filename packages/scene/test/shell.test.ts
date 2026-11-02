@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { createMemoryAppStore, installedAppKey, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
+import { createMemoryAppStore, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
 import { createShellUi } from "../src/index.ts";
 import { mountSystem as mountShell, operate, systemView } from "./system-helper.ts";
@@ -20,7 +20,7 @@ const homeApp = { source: "binette:system", prebuilt: builtHome };
 const fixtures: InstalledApp[] = [];
 for (const app of apps) {
   const built = await buildApp(app.read, { libraries });
-  fixtures.push({ manifest: built.manifest, html: built.html, wasm: built.wasm, key: installedAppKey(app.source, built.manifest.id), source: app.source,
+  fixtures.push({ manifest: built.manifest, html: built.html, wasm: built.wasm, key: built.manifest.id, source: app.source,
     icon: await app.read(built.manifest.icon!), installedAt: 1 });
 }
 async function savedStore(): Promise<AppStore> {
@@ -93,6 +93,17 @@ function heldWorker() {
   };
 }
 
+Deno.test("ホームは表示するサブアプリだけを一覧に載せる", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const parent = { ...fixtures[0]!, manifest: { ...fixtures[0]!.manifest, id: "parent", sub: {
+    visible: { name: "表示する入口" }, hidden: { name: "隠す入口", listed: false },
+  } } };
+  const shell = await mountShell(element, { apps: [homeApp, { source: "binette:system", prebuilt: parent }], store: createMemoryAppStore(), createWorker: worker.createWorker });
+  try {
+    assertEquals([...element.querySelectorAll<HTMLButtonElement>("[data-bina-key^=home-tile-]")].map(tile => tile.textContent), ["設定", "表示する入口"]);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
 Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM が残る", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers();
   const errors: unknown[] = []; const store = createMemoryAppStore();
@@ -129,9 +140,9 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
 });
 
 Deno.test("ホームが無い・system でないと画面と onError に知らせる", async () => {
-  for (const source of ["elsewhere", "binette:system"]) {
+  for (const source of ["https://example.com/apps/", "binette:system"]) {
     const window = new Window(); const element = elementIn(window); const errors: unknown[] = [];
-    const prebuilt = source === "elsewhere" ? builtHome : fixtures[0]!;
+    const prebuilt = source !== "binette:system" ? { ...builtHome, manifest: { ...builtHome.manifest, id: "home" } } : fixtures[0]!;
     const shell = await mountShell(element, { apps: [{ source, prebuilt }], store: createMemoryAppStore(), onError: (e) => errors.push(e) });
     try { assertEquals(errors.length, 1); assertEquals(element.querySelector("[role=status]")!.textContent, "ホームのシステムアプリがありません。"); }
     finally { shell.stop(); await window.happyDOM.close(); }
@@ -324,7 +335,7 @@ Deno.test("Apps は名前を文字コード順に安全に並べ、ホーム候�
   const window = new Window(); const element = elementIn(window);
   const names = ["設定", "a", "Z", '<img src=x onerror="alert(1)">', "A", "あ"];
   const listing = names.map((name, i) => ({ source: "binette:system", prebuilt: { ...fixtures[0]!, manifest: { ...fixtures[0]!.manifest, id: `app-${i}`, name } } }));
-  const other = { source: "elsewhere", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "other", name: "別のホーム" } } };
+  const other = { source: "https://example.com/apps/", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "other", name: "別のホーム" } } };
   const shell = await mountShell(element, { apps: [homeApp, ...listing, other], store: createMemoryAppStore(), homeRetryWindow: 0,
     createWorker() { throw new Error("ホームの起動失敗"); } });
   try {
@@ -411,7 +422,7 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
 });
 
 Deno.test("os は system の役割 settings に割り当てたアプリだけに届き、ほかのアプリの辞書には載らない", async () => {
-  for (const [source, roles] of [["elsewhere", ["settings"]], ["binette:system", undefined]] as const) {
+  for (const [source, roles] of [["https://example.com/apps/", ["settings"]], ["binette:system", undefined]] as const) {
     const window = new Window(); const element = elementIn(window); const worker = workers(); const errors: unknown[] = [];
     const fixture = fixtures[0]!;
     const app = { source, prebuilt: { ...fixture, manifest: { ...fixture.manifest, roles: roles as string[] | undefined } } };
@@ -472,7 +483,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
 Deno.test("設定した Stop までの時間は、残っているインスタンスの次の Pause から効く", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
   const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker, stopDelay: 1000 });
-  const key = installedAppKey(homeApp.source, builtHome.manifest.id);
+  const key = builtHome.manifest.id;
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
@@ -493,8 +504,8 @@ Deno.test("設定した Stop までの時間は、残っているインスタン
 
 Deno.test("ホームの選択を保存し、前のホームを User・Os で Destroy し、次のホームに apps を渡す", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
-  const other = { source: "elsewhere", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "other-home", name: "別のホーム" } } };
-  const otherKey = installedAppKey(other.source, other.prebuilt.manifest.id);
+  const other = { source: "https://example.com/apps/", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "other-home", name: "別のホーム" } } };
+  const otherKey = `${other.source}#${other.prebuilt.manifest.id}`;
   const options = { apps: [homeApp, ...apps, other], store, libraries, createWorker: worker.createWorker };
   let shell = await mountShell(element, options);
   try {
@@ -507,7 +518,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
     assert(homes()[0]!.getAttribute("aria-pressed") !== "true");
     assertEquals(homes()[1]!.textContent, "別のホーム✓");
     assertEquals((await store.system.getSettings())!.roles, { home: otherKey });
-    const old = (await store.system.getLast(installedAppKey(homeApp.source, builtHome.manifest.id)))!;
+    const old = (await store.system.getLast(builtHome.manifest.id))!;
     assertEquals({ state: old.state, done: old.done, reason: old.reason }, { state: 6, done: true, reason: { kind: 0, cause: 0 } });
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=home-tile-]").length === 2);
