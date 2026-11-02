@@ -20,7 +20,13 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
   /** 役割の既定の割り当て（役割 → installedAppKey）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
   roles?: Record<string, string>;
   /** 新しい版の `/system` があるとき、設定アプリの「更新」で入れ替える処理 */
-  update?: { apply(): Promise<void> };
+  update?: {
+    apply(): Promise<void>;
+    check?(): Promise<void>;
+    openRecovery?(): void;
+    snapshot?(): { phase: string; current: string; next: string; available: boolean };
+    subscribe?(listener: () => void): () => void;
+  };
   store: AppStore;
   ui: SystemUi;
   homeRetryWindow?: number;
@@ -268,7 +274,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       roles: Object.fromEntries(Object.entries(assigned).flatMap(([role, app]) => app ? [[role, app.key]] : [])),
       candidates: Object.fromEntries(ASSIGNABLE_ROLES.map(role => [role, candidates(role).map(app => ({ id: app.key, name: app.manifest.name }))])),
       launches,
-      updateAvailable,
+      updateAvailable: options.update?.snapshot?.().available ?? updateAvailable,
+      updateState: options.update?.snapshot?.(),
     };
   };
   const shellSnapshot = (): ShellSnapshot => {
@@ -390,6 +397,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(installed.manifest.id)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
+      const updateAtStart = options.update?.snapshot?.();
       const mounted = await startProcess(installed.wasm, {
         declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
@@ -428,6 +436,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         onSet(name: string, value: number) { if (api.keys.has("os")) setSetting(name, value); },
         onAssign(role: string, i: number) { if (api.keys.has("os")) void selectRole(role, i).catch(report); },
+        onOpenRecovery() { if (api.keys.has("os")) options.update?.openRecovery?.(); },
+        onCheckUpdate() { if (api.keys.has("os")) void options.update?.check?.().catch(report); },
         onUpdate() { if (api.keys.has("os")) void options.update?.apply().catch(report); },
         onStorage(name: string, value: string | null) {
           if (!api.keys.has("storage")) return;
@@ -442,6 +452,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await mounted.begin();
       if (!sessions.has(started) || stopped) { mounted.stop(); started.view.remove(); return; }
       started.mounted = mounted;
+      if (api.keys.has("os") && JSON.stringify(updateAtStart) !== JSON.stringify(options.update?.snapshot?.())) mounted.syncOs?.(osSnapshot(launches));
       mounted.setStopDelay(settings.stopDelay);
       started.startedAt = performance.now();
       mounted.setFrozen(frozen);
@@ -587,6 +598,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       }
     }
   }
+  const unsubscribeUpdate = options.update?.subscribe?.(() => {
+    for (const session of sessions) if (apiOf(session.installed).keys.has("os")) {
+      session.mounted?.syncOs?.(osSnapshot([]));
+    }
+  });
   renderBar();
   if (!home) report(new Error("ホームのシステムアプリがありません。"));
   if (shell) {
@@ -627,6 +643,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     stop() {
       if (stopped) return;
       stopped = true;
+      unsubscribeUpdate?.();
       generation++;
       clearTimeout(restartTimer);
       clearTimeout(shellRestartTimer);

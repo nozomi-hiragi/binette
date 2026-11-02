@@ -3,10 +3,10 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 const source = await Deno.readTextFile(new URL("../public/sw.js", import.meta.url));
 const BASE = "https://example.test/binette/";
 const kernelHash = new Uint8Array(await crypto.subtle.digest("SHA-384", new TextEncoder().encode("シェル:./regie.js")));
-const ENTRY = `<script integrity="sha384-${btoa(String.fromCharCode(...kernelHash))}" type="module" src="./regie.js"></script>`;
-const CACHE = "binette-v0.2.0-3";
+const ENTRY = `<meta name="binette-kernel" content="binette-v0.2.0-4"><script integrity="sha384-${btoa(String.fromCharCode(...kernelHash))}" type="module" src="./regie.js"></script>`;
+const CACHE = "binette-v0.2.0-4";
 type Fetcher = (request: Request) => Promise<Response>;
-type TestEvent = { request?: Request; waitUntil(promise: Promise<unknown>): void; respondWith(promise: Promise<Response>): void };
+type TestEvent = { data?: unknown; ports?: { postMessage(value: unknown): void }[]; request?: Request; waitUntil(promise: Promise<unknown>): void; respondWith(promise: Promise<Response>): void };
 
 function setup(base = BASE) {
   const files = new Map<string, Uint8Array>();
@@ -81,6 +81,7 @@ function setup(base = BASE) {
   const caches = {
     open(name: string) { return Promise.resolve(open(name)); },
     keys() { return Promise.resolve([...stored.keys()]); },
+    has(name: string) { return Promise.resolve(stored.has(name)); },
     delete(name: string) { return Promise.resolve(stored.delete(name)); },
   };
   // 実際に配る classic worker を、グローバルを共有せずに実行する
@@ -88,10 +89,10 @@ function setup(base = BASE) {
     requests.push(request.url);
     return network(request);
   });
-  function dispatch(type: string, request?: Request) {
+  function dispatch(type: string, request?: Request, data?: unknown, ports?: TestEvent["ports"]) {
     const pending: Promise<unknown>[] = [];
     let response: Promise<Response> | undefined;
-    handlers.get(type)!({ request, waitUntil(promise) { pending.push(promise); }, respondWith(promise) { response = promise; } });
+    handlers.get(type)!({ request, data, ports, waitUntil(promise) { pending.push(promise); }, respondWith(promise) { response = promise; } });
     return { response, done: () => Promise.all(pending) };
   }
   function request(path: string, navigate = false, method = "GET") {
@@ -110,16 +111,25 @@ function setup(base = BASE) {
   };
 }
 
-Deno.test("SW はサブパスのシェルを入れて待機を飛ばし、古い binette キャッシュだけを消す", async () => {
+Deno.test("SW はサブパスのシェルを準備して待機し、有効になったら組にならない旧版キャッシュを消す", async () => {
   const sw = setup();
   await sw.dispatch("install").done();
-  assertEquals(sw.skipped, 1);
+  assertEquals(sw.skipped, 0);
   assert(sw.reloads.length > 0 && sw.reloads.every(cache => cache === "reload"));
-  assertEquals([...sw.stored.get(CACHE)!.keys()], ["", "index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js"].map(path => BASE + path));
+  assertEquals([...sw.stored.get(CACHE)!.keys()], ["", "index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js", "build-worker.js"].map(path => BASE + path));
   sw.open("binette-old"); sw.open("another-app");
   await sw.dispatch("activate").done();
   assertEquals([...sw.stored.keys()], [CACHE, "another-app"]);
   assertEquals(sw.claimed, 1);
+});
+
+Deno.test("SW は保存済み /system が組にしている旧版キャッシュを残す", async () => {
+  const sw = setup();
+  await sw.dispatch("install").done();
+  sw.open("binette-old"); sw.open("binette-older");
+  sw.files.set("/system/.manifest.json", new TextEncoder().encode(JSON.stringify({ version: "old", kernel: "binette-old", files: [] })));
+  await sw.dispatch("activate").done();
+  assertEquals([...sw.stored.keys()], [CACHE, "binette-old"]);
 });
 
 Deno.test("SW はオンライン更新中も入口とカーネルの同じ組を返し、個別に更新しない", async () => {
@@ -293,4 +303,36 @@ Deno.test("SW は曖昧な fs パスと層の迂回を拒否し、URL の復号�
     assertEquals((await response.arrayBuffer()).byteLength, 0);
   }
   assertEquals(sw.requests, []);
+});
+
+Deno.test("SW は自身の印を返し、一致する有効化要求だけを受ける", async () => {
+  const sw = setup();
+  let response: unknown;
+  await sw.dispatch("message", undefined, { type: "binette.identity" }, [{ postMessage(value) { response = value; } }]).done();
+  assertEquals(response, { kernel: CACHE });
+  await sw.dispatch("message", undefined, { type: "binette.activate", kernel: "wrong" }).done();
+  assertEquals(sw.skipped, 0);
+  await sw.dispatch("message", undefined, { type: "binette.activate", kernel: CACHE }).done();
+  assertEquals(sw.skipped, 1);
+});
+
+Deno.test("SW は保存済み system が選んだ旧版キャッシュからカーネルの組を返す", async () => {
+  const sw = setup();
+  await sw.dispatch("install").done();
+  await sw.open("binette-old").put("index.html", new Response("旧版の入口"));
+  await sw.open("binette-old").put("regie.js", new Response("旧版のカーネル"));
+  sw.files.set("/system/.manifest.json", new TextEncoder().encode(JSON.stringify({ version: "old", kernel: "binette-old", files: [] })));
+  assertEquals(await (await sw.request("screen", true).response!).text(), "旧版の入口");
+  assertEquals(await (await sw.request("regie.js").response!).text(), "旧版のカーネル");
+});
+
+Deno.test("SW は別の印の入口を install しない", async () => {
+  const changed = source.replace('const CACHE = "binette-v0.2.0-4";', 'const CACHE = "binette-other";');
+  let install: ((event: { waitUntil(promise: Promise<unknown>): void }) => void) | undefined;
+  const worker = { location: new URL("sw.js", BASE), addEventListener(type: string, listener: typeof install) { if (type === "install") install = listener; } };
+  const cache = { addAll: () => Promise.resolve(), match: () => Promise.resolve(new Response(ENTRY)) };
+  new Function("self", "caches", changed)(worker, { open: () => Promise.resolve(cache) });
+  let pending: Promise<unknown> | undefined;
+  install!({ waitUntil(promise) { pending = promise; } });
+  await assertRejects(() => pending!, Error, "入口と Service Worker の印が一致しません");
 });

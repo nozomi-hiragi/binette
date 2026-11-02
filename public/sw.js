@@ -5,8 +5,8 @@
 
 /** @type {ServiceWorkerGlobalScope} */
 const worker = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
-const CACHE = "binette-v0.2.0-3";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./regie.js", "./regie-worker.js"];
+const CACHE = "binette-v0.2.0-4";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./regie.js", "./regie-worker.js", "./build-worker.js"];
 
 worker.addEventListener("install", event => {
   event.waitUntil((async () => {
@@ -16,7 +16,11 @@ worker.addEventListener("install", event => {
     // 配置の途中に入口と JS の版が混ざっていたら、新しい SW を有効にしない。
     const html = await cache.match(new URL("./index.html", worker.location.href));
     const kernel = await cache.match(new URL("./regie.js", worker.location.href));
-    const script = (await html?.clone().text())?.match(/<script\b[^>]*\bsrc="\.\/regie\.js"[^>]*>/)?.[0];
+    const entry = await html?.clone().text();
+    if (entry?.match(/<meta\b[^>]*name="binette-kernel"[^>]*content="([^"]+)"/)?.[1] !== CACHE) {
+      throw new Error("入口と Service Worker の印が一致しません。");
+    }
+    const script = entry?.match(/<script\b[^>]*\bsrc="\.\/regie\.js"[^>]*>/)?.[0];
     const integrity = script?.match(/\bintegrity="(sha384-[A-Za-z0-9+/]+={0,2})"/)?.[1];
     if (!integrity || !kernel || !html) throw new Error("入口の SRI またはカーネルがありません。");
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-384", await kernel.arrayBuffer()));
@@ -25,17 +29,41 @@ worker.addEventListener("install", event => {
     }
     // / と index.html も、同じ応答へ揃える。
     await cache.put(new URL("./", worker.location.href), html);
-    await worker.skipWaiting();
+    // 初回は通常のライフサイクルで有効になる。既存の版があれば合図まで待機する。
   })());
 });
 
 worker.addEventListener("activate", event => {
   event.waitUntil((async () => {
-    const names = await caches.keys();
-    await Promise.all(names.filter(name => name.startsWith("binette-") && name !== CACHE).map(name => caches.delete(name)));
     await worker.clients.claim();
+    // 実行中の版と、保存済み /system が組にしている版（切替に失敗して戻した場合）だけを残し、ほかの古い版は消す
+    const keep = new Set([CACHE, await savedKernel()]);
+    const names = await caches.keys();
+    await Promise.all(names.filter(name => name.startsWith("binette-") && !keep.has(name)).map(name => caches.delete(name)));
   })());
 });
+
+worker.addEventListener("message", event => {
+  if (event.data?.type === "binette.identity") event.ports[0]?.postMessage({ kernel: CACHE });
+  if (event.data?.type === "binette.activate" && event.data.kernel === CACHE) event.waitUntil(worker.skipWaiting());
+});
+
+/** 保存済み /system の目録が組にしているカーネルの印。無ければ undefined */
+async function savedKernel() {
+  try {
+    const [saved] = await readFiles(["/system/.manifest.json"]);
+    const kernel = saved && JSON.parse(new TextDecoder().decode(saved)).kernel;
+    if (typeof kernel === "string" && kernel.startsWith("binette-")) return kernel;
+  } catch { /* 初回の DB 未作成時は実行中の版を使う。 */ }
+  return undefined;
+}
+
+/** 保存済み /system と同じ印のカーネルを返す。切替直後の終了にも耐える。 */
+async function selectedCache() {
+  const kernel = await savedKernel();
+  if (kernel !== undefined && await caches.has(kernel)) return caches.open(kernel);
+  return caches.open(CACHE);
+}
 
 /** @param {Request} request @param {Cache} cache */
 async function refresh(request, cache) {
@@ -181,7 +209,7 @@ worker.addEventListener("fetch", event => {
     event.respondWith(fileResponse(url.pathname.slice(`${base.pathname}fs`.length)));
     return;
   }
-  const cache = caches.open(CACHE);
+  const cache = selectedCache();
   if (request.mode === "navigate") {
     event.respondWith(cache.then(cache => fixedResponse(cache, new URL("./index.html", worker.location.href))));
     return;

@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { kernelVersion, systemLabel } from "./system-metadata.ts";
 
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
@@ -59,7 +60,26 @@ export function kernelIntegrity(): Plugin {
       const stamp = hex(await crypto.subtle.digest("SHA-256", both)).slice(0, 16);
       const stamped = source.replace(/const CACHE = "([^"]+)";/, (_line, name) => `const CACHE = "${name}-${stamp}";`);
       if (stamped === source) throw new Error("sw.js にキャッシュの版がありません。");
+      const kernel = kernelVersion(stamped);
+      // 印を含めてハッシュすると循環するので、上で印のない HTML をハッシュしてから埋める。
+      const htmlPath = `${outDir}/index.html`;
+      const html = await Deno.readTextFile(htmlPath);
+      const escaped = kernel.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+      await Deno.writeTextFile(htmlPath, html.replace("</head>", `<meta name="binette-kernel" content="${escaped}"></head>`));
       await Deno.writeTextFile(sw, stamped);
+      // system の内容ハッシュは維持し、生成済み SW の版で組の情報を確定する。
+      const manifestPath = `${outDir}/manifest.json`;
+      let manifest;
+      try {
+        manifest = JSON.parse(await Deno.readTextFile(manifestPath));
+      } catch (error) {
+        if (error instanceof Deno.errors.NotFound) return;
+        throw error;
+      }
+      const { version } = JSON.parse(await Deno.readTextFile(new URL("../packages/regie/deno.json", import.meta.url)));
+      manifest.kernel = kernel;
+      manifest.label = await systemLabel(version, manifest.version, manifest.kernel);
+      await Deno.writeTextFile(manifestPath, JSON.stringify(manifest));
     },
   };
 }

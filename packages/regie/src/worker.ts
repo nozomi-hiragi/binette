@@ -117,6 +117,11 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         system().roles[name] = candidateAt(name, i).id;
         scope.postMessage({ type: "os.assign", role: name, i });
       },
+      "os.updatePhase": () => writeString(system().updateState?.phase ?? "idle"),
+      "os.updateCurrent": () => writeString(system().updateState?.current ?? ""),
+      "os.updateNext": () => writeString(system().updateState?.next ?? ""),
+      "os.openRecovery": () => { system(); scope.postMessage({ type: "os.openRecovery" }); },
+      "os.checkUpdate": () => { system(); scope.postMessage({ type: "os.checkUpdate" }); },
       "os.updateAvailable": () => system().updateAvailable,
       "os.update": () => {
         system();
@@ -270,8 +275,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         ops = [];
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
       }
-    } else if (data.type === "shell.sync") {
-      shell = data.shell;
+    } else if (data.type === "shell.sync" || data.type === "os.sync") {
+      if (data.type === "os.sync" && data.os) os = { ...data.os, launches: os?.launches ?? data.os.launches };
+      else shell = data.shell;
       if (instance && typeof instance.exports.__bina_shell_sync === "function") {
         try {
           (instance.exports.__bina_shell_sync as () => void)();

@@ -26,7 +26,7 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 入口は直下の `index.html`・`vite.config.ts` と `src/main.ts` です。書き出しとホームの表示は、システムアプリ、同梱アプリの順に、それぞれフォルダ名を UTF-16 コード単位の辞書順（`<`・`>`）で比べます。並び順と並べ替えの仕様は未決です。`deno task check` は生成物が無くても通り、`deno task test` は `dist/` と `.binapp/` を除外します。
 
-`public/` の手書きの `sw.js`・`manifest.webmanifest`・`icon.svg` は配布用ディレクトリにコピーされます。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。`deno task build` は `regie.js`・`regie-worker.js`・`build-worker.js` のハッシュを `sw.js` のキャッシュの版（`binette-v0.2.0-3-<ハッシュ>`）に足すので、カーネルが変われば新しい SW に切り替わります。`sw.js` 自体の作りを変えたときは `binette-v0.2.0-3` の版も変えてください。
+`public/` の手書きの `sw.js`・`manifest.webmanifest`・`icon.svg` は配布用ディレクトリにコピーされます。Service Worker は `src/main.ts` が本番だけ相対 URL と scope `./` で登録し、`deno task start` では登録しません。`deno task check` は SW を `deno check --no-config public/sw.js` で別に検査し、ファイル内の webworker の型を使います。DOM の型と混ぜないためです。`deno task build` は入口とカーネルのハッシュを `sw.js` のキャッシュの版に足し、組になる目録の `kernel` と人が読む `label` を記録します。新しい SW は待機し、設定から準備済みの `/system` と一緒に更新します。`sw.js` 自体の作りを変えたときはキャッシュの基本の版も変えてください。
 
 設定は Binette のシステムアプリ `apps/settings` が持ちます（決定）。今はホームの選択、新しい版への更新、デバッグ値、起動の履歴で、ほかの項目は未決です。ホームもシステムアプリ `apps/home`（`"roles": ["home"]`）です。役割は名乗るだけでは効かず、`system/boot.json` の既定と設定で割り当てたアプリにだけ、その役割の API が `onCreate(last, api)` の辞書で届きます（[docs/spec/roles.md](docs/spec/roles.md)）。Régie が常駐のシステムアプリ `apps/shell`（`"roles": ["shell"]`）を最初に起動し、シェルが `ShellApi.openHome()` でホームを開きます。シェルは AS の Décor でホームバーと `appArea()` を描き、Scene はその領域にアプリを配置します。シェルはスタックに数えず、落ち続けたときだけ Scene が表示領域とホームボタンの最低限の大枠を出します。
 

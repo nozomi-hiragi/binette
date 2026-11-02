@@ -38,3 +38,11 @@
   [data-bina-key^="settings-value-"] { min-width: 36px; padding: 0 4px; }
   [data-bina-key="stepper"] > button { min-width: 28px; }
 }
+
+/* 更新の説明と操作を別の行に置き、狭い幅でもボタンの文字を折らない。 */
+[data-bina-key="settings-root"] [data-bina-key="update-card"] { padding: 16px; gap: 12px; }
+[data-bina-key="settings-root"] [data-bina-key="update-status"] { padding: 0; min-height: 0; }
+[data-bina-key="update-version"] { min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.5; font-variant-numeric: tabular-nums; }
+[data-bina-key="update-actions"] { gap: 8px; flex-wrap: wrap; align-items: center; }
+[data-bina-key="update-actions"] button, [data-bina-key="open-recovery"] { flex: none; white-space: nowrap; }
+[data-bina-key="open-recovery"] { align-self: flex-start; }
