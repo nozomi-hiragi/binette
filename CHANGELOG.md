@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- 仕様: アプリの識別子と提供リストを追加する（[docs/spec/app-id.md](docs/spec/app-id.md)、実装はまだ）。完全な ID は提供リストの URL ＋ `#` ＋ 識別子。提供リストは HTML で、`<link rel="binette-apps">` の JSON か埋め込みの JSON を読む。Cadre（ユーザー向けには「枠アプリ」）を独立したアプリにし、ホームと設定をそのサブアプリにする
+
 - 破壊的変更: 役割・API キー `shell` を `cadre`、`ShellApi`・`ShellSnapshot`・`ShellInstance` を `CadreApi`・`CadreSnapshot`・`CadreInstance` に変更し、関連する起動・同期 API と Worker の `shell.*`・`__bina_shell_sync` も `cadre.*`・`__bina_cadre_sync` に改名する。システムアプリと boot の役割も `shell` から `cadre` に変える。
 
 - カーネルと `/system` の更新を設定の「ソフトウェア・アップデート」にまとめる。目録に表示用の版とカーネルの印を加え、起動時に組を確かめる。目録の確認後、新しい組を裏で取得・検証してから更新する。先取り中と失敗は設定に表示し、失敗したら再試行できる。設定から復旧画面を開ける（目録の形と名前は案）
