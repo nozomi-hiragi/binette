@@ -1540,17 +1540,17 @@
       "npm:vite@8.3.4"
     ],
     "members": {
+      "apps/cadre": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
       "apps/home": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]
       },
       "apps/settings": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
-      "apps/shell": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]

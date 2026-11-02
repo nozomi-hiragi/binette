@@ -7,17 +7,17 @@ import { chooseFromMenu } from "./homebar-helper.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps = await Promise.all(["shell", "home", "settings"].map(async name => ({
+const apps = await Promise.all(["cadre", "home", "settings"].map(async name => ({
   source: "binette:system",
   prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/${name}/${path}`, root)), { libraries }),
 })));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
   while (!condition() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
-  assert(condition(), "シェルの状態が変わりませんでした");
+  assert(condition(), "Cadre の状態が変わりませんでした");
 }
 
-Deno.test("シェルを先に起動し、appArea のホームから設定を開き、ホーム・メニューから閉じても領域を保つ", async () => {
+Deno.test("Cadre を先に起動し、appArea のホームから設定を開き、ホーム・メニューから閉じても領域を保つ", async () => {
   const window = new Window();
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
@@ -25,7 +25,7 @@ Deno.test("シェルを先に起動し、appArea のホームから設定を開�
   let live = 0;
   let resumed = 0;
   const errors: unknown[] = [];
-  const shell = await mountShell(element, { apps, store: createMemoryAppStore(), installed: true,
+  const cadre = await mountShell(element, { apps, store: createMemoryAppStore(), installed: true,
     onError: error => errors.push(error),
     createWorker(): RegieWorker {
       created++; live++;
@@ -72,8 +72,8 @@ Deno.test("シェルを先に起動し、appArea のホームから設定を開�
     await waitFor(() => !settings.isConnected && !home.hidden && live === 2);
     assertEquals(element.querySelector(".bina-ui-appArea"), area);
     assertEquals(errors, []);
-    shell.stop();
+    cadre.stop();
     assertEquals(live, 0);
     assertEquals(element.children.length, 0);
-  } finally { shell.stop(); await window.happyDOM.close(); }
+  } finally { cadre.stop(); await window.happyDOM.close(); }
 });

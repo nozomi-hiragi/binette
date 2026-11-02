@@ -1,9 +1,9 @@
 {
-  "id": "io.github.nozomi-hiragi.binette.shell",
+  "id": "io.github.nozomi-hiragi.binette.cadre",
   "version": "0.1.0",
   "binette": "0.2",
-  "name": "シェル",
-  "roles": ["shell"],
+  "name": "Cadre",
+  "roles": ["cadre"],
   "icon": "icon.svg",
   "entry": {
     "css": "src/style.css",

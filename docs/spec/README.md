@@ -12,7 +12,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | ファイル | 内容 |
 | --- | --- |
 | [boot.md](boot.md) | 起動と配布。カーネルだけを配り、残りを取ってきてブラウザの中のファイルの木に置く形（決定 2026-11-01） |
-| [roles.md](roles.md) | 役割と API。シェル・ホーム・設定もふつうのアプリにし、役割に応じた API を辞書で渡す（決定 2026-11-01） |
+| [roles.md](roles.md) | 役割と API。Cadre・ホーム・設定もふつうのアプリにし、役割に応じた API を辞書で渡す（決定 2026-11-01） |
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
 | [core.md](core.md) | `@binette/core`。パッケージの共通物（形式の型と検査、ライフサイクルの番号、DOM 操作の型） |
 | [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ、`App` クラス |
@@ -32,7 +32,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 - アプリは HTML ＋ AssemblyScript（AS）で書く方向で試す。TSX のような書き方（ASX）は後で考える
 - データのバックアップはサーバー側（Coulisses）に任せる
 - カーネルだけを配り、ほかの部品は HTTP で取ってきてブラウザの中に置いて動かす。目的は、アプリの上でアプリや OS の部品を作り・いじれること（決定 2026-11-01、[boot.md](boot.md)）
-- システムの部品（シェル、ホーム、設定）は、役割を持つふつうのアプリにする。シェルは最初に起動し、ホームバーや通知などの大枠と、アプリの表示領域を受け持つ（決定 2026-11-01、[roles.md](roles.md)）
+- システムの部品（Cadre、ホーム、設定）は、役割を持つふつうのアプリにする。Cadre は最初に起動し、ホームバーや通知などの大枠と、アプリの表示領域を受け持つ（決定 2026-11-01、[roles.md](roles.md)）
 - 開発は binette のリポジトリだけで進める。版を固定して JSR に公開してから、EbinaStation（ebina-front・ebina-station）に入れる
 
 ## 呼び名と層（決定）
@@ -90,7 +90,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
      ルートの OS（src/main.ts）
 ```
 
-- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene のうち、アプリの UI の描画と、カーネルが直接描く Apps・復旧画面はカーネルに入る。ホームバーなどの大枠は、役割 `shell` のシステムアプリ（シェル）に移す（決定 2026-11-01、名前は案。[roles.md](roles.md#ホームバー決定-2026-11-01)）
+- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene のうち、アプリの UI の描画と、カーネルが直接描く Apps・復旧画面はカーネルに入る。ホームバーなどの大枠は、役割 `cadre` のシステムアプリ（Cadre）に移す（決定。[roles.md](roles.md#cadre決定-2026-11-01)）
 - 宣言 UI の共通部分は Décor に置く（[decor.md](decor.md)、案）。Décor は core だけに依存し、Régie と Scene がそれぞれ差分と DOM への反映を使う。
 - システムの依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
 - ビルドは Régie に置く（[regie/build.md](regie/build.md)）。何を動かしてよいかの判断と同じ所に置くため。asc は重いので `@binette/regie/build` という別の入口にし、ビルドしない利用者は読まない
@@ -137,7 +137,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | --- | --- |
 | サーバーが配る `.bina` を Scene が再生する | アプリをインストールして、Régie が動かす |
 | アプリの js は同じページで動く（信頼できるアプリだけの前提） | アプリは Worker の WASM で隔離して動かす |
-| シェル `sh` の API | Réplique |
+| Scene のシェル `sh` の API | Réplique |
 | Coulisses は `.bina` と asset を配る | Coulisses はサーバーサイドの処理とバックアップを受け持つ |
 
 - `.bina`、パノプリ、ルーティング、設定画面（`/settings`）をどう引き継ぐかは未決

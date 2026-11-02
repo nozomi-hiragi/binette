@@ -6,7 +6,7 @@ import { isInstalled, mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const shellApp = { source: "binette:system", prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/shell/${path}`, root)), { libraries }) };
+const cadreApp = { source: "binette:system", prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)), { libraries }) };
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();
   port1.start(); port2.start(); serveApp(port1 as never);
@@ -28,11 +28,11 @@ async function fixture(installed?: boolean, prepare?: (window: Window) => void) 
   prepare?.(window);
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
-  // 実際のシェルを起動して Worker 経由のインストール操作を検証する
-  const shell = await mountShell(element, { apps: [shellApp], store: createMemoryAppStore(), installed, createWorker });
+  // 実際の Cadre を起動して Worker 経由のインストール操作を検証する
+  const cadre = await mountShell(element, { apps: [cadreApp], store: createMemoryAppStore(), installed, createWorker });
   await waitFor(() => element.querySelector("[data-bina-key=home]") !== null &&
     (installButton(element) === null) === element.querySelector<HTMLElement>(".bina-shell-live")!.hidden);
-  return { window, element, shell, async close() { shell.stop(); await window.happyDOM.close(); } };
+  return { window, element, cadre, async close() { cadre.stop(); await window.happyDOM.close(); } };
 }
 
 async function waitFor(condition: () => boolean) {
@@ -93,11 +93,11 @@ Deno.test("display-mode の change で透かしとボタンが変わり、stop �
     const query = queries.get("(display-mode: standalone)")!;
     query.matches = true; query.dispatchEvent(new Event("change"));
     await waitFor(() => installButton(f.element) === null && watermark.hidden === true);
-    assert(f.shell.requireInstall("不要な表示"));
+    assert(f.cadre.requireInstall("不要な表示"));
     query.matches = false; query.dispatchEvent(new Event("change"));
     await waitFor(() => installButton(f.element) !== null && !watermark.hidden);
     const detachedButton = installButton(f.element)!;
-    f.shell.stop();
+    f.cadre.stop();
     query.matches = true; query.dispatchEvent(new Event("change"));
     assertEquals(watermark.hidden, false);
     assertEquals(detachedButton.isConnected, false);
@@ -115,7 +115,7 @@ Deno.test("matchMedia が無くてもライブを表示でき、appinstalled で
     f.window.dispatchEvent(new f.window.Event("appinstalled"));
     await waitFor(() => installButton(f.element) === null && !dialog.open);
     assertEquals(f.element.querySelector<HTMLElement>(".bina-shell-live")!.hidden, true);
-    assert(f.shell.requireInstall("インストール後"));
+    assert(f.cadre.requireInstall("インストール後"));
   } finally { await f.close(); }
 });
 
@@ -124,7 +124,7 @@ Deno.test("requireInstall はライブで理由を文字として手順に添え
     const f = await fixture(installed);
     try {
       const reason = '<img src=x onerror="alert(1)">通知にはインストールが必要です。';
-      assertEquals(f.shell.requireInstall(reason), installed);
+      assertEquals(f.cadre.requireInstall(reason), installed);
       const dialog = f.element.querySelector<HTMLDialogElement>("dialog")!;
       assertEquals(dialog.open, !installed);
       assertEquals(dialog.querySelector("img"), null);
@@ -147,7 +147,7 @@ Deno.test("prompt が無ければ短い手順を開き、閉じるボタンで�
     assert(dialog.textContent!.includes("ブラウザのメニュー"));
     dialog.querySelector<HTMLButtonElement>("button")!.click();
     assertEquals(dialog.open, false);
-    f.shell.requireInstall("特別な理由");
+    f.cadre.requireInstall("特別な理由");
     button!.click();
     assertEquals(dialog.open, true);
     await waitFor(() => dialog.querySelector("p")!.hidden === true);
@@ -181,7 +181,7 @@ Deno.test("beforeinstallprompt は標準表示を止め、ボタンで一度だ�
   } finally { await f.close(); }
 });
 
-Deno.test("prompt の失敗は手順で案内し、複数の shell の表示は干渉しない", async () => {
+Deno.test("prompt の失敗は手順で案内し、複数の cadre の表示は干渉しない", async () => {
   const fixtures = await Promise.all([fixture(false), fixture(false)]);
   try {
     await Promise.all(fixtures.map(async f => {

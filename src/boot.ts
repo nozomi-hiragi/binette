@@ -33,7 +33,7 @@ export async function loadBootApps(
   if (
     !boot || typeof boot.roles?.home !== "string" ||
     typeof boot.roles?.settings !== "string" ||
-    typeof boot.roles?.shell !== "string"
+    typeof boot.roles?.cadre !== "string"
   ) {
     throw new Error("boot.json の役割の割り当てが不正です。");
   }
@@ -79,9 +79,9 @@ export async function loadBootApps(
         manifest.roles?.includes("home")
       ) roles.home = key;
       if (
-        source === SYSTEM && manifest.id === boot.roles.shell &&
-        manifest.roles?.includes("shell")
-      ) roles.shell = key;
+        source === SYSTEM && manifest.id === boot.roles.cadre &&
+        manifest.roles?.includes("cadre")
+      ) roles.cadre = key;
       if (coreSettings && manifest.id === boot.roles.settings) roles.settings = key;
       const [wasm, html, css, icon] = await Promise.all([
         required(`${directory}/app.wasm`, coreSettings),
@@ -105,9 +105,9 @@ export async function loadBootApps(
       });
     }
   }
-  if (!roles.home || !roles.settings || !roles.shell) {
+  if (!roles.home || !roles.settings || !roles.cadre) {
     throw new Error(
-      "boot.json に指定されたシェル、ホームまたは設定アプリがありません。",
+      "boot.json に指定された Cadre、ホームまたは設定アプリがありません。",
     );
   }
   return { apps, roles };

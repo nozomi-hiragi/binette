@@ -49,8 +49,8 @@ Deno.test("システムアプリの失敗はフォルダ名を示す", async () 
 Deno.test("実際のシステムアプリは HTML なしで宣言 UI をビルドする", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    assertEquals(await buildFolder(new URL("../apps", import.meta.url).pathname, dir, replique), ["home", "settings", "shell"]);
-    for (const name of ["home", "settings", "shell"]) {
+    assertEquals(await buildFolder(new URL("../apps", import.meta.url).pathname, dir, replique), ["cadre", "home", "settings"]);
+    for (const name of ["home", "settings", "cadre"]) {
       const manifest = JSON.parse(await Deno.readTextFile(`${dir}/${name}/app.json`));
       assertEquals(manifest.entry.html, undefined);
       assertEquals(await Deno.readTextFile(`${dir}/${name}/index.html`), "");
@@ -92,7 +92,7 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     await Deno.writeTextFile(`${dir}/public/sw.js`, 'const CACHE = "binette-v0.2.0-test";');
     await app(`${dir}/apps`, "home");
     await app(`${dir}/apps`, "settings");
-    await app(`${dir}/apps`, "shell");
+    await app(`${dir}/apps`, "cadre");
     await app(`${dir}/bundled`, "home");
     await Deno.mkdir(`${dir}/.binapp/bundled`, { recursive: true });
     await Deno.writeTextFile(`${dir}/.binapp/old.binapp`, "古い");
@@ -103,7 +103,7 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     const first: SystemManifest = JSON.parse(await Deno.readTextFile(`${out}/manifest.json`));
     const contents = await systemManifest(`${out}/system`);
     assertEquals(first, { ...contents, kernel: "binette-v0.2.0-test", label: await systemLabel("0.2.0", contents.version, "binette-v0.2.0-test") });
-    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "home", settings: "settings", shell: "shell" } });
+    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "home", settings: "settings", cadre: "cadre" } });
     assertEquals(await Deno.readTextFile(`${out}/sw.js`), 'const CACHE = "binette-v0.2.0-test";');
     assertEquals(Array.from(Deno.readDirSync(`${dir}/public`), (entry) => entry.name), ["sw.js"]);
     assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp`), (entry) => entry.name).sort(), ["bundled", "keep.txt", "public"]);

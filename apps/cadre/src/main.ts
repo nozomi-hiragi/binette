@@ -1,27 +1,27 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { Api, App, Last, launch, ShellApi } from "jsr:@binette/replique";
+import { Api, App, Last, launch, CadreApi } from "jsr:@binette/replique";
 import { appArea, appIcon, buttonOf, column, menuItem, row, show, text, View } from "jsr:@binette/replique/ui";
 
-// 辞書から取ったシェルの API。ボタンのコールバックは関数なので、グローバルで持つ
-let shellApi: ShellApi | null = null;
+// 辞書から取った Cadre の API。ボタンのコールバックは関数なので、グローバルで持つ
+let cadreApi: CadreApi | null = null;
 
 function goHome(): void {
-  const api = shellApi;
+  const api = cadreApi;
   if (api != null) api.openHome();
 }
 
 function switchToApp(index: i32): void {
-  const api = shellApi;
+  const api = cadreApi;
   if (api != null) api.open(index);
 }
 
 function closeApp(index: i32): void {
-  const api = shellApi;
+  const api = cadreApi;
   if (api != null) api.close(index);
 }
 
 function installBinette(): void {
-  const api = shellApi;
+  const api = cadreApi;
   if (api != null) api.install();
 }
 
@@ -32,19 +32,19 @@ function initial(name: string): string {
   return String.fromCodePoint(trimmed.codePointAt(0)).toUpperCase();
 }
 
-class ShellApp extends App {
+class CadreApp extends App {
   override onCreate(_last: Last, api: Api): void {
-    shellApi = api.get<ShellApi>("shell");
-    const shell = shellApi;
-    if (shell != null) {
-      shell.openHome();
+    cadreApi = api.get<CadreApi>("cadre");
+    const cadre = cadreApi;
+    if (cadre != null) {
+      cadre.openHome();
     }
   }
 
   override build(): View {
-    const api = shellApi;
+    const api = cadreApi;
     if (api == null) {
-      return column([appArea().grow()]).grow().key("shell-root");
+      return column([appArea().grow()]).grow().key("cadre-root");
     }
 
     // 開いているアプリのドック。閉じる操作は × でなく、右クリック・長押しのメニューに置く
@@ -76,10 +76,10 @@ class ShellApp extends App {
     ]).key("homebar");
 
     return column([
-      appArea().grow().key("shell-area"),
+      appArea().grow().key("cadre-area"),
       homebar,
-    ]).grow().key("shell-root");
+    ]).grow().key("cadre-root");
   }
 }
 
-launch(new ShellApp());
+launch(new CadreApp());

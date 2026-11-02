@@ -5,18 +5,18 @@
 [data-bina-key="settings-title"] { margin: 0; font-size: 32px; font-weight: 750; letter-spacing: -.04em; line-height: 1.25; }
 [data-bina-key$="-section"] { gap: 8px; }
 [data-bina-key$="-section"] .bina-ui-heading-2 { margin: 0; padding: 0 16px; color: var(--bina-ui-muted, #6b7280); font-size: 12px; font-weight: 600; line-height: 1.5; letter-spacing: .035em; }
-[data-bina-key$="-card"], [data-bina-key="homes"], [data-bina-key="shells"], [data-bina-key="debug"] { gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--bina-ui-line, #e3e6ea); border-radius: 14px; background: var(--bina-ui-surface, #fff); box-shadow: 0 1px 3px color-mix(in srgb, currentColor 3%, transparent); }
+[data-bina-key$="-card"], [data-bina-key="homes"], [data-bina-key="cadres"], [data-bina-key="debug"] { gap: 0; padding: 0; overflow: hidden; border: 1px solid var(--bina-ui-line, #e3e6ea); border-radius: 14px; background: var(--bina-ui-surface, #fff); box-shadow: 0 1px 3px color-mix(in srgb, currentColor 3%, transparent); }
 [data-bina-key="settings-root"] .bina-ui-listTile { min-height: 70px; padding: 14px 16px; gap: 14px; }
 [data-bina-key="settings-root"] .bina-ui-listTile > .bina-ui-column { gap: 4px; }
 [data-bina-key="settings-root"] .bina-ui-listTile .bina-ui-small { line-height: 1.5; }
 [data-bina-key="about-icon"] { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 11px; background: var(--bina-ui-accent, #3273b9); color: var(--bina-ui-accent-content, #fff); font-size: 25px; font-weight: 700; }
 [data-bina-key="description"] { margin: 0 16px 16px; padding-top: 14px; border-top: 1px solid var(--bina-ui-line, #e3e6ea); font-size: 13px; line-height: 1.7; }
-[data-bina-key="homes"] > button, [data-bina-key="shells"] > button { display: flex; flex-direction: row; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 14px 16px; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: inherit; text-align: start; }
-[data-bina-key="homes"] > button + button, [data-bina-key="shells"] > button + button, [data-bina-key="debug"] > .bina-ui-row + .bina-ui-row, [data-bina-key="history"] > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
+[data-bina-key="homes"] > button, [data-bina-key="cadres"] > button { display: flex; flex-direction: row; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 14px 16px; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: inherit; text-align: start; }
+[data-bina-key="homes"] > button + button, [data-bina-key="cadres"] > button + button, [data-bina-key="debug"] > .bina-ui-row + .bina-ui-row, [data-bina-key="history"] > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
 [data-bina-key="selection-mark"] { flex: none; width: 20px; text-align: center; font-size: 18px; font-weight: 600; }
-[data-bina-key="homes"] > button:hover, [data-bina-key="shells"] > button:hover { background: color-mix(in srgb, currentColor 5%, transparent); }
-[data-bina-key="homes"] > button:focus-visible, [data-bina-key="shells"] > button:focus-visible { outline-offset: -3px; }
-[data-bina-key="homes"] > button, [data-bina-key="shells"] > button, [data-bina-key="debug"] > .bina-ui-row { box-sizing: border-box; min-height: 54px; padding: 14px 16px; font-size: 16px; font-weight: 400; line-height: 1.5; }
+[data-bina-key="homes"] > button:hover, [data-bina-key="cadres"] > button:hover { background: color-mix(in srgb, currentColor 5%, transparent); }
+[data-bina-key="homes"] > button:focus-visible, [data-bina-key="cadres"] > button:focus-visible { outline-offset: -3px; }
+[data-bina-key="homes"] > button, [data-bina-key="cadres"] > button, [data-bina-key="debug"] > .bina-ui-row { box-sizing: border-box; min-height: 54px; padding: 14px 16px; font-size: 16px; font-weight: 400; line-height: 1.5; }
 [data-bina-key="debug"] > .bina-ui-row { gap: 12px; align-items: center; flex-wrap: wrap; }
 [data-bina-key="debug-label"] { min-width: 0; max-width: 100%; flex: 1 0 192px; font: inherit; overflow-wrap: anywhere; }
 [data-bina-key="debug-controls"] { flex: none; max-width: 100%; margin-left: auto; align-items: center; }
@@ -33,7 +33,7 @@
 @media (max-width: 520px) {
   [data-bina-key="settings-root"] { padding: 26px 12px 32px; gap: 24px; }
   [data-bina-key="settings-title"] { font-size: 30px; }
-  [data-bina-key="homes"] > button, [data-bina-key="shells"] > button, [data-bina-key="debug"] > .bina-ui-row { padding: 14px 12px; }
+  [data-bina-key="homes"] > button, [data-bina-key="cadres"] > button, [data-bina-key="debug"] > .bina-ui-row { padding: 14px 12px; }
   [data-bina-key="debug"] > .bina-ui-row { gap: 8px; }
   [data-bina-key^="settings-value-"] { min-width: 36px; padding: 0 4px; }
   [data-bina-key="stepper"] > button { min-width: 28px; }

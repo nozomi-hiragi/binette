@@ -6,7 +6,7 @@ import { mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps = await Promise.all(["shell", "home", "settings"].map(async name => {
+const apps = await Promise.all(["cadre", "home", "settings"].map(async name => {
   const read = (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root));
   const built = await buildApp(read, { libraries });
   return { source: "binette:system", prebuilt: { ...built, icon: built.manifest.icon ? await read(built.manifest.icon) : undefined } };
@@ -19,7 +19,7 @@ apps.push({ source: "binette:system", prebuilt: { ...plain, icon: undefined } })
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
   while (!condition() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
-  assert(condition(), "シェルの操作が反映されませんでした");
+  assert(condition(), "Cadre の操作が反映されませんでした");
 }
 async function fixture(installed = true) {
   const window = new Window();
@@ -28,7 +28,7 @@ async function fixture(installed = true) {
   let live = 0;
   let ready = 0;
   const errors: unknown[] = [];
-  const shell = await mountShell(element, { apps, installed, store: createMemoryAppStore(), onError: error => errors.push(error),
+  const cadre = await mountShell(element, { apps, installed, store: createMemoryAppStore(), onError: error => errors.push(error),
     createWorker(): RegieWorker {
       live++;
       const { port1, port2 } = new MessageChannel();
@@ -55,11 +55,11 @@ async function fixture(installed = true) {
     await new Promise(resolve => setTimeout(resolve, 0));
   };
   await waitReady();
-  return { window, element, shell, button, errors, waitReady, get live() { return live; },
-    async close() { shell.stop(); await window.happyDOM.close(); } };
+  return { window, element, cadre, button, errors, waitReady, get live() { return live; },
+    async close() { cadre.stop(); await window.happyDOM.close(); } };
 }
 
-Deno.test("シェルのバーはホームと起動中だけを並べ、前面の印と切り替えを更新する", async () => {
+Deno.test("Cadre のバーはホームと起動中だけを並べ、前面の印と切り替えを更新する", async () => {
   const f = await fixture();
   try {
     assertEquals(f.button("home")!.getAttribute("aria-pressed"), "true");
@@ -158,11 +158,11 @@ Deno.test("インストールはライブモードだけに表示し、押すと
   }
 });
 
-Deno.test("stop はシェルとアプリの Worker および表示を片付け、古いボタンは起動しない", async () => {
+Deno.test("stop は Cadre とアプリの Worker および表示を片付け、古いボタンは起動しない", async () => {
   const f = await fixture();
   try {
     const oldButton = f.button("home")!;
-    f.shell.stop();
+    f.cadre.stop();
     oldButton.click();
     await new Promise(resolve => setTimeout(resolve, 20));
     assertEquals(f.live, 0);

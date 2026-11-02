@@ -17,8 +17,8 @@ export interface OsSnapshot {
 /** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
 export type ApiDenial = "NotGranted" | "NotAssigned";
 
-/** シェルの起動中アプリ一覧の各要素 */
-export interface ShellInstance {
+/** Cadre の起動中アプリ一覧の各要素 */
+export interface CadreInstance {
   id: number;
   appIndex: number;
   name: string;
@@ -26,16 +26,16 @@ export interface ShellInstance {
   hasIcon: boolean;
 }
 
-/** シェルアプリの起動時に渡す写し */
-export interface ShellSnapshot {
-  instances: ShellInstance[];
+/** Cadre アプリの起動時に渡す写し */
+export interface CadreSnapshot {
+  instances: CadreInstance[];
   homeFront: boolean;
   installed: boolean;
   installBusy: boolean;
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "shell"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -58,7 +58,7 @@ export interface LaunchOptions {
   onFinish?: () => void;
   /** _start または一回の call で溜めた操作。完了通知より先に届く */
   onDom?: (ops: DomOp[]) => void;
-  /** 辞書の `apps`。ホームとシェルに渡すアプリ。省略時は apps.* を使えない */
+  /** 辞書の `apps`。ホームと Cadre に渡すアプリ。省略時は apps.* を使えない */
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
   /** 辞書の `os`。設定アプリだけに渡す。省略時は os.* を使えない */
@@ -74,16 +74,16 @@ export interface LaunchOptions {
   storage?: Map<string, string>;
   /** データの書き込み。value が null なら削除 */
   onStorage?: (name: string, value: string | null) => void;
-  /** 辞書の `shell`。シェルアプリだけに渡す。省略時は shell.* を使えない */
-  shell?: ShellSnapshot;
-  onShellOpen?: (i: number) => void;
-  onShellClose?: (i: number) => void;
-  onShellBack?: () => void;
-  onShellHome?: () => void;
-  /** シェルが設定アプリを開くよう頼んだとき */
-  onShellSettings?: () => void;
-  onShellNotify?: (text: string) => void;
-  onShellInstall?: () => void;
+  /** 辞書の `cadre`。Cadre アプリだけに渡す。省略時は cadre.* を使えない */
+  cadre?: CadreSnapshot;
+  onCadreOpen?: (i: number) => void;
+  onCadreClose?: (i: number) => void;
+  onCadreBack?: () => void;
+  onCadreHome?: () => void;
+  /** Cadre が設定アプリを開くよう頼んだとき */
+  onCadreSettings?: () => void;
+  onCadreNotify?: (text: string) => void;
+  onCadreInstall?: () => void;
   /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted として扱う */
   denied?: Record<string, ApiDenial>;
   /** アプリを終了しない呼び出しの失敗 */
@@ -104,8 +104,8 @@ export interface RegieApp {
   readonly exports: readonly string[];
   /** export した関数を呼ぶ。終わったら解決する。呼び出し中の DOM 操作は、解決より先に `onDom` に届く */
   call(name: string, ...args: (number | string)[]): Promise<void>;
-  /** シェルの状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
-  syncShell?(snapshot: ShellSnapshot): void;
+  /** Cadre の状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
+  syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
   /** Worker を止める */
   stop(): void;
@@ -198,12 +198,12 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               try { worker.postMessage({ type: "os.sync", id, os: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
-            syncShell(snapshot) {
+            syncCadre(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
               const id = nextId++;
               pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
-              try { worker.postMessage({ type: "shell.sync", id, shell: snapshot }); }
+              try { worker.postMessage({ type: "cadre.sync", id, cadre: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             stop,
@@ -224,13 +224,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.checkUpdate": options.onCheckUpdate?.(); break;
         case "os.update": options.onUpdate?.(); break;
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
-        case "shell.open": options.onShellOpen?.(data.i!); break;
-        case "shell.close": options.onShellClose?.(data.i!); break;
-        case "shell.back": options.onShellBack?.(); break;
-        case "shell.home": options.onShellHome?.(); break;
-        case "shell.settings": options.onShellSettings?.(); break;
-        case "shell.notify": options.onShellNotify?.(data.text!); break;
-        case "shell.install": options.onShellInstall?.(); break;
+        case "cadre.open": options.onCadreOpen?.(data.i!); break;
+        case "cadre.close": options.onCadreClose?.(data.i!); break;
+        case "cadre.back": options.onCadreBack?.(); break;
+        case "cadre.home": options.onCadreHome?.(); break;
+        case "cadre.settings": options.onCadreSettings?.(); break;
+        case "cadre.notify": options.onCadreNotify?.(data.text!); break;
+        case "cadre.install": options.onCadreInstall?.(); break;
         case "finish": finishing = true; break;
         case "done": {
           clearTimeout(pending.get(data.id!)?.timer);
@@ -255,7 +255,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.shell === undefined ? {} : { shell: options.shell }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

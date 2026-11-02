@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type ShellSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -33,7 +33,7 @@ export interface ProcessOptions {
     apps?: { id: string; name: string; icon?: string }[];
     os?: LaunchOptions["os"];
     storage?: LaunchOptions["storage"];
-    shell?: LaunchOptions["shell"];
+    cadre?: LaunchOptions["cadre"];
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
@@ -44,13 +44,13 @@ export interface ProcessOptions {
   onCheckUpdate?: LaunchOptions["onCheckUpdate"];
   onOpenRecovery?: LaunchOptions["onOpenRecovery"];
   onStorage?: LaunchOptions["onStorage"];
-  onShellOpen?: LaunchOptions["onShellOpen"];
-  onShellClose?: LaunchOptions["onShellClose"];
-  onShellBack?: LaunchOptions["onShellBack"];
-  onShellHome?: LaunchOptions["onShellHome"];
-  onShellSettings?: LaunchOptions["onShellSettings"];
-  onShellNotify?: LaunchOptions["onShellNotify"];
-  onShellInstall?: LaunchOptions["onShellInstall"];
+  onCadreOpen?: LaunchOptions["onCadreOpen"];
+  onCadreClose?: LaunchOptions["onCadreClose"];
+  onCadreBack?: LaunchOptions["onCadreBack"];
+  onCadreHome?: LaunchOptions["onCadreHome"];
+  onCadreSettings?: LaunchOptions["onCadreSettings"];
+  onCadreNotify?: LaunchOptions["onCadreNotify"];
+  onCadreInstall?: LaunchOptions["onCadreInstall"];
 }
 
 /** 状態を進めるアプリ */
@@ -69,8 +69,8 @@ export interface Process {
   dispatchUiText(handle: number, value: string, version?: number): void;
   /** 値を返す部品（checkbox・radio・slider・picker・segmented・tabs）の操作を届ける。捨てるときも版を知らせ、表示をアプリの値に戻す */
   dispatchUiValue(handle: number, value: number, version?: number): void;
-  /** シェルの状態（起動中アプリ一覧や前面）の更新を知らせる */
-  syncShell?(snapshot: ShellSnapshot): void;
+  /** Cadre の状態（起動中アプリ一覧や前面）の更新を知らせる */
+  syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
@@ -142,7 +142,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     last,
     os: options.grants?.os,
     storage: options.grants?.storage,
-    shell: options.grants?.shell,
+    cadre: options.grants?.cadre,
     denied: options.grants?.denied,
     onSet: options.onSet,
     onAssign(role, i) { assignments.push([role, i]); notifyRequests(); },
@@ -150,13 +150,13 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onCheckUpdate: options.onCheckUpdate,
     onOpenRecovery: options.onOpenRecovery,
     onStorage: options.onStorage,
-    onShellOpen: options.onShellOpen,
-    onShellClose: options.onShellClose,
-    onShellBack: options.onShellBack,
-    onShellHome: options.onShellHome,
-    onShellSettings: options.onShellSettings,
-    onShellNotify: options.onShellNotify,
-    onShellInstall: options.onShellInstall,
+    onCadreOpen: options.onCadreOpen,
+    onCadreClose: options.onCadreClose,
+    onCadreBack: options.onCadreBack,
+    onCadreHome: options.onCadreHome,
+    onCadreSettings: options.onCadreSettings,
+    onCadreNotify: options.onCadreNotify,
+    onCadreInstall: options.onCadreInstall,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -334,7 +334,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       else armTimer();
     },
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
-    syncShell(snapshot) { running?.syncShell?.(snapshot); },
+    syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,
   };

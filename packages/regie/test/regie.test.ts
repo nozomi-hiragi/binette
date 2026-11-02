@@ -538,23 +538,23 @@ Deno.test("明示した Worker URL で起動し、createWorker は URL より優
   }
 });
 
-Deno.test("シェルの同期に応答しないアプリは、呼び出しの時間切れで終了する", async () => {
-  // 描き直しで固まった Worker の代わりに、shell.sync を届けない
+Deno.test("Cadre の同期に応答しないアプリは、呼び出しの時間切れで終了する", async () => {
+  // 描き直しで固まった Worker の代わりに、cadre.sync を届けない
   const createSilentSync = (): RegieWorker => {
     const worker = createWorker();
-    return { ...worker, postMessage: (message, transfer) => { if ((message as { type: string }).type !== "shell.sync") worker.postMessage(message, transfer); } };
+    return { ...worker, postMessage: (message, transfer) => { if ((message as { type: string }).type !== "cadre.sync") worker.postMessage(message, transfer); } };
   };
   let exited: Error | undefined;
   const app = await launchApp(await build(source), { createWorker: createSilentSync, callTimeout: 50, onExit: (error) => { exited = error; } });
-  app.syncShell!({ instances: [], homeFront: true, installed: true, installBusy: false });
+  app.syncCadre!({ instances: [], homeFront: true, installed: true, installBusy: false });
   for (let i = 0; i < 100 && !exited; i++) await new Promise((resolve) => setTimeout(resolve, 10));
   assertEquals(exited?.message, "アプリが応答しないので終了しました。");
 });
 
-Deno.test("シェルの同期は完了を返し、時間切れにならない", async () => {
+Deno.test("Cadre の同期は完了を返し、時間切れにならない", async () => {
   let exited: Error | undefined;
   const app = await launchApp(await build(source), { createWorker, callTimeout: 50, onExit: (error) => { exited = error; } });
-  app.syncShell!({ instances: [], homeFront: true, installed: true, installBusy: false });
+  app.syncCadre!({ instances: [], homeFront: true, installed: true, installBusy: false });
   await new Promise((resolve) => setTimeout(resolve, 150));
   assertEquals(exited, undefined);
   app.stop();

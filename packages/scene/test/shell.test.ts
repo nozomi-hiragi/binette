@@ -691,7 +691,7 @@ Deno.test("ライブの透かしはアプリ表示領域と最低限の大枠を
     ui.requireInstall("保存");
     assertEquals(dialog.parentElement, root);
     assertEquals(dialog.open, true);
-    ui.update({ ...state, shellUnavailable: true });
+    ui.update({ ...state, cadreUnavailable: true });
     assertEquals(watermark.parentElement, fallback);
     // 再起動後の新しい木にも同じ透かしを移し、古い木には残さない
     const restartedArea = area.cloneNode() as HTMLElement;
