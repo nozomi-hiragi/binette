@@ -54,11 +54,13 @@ class Bar extends App {
 
 名乗った（`roles`）アプリのうち、どれを割り当てるかを 2 段で決めます（[regie/system.md](regie/system.md#役割の割り当て実装済み形は案)）。
 
+既定の埋め込みは Cadre（`cadre`）と、そのサブアプリのホーム（`cadre.home`）・設定（`cadre.settings`）です。`apps/cadre/app.json` の親と `sub` がそれぞれ役割を名乗ります。ホームと Cadre の割り当ては独立しており、Cadre を差し替えても設定の割り当ては変わりません。
+
 1. 初回は `system/boot.json` の既定（`roles.cadre`・`roles.home`・`roles.settings` にアプリの ID）。カーネルがブートのとき、これを `SystemOptions.roles`（役割 → 完全なアプリ ID）にして Régie に渡す
 2. そのあとは設定（SystemStore の `settings.roles`、役割 → 完全なアプリ ID）が優先する。割り当てを変えられるのは設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` と `cadre`
 3. どちらも使えなければ、入手元が `binette:system` の、その役割を名乗る最初のアプリ
 
-`settings` は固定で、設定では変えられません（設定アプリは入手元が `binette:system` のものだけ。ブートでも `/user` の上書きを拒む）。キーごとの届け先は Régie の表（`API_RULES`）で決まります。
+`settings` は固定で、設定では変えられません（設定アプリは入手元が `binette:system` のものだけ。ブートでも設定を含む `/apps/cadre` パッケージへの `/user` の上書きを拒む）。キーごとの届け先は Régie の表（`API_RULES`）で決まります。
 
 ## 許可されていない呼び出し（実装済み）
 

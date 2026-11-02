@@ -1,7 +1,7 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { BinetteError, parseAppManifest } from "../src/index.ts";
 
-const manifest = { id: "io.github.example.counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } };
+const manifest = { id: "counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } };
 
 Deno.test("app.json を読める", () => {
   const app = parseAppManifest(JSON.stringify({ ...manifest, entry: { ...manifest.entry, css: "src/style.css" } }));
@@ -89,10 +89,12 @@ Deno.test("sub の形が正しくないと BinetteError", () => {
   }
 });
 
-Deno.test("strictId のときだけ、id の . を誤りにする", () => {
+Deno.test("既定で id の . を誤りにし、旧形式は明示したときだけ読める", () => {
   assertEquals(parseAppManifest(JSON.stringify(manifest)).id, manifest.id);
   assertEquals(parseAppManifest(JSON.stringify({ ...manifest, id: "memo" }), { strictId: true }).id, "memo");
   for (const id of ["io.github.example", "a%2Eb"]) {
+    assertEquals(parseAppManifest(JSON.stringify({ ...manifest, id }), { strictId: false }).id, id);
+    assertEquals(assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, id })), BinetteError).code, "invalid_format");
     assertEquals(assertThrows(() => parseAppManifest(JSON.stringify({ ...manifest, id }), { strictId: true }), BinetteError).code, "invalid_format");
   }
 });

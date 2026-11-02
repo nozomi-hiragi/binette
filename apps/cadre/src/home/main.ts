@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { Api, App, AppsApi, Last, launch } from "jsr:@binette/replique";
+import { Api, App, AppsApi, Last } from "jsr:@binette/replique";
 import { View, appIcon, buttonOf, column, grid, text } from "jsr:@binette/replique/ui";
 
 // 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
@@ -11,7 +11,7 @@ function openApp(index: i32): void {
   api.open(index);
 }
 
-class Home extends App {
+export class Home extends App {
   override onCreate(_last: Last, api: Api): void { appsApi = api.get<AppsApi>("apps"); }
 
   override build(): View {
@@ -25,4 +25,3 @@ class Home extends App {
   }
 }
 
-launch(new Home());

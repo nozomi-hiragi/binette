@@ -65,7 +65,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 `deno task start` で開発用に起動し、`deno task build` で `dist/` に静的ファイルを書き出します。システムアプリの設定はプリビルドした `.binapp` を同梱し、IndexedDB に保存します。ブラウザでは asc を読みません。相対 URL で配信でき、GitHub Pages のサブパスにも置けます。
 
-ホームと設定は、OS と一緒に配るシステムアプリとして Binette が持ちます（決定）。置き場所はリポジトリ直下の `apps/` で、フォルダを足すだけで増えます。配り方と未決のことは [apps/](apps/README.md)、それぞれの仕様は [apps/home.md](apps/home.md) と [apps/settings.md](apps/settings.md) にあります。
+ホームと設定は、OS と一緒に配る Cadre（`apps/cadre`）のサブアプリ `cadre.home`・`cadre.settings` として Binette が持ちます（決定）。配り方と未決のことは [apps/](apps/README.md)、それぞれの仕様は [apps/home.md](apps/home.md) と [apps/settings.md](apps/settings.md) にあります。
 
 ## 層の分担（決定 2026-10-28）
 
@@ -79,7 +79,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | Scene | システム UI。大枠（ホームバー、Apps の一覧、エラー表示、ライブモード）と、その中のアプリの置き場（HTML を描き、DOM 操作を反映し、クリックを Régie に渡す） |
 | Réplique | アプリが Régie を呼ぶためのライブラリ（AS） |
 | Coulisses | サーバー側。アプリのサーバーサイド処理、バックアップの受け取り |
-| フロントの実装 | Scene を載せる入口。Régie と Coulisses の間の通信路を差し込む。設定はシステムアプリ `apps/settings` が持つ |
+| フロントの実装 | Scene を載せる入口。Régie と Coulisses の間の通信路を差し込む。設定はCadre のサブアプリ `cadre.settings` が持つ |
 
 ```
           core（共通物）
@@ -121,7 +121,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 ## v0.2 の最小限の土台（実装済み）
 
-ホームは Binette が持ちます（決定）。今は設定アプリを並べ、開いて戻れます（[regie/system.md](regie/system.md)、[scene/shell.md](scene/shell.md)）。設定は `apps/settings` が持ち、設定の項目と読み書きの呼び出しは未決です。
+ホームは Binette が持ちます（決定）。今は設定アプリを並べ、開いて戻れます（[regie/system.md](regie/system.md)、[scene/shell.md](scene/shell.md)）。設定は `cadre.settings` が持ちます（[apps/settings.md](apps/settings.md)）。
 
 システムは同じ入手元・ID・版のビルド結果を保存して使い回します。Binette はシステムアプリのプリビルド結果を、入手元 `binette:system` として毎回保存し直して開きます。開発用の `read` を渡したときの初回の流れは次のとおりです。
 

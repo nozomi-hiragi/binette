@@ -12,11 +12,11 @@ import { showRecovery } from "./recovery.ts";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value));
-async function fixture(subApps = false, subHome = "home") {
+async function fixture(subApps = true, subHome = "home") {
   const tree = createMemoryFileTree();
   const files = new Map<string, Uint8Array>([[
     "system/boot.json",
-    encode({ roles: { home: "home", settings: "settings", cadre: "cadre" } }),
+    encode({ roles: { home: "home", settings: "settings", cadre: "cadre" }, lists: [] }),
   ]]);
   for (const name of ["home", "settings", "cadre"]) {
     files.set(
@@ -31,8 +31,8 @@ async function fixture(subApps = false, subHome = "home") {
     files.set(`system/apps/${name}/style.css`, new TextEncoder().encode("p { color: red }"));
   }
   if (subApps) {
-    files.set("system/boot.json", encode({ roles: { cadre: "cadre", home: `cadre.${subHome}`, settings: "cadre.settings" } }));
-    files.set("system/apps/cadre/app.json", encode({ id: "cadre", name: "枠", roles: ["cadre"], entry: { as: "main.ts" }, sub: {
+    files.set("system/boot.json", encode({ roles: { cadre: "cadre", home: `cadre.${subHome}`, settings: "cadre.settings" }, lists: [] }));
+    files.set("system/apps/cadre/app.json", encode({ id: "cadre", name: "枠", roles: ["cadre"], entry: { as: "main.ts", css: "src/style.css" }, sub: {
       [subHome]: { name: "ホーム", roles: ["home"], icon: "home.svg" },
       settings: { name: "設定", roles: ["settings"], listed: false, icon: "settings.svg" },
     } }));
@@ -71,16 +71,16 @@ async function fixture(subApps = false, subHome = "home") {
 
 Deno.test("起動は固定物を検証し、設定の上書きと古い固定アプリを使わない", async () => {
   const { tree, distribution } = await fixture();
-  await tree.write("/user/apps/settings/app.wasm", new Uint8Array([99]));
+  await tree.write("/user/apps/cadre/app.wasm", new Uint8Array([99]));
   const { apps, roles } = await loadBootApps(tree, distribution);
   assertEquals(apps.find(app => app.prebuilt?.manifest.id === "cadre")?.prebuilt?.css, "p { color: red }");
   assertEquals(roles, {
-    home: appId("binette:system", "home"),
-    settings: appId("binette:system", "settings"),
+    home: "cadre.home",
+    settings: "cadre.settings",
     cadre: appId("binette:system", "cadre"),
   });
   assertEquals(
-    apps.find((app) => app.prebuilt?.manifest.id === "settings")?.prebuilt
+    apps.find((app) => app.prebuilt?.manifest.id === "cadre")?.prebuilt
       ?.wasm,
     new Uint8Array([0, 97, 115, 109]),
   );
@@ -108,7 +108,7 @@ Deno.test("目録にあるアプリの説明ファイルが欠けたときも起
   const { tree, distribution } = await fixture();
   const files = new Map<string, Uint8Array>();
   for (const path of await tree.list("/system")) {
-    if (path !== "/system/apps/home/app.json") {
+    if (path !== "/system/apps/cadre/app.json") {
       files.set(path, (await tree.read(path))!);
     }
   }
@@ -121,7 +121,7 @@ Deno.test("目録にあるアプリの説明ファイルが欠けたときも起
 });
 
 Deno.test("改変した固定物と設定役割へのユーザーの差し替えは起動を拒否する", async () => {
-  const { tree, distribution } = await fixture();
+  const { tree, distribution } = await fixture(false);
   await tree.write(
     "/user/apps/home/app.json",
     encode({
@@ -191,11 +191,9 @@ Deno.test("オフラインでも保存済みの配布物を検証してホーム
   assertEquals(update.installedVersion, "1");
   assertEquals(update.updateAvailable, false);
   const { apps, roles } = await loadBootApps(tree, distribution);
-  assertEquals(roles.home, appId("binette:system", "home"));
+  assertEquals(roles.home, "cadre.home");
   assertEquals(apps.map((app) => app.prebuilt?.manifest.id), [
     "cadre",
-    "home",
-    "settings",
   ]);
 });
 

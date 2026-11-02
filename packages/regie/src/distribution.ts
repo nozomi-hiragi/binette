@@ -270,7 +270,8 @@ export function createSystemDistribution(
       if (!path.startsWith("/") || !canonical(path.slice(1))) {
         throw new Error("読み込み先は正規の絶対パスにしてください。");
       }
-      if (path !== "/apps/settings" && !path.startsWith("/apps/settings/")) {
+      // 設定サブアプリと入口を共有する Cadre 全体を保護する。
+      if (path !== "/apps/cadre" && !path.startsWith("/apps/cadre/")) {
         const user = await tree.read(`/user${path}`);
         if (user) return user;
       }

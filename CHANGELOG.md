@@ -2,6 +2,10 @@
 
 ## v0.2.0（未リリース）
 
+- 破壊的変更: 埋め込みアプリの ID を `io.github.nozomi-hiragi.binette.cadre` → `cadre`、`io.github.nozomi-hiragi.binette.home` → `cadre.home`、`io.github.nozomi-hiragi.binette.settings` → `cadre.settings`、`io.github.nozomi-hiragi.binette.designer` → `designer` に変更する。`apps/home`・`apps/settings` を `apps/cadre` に統合し、ホーム・設定は `sub` として親の AS の入口・CSS を共有する。画面とホームバーの見た目は維持する
+- `system/boot.json` の役割の既定を `cadre`・`cadre.home`・`cadre.settings` にし、`lists: []` を出力する。designer は `bundled/designer` の同梱のままにする。設定の上書きを防ぐため、`/user` の重ね合わせから `/apps/cadre` パッケージ全体を保護する
+- 破壊的変更: `app.json` の `id` を既定で識別子の規則で検査し、`.` を含む ID を拒む。旧形式を読む道具向けの `{ strictId: false }` は残し、Régie の旧 ID の暫定例外を削除する。サブアプリは親の `sub` に宣言する
+
 - 破壊的変更: Régie のアプリのキーを `installedAppKey(source, id)`（`JSON.stringify([source, id])`）から `appId(source, id)` が返す完全なアプリ ID に変更する。役割の割り当て・起動履歴・ライフサイクルの記録も同じ ID を使う。旧キーの保存データは移行しないため、読めなくなることがある
 - `app.json` の `sub` を起動可能な入口として扱う。サブアプリは親と保存領域・権限を共有し、別の Worker とスタック項目で動く。`listed: false` はホームの一覧から隠すが、役割の候補には含める。Réplique の `Api.sub()` はサブアプリの識別子を返し、親では空文字列を返す
 
@@ -9,7 +13,7 @@
   - `normalizeAppIdentifier`・`normalizeAppListUrl`・`formatAppId`・`parseAppId`: 識別子の % エンコードの正規化、提供リストの URL の検査、完全な ID（URL の ID・生の ID・サブアプリ）の組み立てと分解
   - `findAppList`・`parseAppList`: 提供リストの HTML から `<link rel="binette-apps">` か埋め込みの JSON を探し、JSON を検査する（`source` の解決、`integrity` の形、`movedTo`）。HTML を読む DOM は呼び出し側が渡す
   - `hashFile`・`hashFolder`・`computeIntegrity`・`verifyIntegrity`: `integrity` のハッシュ（`sha256-<base64>`）の計算と検証。フォルダのハッシュのバイト列のつなぎ方は暫定（`UTF-8(パス) 0x00 UTF-8(バイト数) 0x00 中身`）
-  - `parseAppManifest` が `sub`（サブアプリ）を検査する。`{ strictId: true }` を渡すと `id` も識別子の規則（`.` を含まない）で検査する。既定では今までどおり検査しない
+  - `parseAppManifest` が `sub`（サブアプリ）と `id` の識別子の規則（`.` を含まない）を検査する
 - Régie の CLI に `integrity <アプリのフォルダ> [キー...]` を追加する。キーごとのハッシュを JSON で出す（既定のキーは `/`）。名前が `.` で始まるファイルとフォルダ、シンボリックリンクは含めない
 
 - 仕様: アプリの識別子と提供リストを追加する（[docs/spec/app-id.md](docs/spec/app-id.md)、一部実装済み）。完全な ID は提供リストの URL ＋ `#` ＋ 識別子。提供リストは HTML で、`<link rel="binette-apps">` の JSON か埋め込みの JSON を読む。Cadre（ユーザー向けには「枠アプリ」）を独立したアプリにし、ホームと設定をそのサブアプリにする

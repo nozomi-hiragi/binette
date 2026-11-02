@@ -40,8 +40,7 @@ export async function loadBootApps(
   const roleKeys: Record<string, string> = {};
   for (const [role, id] of Object.entries(boot.roles)) {
     if (typeof id !== "string") throw new Error("boot.json の役割の割り当てが不正です。");
-    try { roleKeys[role] = formatAppId(parseAppId(id)); }
-    catch { roleKeys[role] = appId(SYSTEM, id); }
+    roleKeys[role] = formatAppId(parseAppId(id));
   }
   const apps: SystemApp[] = [];
   // 役割の既定の割り当て（役割 → appId）

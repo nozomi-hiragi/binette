@@ -29,11 +29,11 @@ Deno.test("File trees validate canonical paths, preserve prefix boundaries, and 
   assertEquals(await tree.read("/data/a"), undefined);
 });
 
-Deno.test("Overlays prefer user files, restore deleted overrides, and protect settings", async () => {
+Deno.test("Overlays prefer user files, restore deleted overrides, and protect Cadre", async () => {
   const tree = createMemoryFileTree();
   await tree.replaceSystem(
     new Map([["/system/apps/home/app.json", new Uint8Array([1])], [
-      "/system/apps/settings/app.json",
+      "/system/apps/cadre/app.json",
       new Uint8Array([2]),
     ]]),
   );
@@ -41,26 +41,26 @@ Deno.test("Overlays prefer user files, restore deleted overrides, and protect se
     new Map([["/system/boot.json", new Uint8Array([9])], [
       "/system/apps/home/app.json",
       new Uint8Array([1]),
-    ], ["/system/apps/settings/app.json", new Uint8Array([2])]]),
+    ], ["/system/apps/cadre/app.json", new Uint8Array([2])]]),
   );
   await tree.write("/user/apps/home/app.json", new Uint8Array([3]));
-  await tree.write("/user/apps/settings/app.json", new Uint8Array([4]));
-  await tree.write("/user/apps/settings/extra", new Uint8Array([5]));
+  await tree.write("/user/apps/cadre/app.json", new Uint8Array([4]));
+  await tree.write("/user/apps/cadre/extra", new Uint8Array([5]));
   assertEquals(
     await tree.readOverlay("/apps/home/app.json"),
     new Uint8Array([3]),
   );
   assertEquals(
-    await tree.readOverlay("/apps/settings/app.json"),
+    await tree.readOverlay("/apps/cadre/app.json"),
     new Uint8Array([2]),
   );
   assertEquals(await tree.listOverlay("/apps"), [
+    "/apps/cadre/app.json",
     "/apps/home/app.json",
-    "/apps/settings/app.json",
   ]);
   assertEquals(await tree.listOverlay("/"), [
+    "/apps/cadre/app.json",
     "/apps/home/app.json",
-    "/apps/settings/app.json",
     "/boot.json",
   ]);
   assertEquals(await tree.readOverlay("/boot.json"), new Uint8Array([9]));

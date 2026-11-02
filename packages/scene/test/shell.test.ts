@@ -7,14 +7,21 @@ import { buildApp } from "@binette/regie/build";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps = ["設定", "設定の写し"].map((name, index) => ({
-  source: "binette:system",
-  async read(path: string): Promise<string> {
-    const text = await Deno.readTextFile(new URL(`apps/settings/${path}`, root));
-    return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), id: `settings-${index}`, name }) : text;
-  },
-}));
-const homeRead = { source: "binette:system", read: (path: string) => Deno.readTextFile(new URL(`apps/home/${path}`, root)) };
+// 各画面の既存のライフサイクル試験では、Cadre 内のクラスを単独の入口として使う。
+function screenRead(screen: "home" | "settings", id: string, name: string) {
+  return async (path: string): Promise<string> => {
+    if (path === "src/main.ts") {
+      const type = screen === "home" ? "Home" : "Settings";
+      return `import { launch } from "jsr:@binette/replique"; import { ${type} } from "./${screen}/main.ts"; launch(new ${type}());`;
+    }
+    const text = await Deno.readTextFile(new URL(`apps/cadre/${path}`, root));
+    if (path !== "app.json") return text;
+    const manifest = JSON.parse(text);
+    return JSON.stringify({ ...manifest, id, name, icon: manifest.sub[screen].icon, roles: [screen], sub: undefined });
+  };
+}
+const apps = ["設定", "設定の写し"].map((name, index) => ({ source: "binette:system", read: screenRead("settings", `settings-${index}`, name) }));
+const homeRead = { source: "binette:system", read: screenRead("home", "home", "ホーム") };
 const builtHome = await buildApp(homeRead.read, { libraries });
 const homeApp = { source: "binette:system", prebuilt: builtHome };
 const fixtures: InstalledApp[] = [];
@@ -92,6 +99,27 @@ function heldWorker() {
     }),
   };
 }
+
+Deno.test("実際の Cadre は同じ入口からホームと設定を別の Worker で開く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const store = createMemoryAppStore(); const errors: unknown[] = [];
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home", settings: "cadre.settings" },
+    store, libraries, createWorker: worker.createWorker, onError: error => errors.push(error),
+  });
+  try {
+    await waitFor(() => element.querySelector("[data-bina-key=home-grid]") !== null);
+    const tiles = element.querySelectorAll<HTMLButtonElement>("[data-bina-key^=home-tile-]");
+    assertEquals([...tiles].map(tile => tile.textContent), ["設定"]);
+    tiles[0]!.click();
+    await waitFor(() => element.querySelector("[data-bina-key=debug]") !== null);
+    assertEquals(systemView(element).instances.map(instance => instance.key).sort(), ["cadre.home", "cadre.settings"]);
+    assertEquals(worker.created, 3);
+    assertEquals((await store.list()).map(app => app.key), ["cadre"]);
+    assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
 
 Deno.test("ホームは表示するサブアプリだけを一覧に載せる", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers();

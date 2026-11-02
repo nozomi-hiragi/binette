@@ -142,13 +142,11 @@ export async function buildApps(root: string): Promise<void> {
       for (const name of names) console.log(`system/${output}/${name}`);
     }
     const roles: Record<string, string> = {};
-    for (const name of ["home", "settings", "cadre"]) {
-      try {
-        const manifest = JSON.parse(await Deno.readTextFile(resolve(system, "apps", name, "app.json")));
-        roles[name] = manifest.id;
-      } catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
-    }
-    await Deno.writeFile(resolve(system, "boot.json"), encode({ roles }));
+    const cadre = JSON.parse(await Deno.readTextFile(resolve(system, "apps/cadre/app.json")));
+    roles.cadre = cadre.id;
+    roles.home = `${cadre.id}.home`;
+    roles.settings = `${cadre.id}.settings`;
+    await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: [] }));
     await buildCompiler(resolve(system, "tools/asc.js"));
     await Deno.mkdir(resolve(system, "libraries"));
     await Deno.copyFile(replique, resolve(system, "libraries/replique.ts"));

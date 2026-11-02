@@ -10,7 +10,11 @@ const app = (source: string, id: string): InstalledApp => ({
 Deno.test("完全な ID は URL を正規化し、埋め込みは生の ID を使う", () => {
   assertEquals(appId("https://EXAMPLE.test:443/apps/", "メモ"), "https://example.test/apps/#%E3%83%A1%E3%83%A2");
   assertEquals(appId("binette:system", "cadre"), "cadre");
-  assertEquals(appId("binette:bundled", "io.github.nozomi-hiragi.binette.home"), "io.github.nozomi-hiragi.binette.home");
+  assertEquals(appId("binette:bundled", "designer"), "designer");
+  for (const source of ["binette:system", "binette:bundled"]) {
+    assertThrows(() => appId(source, "io.github.nozomi-hiragi.binette.home"));
+    assertThrows(() => appId(source, "https://example.test/#memo"));
+  }
   assertThrows(() => appId("binette:system", "other.invalid"));
   assertNotEquals(appId("https://one.test/", "memo"), appId("https://two.test/", "memo"));
 });

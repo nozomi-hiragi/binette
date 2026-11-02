@@ -1545,16 +1545,6 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
-      "apps/home": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
-      "apps/settings": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
       "bundled/designer": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"

@@ -1,24 +1,23 @@
-# ホーム（`apps/home`）
+# ホーム（`cadre.home`）
 
 [システムアプリの目次](README.md)
 
-ホームは、入っているアプリを並べ、押されたアプリを開くシステムアプリです（決定）。並べ方はホームの宣言的 UI が持ち、見た目は Scene の部品が持ち、どれをホームにするか・アプリを開く流れは Régie（[regie/system.md](../regie/system.md)）、ホームバーと表示領域の宣言は Cadre（[cadre.md](cadre.md)）、アプリの配置は Scene（[scene/shell.md](../scene/shell.md)）が持ちます。以下は実装済み（形は案）です。
+ホームは、入っているアプリを並べ、押されたアプリを開く Cadre のサブアプリ（`cadre.home`）です（決定）。並べ方はホームの宣言的 UI が持ち、見た目は Scene の部品が持ち、どれをホームにするか・アプリを開く流れは Régie（[regie/system.md](../regie/system.md)）、ホームバーと表示領域の宣言は Cadre（[cadre.md](cadre.md)）、アプリの配置は Scene（[scene/shell.md](../scene/shell.md)）が持ちます。以下は実装済み（形は案）です。
 
 ## 役割
 
-- `app.json` に `"roles": ["home"]` を書く（[app.md](../app.md#appjson)）
+- 親の `app.json` の `sub.home` に `"roles": ["home"]` を書く（[app.md](../app.md#appjson)）
 - OS は、役割 `home` に割り当てたアプリをホームとして開く。割り当ては設定、ブートの既定、入手元が `binette:system` の最初のものの順で選ぶ。無ければ、画面と `onError` にエラーを出す（[regie/system.md](../regie/system.md#役割の割り当て実装済み形は案)）
 - 割り当てられたホームだけが、入っているアプリの一覧と起動の API（辞書の `apps`）を受け取る。ほかのアプリの `api.get<AppsApi>("apps")` は null になり、辞書を通さずに呼ぶとアプリを終了する（[replique.md](../replique.md#api-の辞書実装済み形は案)）
 
+`apps/cadre/app.json` のサブアプリとして宣言します（親のほかの欄は省略）。
+
 ```json
 {
-  "id": "io.github.nozomi-hiragi.binette.home",
-  "version": "0.1.0",
-  "binette": "0.2",
-  "name": "ホーム",
-  "roles": ["home"],
-  "icon": "icon.svg",
-  "entry": { "as": "src/main.ts" }
+  "id": "cadre",
+  "sub": {
+    "home": { "name": "ホーム", "icon": "home.svg", "roles": ["home"] }
+  }
 }
 ```
 
@@ -31,7 +30,7 @@
 
 ## 動き（案・実装済み）
 
-`Home extends App` の `build()` で、OS が渡したアプリごとにアイコンと名前を含むボタンを作り、grid に並べます。`onCreate(last, api)` で `AppsApi` を取り、ボタンは `arg(i)` でアプリの番号を渡して `AppsApi.open(i)` を呼びます。アイコンはホーム専用の `appIcon(i)` で表示します。実際のソースは [main.ts](../../../apps/home/src/main.ts) にあります。
+`Home extends App` の `build()` で、OS が渡したアプリごとにアイコンと名前を含むボタンを作り、grid に並べます。`onCreate(last, api)` で `AppsApi` を取り、ボタンは `arg(i)` でアプリの番号を渡して `AppsApi.open(i)` を呼びます。アイコンはホーム専用の `appIcon(i)` で表示します。実際のソースは [main.ts](../../../apps/cadre/src/home/main.ts) にあります。親の入口が `api.sub()` の `home` を見てホームを起動します。
 
 ## OS の枠との分担
 
@@ -65,7 +64,7 @@
 
 ## 未決のこと
 
-- ホームをほかのアプリに差し替えられるか。差し替えるなら、どのアプリがホームを名乗れるか
+- どのアプリがホームを名乗れるかの制限（割り当てによる差し替えは実装済み）
 - `permissions` の書き方（今の `apps` の API は役割の割り当てだけで決まる）
 - 並べ替え、フォルダ分け、アプリの追加・削除の操作
 - アプリの CSS の分離

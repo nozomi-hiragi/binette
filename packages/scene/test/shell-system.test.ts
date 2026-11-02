@@ -7,7 +7,7 @@ import { chooseFromMenu } from "./homebar-helper.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps = await Promise.all(["cadre", "home", "settings"].map(async name => ({
+const apps = await Promise.all(["cadre"].map(async name => ({
   source: "binette:system",
   prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/${name}/${path}`, root)), { libraries }),
 })));
