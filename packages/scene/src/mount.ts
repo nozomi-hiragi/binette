@@ -13,7 +13,7 @@ export interface MountOptions {
   onDom?: () => void;
   /** アプリの CSS（`entry.css`）。このアプリの表示先の中だけに効かせる */
   css?: string;
-  /** シェルからアプリ表示領域の内側へ DOM 操作を届かせない */
+  /** Cadre からアプリ表示領域の内側へ DOM 操作を届かせない */
   isolateAppArea?: boolean;
 }
 

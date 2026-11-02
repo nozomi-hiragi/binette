@@ -1,6 +1,6 @@
 import { createUiDiffer } from "@binette/decor";
 import type { DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type ShellSnapshot } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -19,7 +19,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
   let storage: Map<string, string> | undefined;
-  let shell: ShellSnapshot | undefined;
+  let cadre: CadreSnapshot | undefined;
   let denied: Record<string, ApiDenial> = {};
   let page = "";
   let declarative = false;
@@ -55,11 +55,11 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     if (storage === undefined) throw new Error("この呼び出しは storage が届いたアプリだけが使えます。");
     return storage;
   };
-  const shellState = () => {
-    if (shell === undefined) throw new Error("この呼び出しは shell が届いたアプリだけが使えます。");
-    return shell;
+  const cadreState = () => {
+    if (cadre === undefined) throw new Error("この呼び出しは cadre が届いたアプリだけが使えます。");
+    return cadre;
   };
-  const granted = (key: string) => key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "shell" ? shell !== undefined : false;
+  const granted = (key: string) => key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -183,59 +183,59 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         appAt(i);
         scope.postMessage({ type: "apps.open", i });
       },
-      "shell.count": () => shellState().instances.length,
-      "shell.name": (i: number) => {
-        const instances = shellState().instances;
+      "cadre.count": () => cadreState().instances.length,
+      "cadre.name": (i: number) => {
+        const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
         return writeString(instances[i]!.name);
       },
-      "shell.appIndex": (i: number) => {
-        const instances = shellState().instances;
+      "cadre.appIndex": (i: number) => {
+        const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
         return instances[i]!.appIndex;
       },
-      "shell.isFront": (i: number) => {
-        const instances = shellState().instances;
+      "cadre.isFront": (i: number) => {
+        const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
         return instances[i]!.front ? 1 : 0;
       },
-      "shell.isHome": () => shellState().homeFront ? 1 : 0,
-      "shell.hasIcon": (i: number) => {
-        const instances = shellState().instances;
+      "cadre.isHome": () => cadreState().homeFront ? 1 : 0,
+      "cadre.hasIcon": (i: number) => {
+        const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
         return instances[i]!.hasIcon ? 1 : 0;
       },
-      "shell.open": (i: number) => {
-        const instances = shellState().instances;
+      "cadre.open": (i: number) => {
+        const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        scope.postMessage({ type: "shell.open", i: instances[i]!.id });
+        scope.postMessage({ type: "cadre.open", i: instances[i]!.id });
       },
-      "shell.close": (i: number) => {
-        const instances = shellState().instances;
+      "cadre.close": (i: number) => {
+        const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        scope.postMessage({ type: "shell.close", i: instances[i]!.id });
+        scope.postMessage({ type: "cadre.close", i: instances[i]!.id });
       },
-      "shell.openHome": () => {
-        shellState();
-        scope.postMessage({ type: "shell.home" });
+      "cadre.openHome": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.home" });
       },
-      "shell.back": () => {
-        shellState();
-        scope.postMessage({ type: "shell.back" });
+      "cadre.back": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.back" });
       },
-      "shell.openSettings": () => {
-        shellState();
-        scope.postMessage({ type: "shell.settings" });
+      "cadre.openSettings": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.settings" });
       },
-      "shell.isInstalled": () => shellState().installed ? 1 : 0,
-      "shell.installBusy": () => shellState().installBusy ? 1 : 0,
-      "shell.install": () => {
-        shellState();
-        scope.postMessage({ type: "shell.install" });
+      "cadre.isInstalled": () => cadreState().installed ? 1 : 0,
+      "cadre.installBusy": () => cadreState().installBusy ? 1 : 0,
+      "cadre.install": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.install" });
       },
-      "shell.notify": (ptr: number) => {
-        shellState();
-        scope.postMessage({ type: "shell.notify", text: readString(ptr) });
+      "cadre.notify": (ptr: number) => {
+        cadreState();
+        scope.postMessage({ type: "cadre.notify", text: readString(ptr) });
       },
     },
     env: {
@@ -251,13 +251,13 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; shell?: ShellSnapshot; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; denied?: Record<string, ApiDenial> };
     if (data.type === "init") {
       try {
         apps = data.apps;
         os = data.os;
         storage = data.storage;
-        shell = data.shell;
+        cadre = data.cadre;
         denied = data.denied ?? {};
         page = data.page ?? "";
         declarative = data.declarative ?? false;
@@ -275,12 +275,12 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         ops = [];
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
       }
-    } else if (data.type === "shell.sync" || data.type === "os.sync") {
+    } else if (data.type === "cadre.sync" || data.type === "os.sync") {
       if (data.type === "os.sync" && data.os) os = { ...data.os, launches: os?.launches ?? data.os.launches };
-      else shell = data.shell;
-      if (instance && typeof instance.exports.__bina_shell_sync === "function") {
+      else cadre = data.cadre;
+      if (instance && typeof instance.exports.__bina_cadre_sync === "function") {
         try {
-          (instance.exports.__bina_shell_sync as () => void)();
+          (instance.exports.__bina_cadre_sync as () => void)();
           flush();
         } catch (error) {
           ops = [];

@@ -93,7 +93,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
       if (LIBRARY_PREFIXES.some(prefix => name.startsWith(prefix))) return findLibrary(libraries, name);
       const path = appPath(name);
       if (path === null) return null;
-      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value, __bina_shell_sync } from "jsr:@binette/replique";\n';
+      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value, __bina_cadre_sync } from "jsr:@binette/replique";\n';
       if (LIBRARY_PREFIXES.some(prefix => path.startsWith(prefix))) return findLibrary(libraries, path);
       if (!path.endsWith(".ts")) return null;
       try { return await read(path) ?? null; } catch { return null; }

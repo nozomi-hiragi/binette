@@ -3,7 +3,7 @@ import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, ShellSnapshot } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot } from "./launch.ts";
 import { type AppStore, type InstalledApp, installedAppKey, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -36,7 +36,7 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
 
 /** システムが見せ方を受け持つ側に頼むこと */
 export interface SystemUi {
-  present(instance: { id: number; app: InstalledApp; home: boolean; shell?: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
+  present(instance: { id: number; app: InstalledApp; home: boolean; cadre?: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
   update(view: SystemView): void;
   report(error: unknown): void;
   install?(): void;
@@ -49,8 +49,8 @@ export interface SystemView {
   front: number | "apps" | undefined;
   apps: { key: string; name: string }[];
   clearError: boolean;
-  /** シェルが落ち続けてフォールバック UI を描くべきか */
-  shellUnavailable?: boolean;
+  /** Cadre が落ち続けてフォールバック UI を描くべきか */
+  cadreUnavailable?: boolean;
 }
 
 /** 起動したシステム */
@@ -68,14 +68,14 @@ export interface BinetteSystem {
  * どちらも無いキーはすべてのアプリに届く。権限を許す流れは未決なので、permission のキーは今は誰にも届かない。
  */
 const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
-  apps: { roles: ["home", "shell"] },
+  apps: { roles: ["home", "cadre"] },
   os: { roles: ["settings"] },
   storage: {},
   fs: { permission: "fs" },
-  shell: { roles: ["shell"] },
+  cadre: { roles: ["cadre"] },
 };
 /** 設定アプリで割り当てを変えられる役割。設定アプリ自体は固定 */
-const ASSIGNABLE_ROLES = ["home", "shell"];
+const ASSIGNABLE_ROLES = ["home", "cadre"];
 const SYSTEM_SOURCE = "binette:system";
 
 const HOME_RESTART_FIRST = 100;
@@ -102,18 +102,18 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   let restartTimer: ReturnType<typeof setTimeout> | undefined;
   let homeFailingSince: number | undefined;
   let homeUnavailable = false;
-  let shellSession: Session | undefined;
-  let shellFailingSince: number | undefined;
-  let shellRestartDelay = HOME_RESTART_FIRST;
-  let shellRestartTimer: ReturnType<typeof setTimeout> | undefined;
-  let shellUnavailable = false;
-  const mayRestartShell = (startedAt?: number) => {
+  let cadreSession: Session | undefined;
+  let cadreFailingSince: number | undefined;
+  let cadreRestartDelay = HOME_RESTART_FIRST;
+  let cadreRestartTimer: ReturnType<typeof setTimeout> | undefined;
+  let cadreUnavailable = false;
+  const mayRestartCadre = (startedAt?: number) => {
     const now = performance.now();
-    if (shellFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) {
-      shellFailingSince = now;
-      shellRestartDelay = HOME_RESTART_FIRST;
+    if (cadreFailingSince === undefined || (startedAt !== undefined && now - startedAt >= settings.homeRetryWindow)) {
+      cadreFailingSince = now;
+      cadreRestartDelay = HOME_RESTART_FIRST;
     }
-    return now - shellFailingSince < settings.homeRetryWindow;
+    return now - cadreFailingSince < settings.homeRetryWindow;
   };
   // 落ちたホームを起動し直す前の待ち。落ちるたびに倍にし、HOME_RESTART_MAX で頭打ちにする
   let homeRestartDelay = HOME_RESTART_FIRST;
@@ -152,10 +152,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     sessions.delete(session);
     renderBar();
   };
-  const cutShell = () => {
-    if (!shellSession) return;
-    const session = shellSession;
-    shellSession = undefined;
+  const cutCadre = () => {
+    if (!cadreSession) return;
+    const session = cadreSession;
+    cadreSession = undefined;
     session.controller.abort();
     session.mounted?.stop();
     session.view?.remove();
@@ -201,10 +201,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const chosen = role === "settings" ? undefined : settings.roles[role];
     return list.find(app => app.key === chosen) ?? list.find(app => app.key === options.roles?.[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
   };
-  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), shell: assign("shell") };
+  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre") };
   let home = assigned.home;
-  let shell = assigned.shell;
-  const apps = installedApps.filter(app => !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("shell"));
+  let cadre = assigned.cadre;
+  const apps = installedApps.filter(app => !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
   const updateAvailable = options.update !== undefined;
   let saving = Promise.resolve();
   const saveSettings = () => {
@@ -226,18 +226,18 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const selectRole = async (role: string, i: number) => {
     const list = candidates(role);
     if (stopped || !Number.isInteger(i) || !list[i]) return;
-    if (role === "shell") {
-      const previous = shell;
-      shell = assigned.shell = list[i]!;
-      settings.roles.shell = shell.key;
+    if (role === "cadre") {
+      const previous = cadre;
+      cadre = assigned.cadre = list[i]!;
+      settings.roles.cadre = cadre.key;
       saveSettings();
-      if (previous?.key !== shell.key || shellUnavailable) {
-        clearTimeout(shellRestartTimer);
-        shellFailingSince = undefined;
-        shellRestartDelay = HOME_RESTART_FIRST;
-        shellUnavailable = false;
-        cutShell();
-        await startShell();
+      if (previous?.key !== cadre.key || cadreUnavailable) {
+        clearTimeout(cadreRestartTimer);
+        cadreFailingSince = undefined;
+        cadreRestartDelay = HOME_RESTART_FIRST;
+        cadreUnavailable = false;
+        cutCadre();
+        await startCadre();
       }
       return;
     }
@@ -278,7 +278,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       updateState: options.update?.snapshot?.(),
     };
   };
-  const shellSnapshot = (): ShellSnapshot => {
+  const cadreSnapshot = (): CadreSnapshot => {
     const instances = [...sessions].filter(s => !s.home && !s.closing).map(s => ({
       id: s.id,
       appIndex: apps.findIndex(app => app.key === s.installed.key),
@@ -291,14 +291,14 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   };
 
   function renderBar(clearError = false) {
-    const snapshot = shellSnapshot();
-    shellSession?.mounted?.syncShell?.(snapshot);
+    const snapshot = cadreSnapshot();
+    cadreSession?.mounted?.syncCadre?.(snapshot);
     options.ui.update({
       instances: [...sessions].map(s => ({ id: s.id, key: s.installed.key, name: s.installed.manifest.name, icon: s.installed.icon, home: s.home, closing: s.closing })),
       front: appsShown ? "apps" : active === hiding ? undefined : active?.id,
       apps: [...apps].sort((a, b) => a.manifest.name < b.manifest.name ? -1 : a.manifest.name > b.manifest.name ? 1 : 0).map(app => ({ key: app.key, name: app.manifest.name })),
       clearError,
-      shellUnavailable: shellUnavailable || !shell,
+      cadreUnavailable: cadreUnavailable || !cadre,
     });
   }
   function showApps() {
@@ -481,118 +481,118 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     openedHome = true;
     await show(home, true, clearStatus);
   };
-  function restartShell() {
-    const delay = shellRestartDelay;
-    shellRestartDelay = Math.min(shellRestartDelay * 2, HOME_RESTART_MAX);
-    clearTimeout(shellRestartTimer);
-    shellRestartTimer = setTimeout(() => {
-      if (!stopped && shell) void startShell();
+  function restartCadre() {
+    const delay = cadreRestartDelay;
+    cadreRestartDelay = Math.min(cadreRestartDelay * 2, HOME_RESTART_MAX);
+    clearTimeout(cadreRestartTimer);
+    cadreRestartTimer = setTimeout(() => {
+      if (!stopped && cadre) void startCadre();
     }, delay);
   }
-  async function startShell(): Promise<void> {
-    if (stopped || !shell) {
-      shellUnavailable = true;
+  async function startCadre(): Promise<void> {
+    if (stopped || !cadre) {
+      cadreUnavailable = true;
       renderBar();
       return;
     }
-    const selectedShell = shell;
-    clearTimeout(shellRestartTimer);
-    if (shellSession) cutShell();
-    const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedShell, home: false, finish: false, closing: false, lastShown: ++shown };
-    shellSession = session;
+    const selectedCadre = cadre;
+    clearTimeout(cadreRestartTimer);
+    if (cadreSession) cutCadre();
+    const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedCadre, home: false, finish: false, closing: false, lastShown: ++shown };
+    cadreSession = session;
     try {
-      const api = apiOf(selectedShell);
-      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedShell.manifest.id)).catch(() => undefined) : undefined;
+      const api = apiOf(selectedCadre);
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedCadre.manifest.id)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
-      if (shellSession !== session || stopped) return;
-      const mounted = await startProcess(selectedShell.wasm, {
-        declarative: selectedShell.manifest.entry.html === undefined,
+      if (cadreSession !== session || stopped) return;
+      const mounted = await startProcess(selectedCadre.wasm, {
+        declarative: selectedCadre.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
         destroyTimeout: settings.destroyTimeout,
-        persistence: { store: options.store.system, key: selectedShell.key, historyLimit: settings.historyLimit },
+        persistence: { store: options.store.system, key: selectedCadre.key, historyLimit: settings.historyLimit },
         page,
         signal: session.controller.signal,
-        onError: error => { if (shellSession === session) report(error); },
+        onError: error => { if (cadreSession === session) report(error); },
         onExit(error) {
-          if (shellSession !== session) return;
-          cutShell();
+          if (cadreSession !== session) return;
+          cutCadre();
           report(error);
-          if (mayRestartShell(session.startedAt)) restartShell();
+          if (mayRestartCadre(session.startedAt)) restartCadre();
           else {
-            shellUnavailable = true;
+            cadreUnavailable = true;
             renderBar();
             void openHome();
           }
         },
         onFinish() {
-          if (shellSession !== session) return;
-          cutShell();
-          if (mayRestartShell(session.startedAt)) restartShell();
+          if (cadreSession !== session) return;
+          cutCadre();
+          if (mayRestartCadre(session.startedAt)) restartCadre();
           else {
-            shellUnavailable = true;
+            cadreUnavailable = true;
             renderBar();
             void openHome();
           }
         },
         grants: {
           denied: api.denied,
-          shell: shellSnapshot(),
+          cadre: cadreSnapshot(),
           ...(storage ? { storage } : {}),
           ...(api.keys.has("apps") ? { apps: apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) } : {}),
         },
         onStorage(name, value) {
           if (!api.keys.has("storage")) return;
-          saving = saving.then(() => options.store.data.write(selectedShell.manifest.id, name, value)).catch(report);
+          saving = saving.then(() => options.store.data.write(selectedCadre.manifest.id, name, value)).catch(report);
         },
-        onShellOpen(id) {
+        onCadreOpen(id) {
           const target = [...sessions].find(s => s.id === id && !s.home && !s.closing);
           if (target) void show(target.installed, false);
         },
-        onShellClose(id) {
+        onCadreClose(id) {
           const target = [...sessions].find(s => s.id === id && !s.home && !s.closing);
           if (target) void close(target, DestroyKind.User, DestroyCause.Os);
         },
-        onShellHome() { void openHome(); },
-        onShellSettings() {
+        onCadreHome() { void openHome(); },
+        onCadreSettings() {
           const target = assigned.settings;
           if (target) void show(target, false);
         },
-        onShellBack() {
+        onCadreBack() {
           if (active && !active.home) void returnHome();
         },
-        onShellNotify(_text) {},
-        onShellInstall() { options.ui.install?.(); },
+        onCadreNotify(_text) {},
+        onCadreInstall() { options.ui.install?.(); },
         onOpen(i) {
           if (!api.keys.has("apps") || !Number.isInteger(i) || !apps[i]) return;
           void show(apps[i]!, false);
         },
       });
-      if (shellSession !== session || stopped) { mounted.stop(); return; }
+      if (cadreSession !== session || stopped) { mounted.stop(); return; }
       session.view = options.ui.present({
-        id: session.id, app: selectedShell, home: false, shell: true,
+        id: session.id, app: selectedCadre, home: false, cadre: true,
         apps: api.keys.has("apps") ? apps.map(({ manifest, icon }) => ({ id: manifest.id, name: manifest.name, icon })) : undefined,
       }, mounted);
       await mounted.begin();
-      if (shellSession !== session || stopped) { mounted.stop(); session.view.remove(); return; }
+      if (cadreSession !== session || stopped) { mounted.stop(); session.view.remove(); return; }
       session.mounted = mounted;
       mounted.setStopDelay(settings.stopDelay);
       session.startedAt = performance.now();
       mounted.setFrozen(frozen);
-      // 隠れている間に起動し終えたシェルは、ふつうのアプリと同じく Pause に戻す
+      // 隠れている間に起動し終えた Cadre は、ふつうのアプリと同じく Pause に戻す
       if (!visible || frozen) await mounted.pause().catch(() => {});
-      if (shellSession !== session || stopped) return;
-      shellUnavailable = false;
+      if (cadreSession !== session || stopped) return;
+      cadreUnavailable = false;
       renderBar();
     } catch (error) {
-      if (shellSession !== session) return;
-      cutShell();
+      if (cadreSession !== session) return;
+      cutCadre();
       report(error);
-      if (mayRestartShell()) restartShell();
+      if (mayRestartCadre()) restartCadre();
       else {
-        shellUnavailable = true;
+        cadreUnavailable = true;
         renderBar();
         void openHome();
       }
@@ -605,10 +605,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   });
   renderBar();
   if (!home) report(new Error("ホームのシステムアプリがありません。"));
-  if (shell) {
-    await startShell();
+  if (cadre) {
+    await startCadre();
   } else {
-    shellUnavailable = true;
+    cadreUnavailable = true;
     renderBar();
     await openHome();
   }
@@ -633,10 +633,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       visible = page.visible;
       if (frozen !== page.frozen) {
         frozen = page.frozen;
-        shellSession?.mounted?.setFrozen(frozen);
+        cadreSession?.mounted?.setFrozen(frozen);
         for (const session of sessions) session.mounted?.setFrozen(frozen);
       }
-      shellSession?.mounted && void (visible && !frozen ? shellSession.mounted.resume() : shellSession.mounted.pause()).catch(() => {});
+      cadreSession?.mounted && void (visible && !frozen ? cadreSession.mounted.resume() : cadreSession.mounted.pause()).catch(() => {});
       const mounted = active?.mounted;
       if (mounted) void (visible && !frozen ? mounted.resume() : mounted.pause()).catch(() => {});
     },
@@ -646,8 +646,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       unsubscribeUpdate?.();
       generation++;
       clearTimeout(restartTimer);
-      clearTimeout(shellRestartTimer);
-      cutShell();
+      clearTimeout(cadreRestartTimer);
+      cutCadre();
       for (const session of sessions) cut(session);
     },
   };

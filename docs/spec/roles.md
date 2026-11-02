@@ -2,10 +2,10 @@
 
 [仕様の目次](README.md)
 
-シェル（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
+Cadre（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
 
 > [!NOTE]
-> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`api.get<T>`、`api.why`）・`apps`・`os`・`storage` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。シェルの常駐起動・`ShellApi`・`appArea()` も実装済みです。通知は入口だけです。役割の名前、キーの名前、関数名は、どれも **案** です。
+> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`api.get<T>`、`api.why`）・`apps`・`os`・`storage` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。Cadre の常駐起動・`CadreApi`・`appArea()` も実装済みです。通知は入口だけです。役割名 `cadre` は決定です。ほかのキーや関数の形は案です。
 
 ## 方針（決定 2026-11-01）
 
@@ -20,7 +20,7 @@
 
 ```jsonc
 // app.json
-{ "id": "shell", "name": "シェル", "roles": ["shell"], "permissions": { "fs": { "reason": "シェルの設定を編集するため" } } }
+{ "id": "cadre", "name": "Cadre", "roles": ["cadre"], "permissions": { "fs": { "reason": "Cadre の設定を編集するため" } } }
 ```
 
 ```ts
@@ -34,12 +34,12 @@ class Home extends App {
   }
 }
 
-// 実装済み（形は案、シェル）
+// 実装済み（形は案、Cadre）
 class Bar extends App {
   override onCreate(last: Last, api: Api): void {
-    const shell = api.get<ShellApi>("shell"); // 取れなければ null
-    if (shell == null) {
-      // api.why("shell") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
+    const cadre = api.get<CadreApi>("cadre"); // 取れなければ null
+    if (cadre == null) {
+      // api.why("cadre") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
     }
   }
 }
@@ -54,8 +54,8 @@ class Bar extends App {
 
 名乗った（`roles`）アプリのうち、どれを割り当てるかを 2 段で決めます（[regie/system.md](regie/system.md#役割の割り当て実装済み形は案)）。
 
-1. 初回は `system/boot.json` の既定（`roles.shell`・`roles.home`・`roles.settings` にアプリの ID）。カーネルがブートのとき、これを `SystemOptions.roles`（役割 → installedAppKey）にして Régie に渡す
-2. そのあとは設定（SystemStore の `settings.roles`、役割 → installedAppKey）が優先する。割り当てを変えられるのは設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` と `shell`
+1. 初回は `system/boot.json` の既定（`roles.cadre`・`roles.home`・`roles.settings` にアプリの ID）。カーネルがブートのとき、これを `SystemOptions.roles`（役割 → installedAppKey）にして Régie に渡す
+2. そのあとは設定（SystemStore の `settings.roles`、役割 → installedAppKey）が優先する。割り当てを変えられるのは設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` と `cadre`
 3. どちらも使えなければ、入手元が `binette:system` の、その役割を名乗る最初のアプリ
 
 `settings` は固定で、設定では変えられません（設定アプリは入手元が `binette:system` のものだけ。ブートでも `/user` の上書きを拒む）。キーごとの届け先は Régie の表（`API_RULES`）で決まります。
@@ -64,21 +64,21 @@ class Bar extends App {
 
 辞書は「使えるかを調べる入口」です。載っていないキーを `api.get` しても、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を直接呼んだときは、今までどおり例外でアプリを終了します（[regie/run.md](regie/run.md#辞書を通さない呼び出し実装済み)）。強制は import 側が続けて受け持つので、辞書を迂回しても権限は増えません。
 
-## シェル（決定 2026-11-01）
+## Cadre（決定 2026-11-01）
 
 Windows のエクスプローラーのような、OS の一番外側を受け持つアプリです（のぞみ 2026-11-01）。
 
-- 本当に最初に起動するアプリ。カーネルは起動の流れを終えたら、まずシェルを起動する
+- 本当に最初に起動するアプリ。カーネルは起動の流れを終えたら、まず Cadre を起動する
 - ホームバー、これから来る通知など、OS の大枠の UI を全部受け持つ
-- 大枠の中に「アプリの表示領域」を置く。ホームはシェルが呼び、ホームやほかのアプリはカーネルがその領域に出す
-- 機能（アプリの切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知など）はカーネルが固定で持ち、`shell` の API として渡す
-- 見た目と並びは、シェルが Décor で好きに作る
+- 大枠の中に「アプリの表示領域」を置く。ホームは Cadre が呼び、ホームやほかのアプリはカーネルがその領域に出す
+- 機能（アプリの切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知など）はカーネルが固定で持ち、`cadre` の API として渡す
+- 見た目と並びは、Cadre が Décor で好きに作る
 
 ```ts
 // 例（案）。appArea() はカーネルがアプリを出す場所
 override build(): View {
   const dock: View[] = [];
-  for (let i = 0; i < this.shell.running(); i++) dock.push(buttonOf([appIcon(i)], switchTo).arg(i));
+  for (let i = 0; i < this.cadre.running(); i++) dock.push(buttonOf([appIcon(i)], switchTo).arg(i));
   return column([
     appArea().grow(),
     row([button("ホーム", home), ...dock]).gap(),
@@ -86,15 +86,15 @@ override build(): View {
 }
 ```
 
-- 役割の名前は `shell`（案）。部品 `appArea()` の名前も案
-- シェルもほかのアプリと同じく Worker の WASM で動き、DOM には触れない。アプリの表示領域の中身（アプリの DOM）は、シェルからは見えない
-- シェルはブートと保存設定の役割の割り当てで選ぶ。設定画面からも差し替えられる（設定アプリと違ってコアではない）
-- ホームバーは既定のシェル `apps/shell` が AS の Décor で描く（[apps/shell.md](apps/shell.md)）。Scene はアプリを `appArea()` に配置する
+- 役割の名前は `cadre`（決定）。部品 `appArea()` の名前は案
+- Cadre もほかのアプリと同じく Worker の WASM で動き、DOM には触れない。アプリの表示領域の中身（アプリの DOM）は、Cadre からは見えない
+- Cadre はブートと保存設定の役割の割り当てで選ぶ。設定画面からも差し替えられる（設定アプリと違ってコアではない）
+- ホームバーは既定の Cadre `apps/cadre` が AS の Décor で描く（[apps/cadre.md](apps/cadre.md)）。Scene はアプリを `appArea()` に配置する
 - 吹き出しとメニューのような重ね表示は、Décor にまだ部品がない。どう渡すかは未決
 
 ## 常駐する役割の落ちたとき（決定）
 
-ホームと同じ決まりにします（[lifecycle.md](lifecycle.md#落ちたとき決定)）。落ちたら起動し直し、落ち続けたらカーネルが直接描く最後の受け皿を出します。シェルの受け皿は、アプリの表示領域とホームへ戻るボタンだけの最低限の大枠です（実装済み、形は案）。再起動の待ちと打ち切りにはホームと同じ `homeRetryWindow` を使います。シェルのような常駐する役割は、スタックに数えません。
+ホームと同じ決まりにします（[lifecycle.md](lifecycle.md#落ちたとき決定)）。落ちたら起動し直し、落ち続けたらカーネルが直接描く最後の受け皿を出します。Cadre の受け皿は、アプリの表示領域とホームへ戻るボタンだけの最低限の大枠です（実装済み、形は案）。再起動の待ちと打ち切りにはホームと同じ `homeRetryWindow` を使います。Cadre のような常駐する役割は、スタックに数えません。
 
 ## 設定アプリ（決定 2026-11-01）
 
@@ -107,7 +107,7 @@ override build(): View {
 | 役割 | 仕事 | 常駐 |
 | --- | --- | --- |
 | `home` | ほかのアプリを並べて開く | いいえ（スタックに数える。今のまま） |
-| `shell` | OS の大枠（ホームバー、通知など）とアプリの表示領域 | はい |
+| `cadre` | OS の大枠（ホームバー、通知など）とアプリの表示領域 | はい |
 | `settings` | OS の設定、役割の割り当て | いいえ |
 
 ロック画面やキーボードなどは、要るようになったら足します。
@@ -116,8 +116,8 @@ override build(): View {
 
 | キー | 中身 | 届く相手 | 状態 |
 | --- | --- | --- | --- |
-| `shell` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | シェル | 実装済み（通知は入口だけ。形は案） |
-| `apps` | アプリの一覧、アイコン、開く（`AppsApi`） | ホームとシェル | 実装済み |
+| `cadre` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | Cadre | 実装済み（通知は入口だけ。形は案） |
+| `apps` | アプリの一覧、アイコン、開く（`AppsApi`） | ホームと Cadre | 実装済み |
 | `os` | OS の設定、役割の割り当て、起動の履歴、更新（`OsApi`） | 設定アプリ | 実装済み |
 | `fs` | ファイルの木を読む・書く（範囲つき。`FsApi`） | 権限を許したアプリ（デザイナー、エディタなど） | キーだけ。今は誰にも届かない |
 | `storage` | アプリごとのデータ（`/data/<id>/`。`StorageApi`） | すべてのアプリ | 実装済み（読む・書く・一覧・削除） |

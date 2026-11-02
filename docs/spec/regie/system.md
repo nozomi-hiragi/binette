@@ -29,7 +29,7 @@ interface SystemOptions extends BuildOptions {
 /** Régie がシステム UI に頼むこと */
 interface SystemUi {
   /** インスタンスの置き場を作り、HTML を描いて process.attach する。返した置き場は remove で消す */
-  present(instance: { id: number; app: InstalledApp; home: boolean; shell?: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
+  present(instance: { id: number; app: InstalledApp; home: boolean; cadre?: boolean; apps?: { id: string; name: string; icon?: string }[] }, process: Process): { remove(): void };
   /** 見せる状態が変わった */
   update(view: SystemView): void;
   /** エラーを見せる。同じエラーが何度か届くことがある（Pause の失敗など）。まとめるのは UI の役目 */
@@ -44,7 +44,7 @@ interface SystemView {
   apps: { key: string; name: string }[];
   /** show でエラー表示を消すときだけ true */
   clearError: boolean;
-  shellUnavailable?: boolean;
+  cadreUnavailable?: boolean;
 }
 interface BinetteSystem {
   /** ホームを開く。startSystem のあと、システム UI をつないでから呼ぶ。ホームが残っていなければ起動する */
@@ -79,12 +79,12 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 
 - `store.list()` も読み、今回保存したアプリと合わせて、`manifest.roles` にその役割を含むものを候補にする。入手元は問わない。設定（`settings`）の役割は、候補が入手元 `binette:system` のアプリだけ
 - 割り当ては 3 段で選ぶ。(1) 設定 `roles[役割]`（installedAppKey）が候補にあればそれ、(2) `SystemOptions.roles[役割]`（ブートの既定。`system/boot.json` から読んだもの）が候補にあればそれ、(3) 入手元が `binette:system` の最初の候補。無ければホームは `ui.report` にエラーを出す。設定の役割は (1) を使わない（コアで差し替えられない）
-- 設定を変えられるのは、設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` と `shell`。ホームでは、その場で `roles.home` を保存し、前のホームを User・Os で Destroy する。設定アプリは開いたまま、以後のホームへ戻る動きは新しいホームを使い、`apps` も新しいホームだけに渡す。失敗の計時も消す。ホーム候補と履歴の名前の解決は `store.list()` 全件を含む
+- 設定を変えられるのは、設定アプリの `os.assign(役割, 候補の番号)` だけ。今変えられる役割は `home` と `cadre`。ホームでは、その場で `roles.home` を保存し、前のホームを User・Os で Destroy する。設定アプリは開いたまま、以後のホームへ戻る動きは新しいホームを使い、`apps` も新しいホームだけに渡す。失敗の計時も消す。ホーム候補と履歴の名前の解決は `store.list()` 全件を含む
 - 保存した割り当てのアプリが無い（削除された、名乗らなくなった）ときは、次の段に進む。保存した値は消さない
 
 ## 開く・戻る・閉じる
 
-- `openHome()` でホームを開く（最初の 1 回はシェルが呼ぶ）。ホームには、`home`・`shell` を名乗るアプリ以外を渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
+- `openHome()` でホームを開く（最初の 1 回は Cadre が呼ぶ）。ホームには、`home`・`cadre` を名乗るアプリ以外を渡された順に `{ id, name, icon? }[]` として渡す。ホーム自身は一覧に入れない
 - ホームの `AppsApi.open(i)` や `open(key)` で、そのアプリを前面に出す。元の前面は Pause にし、置き場とプロセスを残す（隠すのはシステム UI）。Pause なら Resume、Stop なら Start(Stop) → Resume。無ければインスタンスを作る
 - 同じアプリの Destroy が終わる前に次のインスタンスを作らない。起動の途中で離れたら、未完成のインスタンスを残さない
 - ホームも含め既定 3 インスタンスまで残す。超えたら前面以外で最後に前面に出た順に片付け、Stop → Destroy（System・Stack）を通す
@@ -97,7 +97,7 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 - 落ちたインスタンスは状態を知らせずにスタックから外し、`ui.report` にエラーを出す。前面ならホームへ戻り、背面なら前面を変えない
 - ホーム自身が前面で落ちた場合と起動失敗では開き直す。開き直す前に 100ms 待ち、落ちるたびに倍にして 1000ms で頭打ちにする（数え直すと 100ms に戻る。案）
 - 最初の落ちから homeRetryWindow を過ぎても落ち続けたら、前面を Apps にしてエラーを残す。落ちたホームが起動を済ませてから homeRetryWindow 以上動いていたら数え直す。起動の失敗（時間切れを含む）では数え直さない
-- Apps に並べるのは、ホームに渡す一覧と同じアプリ（`home`・`shell` を名乗るアプリ以外、設定を含む）。名前を `<`・`>` の文字コード順で比べる。Apps から開いたアプリが閉じたら Apps に戻る
+- Apps に並べるのは、ホームに渡す一覧と同じアプリ（`home`・`cadre` を名乗るアプリ以外、設定を含む）。名前を `<`・`>` の文字コード順で比べる。Apps から開いたアプリが閉じたら Apps に戻る
 - `openHome()` は、Apps のときも Apps から開いたアプリのときも、失敗の計時を消してホームを再試行する。起動できれば以後はホームへ戻り、落ち続ければ同じ時間を数えて Apps に戻る
 
 ## 権限
@@ -106,8 +106,8 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 
 | キー | 届く相手 | 届かないとき |
 | --- | --- | --- |
-| `shell`（大枠の操作） | 役割 `shell` に割り当てられたアプリ | NotAssigned |
-| `apps`（アプリの一覧、アイコン、開く） | 役割 `home` か `shell` に割り当てられたアプリ | NotAssigned |
+| `cadre`（大枠の操作） | 役割 `cadre` に割り当てられたアプリ | NotAssigned |
+| `apps`（アプリの一覧、アイコン、開く） | 役割 `home` か `cadre` に割り当てられたアプリ | NotAssigned |
 | `os`（OS の設定、役割の割り当て、起動の履歴、更新） | 役割 `settings` に割り当てられたアプリ（入手元が `binette:system`） | NotAssigned |
 | `storage`（アプリごとのデータ） | すべてのアプリ。アプリのデータの読み込みに失敗したときと、ID が `system` のときだけ載せない | NotGranted |
 | `fs`（ファイルの木） | 誰にも届かない。`app.json` の `permissions` に書くアプリに、ユーザーの許可を得て渡す流れは未決 | NotGranted |
@@ -140,10 +140,10 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 - freeze で全インスタンスの Stop までの計時を止め、resume で残りから続ける。状態の Pause・Resume は前面だけを対象にする
 - 凍結が解けても見えていなければ Resume にしない（resume は前面に戻った知らせではないため）。Stop から戻るなら Start(Stop) → Resume。起動中にページが隠れた場合も、起動後に Pause にする
 
-## 常駐シェル（実装済み、形は案）
+## 常駐 Cadre（実装済み、形は案）
 
-シェルはホームより先に起動し、スタックとは別に保持します。`ShellSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncShell` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。通知は入口だけです。
+Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。通知は入口だけです。
 
-落ちたらホームと同じ待ちと `homeRetryWindow` で再起動し、落ち続けたら `shellUnavailable` を Scene に渡します。シェルがない場合も最低限の大枠でホームを開きます。`os.assign("shell", i)` は保存して旧シェルを止め、新しいシェルを起動します。通常のアプリのスタックは残します。
+落ちたらホームと同じ待ちと `homeRetryWindow` で再起動し、落ち続けたら `cadreUnavailable` を Scene に渡します。Cadre がない場合も最低限の大枠でホームを開きます。`os.assign("cadre", i)` は保存して旧 Cadre を止め、新しい Cadre を起動します。通常のアプリのスタックは残します。
 
-インストール案内は `SystemUi.install()` に頼み、Scene が `setInstallState(installed, busy)` で状態を返します。ページの非表示・凍結は常駐シェルにも伝えます。
+インストール案内は `SystemUi.install()` に頼み、Scene が `setInstallState(installed, busy)` で状態を返します。ページの非表示・凍結は常駐 Cadre にも伝えます。

@@ -31,7 +31,7 @@ const css = `
 :where(.bina-shell-fallback-home):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-shell-live) { position: absolute; z-index: 2147483647; pointer-events: none; right: max(var(--bina-shell-padding, 12px), env(safe-area-inset-right, 0px)); bottom: max(var(--bina-shell-padding, 12px), env(safe-area-inset-bottom, 0px)); color: var(--bina-shell-live-color, var(--bina-shell-color, #16181d)); opacity: var(--bina-shell-live-opacity, 0.35); font-size: var(--bina-shell-live-size, 0.875em); }
 :where(.bina-shell-install-dialog) { z-index: 2147483647; max-width: min(28rem, 80vw); padding: var(--bina-shell-padding, 12px); border: 1px solid var(--bina-shell-border, #d5dae1); border-radius: var(--bina-shell-radius, 12px); background: var(--bina-shell-surface, #fff); color: var(--bina-shell-color, #16181d); font: inherit; overflow-wrap: anywhere; }
-/* シェルの木の根は表示領域より大きくならず、アプリの中身は領域の中でスクロールする */
+/* Cadre の木の根は表示領域より大きくならず、アプリの中身は領域の中でスクロールする */
 :where(.bina-shell-host > *) { min-height: 0; min-width: 0; }
 :where(.bina-shell-app) { display: flex; flex-direction: column; flex: 1; box-sizing: border-box; min-height: 0; width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; }
 :where(.bina-shell-apps) { display: flex; flex-direction: column; align-items: flex-start; flex: 1; box-sizing: border-box; min-height: 0; width: 100%; height: 100%; overflow: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
@@ -47,8 +47,8 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   const style = document.createElement("style");
   style.textContent = css;
 
-  const shellHost = document.createElement("div");
-  shellHost.className = "bina-shell-host";
+  const cadreHost = document.createElement("div");
+  cadreHost.className = "bina-shell-host";
 
   const fallback = document.createElement("div");
   fallback.className = "bina-shell-fallback";
@@ -79,21 +79,21 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   const live = mountLiveMode(root, options.installed, () => {
     system?.setInstallState?.(live.installed, live.busy);
   });
-  root.append(style, shellHost, fallback, appsHost, status);
+  root.append(style, cadreHost, fallback, appsHost, status);
   element.replaceChildren(root);
 
   let system: BinetteSystem | undefined;
   let stopped = false;
   let frozen = false;
-  let view: SystemView = { instances: [], front: undefined, apps: [], clearError: false, shellUnavailable: false };
+  let view: SystemView = { instances: [], front: undefined, apps: [], clearError: false, cadreUnavailable: false };
   const hosts = new Map<number, { host: HTMLElement; stop(): void }>();
-  let shellMounted: { stop(): void } | undefined;
+  let cadreMounted: { stop(): void } | undefined;
   const reported = new WeakSet<object>();
 
   function getAppArea(): HTMLElement {
     if (!fallback.hidden) return fallbackArea;
-    const area = shellHost.querySelector<HTMLElement>(".bina-ui-appArea");
-    return area ?? shellHost;
+    const area = cadreHost.querySelector<HTMLElement>(".bina-ui-appArea");
+    return area ?? cadreHost;
   }
 
   const setPage = () => system?.setPage({ visible: document.visibilityState === "visible", frozen });
@@ -107,21 +107,21 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     bind(value) { if (!stopped) { system = value; system.setInstallState?.(live.installed, live.busy); setPage(); } },
     install() { void live.install(); },
     present(instance, process) {
-      if (instance.shell) {
-        shellMounted?.stop();
-        shellHost.replaceChildren();
-        const mounted = mountApp(shellHost, instance.app.html, process, {
+      if (instance.cadre) {
+        cadreMounted?.stop();
+        cadreHost.replaceChildren();
+        const mounted = mountApp(cadreHost, instance.app.html, process, {
           apps: instance.apps,
           css: instance.app.css,
           onError: error => ui.report(error),
           onDom: () => ui.update(view),
           isolateAppArea: true,
         });
-        shellMounted = mounted;
+        cadreMounted = mounted;
         const remove = () => {
           mounted.stop();
-          shellHost.replaceChildren();
-          if (shellMounted === mounted) shellMounted = undefined;
+          cadreHost.replaceChildren();
+          if (cadreMounted === mounted) cadreMounted = undefined;
         };
         return { remove };
       }
@@ -141,9 +141,9 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       if (next.clearError) status.hidden = true;
       view = next;
       const front = next.front;
-      const useFallback = next.shellUnavailable === true;
+      const useFallback = next.cadreUnavailable === true;
       fallback.hidden = !useFallback;
-      shellHost.hidden = useFallback;
+      cadreHost.hidden = useFallback;
 
       const targetArea = getAppArea();
       live.setAppArea(targetArea);
@@ -182,8 +182,8 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       if (stopped) return;
       stopped = true;
       system = undefined;
-      shellMounted?.stop();
-      shellMounted = undefined;
+      cadreMounted?.stop();
+      cadreMounted = undefined;
       for (const entry of hosts.values()) entry.stop();
       document.removeEventListener("visibilitychange", setPage);
       document.removeEventListener("freeze", freeze);

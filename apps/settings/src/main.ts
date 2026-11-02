@@ -41,10 +41,10 @@ function chooseHome(index: i32): void {
   if (os == null) return;
   os.assign("home", index);
 }
-function chooseShell(index: i32): void {
+function chooseCadre(index: i32): void {
   const os = osApi;
   if (os == null) return;
-  os.assign("shell", index);
+  os.assign("cadre", index);
 }
 function update(): void {
   const os = osApi;
@@ -98,13 +98,13 @@ class Settings extends App {
         text(selected ? "✓" : "").tone("accent").key("selection-mark"),
       ], chooseHome).arg(i).selected(selected).label(os.candidateName("home", i) + (selected ? "（使用中）" : "をホームにする")).key("home-" + i.toString()));
     }
-    const shells: View[] = [];
-    for (let i: i32 = 0; i < os.candidateCount("shell"); i++) {
-      const selected = os.candidateId("shell", i) == os.role("shell");
-      shells.push(buttonOf([
-        text(os.candidateName("shell", i)).grow(),
+    const cadres: View[] = [];
+    for (let i: i32 = 0; i < os.candidateCount("cadre"); i++) {
+      const selected = os.candidateId("cadre", i) == os.role("cadre");
+      cadres.push(buttonOf([
+        text(os.candidateName("cadre", i)).grow(),
         text(selected ? "✓" : "").tone("accent").key("selection-mark"),
-      ], chooseShell).arg(i).selected(selected).label(os.candidateName("shell", i) + (selected ? "（使用中）" : "をシェルにする")).key("shell-" + i.toString()));
+      ], chooseCadre).arg(i).selected(selected).label(os.candidateName("cadre", i) + (selected ? "（使用中）" : "を Cadre にする")).key("cadre-" + i.toString()));
     }
     const debug: View[] = [];
     for (let i: i32 = 0; i < names.length; i++) {
@@ -149,7 +149,7 @@ class Settings extends App {
         ]).surface("card").key("update-card"),
       ]).key("update-section"),
       column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),
-      column([text("シェル").heading(2).key("shell-title"), column(shells).surface("card").key("shells")]).key("shell-section"),
+      column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"),
       column([text("デバッグ").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"),
       column([
         row([text("起動の履歴").heading(2).grow().key("history-title"), text("UTC").small().tone("muted")]),

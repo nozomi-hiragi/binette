@@ -82,7 +82,7 @@ interface OsSnapshot {
   updateAvailable: boolean; // 新しい版の /system があるか
 }
 type ApiDenial = "NotGranted" | "NotAssigned";
-const API_KEYS = ["apps", "os", "storage", "fs", "shell"] as const;
+const API_KEYS = ["apps", "os", "storage", "fs", "cadre"] as const;
 ```
 
 - `signal` が中断されたら Worker を止め、起動や呼び出しの待ちを reject する。中断済みなら Worker は作らない
@@ -209,7 +209,7 @@ Régie が WASM に渡すのは `binette` の [Réplique の import](../replique
 
 ### 辞書を通さない呼び出し（実装済み）
 
-アプリの `Api` は import `api.why(key)` で、キーが載っているか（0）、NotGranted（1）、NotAssigned（2）を Worker に聞きます。載っていないキーを取ろうとしても、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*`・`shell.*` の import を直接呼んだときは、従来の決まりのまま例外でアプリを終了します（`この呼び出しは apps が届いたアプリだけが使えます。` など）。つまり、辞書は「使えるか調べる」ための入口で、権限の強制は import 側が続けて受け持ちます。
+アプリの `Api` は import `api.why(key)` で、キーが載っているか（0）、NotGranted（1）、NotAssigned（2）を Worker に聞きます。載っていないキーを取ろうとしても、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*`・`cadre.*` の import を直接呼んだときは、従来の決まりのまま例外でアプリを終了します（`この呼び出しは apps が届いたアプリだけが使えます。` など）。つまり、辞書は「使えるか調べる」ための入口で、権限の強制は import 側が続けて受け持ちます。
 
 `apps.open` と `app.finish` の import は即時にメッセージを送ります。メインは ready または待つ call の完了まで要求を保留し、DOM 操作が届いたあとに onOpen / onFinish を呼びます。同じ呼び出しの finish は open より優先します。
 
@@ -244,6 +244,6 @@ const text = new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, pt
 - 読むたびに `memory.buffer` を取り直します（メモリが伸びると `buffer` が変わるため）
 
 
-## シェルの同期（実装済み、形は案）
+## Cadre の同期（実装済み、形は案）
 
-起動時の `shell?: ShellSnapshot` が辞書の `shell` キーを有効にします。`ShellSnapshot` は `instances`（各アプリの `id`・`appIndex`・`name`・`front`・`hasIcon`）、`homeFront`、`installed`、`installBusy` を持ちます。`syncShell` で Worker の一覧を更新し、`__bina_shell_sync` で宣言 UI を描き直します。`onShellOpen`・`onShellClose` はインスタンスの ID、`onShellHome`・`onShellBack`・`onShellInstall` は操作、`onShellNotify` は文字列をシステムへ届けます。権限のない `shell.*` の直接呼び出しはほかのキーと同じく終了します。
+起動時の `cadre?: CadreSnapshot` が辞書の `cadre` キーを有効にします。`CadreSnapshot` は `instances`（各アプリの `id`・`appIndex`・`name`・`front`・`hasIcon`）、`homeFront`、`installed`、`installBusy` を持ちます。`syncCadre` で Worker の一覧を更新し、`__bina_cadre_sync` で宣言 UI を描き直します。`onCadreOpen`・`onCadreClose` はインスタンスの ID、`onCadreHome`・`onCadreBack`・`onCadreInstall` は操作、`onCadreNotify` は文字列をシステムへ届けます。権限のない `cadre.*` の直接呼び出しはほかのキーと同じく終了します。

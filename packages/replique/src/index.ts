@@ -267,7 +267,7 @@ declare function whyImport(key: string): i32;
 /** 辞書に載らなかった理由。Granted は、載っている */
 export enum Why { Granted, NotGranted, NotAssigned }
 
-/** `api.get<AppsApi>("apps")`。アプリの一覧と起動。ホーム（とシェル）の役割を割り当てられたアプリに届く */
+/** `api.get<AppsApi>("apps")`。アプリの一覧と起動。ホーム（と Cadre）の役割を割り当てられたアプリに届く */
 export class AppsApi {
   /** img に OS のアプリアイコンを入れる */
   icon(img: Element, i: i32): void { iconImport(img.handle, i); }
@@ -320,47 +320,47 @@ export class StorageApi {
 /** `api.get<FsApi>("fs")`。ファイルの木。範囲の決め方が未決なので、キーだけ用意して今は誰にも届かない */
 export class FsApi {}
 
-/** `api.get<ShellApi>("shell")`。シェルの役割に割り当てられたアプリにだけ届く */
-export class ShellApi {
+/** `api.get<CadreApi>("cadre")`。Cadre の役割に割り当てられたアプリにだけ届く */
+export class CadreApi {
   /** 起動中のアプリ（ホームを除く）の数 */
-  count(): i32 { return shellCountImport(); }
+  count(): i32 { return cadreCountImport(); }
   /** running の別名 */
   running(): i32 { return this.count(); }
   /** i 番目のアプリの名前 */
-  name(i: i32): string { return shellNameImport(i); }
+  name(i: i32): string { return cadreNameImport(i); }
   /** i 番目のアプリが前面にあるか */
-  isFront(i: i32): boolean { return shellIsFrontImport(i) != 0; }
+  isFront(i: i32): boolean { return cadreIsFrontImport(i) != 0; }
   /** ホームが前面にあるか */
-  isHome(): boolean { return shellIsHomeImport() != 0; }
+  isHome(): boolean { return cadreIsHomeImport() != 0; }
   /** i 番目のアプリのアイコンがあるか */
-  hasIcon(i: i32): boolean { return shellHasIconImport(i) != 0; }
+  hasIcon(i: i32): boolean { return cadreHasIconImport(i) != 0; }
   /** i 番目のアプリに対応する apps 一覧の番号。appIcon に渡す */
-  appIndex(i: i32): i32 { return shellAppIndexImport(i); }
+  appIndex(i: i32): i32 { return cadreAppIndexImport(i); }
   /** インストール済みか */
-  isInstalled(): boolean { return shellIsInstalledImport() != 0; }
+  isInstalled(): boolean { return cadreIsInstalledImport() != 0; }
   /** インストールの確認を待っているか */
-  installBusy(): boolean { return shellInstallBusyImport() != 0; }
+  installBusy(): boolean { return cadreInstallBusyImport() != 0; }
   /** インストールを案内する */
-  install(): void { shellInstallImport(); }
+  install(): void { cadreInstallImport(); }
   /** i 番目のアプリを開く（前面にする） */
-  open(i: i32): void { shellOpenImport(i); }
+  open(i: i32): void { cadreOpenImport(i); }
   /** i 番目のアプリを閉じる */
-  close(i: i32): void { shellCloseImport(i); }
+  close(i: i32): void { cadreCloseImport(i); }
   /** ホームを開く */
-  openHome(): void { shellOpenHomeImport(); }
+  openHome(): void { cadreOpenHomeImport(); }
   /** openHome の別名 */
   home(): void { this.openHome(); }
   /** 戻る */
-  back(): void { shellBackImport(); }
+  back(): void { cadreBackImport(); }
   /** 設定の役割に割り当てられたアプリを開く */
-  openSettings(): void { shellOpenSettingsImport(); }
+  openSettings(): void { cadreOpenSettingsImport(); }
   /** 通知（案。枠のみ） */
-  notify(text: string): void { shellNotifyImport(text); }
+  notify(text: string): void { cadreNotifyImport(text); }
 }
 
 /**
  * OS が `onCreate` で渡す API の辞書。キーで取り出す。
- * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi、`shell` は ShellApi）を返す
+ * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi、`cadre` は CadreApi）を返す
  */
 export class Api {
   /** 届いていれば API を、キーが無いか型引数が合わないか、届いていなければ null を返す */
@@ -370,7 +370,7 @@ export class Api {
     if (key == "os" && idof<T>() == idof<OsApi>()) return changetype<T>(new OsApi());
     if (key == "storage" && idof<T>() == idof<StorageApi>()) return changetype<T>(new StorageApi());
     if (key == "fs" && idof<T>() == idof<FsApi>()) return changetype<T>(new FsApi());
-    if (key == "shell" && idof<T>() == idof<ShellApi>()) return changetype<T>(new ShellApi());
+    if (key == "cadre" && idof<T>() == idof<CadreApi>()) return changetype<T>(new CadreApi());
     return null;
   }
   /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
@@ -409,50 +409,50 @@ declare function lastCauseImport(): DestroyCause;
 declare function finishImport(): void;
 
 // @ts-ignore: decorator
-@external("binette", "shell.count")
-declare function shellCountImport(): i32;
+@external("binette", "cadre.count")
+declare function cadreCountImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.name")
-declare function shellNameImport(i: i32): string;
+@external("binette", "cadre.name")
+declare function cadreNameImport(i: i32): string;
 // @ts-ignore: decorator
-@external("binette", "shell.isFront")
-declare function shellIsFrontImport(i: i32): i32;
+@external("binette", "cadre.isFront")
+declare function cadreIsFrontImport(i: i32): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.isHome")
-declare function shellIsHomeImport(): i32;
+@external("binette", "cadre.isHome")
+declare function cadreIsHomeImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.hasIcon")
-declare function shellHasIconImport(i: i32): i32;
+@external("binette", "cadre.hasIcon")
+declare function cadreHasIconImport(i: i32): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.appIndex")
-declare function shellAppIndexImport(i: i32): i32;
+@external("binette", "cadre.appIndex")
+declare function cadreAppIndexImport(i: i32): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.isInstalled")
-declare function shellIsInstalledImport(): i32;
+@external("binette", "cadre.isInstalled")
+declare function cadreIsInstalledImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.installBusy")
-declare function shellInstallBusyImport(): i32;
+@external("binette", "cadre.installBusy")
+declare function cadreInstallBusyImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "shell.install")
-declare function shellInstallImport(): void;
+@external("binette", "cadre.install")
+declare function cadreInstallImport(): void;
 // @ts-ignore: decorator
-@external("binette", "shell.open")
-declare function shellOpenImport(i: i32): void;
+@external("binette", "cadre.open")
+declare function cadreOpenImport(i: i32): void;
 // @ts-ignore: decorator
-@external("binette", "shell.close")
-declare function shellCloseImport(i: i32): void;
+@external("binette", "cadre.close")
+declare function cadreCloseImport(i: i32): void;
 // @ts-ignore: decorator
-@external("binette", "shell.openHome")
-declare function shellOpenHomeImport(): void;
+@external("binette", "cadre.openHome")
+declare function cadreOpenHomeImport(): void;
 // @ts-ignore: decorator
-@external("binette", "shell.back")
-declare function shellBackImport(): void;
+@external("binette", "cadre.back")
+declare function cadreBackImport(): void;
 // @ts-ignore: decorator
-@external("binette", "shell.openSettings")
-declare function shellOpenSettingsImport(): void;
+@external("binette", "cadre.openSettings")
+declare function cadreOpenSettingsImport(): void;
 // @ts-ignore: decorator
-@external("binette", "shell.notify")
-declare function shellNotifyImport(text: string): void;
+@external("binette", "cadre.notify")
+declare function cadreNotifyImport(text: string): void;
 
 // @ts-ignore: decorator
 @external("binette", "ui.render")
@@ -593,7 +593,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
   rebuild();
 }
 
-/** OS がシェルの状態（起動中の一覧や前面）の更新を知らせる */
-export function __bina_shell_sync(): void {
+/** OS が Cadre の状態（起動中の一覧や前面）の更新を知らせる */
+export function __bina_cadre_sync(): void {
   rebuild();
 }

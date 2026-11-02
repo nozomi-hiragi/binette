@@ -184,7 +184,7 @@ const system = await startSystem({
   apps: [{ source: "binette:system", prebuilt: { ...built, manifest: { ...built.manifest, roles: ["home"] } } }],
   store: createMemoryAppStore(), ui, createWorker,
 });
-assertEquals(views.at(-1)?.shellUnavailable, true);
+assertEquals(views.at(-1)?.cadreUnavailable, true);
 assertEquals(views.at(-1)?.instances.length, 1);
 await system.openHome();
 assertEquals(views.at(-1)?.instances.length, 1);

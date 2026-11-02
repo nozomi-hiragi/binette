@@ -16,9 +16,9 @@ async function fixture() {
   const tree = createMemoryFileTree();
   const files = new Map<string, Uint8Array>([[
     "system/boot.json",
-    encode({ roles: { home: "home", settings: "settings", shell: "shell" } }),
+    encode({ roles: { home: "home", settings: "settings", cadre: "cadre" } }),
   ]]);
-  for (const name of ["home", "settings", "shell"]) {
+  for (const name of ["home", "settings", "cadre"]) {
     files.set(
       `system/apps/${name}/app.json`,
       encode({ id: name, name, roles: [name], entry: { as: "main.ts", css: "src/style.css" } }),
@@ -63,11 +63,11 @@ Deno.test("起動は固定物を検証し、設定の上書きと古い固定ア
   const { tree, distribution } = await fixture();
   await tree.write("/user/apps/settings/app.wasm", new Uint8Array([99]));
   const { apps, roles } = await loadBootApps(tree, distribution);
-  assertEquals(apps.find(app => app.prebuilt?.manifest.id === "shell")?.prebuilt?.css, "p { color: red }");
+  assertEquals(apps.find(app => app.prebuilt?.manifest.id === "cadre")?.prebuilt?.css, "p { color: red }");
   assertEquals(roles, {
     home: installedAppKey("binette:system", "home"),
     settings: installedAppKey("binette:system", "settings"),
-    shell: installedAppKey("binette:system", "shell"),
+    cadre: installedAppKey("binette:system", "cadre"),
   });
   assertEquals(
     apps.find((app) => app.prebuilt?.manifest.id === "settings")?.prebuilt
@@ -183,8 +183,8 @@ Deno.test("オフラインでも保存済みの配布物を検証してホーム
   const { apps, roles } = await loadBootApps(tree, distribution);
   assertEquals(roles.home, installedAppKey("binette:system", "home"));
   assertEquals(apps.map((app) => app.prebuilt?.manifest.id), [
+    "cadre",
     "home",
     "settings",
-    "shell",
   ]);
 });
