@@ -648,9 +648,12 @@ export function readShared(): void { const value = storage!.read("shared"); docu
     await system.open("settings");
     await element.active.process.app.call("readHomes");
     assertEquals(element.active.text.get("homes"), "2");
+    // 一覧に出ないサブアプリとホームは open で開かない
+    const shown = element.active;
     await system.open("https://example.test/list/#parent.secret");
-    assertEquals(element.active.text.get("sub"), "secret");
-    assertEquals((await store.system.listLaunches()).map(r => r.app), ["home", "https://example.test/list/#parent", "https://example.test/list/#parent.child", "settings", "https://example.test/list/#parent.secret"]);
+    await system.open("home");
+    assertEquals(element.active, shown);
+    assertEquals((await store.system.listLaunches()).map(r => r.app), ["home", "https://example.test/list/#parent", "https://example.test/list/#parent.child", "settings"]);
     assert(await store.system.getLast("https://example.test/list/#parent.child"));
     assertEquals(element.errors, []);
   } finally { system.stop(); }

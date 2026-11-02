@@ -644,7 +644,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   return {
     openHome,
     async open(key) {
-      const app = available.get(key);
+      const app = apps.find(app => app.key === key);
       if (app) await show(app, false);
     },
     async close(id) {
