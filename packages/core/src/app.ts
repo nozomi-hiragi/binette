@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { BinetteError } from "./parse.ts";
+import { normalizeAppIdentifier } from "./app-id.ts";
 
 const objectValue = (message: string) => v.custom<Record<string, unknown>>(
   (value) => typeof value === "object" && value !== null && !Array.isArray(value), message,
@@ -19,6 +20,25 @@ const entrySchema = v.pipe(
   }),
 );
 
+/** サブアプリ 1 つ分の欄 */
+const subEntrySchema = v.looseObject({
+  name: nonempty("sub の name を指定してください。"),
+  icon: v.optional(v.string("sub の icon は文字列で指定してください。")),
+  roles: v.optional(v.array(v.string("sub の roles は文字列の配列で指定してください。"), "sub の roles は文字列の配列で指定してください。")),
+  listed: v.optional(v.boolean("sub の listed は真偽値で指定してください。")),
+});
+// record は特殊な名前（__proto__ など）を除外するため、キーを 1 つずつ検査してから辞書へ戻す
+const subSchema = v.pipe(
+  objectValue("sub はオブジェクトで指定してください。"),
+  v.transform(Object.entries),
+  v.array(v.tuple([
+    v.pipe(v.string(), v.check((key) => { try { normalizeAppIdentifier(key); return true; } catch { return false; } }, (issue) => `sub の識別子が正しくありません: ${String(issue.input)}`)),
+    subEntrySchema,
+  ])),
+  v.check((entries) => new Set(entries.map(([key]) => normalizeAppIdentifier(key))).size === entries.length, "sub の識別子が重複しています。"),
+  v.transform((entries) => Object.fromEntries(entries.map(([key, value]) => [normalizeAppIdentifier(key), value]))),
+);
+
 // ほかの欄は検査せず、そのまま残す
 const appManifestSchema = v.pipe(
   objectValue("app.json はオブジェクトで指定してください。"),
@@ -33,6 +53,7 @@ const appManifestSchema = v.pipe(
     entry: entrySchema,
     icon: v.optional(v.string("icon は文字列で指定してください。")),
     roles: v.optional(v.array(v.string("roles は文字列の配列で指定してください。"), "roles は文字列の配列で指定してください。")),
+    sub: v.optional(subSchema),
   }),
 );
 
@@ -52,7 +73,19 @@ export interface AppEntry {
   as: string;
 }
 
-/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry`・`icon`・`roles` を検査する */
+/** サブアプリ 1 つ分。ID は親の識別子 ＋ `.` ＋ サブアプリの識別子。保存領域と権限は親と共有する */
+export interface AppSubManifest {
+  /** 表示名 */
+  name: string;
+  /** アイコンのパス（`app.json` の場所から） */
+  icon?: string;
+  /** 名乗る役割 */
+  roles?: string[];
+  /** ホームの一覧に出すか。既定は `true` */
+  listed?: boolean;
+}
+
+/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry`・`icon`・`roles`・`sub` を検査する */
 export interface AppManifest {
   /** アプリの ID。Régie は「入手元 ＋ ID」で区別する */
   id: string;
@@ -68,6 +101,8 @@ export interface AppManifest {
   icon?: string;
   /** 名乗る役割。ホームは home、設定は settings。名乗っただけでは API は届かず、割り当てられたアプリにだけ届く */
   roles?: string[];
+  /** サブアプリ。キーは識別子（`.` を含まない。% エンコードして正規化済み）。深さは 1 段だけ */
+  sub?: Record<string, AppSubManifest>;
   /** 入口の HTML・CSS・AS */
   entry: AppEntry;
   /** 使う権限と、その用途の説明 */
@@ -80,14 +115,22 @@ export interface AppManifest {
   [key: string]: unknown;
 }
 
+/** {@link parseAppManifest} の設定 */
+export interface ParseAppManifestOptions {
+  /** `id` を識別子の規則で検査する（`.` を含むと誤り）。既定は false */
+  strictId?: boolean;
+}
+
 /**
  * `app.json` の中身を JSON として読み、検査する。正しければ {@link AppManifest} として返す。
- * 検査するのは `id`・`name`・`entry`・`icon`・`roles` で、ほかの欄はそのまま残す。
+ * 検査するのは `id`・`name`・`entry`・`icon`・`roles`・`sub` で、ほかの欄はそのまま残す。
  *
  * @param text `app.json` の中身の文字列
+ * @param options `strictId` を true にすると、`id` を識別子の規則（`.` を含まないなど）で検査する。
+ *   暗黙の判断: 今のアプリは `io.github.…` のような `.` 入りの `id` を使っていて Régie もまだ新しい規則を使わないので、既定では検査しない
  * @throws {BinetteError} JSON として読めないときや、形式が正しくないとき
  */
-export function parseAppManifest(text: string): AppManifest {
+export function parseAppManifest(text: string, options: ParseAppManifestOptions = {}): AppManifest {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -96,5 +139,13 @@ export function parseAppManifest(text: string): AppManifest {
   }
   const result = v.safeParse(appManifestSchema, value, { abortEarly: true });
   if (!result.success) throw new BinetteError("invalid_format", result.issues[0].message);
-  return result.output as AppManifest;
+  const manifest = result.output as AppManifest;
+  if (options.strictId) {
+    try {
+      normalizeAppIdentifier(manifest.id);
+    } catch (error) {
+      throw new BinetteError("invalid_format", `id が識別子として正しくありません。${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return manifest;
 }
