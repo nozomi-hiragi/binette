@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- Régie に提供リストの登録・取得、アプリのインストール、起動時と 30 分ごとの更新確認、`movedTo` による ID の付け替えを追加する。`http:` はデバッグ設定でのみ許可する。整合性はファイルと取得済みファイルを対象にしたフォルダを検証し、`/` は未対応として拒否する（[仕様](docs/spec/app-id.md)）
+
 - 破壊的変更: 埋め込みアプリの ID を `io.github.nozomi-hiragi.binette.cadre` → `cadre`、`io.github.nozomi-hiragi.binette.home` → `cadre.home`、`io.github.nozomi-hiragi.binette.settings` → `cadre.settings`、`io.github.nozomi-hiragi.binette.designer` → `designer` に変更する。`apps/home`・`apps/settings` を `apps/cadre` に統合し、ホーム・設定は `sub` として親の AS の入口・CSS を共有する。画面とホームバーの見た目は維持する
 - `system/boot.json` の役割の既定を `cadre`・`cadre.home`・`cadre.settings` にし、`lists: []` を出力する。designer は `bundled/designer` の同梱のままにする。設定の上書きを防ぐため、`/user` の重ね合わせから `/apps/cadre` パッケージ全体を保護する
 - 破壊的変更: `app.json` の `id` を既定で識別子の規則で検査し、`.` を含む ID を拒む。旧形式を読む道具向けの `{ strictId: false }` は残し、Régie の旧 ID の暫定例外を削除する。サブアプリは親の `sub` に宣言する

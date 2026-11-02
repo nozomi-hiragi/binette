@@ -231,3 +231,36 @@ Deno.test("IndexedDB reads a single generation while other connections replace m
     assertEquals(await reader.readFiles(paths), [new Uint8Array([5]), new Uint8Array([5])]);
   });
 });
+
+Deno.test("提供リストの移転は登録・データ・記録を一括で変更し、途中失敗後も再試行できる", async () => {
+  const fixture = databaseFixture(installed);
+  await withDatabase(fixture, async () => {
+    const store = createIndexedDbAppStore();
+    const app = { ...installed, source: "https://old.test/apps/", key: "https://old.test/apps/#memo", manifest: { ...installed.manifest, id: "memo", sub: { "日本語": { name: "子" } } } };
+    await store.put(app);
+    const next = "https://new.test/apps/";
+    const oldSub = app.key + ".%E6%97%A5%E6%9C%AC%E8%AA%9E";
+    await store.system.putLists([{ url: app.source }]);
+    await store.system.putSettings({ roles: { home: oldSub } });
+    await store.data.write(app.key, "値", "内容");
+    await store.system.putPermissions(app.key, ["fs"]);
+    const record = { state: 3, done: true, page: "ページ", reason: { kind: 1, cause: 2 } };
+    await store.system.putLast(oldSub, record);
+    fixture.failNextWrite(new Error("移転失敗"), 2);
+    await assertRejects(() => store.moveSource(app.source, next, [{ url: next }]), Error, "移転失敗");
+    assertEquals(await store.get(app.key), app);
+    assertEquals(await store.get(next + "#memo"), undefined);
+    assertEquals(await store.system.getLists(), [{ url: app.source }]);
+    assertEquals(await store.data.read(app.key), new Map([["値", "内容"]]));
+    await store.moveSource(app.source, next, [{ url: next }]);
+    const reopened = createIndexedDbAppStore();
+    assertEquals(await reopened.get(app.key), undefined);
+    assertEquals((await reopened.get(next + "#memo"))?.source, next);
+    assertEquals(await reopened.system.getLists(), [{ url: next }]);
+    assertEquals(await reopened.data.read(app.key), new Map());
+    assertEquals(await reopened.data.read(next + "#memo"), new Map([["値", "内容"]]));
+    assertEquals(await reopened.system.getLast(next + "#memo.%E6%97%A5%E6%9C%AC%E8%AA%9E"), record);
+    assertEquals((await reopened.system.getSettings())?.roles, { home: next + "#memo.%E6%97%A5%E6%9C%AC%E8%AA%9E" });
+    assertEquals(await reopened.system.getPermissions(next + "#memo"), ["fs"]);
+  });
+});

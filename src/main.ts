@@ -43,13 +43,15 @@ try {
     current, check(kernel) { return current && kernel && kernel !== current ? Promise.reject(new Error("カーネルを更新できません。")) : Promise.resolve(); }, activate() { return Promise.resolve(); },
   }, () => { if (!reloading) { reloading = true; location.reload(); } });
   await updater.boot();
-  const { apps, roles } = await loadBootApps(tree, distribution);
+  const { apps, roles, lists } = await loadBootApps(tree, distribution);
   let booting = true;
   const errors: unknown[] = [];
   const shell = await mountShell(container, {
     apps,
     workerUrl: import.meta.env.PROD ? new URL("./regie-worker.js", document.baseURI) : undefined,
     roles,
+    lists,
+    browserBuild: { distribution, workerUrl: import.meta.env.PROD ? new URL("./build-worker.js", document.baseURI) : undefined },
     update: { ...updater, openRecovery() { location.assign("?recovery"); } },
     store: bootAppStore(createAppStore(tree)),
     onError(error) { console.error(error); if (booting) errors.push(error); },

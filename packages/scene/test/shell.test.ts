@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { createMemoryAppStore, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
+import { createProviderLists, createMemoryAppStore, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
 import { createShellUi } from "../src/index.ts";
 import { mountSystem as mountShell, operate, systemView } from "./system-helper.ts";
@@ -499,7 +499,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     await waitFor(() => errors.length === 0);
     shell.stop();
     const saved = (await store.system.getSettings())!;
-    assertEquals(saved, { roles: {}, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
+    assertEquals(saved, { roles: {}, allowHttpLists: false, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
     shell = await mountShell(element, options);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6 && worker.live === 1);
@@ -635,9 +635,11 @@ Deno.test("createShellUi は bind 前のボタンを無視し、bind で現在�
   Object.defineProperty(window.document, "visibilityState", { configurable: true, value: "hidden" });
   const pages: { visible: boolean; frozen: boolean }[] = [];
   let opened = 0;
+  const lists = await createProviderLists({ store: createMemoryAppStore() });
   const system: BinetteSystem = {
+    lists,
     openHome() { opened++; return Promise.resolve(); }, open: () => Promise.resolve(), close: () => Promise.resolve(),
-    setPage(page) { pages.push(page); }, stop() {},
+    setPage(page) { pages.push(page); }, stop() { lists.stop(); },
   };
   const ui = createShellUi(element, { installed: true });
   try {

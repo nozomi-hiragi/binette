@@ -3,7 +3,7 @@ import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
 /** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
-  settings: Omit<SystemSettings, "roles">;
+  settings: Omit<SystemSettings, "roles" | "allowHttpLists">;
   /** 役割に割り当てたアプリ */
   roles: Record<string, string>;
   /** 役割ごとの選べるアプリ。割り当てを変えられる役割だけが載る */

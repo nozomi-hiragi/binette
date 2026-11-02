@@ -13,7 +13,7 @@ interface FileTree {
   read(path: string): Promise<Uint8Array | undefined>;
   readFiles(paths: readonly string[]): Promise<(Uint8Array | undefined)[]>;
   write(path: string, data: Uint8Array): Promise<void>;
-  writeFiles(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  writeFiles(files: ReadonlyMap<string, Uint8Array>, remove?: readonly string[]): Promise<void>;
   list(prefix: string): Promise<string[]>;
   delete(path: string): Promise<void>;
   replaceSystem(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
@@ -26,7 +26,7 @@ interface FileTree {
 - `createMemoryFileTree()`、`createIndexedDbFileTree({ name? })` で作る。IndexedDB の既定名は `binette-apps`、接続は初回操作時に開く
 - パスは正規の絶対パス。`list` は指定パス自身とその子孫のファイルを返し、結果は文字コード順。ファイルが無ければ `read` は `undefined`、`delete` は何もしない
 - `readOverlay` と `listOverlay` は `/apps/example/a` のような論理パスを取り、対応する `/user/apps/example/a` と `/system/apps/example/a` を重ねる。設定を含む `/apps/cadre` とその子孫は `/system` だけを使う
-- `readFiles` は複数ファイルを同じ時点の状態から読む。`write`・`writeFiles`・`delete`・`update` は `/system` を変更できない。`writeFiles` は複数ファイルをまとめて原子的に書く。`replaceSystem` は `/system/…` のファイルの集合を丸ごと入れ替える。`update` は 1 ファイルの読み書きを原子的に行い、起動履歴の同時更新に使う
+- `readFiles` は複数ファイルを同じ時点の状態から読む。`write`・`writeFiles`・`delete`・`update` は `/system` を変更できない。`writeFiles` は複数ファイルの書き込みと省略可能な削除をまとめて原子的に行う。`replaceSystem` は `/system/…` のファイルの集合を丸ごと入れ替える。`update` は 1 ファイルの読み書きを原子的に行い、起動履歴の同時更新に使う
 - これはカーネル用の API であり、それ自体はアプリごとの権限を検査しない。`replaceSystem` はカーネルの更新処理だけに渡す
 
 ## AppStore（実装済み）
@@ -42,18 +42,20 @@ interface InstalledApp {
   html: string;
   wasm: Uint8Array;
   installedAt: number;
+  listVersion?: string; // 提供リストの版
 }
 interface AppStore {
   readonly system: SystemStore;
   list(): Promise<InstalledApp[]>;
   get(key: string): Promise<InstalledApp | undefined>;
   put(app: InstalledApp): Promise<void>;
+  moveSource(from: string, to: string, lists?: ProviderListRegistration[]): Promise<void>;
 }
 ```
 
 - `appId(source, id)` が返す `key` は完全なアプリ ID。埋め込みは生の ID、提供リストからのものは正規化したリスト URL ＋ `#` ＋識別子を使う。`binette:system`・`binette:bundled` はいずれも生の ID を使い、既定は `cadre`・`designer`。サブアプリの ID は `cadre.home`・`cadre.settings` だが、AppStore には親のパッケージだけを保存する。旧 `[source, id]` キーは移行しない
 - `icon` は SVG の文字列。無ければ `undefined`
-- `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ
+- `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ。`listVersion` は提供リストの版を `manifest.version` と別に保存する
 - `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
 - `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
 - `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
@@ -62,7 +64,7 @@ interface AppStore {
 
 ソースをファイルの木に置く場合は `/apps/<ID>/app.json` とソース・アイコンを保持し、`buildStoredApp` で `/apps/<ID>/build/app.wasm`・`index.html` を生成します。起動との互換のため、同時に `/apps/<完全な ID>/record.json`・`app.wasm` にも記録します。配置、同じ ID を持つ入手元どうしの扱い、ソースの取得方法は案です。
 
-版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。入手元の検証や権限の確認はまだしません。
+版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。提供リストの移転時には `moveSource` がアプリと保存データ、OS の記録を付け替えます。権限の許可をユーザーに尋ねる仕組みはまだありません。
 
 ## アプリごとのデータ（案・実装済み）
 
@@ -93,6 +95,7 @@ interface LifecycleRecord {
 interface LaunchRecord { time: number; app: string } // Unix epoch ミリ秒、完全なアプリ ID
 interface SystemSettings {
   roles: Record<string, string>; // 役割 → 完全なアプリ ID。既定 {} はブートの既定の割り当て（[system.md](system.md#役割の割り当て実装済み形は案)）
+  allowHttpLists?: boolean; // 開発用、既定 false
   stackSize: number; // 既定 3
   stopDelay: number; // 既定 10000 ミリ秒
   callTimeout: number; // 既定 5000 ミリ秒
@@ -101,6 +104,10 @@ interface SystemSettings {
   homeRetryWindow: number; // 既定 5000 ミリ秒
 }
 interface SystemStore {
+  getLists(): Promise<ProviderListRegistration[]>;
+  putLists(lists: ProviderListRegistration[]): Promise<void>;
+  getPermissions(key: string): Promise<string[]>;
+  putPermissions(key: string, permissions: string[]): Promise<void>;
   getLast(key: string): Promise<LifecycleRecord | undefined>;
   putLast(key: string, record: LifecycleRecord): Promise<void>;
   listLaunches(): Promise<LaunchRecord[]>;

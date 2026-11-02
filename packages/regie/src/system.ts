@@ -1,3 +1,4 @@
+import { createProviderLists, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
 import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
@@ -15,6 +16,9 @@ export type SystemApp = { source: string } & (
 /** システムの設定 */
 export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
+  /** boot.json の提供リスト */
+  lists?: string[];
+  providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout">;
   /** 指定するとソースのビルドを検証済みコンパイラの Worker で行う。 */
   browserBuild?: BrowserBuildOptions;
   /** 役割の既定の割り当て（役割 → appId）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
@@ -55,6 +59,7 @@ export interface SystemView {
 
 /** 起動したシステム */
 export interface BinetteSystem {
+  readonly lists: ProviderLists;
   openHome(): Promise<void>;
   open(key: string): Promise<void>;
   close(id: number): Promise<void>;
@@ -90,6 +95,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const stored = await options.store.system.getSettings();
   validateSystemSettings(stored ?? {});
   Object.assign(settings, stored, { roles: { ...stored?.roles } });
+  const bootRoles = { ...options.roles };
   const page = crypto.randomUUID();
   let frozen = false;
   let visible = true;
@@ -135,7 +141,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     return now - homeFailingSince < settings.homeRetryWindow;
   };
   let stopped = false;
-  type Session = { controller: AbortController; mounted?: Process; view?: { remove(): void }; id: number; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
+  let changingApps = false;
+  type Session = { controller: AbortController; starting?: Promise<Process>; mounted?: Process; view?: { remove(): void }; id: number; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
   let shown = 0;
   const sessions = new Set<Session>();
   let active: Session | undefined;
@@ -163,12 +170,14 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   };
   const installedApps: InstalledApp[] = [];
   const seen = new Set<string>();
+  const attempted = new Set<string>();
   for (const app of options.apps) {
     try {
       const text = app.prebuilt === undefined ? await app.read("app.json") : undefined;
       const manifest = app.prebuilt?.manifest ?? parseAppManifest(text!);
       const key = appId(app.source, manifest.id);
       if (seen.has(key)) continue;
+      attempted.add(key);
       let installed = await options.store.get(key);
       if (app.prebuilt !== undefined) {
         // ビルドが要らないので毎回入れ直す。版を上げ忘れた OS の更新でも古いものを残さない。入れた日時は最初のものを保つ
@@ -202,6 +211,23 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       seen.add(key);
     } catch (error) { report(error); }
   }
+  let changing = async (_source: string, _id?: string) => {};
+  let changed = async () => {};
+  const lists = await createProviderLists({
+    store: options.store, lists: options.lists, browserBuild: options.browserBuild,
+    ...options.providerLists, report,
+    changing: (source, id) => changing(source, id),
+    async changed(move) {
+      if (move) for (const [role, key] of Object.entries(bootRoles)) {
+        if (key.startsWith(`${move.from}#`)) bootRoles[role] = move.to + key.slice(move.from.length);
+      }
+      Object.assign(settings, await options.store.system.getSettings());
+      await changed();
+    },
+  });
+  for (const registration of await lists.list()) if (registration.boot) for (const [role, key] of Object.entries(bootRoles)) {
+    if (key.startsWith(`${registration.boot}#`)) bootRoles[role] = registration.url + key.slice(registration.boot.length);
+  }
   // ホーム候補は、今回渡されたアプリ以外も含めて保存先から探す
   const available = new Map(installedApps.map(app => [app.key, app]));
   for (const app of await options.store.list()) if (!available.has(app.key)) available.set(app.key, app);
@@ -226,12 +252,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const assign = (role: string): InstalledApp | undefined => {
     const list = role === "settings" ? holders(role).filter(app => app.source === SYSTEM_SOURCE) : holders(role);
     const chosen = role === "settings" ? undefined : settings.roles[role];
-    return list.find(app => app.key === chosen) ?? list.find(app => app.key === options.roles?.[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
+    return list.find(app => app.key === chosen) ?? list.find(app => app.key === bootRoles[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
   };
   const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre") };
   let home = assigned.home;
   let cadre = assigned.cadre;
-  const apps = installedApps.flatMap(entries).filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
+  const apps = [...installedApps, ...parents.filter(app => !attempted.has(app.key) && app.source !== SYSTEM_SOURCE && app.source !== "binette:bundled")].flatMap(entries).filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
   const updateAvailable = options.update !== undefined;
   let saving = Promise.resolve();
   const saveSettings = () => {
@@ -239,8 +265,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     saving = saving.then(() => options.store.system.putSettings(copy)).catch(report);
   };
   const setSetting = (name: string, value: number) => {
-    if (stopped || !["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name)) return;
-    const key = name as Exclude<keyof SystemSettings, "roles">;
+    if (stopped || changingApps || !["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name)) return;
+    const key = name as Exclude<keyof SystemSettings, "roles" | "allowHttpLists">;
     try {
       validateSystemSettings({ [key]: value });
       if (!Number.isInteger(value) || ((key === "callTimeout" || key === "destroyTimeout") && value < 1000)) return;
@@ -252,7 +278,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   /** 設定アプリが、役割に割り当てるアプリを候補の番号で選ぶ */
   const selectRole = async (role: string, i: number) => {
     const list = candidates(role);
-    if (stopped || !Number.isInteger(i) || !list[i]) return;
+    if (stopped || changingApps || !Number.isInteger(i) || !list[i]) return;
     if (role === "cadre") {
       const previous = cadre;
       cadre = assigned.cadre = list[i]!;
@@ -295,7 +321,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   };
   /** 設定アプリの起動時に渡す OS の写し */
   const osSnapshot = (launches: { time: number; name: string }[]) => {
-    const { roles: _roles, ...numeric } = settings;
+    const { roles: _roles, allowHttpLists: _allowHttpLists, ...numeric } = settings;
     return {
       settings: numeric,
       roles: Object.fromEntries(Object.entries(assigned).flatMap(([role, app]) => app ? [[role, app.key]] : [])),
@@ -372,7 +398,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }
   }
   async function show(installed: InstalledApp, atHome: boolean, clearStatus = true): Promise<void> {
-    if (stopped) return;
+    if (stopped || changingApps) return;
     if (active?.installed.key === installed.key && !active.mounted) return;
     clearTimeout(restartTimer);
     const current = ++generation;
@@ -425,7 +451,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
       const updateAtStart = options.update?.snapshot?.();
-      const mounted = await startProcess(installed.wasm, {
+      const mounting = startProcess(installed.wasm, {
         sub: installed.sub,
         declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
@@ -472,6 +498,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           saving = saving.then(() => options.store.data.write(installed.parentKey ?? installed.key, name, value)).catch(report);
         },
       });
+      started.starting = mounting;
+      const mounted = await mounting;
       if (!sessions.has(started) || stopped) { mounted.stop(); return; }
       started.view = options.ui.present({ id: started.id, app: installed, home: atHome,
         apps: api.keys.has("apps") ? apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) : undefined,
@@ -518,6 +546,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }, delay);
   }
   async function startCadre(): Promise<void> {
+    if (changingApps) return;
     if (stopped || !cadre) {
       cadreUnavailable = true;
       renderBar();
@@ -533,7 +562,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedCadre.parentKey ?? selectedCadre.key)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (cadreSession !== session || stopped) return;
-      const mounted = await startProcess(selectedCadre.wasm, {
+      const mounting = startProcess(selectedCadre.wasm, {
         sub: selectedCadre.sub,
         declarative: selectedCadre.manifest.entry.html === undefined,
         createWorker: options.createWorker,
@@ -599,6 +628,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           void show(apps[i]!, false);
         },
       });
+      session.starting = mounting;
+      const mounted = await mounting;
       if (cadreSession !== session || stopped) { mounted.stop(); return; }
       session.view = options.ui.present({
         id: session.id, app: selectedCadre, home: false, cadre: true,
@@ -627,6 +658,41 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       }
     }
   }
+  // 起動済み Worker の一覧は起動時の写しなので、役割の Worker は保存して起動し直す。
+  // 移転元の storage・ライフサイクル書き込みが残らないよう、付け替え前に終了を待つ。
+  changing = async (source, id) => {
+    changingApps = true;
+    for (const session of [...sessions]) if ((session.installed.source === source && (id === undefined || (session.installed.parentKey ?? session.installed.key) === appId(source, id))) || apiOf(session.installed).keys.has("apps")) {
+      const process = session.mounted ?? await session.starting?.catch(() => undefined);
+      await process?.destroy(DestroyKind.System, DestroyCause.Os).catch(report);
+      cut(session);
+    }
+    if (cadreSession) {
+      const process = cadreSession.mounted ?? await cadreSession.starting?.catch(() => undefined);
+      await process?.destroy(DestroyKind.System, DestroyCause.Os).catch(report);
+      cutCadre();
+    }
+    clearTimeout(restartTimer);
+    clearTimeout(cadreRestartTimer);
+    await saving;
+  };
+  changed = async () => {
+    changingApps = false;
+    if (stopped) return;
+    available.clear();
+    for (const app of await options.store.list()) if (app.source !== SYSTEM_SOURCE && app.source !== "binette:bundled") for (const entry of entries(app)) available.set(entry.key, entry);
+    // bootAppStore は埋め込みを隠すので、今回の配布物を戻す。
+    for (const app of installedApps) if (!available.has(app.key)) for (const entry of entries(app)) available.set(entry.key, entry);
+    for (const role of ["home", "settings", "cadre"]) assigned[role] = assign(role);
+    home = assigned.home;
+    cadre = assigned.cadre;
+    apps.splice(0, apps.length, ...[...available.values()].filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre")));
+    const launches = (await options.store.system.listLaunches()).toReversed().map(record => ({ time: record.time, name: available.get(record.app)?.manifest.name ?? record.app }));
+    for (const session of sessions) if (apiOf(session.installed).keys.has("os")) session.mounted?.syncOs?.(osSnapshot(launches));
+    renderBar();
+    if (cadre) await startCadre();
+    if (openedHome && home && !active) await openHome();
+  };
   const unsubscribeUpdate = options.update?.subscribe?.(() => {
     for (const session of sessions) if (apiOf(session.installed).keys.has("os")) {
       session.mounted?.syncOs?.(osSnapshot([]));
@@ -641,7 +707,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     renderBar();
     await openHome();
   }
+  // 呼び出し元の UI の起動完了を待ち、接続失敗も通常のエラーとして届ける。
+  const firstCheck = setTimeout(() => { if (!stopped) void lists.check().catch(report); }, 0);
   return {
+    lists,
     openHome,
     async open(key) {
       const app = apps.find(app => app.key === key);
@@ -673,6 +742,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (stopped) return;
       stopped = true;
       unsubscribeUpdate?.();
+      clearTimeout(firstCheck);
+      lists.stop();
       generation++;
       clearTimeout(restartTimer);
       clearTimeout(cadreRestartTimer);

@@ -18,7 +18,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 export async function loadBootApps(
   tree: FileTree,
   distribution: SystemDistribution,
-): Promise<{ apps: SystemApp[]; roles: Record<string, string> }> {
+): Promise<{ apps: SystemApp[]; roles: Record<string, string>; lists: string[] }> {
   const required = async (path: string, system = false) => {
     const value =
       await (system
@@ -42,6 +42,7 @@ export async function loadBootApps(
     if (typeof id !== "string") throw new Error("boot.json の役割の割り当てが不正です。");
     roleKeys[role] = formatAppId(parseAppId(id));
   }
+  if (!Array.isArray(boot.lists) || !boot.lists.every((url: unknown) => typeof url === "string")) throw new Error("boot.json の提供リストが不正です。");
   const apps: SystemApp[] = [];
   // 役割の既定の割り当て（役割 → appId）
   const roles: Record<string, string> = {};
@@ -118,7 +119,7 @@ export async function loadBootApps(
       "boot.json に指定された Cadre、ホームまたは設定アプリがありません。",
     );
   }
-  return { apps, roles };
+  return { apps, roles, lists: boot.lists };
 }
 
 /** 古い配布物の保存済みコードを、起動候補へ戻さない。通常のインストール済みアプリは残す。 */
