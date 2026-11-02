@@ -235,14 +235,14 @@ Deno.test("SW はオフラインでも入口と固定名のカーネルを返す
 Deno.test("SW の fs は root とサブパスで user を優先し、設定と直接 system は検証して返す", async () => {
   for (const base of ["https://example.test/", BASE, "https://example.test/nested/binette/"]) {
     const sw = setup(base);
-    await systemFiles(sw, { "apps/home/icon.svg": "固定", "apps/settings/app.wasm": "設定" });
+    await systemFiles(sw, { "apps/home/icon.svg": "固定", "apps/cadre/app.wasm": "設定" });
     sw.files.set("/user/apps/home/icon.svg", new TextEncoder().encode("上書き"));
-    sw.files.set("/user/apps/settings/app.wasm", new TextEncoder().encode("偽設定"));
+    sw.files.set("/user/apps/cadre/app.wasm", new TextEncoder().encode("偽設定"));
     await sw.open(CACHE).put("fs/apps/home/icon.svg", new Response("古い応答"));
     for (const [path, text, type] of [
       ["apps/home/icon.svg", "上書き", "image/svg+xml"],
       ["system/apps/home/icon.svg", "固定", "image/svg+xml"],
-      ["apps/settings/app.wasm", "設定", "application/wasm"],
+      ["apps/cadre/app.wasm", "設定", "application/wasm"],
     ]) {
       const response = await sw.request(`fs/${path}?v=1`, true).response!;
       assertEquals(response.status, 200);
@@ -288,7 +288,7 @@ Deno.test("SW は曖昧な fs パスと層の迂回を拒否し、URL の復号�
   for (const path of ["apps//a", "apps/%2fsecret", "apps/%5csecret", "apps/%252e%252e/file", "apps/%00", "apps/%7f", "apps/%zz", "apps/", ""]) {
     assertEquals((await sw.request(`fs/${path}`).response!).status, 400, path);
   }
-  for (const path of ["user/apps/settings/app.wasm", "system/.manifest.json"]) {
+  for (const path of ["user/apps/cadre/app.wasm", "system/.manifest.json"]) {
     assertEquals((await sw.request(`fs/${path}`).response!).status, 404);
   }
   for (const [path, type] of [

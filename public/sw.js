@@ -172,9 +172,10 @@ async function fileResponse(encoded) {
   try {
     const direct = path.startsWith("/system/");
     const fixed = direct ? path : `/system${path}`;
-    const settings = path === "/apps/settings" || path.startsWith("/apps/settings/");
+    // 設定サブアプリと実行物を共有する Cadre 全体を保護する。
+    const fixedCadre = path === "/apps/cadre" || path.startsWith("/apps/cadre/");
     const [saved, system, user] = await readFiles([
-      "/system/.manifest.json", fixed, ...(direct || settings ? [] : [`/user${path}`]),
+      "/system/.manifest.json", fixed, ...(direct || fixedCadre ? [] : [`/user${path}`]),
     ]);
     let data = user;
     if (data === undefined) {

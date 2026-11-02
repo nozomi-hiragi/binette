@@ -6,10 +6,10 @@ import { mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
-const apps = await Promise.all(["cadre", "home", "settings"].map(async name => {
+const apps = await Promise.all(["cadre"].map(async name => {
   const read = (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root));
   const built = await buildApp(read, { libraries });
-  return { source: "binette:system", prebuilt: { ...built, icon: built.manifest.icon ? await read(built.manifest.icon) : undefined } };
+  return { source: "binette:system", prebuilt: { ...built, ...(built.manifest.sub ? { subIcons: Object.fromEntries(await Promise.all(Object.entries(built.manifest.sub).map(async ([id, sub]) => [id, sub.icon ? await read(sub.icon) : ""]))) } : {}), icon: built.manifest.icon ? await read(built.manifest.icon) : undefined } };
 }));
 const plain = await buildApp(path => Promise.resolve(path === "app.json"
   ? JSON.stringify({ id: "plain", name: "アイコンなし", version: "0.1.0", binette: "0.2", entry: { as: "main.ts" } })
@@ -89,7 +89,7 @@ Deno.test("ドックは対応するアプリのアイコンと読み上げ名を
     const dock = f.button("dock-0")!;
     assertEquals(dock.getAttribute("aria-label"), "設定を開く");
     const image = dock.querySelector("img")!;
-    assertEquals(image.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(apps[2]!.prebuilt.icon!)}`);
+    assertEquals(image.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(apps[0]!.prebuilt.subIcons!.settings!)}`);
     assertEquals(image.getAttribute("alt"), "");
     await f.waitReady();
     f.button("home")!.click();

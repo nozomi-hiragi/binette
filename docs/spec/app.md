@@ -18,14 +18,16 @@ src/
 - ファイルのパスは、すべて `app.json` を置いた場所からの相対パスで書く（実装済み。Régie の `buildApp` は `read("app.json")` のあと、`entry` のパスを整えて `read` に渡す。フォルダの外を指すパスは誤り）
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）が使える。`app.json` のフォルダの外は読まない（実装済み。[regie/build.md](regie/build.md#ファイルの解決)）
 
-例: [apps/settings](../../apps/settings)
+例: [apps/cadre](../../apps/cadre)（ホーム・設定をサブアプリとして持つ）
 
 ```
-apps/settings/
+apps/cadre/
   app.json
   icon.svg
-  src/index.html
+  home.svg
+  settings.svg
   src/main.ts
+  src/style.css
 ```
 
 ## app.json
@@ -34,7 +36,7 @@ apps/settings/
 
 ```json
 {
-  "id": "io.github.nozomi-hiragi.memo",
+  "id": "memo",
   "version": "0.1.0",
   "binette": "0.2",
   "name": "メモ",
@@ -58,7 +60,7 @@ apps/settings/
 
 | 欄 | 型 | 必須 | 説明 |
 | --- | --- | --- | --- |
-| `id` | 文字列 | 必須 | アプリの識別子。Régie は提供リストの URL ＋ `#` ＋ 識別子、または埋め込みの生 ID で区別する。サブアプリの `sub` は [app-id.md](app-id.md) |
+| `id` | 文字列 | 必須 | アプリの識別子。`.` は使えない（サブアプリの区切り）。Régie は提供リストの URL ＋ `#` ＋ 識別子、または埋め込みの生 ID で区別する。サブアプリの `sub` は [app-id.md](app-id.md) |
 | `version` | 文字列 | 任意 | アプリの版（semver）。表示と、更新の比較の両方に使う |
 | `binette` | 文字列 | 任意 | 使う Binette（Réplique の呼び出し）の版。Android の `minSdk` にあたる |
 | `name` | 文字列 | 必須 | 表示名 |
@@ -86,9 +88,9 @@ apps/settings/
 
 ### 読み込みと検査（実装済み）
 
-`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` と、任意の `icon`・`roles` の型で、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。
+`@binette/core` の `parseAppManifest(text)` が読みます（[core.md](core.md#parseappmanifest)）。検査するのは `id`・`name`・`entry` と、任意の `icon`・`roles`・`sub` で、ほかの欄は型も中身も確かめずに、そのまま結果に残します。表にない欄も残します。`id` は既定で識別子の規則を検査し、`.` を含む ID は拒みます。サブアプリは `sub` に宣言します（[app-id.md](app-id.md#サブアプリ)）。
 
-検査は次の順に行い、最初に見つかった誤りで止めます。誤りは `BinetteError`（`code` は `"invalid_format"`）で、`message` は次のとおりです。
+基本の欄は次の順に検査し、最初に見つかった誤りで止めます。`sub` の各欄も [サブアプリの規則](app-id.md#サブアプリ) で検査し、構造の検査が通ったあとに `id` を識別子として検査します。識別子の誤りは `id が識別子として正しくありません。` に理由を添えます。誤りは `BinetteError`（`code` は `"invalid_format"`）で、`message` は次のとおりです。
 
 | 順 | 条件 | メッセージ |
 | --- | --- | --- |

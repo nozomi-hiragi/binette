@@ -29,7 +29,7 @@
 | [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
 | [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-設定はシステムアプリ [apps/settings](apps/settings) が持ちます（決定）。今は骨組みで、設定の項目と、それを読み書きする呼び出しは未決です。AS の document API で通常の id の要素を参照し、文字の変更とクリックを扱います。
+設定は [apps/cadre](apps/cadre) のサブアプリ `cadre.settings` が持ちます。ホームと Cadre の選択、OS の更新、デバッグ値、起動履歴を扱います（[仕様](docs/spec/apps/settings.md)）。
 
 ## デザイナー
 
@@ -47,11 +47,11 @@ deno task start  # http://localhost:5175/
 
 http://localhost:5175/ を開くと、ホームに設定とデザイナーが並びます。システムアプリと同梱アプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
 
-`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。入口はリポジトリ直下の `index.html` と `src/main.ts` です。本番のカーネルは `regie.js` と `regie-worker.js` に分かれ、入口は SRI 付きで `regie.js` を読みます。`apps/` の直下に `app.json` を持つフォルダを足すとシステムアプリ、`bundled/` に足すと通常の同梱アプリが増えます。どちらも `deno task build:system` でビルドします。同梱アプリの入手元は `binette:bundled` で、システムアプリの権限は持ちません。デザイナーは `bundled/designer/` に置いています。
+`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。入口はリポジトリ直下の `index.html` と `src/main.ts` です。本番のカーネルは `regie.js` と `regie-worker.js` に分かれ、入口は SRI 付きで `regie.js` を読みます。`apps/` の直下に `app.json` を持つフォルダを足すとシステムアプリ、`bundled/` に足すと通常の同梱アプリが増えます。どちらも `deno task build:system` でビルドします。同梱アプリの入手元は `binette:bundled` で、システムアプリの権限は持ちません。デザイナーは `bundled/designer/` に置き、ID は `designer` です。既定のシステムアプリは `apps/cadre/` で、ID `cadre` の親と `cadre.home`・`cadre.settings` の入口を 1 つのパッケージに持ちます。
 
 ブラウザのタブでは「ライブモード」と表示し、ホームバーの「インストール」からインストールの画面か手順を開けます。iPhone の Safari では「共有 → ホーム画面に追加」を使います。ライブで試した内容は、インストール後に引き継げることを保証しません。本番では OS の Service Worker がオフライン用にキャッシュします。初回の登録後にオンラインで再読み込みしてから使ってください。開発サーバーでは登録しません。
 
-ホームはシステムアプリ [apps/home](apps/home) です（決定）。HTML と AS がタイルの見た目と並びを持ち、どれをホームにしてどう開くかは Régie、アプリを置く枠とホームバーは Scene が持ちます（今のコードでは両方 Scene の `mountShell` にある）。一覧・アイコン・`apps.*` は実装済み（形は案）です。ホームの差し替え、権限の仕組み、アプリの CSS の分離は未決です。
+ホームは [apps/cadre](apps/cadre) のサブアプリ `cadre.home` です。AS の Décor がタイルの見た目と並びを持ち、どれをホームにしてどう開くかは Régie、ホームバーとアプリの表示領域の宣言は Cadre、アプリの配置は Scene が持ちます。ホームは設定から差し替えられます（[仕様](docs/spec/apps/home.md)）。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 

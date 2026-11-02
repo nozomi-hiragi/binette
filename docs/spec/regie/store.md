@@ -25,7 +25,7 @@ interface FileTree {
 
 - `createMemoryFileTree()`、`createIndexedDbFileTree({ name? })` で作る。IndexedDB の既定名は `binette-apps`、接続は初回操作時に開く
 - パスは正規の絶対パス。`list` は指定パス自身とその子孫のファイルを返し、結果は文字コード順。ファイルが無ければ `read` は `undefined`、`delete` は何もしない
-- `readOverlay` と `listOverlay` は `/apps/home/a` のような論理パスを取り、対応する `/user/apps/home/a` と `/system/apps/home/a` を重ねる。`/apps/settings` とその子孫は `/system` だけを使う
+- `readOverlay` と `listOverlay` は `/apps/example/a` のような論理パスを取り、対応する `/user/apps/example/a` と `/system/apps/example/a` を重ねる。設定を含む `/apps/cadre` とその子孫は `/system` だけを使う
 - `readFiles` は複数ファイルを同じ時点の状態から読む。`write`・`writeFiles`・`delete`・`update` は `/system` を変更できない。`writeFiles` は複数ファイルをまとめて原子的に書く。`replaceSystem` は `/system/…` のファイルの集合を丸ごと入れ替える。`update` は 1 ファイルの読み書きを原子的に行い、起動履歴の同時更新に使う
 - これはカーネル用の API であり、それ自体はアプリごとの権限を検査しない。`replaceSystem` はカーネルの更新処理だけに渡す
 
@@ -51,7 +51,7 @@ interface AppStore {
 }
 ```
 
-- `appId(source, id)` が返す `key` は完全なアプリ ID。埋め込みは生の ID、提供リストからのものは正規化したリスト URL ＋ `#` ＋識別子を使う。旧 `[source, id]` キーは移行しない
+- `appId(source, id)` が返す `key` は完全なアプリ ID。埋め込みは生の ID、提供リストからのものは正規化したリスト URL ＋ `#` ＋識別子を使う。`binette:system`・`binette:bundled` はいずれも生の ID を使い、既定は `cadre`・`designer`。サブアプリの ID は `cadre.home`・`cadre.settings` だが、AppStore には親のパッケージだけを保存する。旧 `[source, id]` キーは移行しない
 - `icon` は SVG の文字列。無ければ `undefined`
 - `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ
 - `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`

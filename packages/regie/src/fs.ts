@@ -43,7 +43,8 @@ function writable(path: string): void {
     throw new Error("/system can only be changed with replaceSystem.");
   }
 }
-const settings = (path: string) => within(path, "/apps/settings");
+// 設定サブアプリは親と実行物を共有するため、Cadre 全体を固定物から読む。
+const fixedCadre = (path: string) => within(path, "/apps/cadre");
 const copy = (value: Uint8Array | undefined) => value?.slice();
 function writableFiles(
   files: ReadonlyMap<string, Uint8Array>,
@@ -76,7 +77,7 @@ function overlay(
     ...tree,
     async readOverlay(path) {
       validatePath(path);
-      return (!settings(path)
+      return (!fixedCadre(path)
         ? await tree.read(`/user${path === "/" ? "" : path}`)
         : undefined) ??
         await tree.read(`/system${path === "/" ? "" : path}`);
@@ -91,7 +92,7 @@ function overlay(
           )
         ) {
           const logical = path.slice(layer.length);
-          if (logical && (layer !== "/user" || !settings(logical))) {
+          if (logical && (layer !== "/user" || !fixedCadre(logical))) {
             found.add(logical);
           }
         }

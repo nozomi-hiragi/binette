@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { Api, App, Last, OsApi, launch } from "jsr:@binette/replique";
+import { Api, App, Last, OsApi } from "jsr:@binette/replique";
 import { View, button, buttonOf, column, listTile, row, show, text } from "jsr:@binette/replique/ui";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
@@ -70,7 +70,7 @@ function change(change: i32): void {
   os.set(names[i], <i32>next);
 }
 
-class Settings extends App {
+export class Settings extends App {
   override onCreate(_last: Last, api: Api): void { osApi = api.get<OsApi>("os"); }
 
   override build(): View {
@@ -162,4 +162,3 @@ class Settings extends App {
   }
 }
 
-launch(new Settings());

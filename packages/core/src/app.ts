@@ -117,7 +117,7 @@ export interface AppManifest {
 
 /** {@link parseAppManifest} の設定 */
 export interface ParseAppManifestOptions {
-  /** `id` を識別子の規則で検査する（`.` を含むと誤り）。既定は false */
+  /** `id` を識別子の規則で検査する（`.` を含むと誤り）。既定は true */
   strictId?: boolean;
 }
 
@@ -126,8 +126,8 @@ export interface ParseAppManifestOptions {
  * 検査するのは `id`・`name`・`entry`・`icon`・`roles`・`sub` で、ほかの欄はそのまま残す。
  *
  * @param text `app.json` の中身の文字列
- * @param options `strictId` を true にすると、`id` を識別子の規則（`.` を含まないなど）で検査する。
- *   暗黙の判断: 今のアプリは `io.github.…` のような `.` 入りの `id` を使っていて Régie もまだ新しい規則を使わないので、既定では検査しない
+ * @param options `id` は既定で識別子の規則（`.` を含まないなど）で検査する。
+ *   `strictId: false` は旧形式の説明ファイルを読む道具向け。
  * @throws {BinetteError} JSON として読めないときや、形式が正しくないとき
  */
 export function parseAppManifest(text: string, options: ParseAppManifestOptions = {}): AppManifest {
@@ -140,7 +140,7 @@ export function parseAppManifest(text: string, options: ParseAppManifestOptions 
   const result = v.safeParse(appManifestSchema, value, { abortEarly: true });
   if (!result.success) throw new BinetteError("invalid_format", result.issues[0].message);
   const manifest = result.output as AppManifest;
-  if (options.strictId) {
+  if (options.strictId !== false) {
     try {
       normalizeAppIdentifier(manifest.id);
     } catch (error) {

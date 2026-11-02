@@ -30,13 +30,13 @@ const update = await distribution.checkUpdate();
 if (update.installedVersion === undefined) {
   await distribution.install(update.manifest); // 初回だけ自動導入
 }
-const wasm = await distribution.readOverlay("/apps/home/app.wasm");
+const wasm = await distribution.readOverlay("/apps/cadre/app.wasm");
 // 既存の導入がある場合は、設定で更新を選んでから install(update.manifest) を呼ぶ。
 ```
 
 `checkUpdate()` は目録だけを取り、`{ manifest, installedVersion, updateAvailable }` を返します。版が異なると `updateAvailable` が true になります。取得できないときは保存目録と目録に載る全固定物を検査し、問題がなければ保存版を更新なしとして返します。保存版がない場合や検査に失敗した場合はエラーになります。`install(manifest?)` は新目録にハッシュと大きさが一致する保存済みファイルを再利用し、足りない分を取得・検査してから `/system` 全体を `replaceSystem` で入れ替えます。目録も予約パス `/system/.manifest.json` に同時保存するため、取得・検査・置換が失敗した場合は以前の版を保ちます。
 
-固定物の読み込みは `readSystem("/system/...")`、重ね合わせは `readOverlay("/apps/...")` を使います。システムのファイルは保存目録と同じ時点で読み、毎回ハッシュと大きさを検査します。目録にあるファイルの欠落・改変や、目録にない固定物は例外にします。目録にも実体にもないパスは undefined を返します。`/user` の上書きは検査対象外で、設定アプリ `/apps/settings/` には適用しません。
+固定物の読み込みは `readSystem("/system/...")`、重ね合わせは `readOverlay("/apps/...")` を使います。システムのファイルは保存目録と同じ時点で読み、毎回ハッシュと大きさを検査します。目録にあるファイルの欠落・改変や、目録にない固定物は例外にします。目録にも実体にもないパスは undefined を返します。`/user` の上書きは検査対象外で、設定を含む Cadre パッケージ `/apps/cadre/` には適用しません。ホーム・設定は同じパッケージのサブアプリ `cadre.home`・`cadre.settings` です。
 
 `recover("clear-user")` は `/user` の変更を消し、`recover("refetch-system")` は全固定物を取得し直してから置換し、`recover("clear-all")` はファイルの木をすべて消します。削除操作はファイルごとなので、途中で保存先が失敗した場合は部分削除になることがあります。復旧後の再起動や画面は呼び出し側で行います。
 

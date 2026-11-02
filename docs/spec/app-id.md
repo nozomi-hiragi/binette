@@ -185,6 +185,6 @@ ID は、アプリをどう入れたかで分けます。
 
 今のコードでは、Régie は完全なアプリ ID を保存・役割の割り当て・起動履歴に使い、`sub` の各入口と `api.sub()` に対応しています。サブアプリは親と保存領域と権限を共有し、別の Worker で動きます。
 
-- 入手元はシステムアプリが `binette:system`、同梱アプリが `binette:bundled`（[apps/](apps/README.md)）。Cadre・ホーム・設定はまだ別々のシステムアプリで、designer は同梱アプリ。現在のマニフェストの `.` を含む ID は暫定的にそのまま生 ID に使い、後の変更で整理する
-- 提供リストの登録・インストールと `system/boot.json` の `lists` はまだ無い
+- 入手元はシステムアプリが `binette:system`、同梱アプリが `binette:bundled`（[apps/](apps/README.md)）。Cadre は `apps/cadre` の 1 つのパッケージで、ホーム・設定はその `sub`。ID は `cadre`・`cadre.home`・`cadre.settings`。designer は同梱のまま、ID は `designer`。`app.json` の `id` は既定で識別子の規則（`.` を含まない）で検査し、旧 ID の暫定例外は使わない
+- `system/boot.json` は `roles` に上の埋め込み ID を持ち、`lists: []` を出力する。提供リストのページと登録・インストール、Régie による `lists` の利用はまだ無い
 - `@binette/core` に識別子・提供リストの URL・完全な ID の正規化と組み立て、提供リストの読み取り、`app.json` の `sub` の検査、`integrity` の計算と検証の関数がある。Régie の CLI には `integrity` コマンドがある

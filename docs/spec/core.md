@@ -58,10 +58,11 @@ interface AppManifest {
 ## parseAppManifest
 
 ```ts
-function parseAppManifest(text: string): AppManifest
+function parseAppManifest(text: string, options?: { strictId?: boolean }): AppManifest
 ```
 
 - `text` は `app.json` の中身の文字列です
+- `id` は既定で識別子の規則を検査します。`.` はサブアプリの区切りなので使えません。サブアプリは `sub` に宣言します（[app-id.md](app-id.md#サブアプリ)）。旧形式を読む道具向けに `{ strictId: false }` を渡すと、この識別子の検査だけを省けます
 - `JSON.parse` で読み、valibot のスキーマで検査します。正しければ、読んだオブジェクトを返します。検査しない欄も含めて、中身は変えません
 - 誤りは `BinetteError` を投げます。検査の順とメッセージは [app.md の「読み込みと検査」](app.md#読み込みと検査実装済み) にあります
 

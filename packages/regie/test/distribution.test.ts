@@ -301,13 +301,13 @@ Deno.test("Reads verify saved bytes each time, fail closed on missing metadata, 
   ) {
     await assertRejects(() => api.readSystem(path));
   }
-  const settings = await fixture("1", "settings");
-  const fixed = distribution(tree, settings.fetch);
+  const cadre = await fixture("1", "cadre");
+  const fixed = distribution(tree, cadre.fetch);
   await fixed.install();
-  await tree.write("/user/apps/settings/app.wasm", encode("unsafe"));
+  await tree.write("/user/apps/cadre/app.wasm", encode("unsafe"));
   assertEquals(
-    await fixed.readOverlay("/apps/settings/app.wasm"),
-    settings.data,
+    await fixed.readOverlay("/apps/cadre/app.wasm"),
+    cadre.data,
   );
 });
 

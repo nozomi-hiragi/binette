@@ -1,8 +1,8 @@
-# 設定（`apps/settings`）
+# 設定（`cadre.settings`）
 
 [システムアプリの目次](README.md)
 
-設定画面は、Binette のシステムアプリ `apps/settings` が持ちます（決定）。ホームと Cadre の選択、更新、ライフサイクルのデバッグ値、起動の履歴を表示します（形は案・実装済み）。
+設定画面は、Cadre のサブアプリ `cadre.settings`（`apps/cadre`）が持ちます（決定）。ホームと Cadre の選択、更新、ライフサイクルのデバッグ値、起動の履歴を表示します（形は案・実装済み）。
 
 ## 今の画面（実装済み）
 
@@ -14,22 +14,21 @@
 - 「デバッグ」の節: 各項目に名前と数値のステッパーを並べる。スタック数は 1 ずつ・1 以上、履歴の行数は 10 ずつ・0 以上、時間は 1 秒ずつ。Stop と Apps の時間は 0 以上、呼び出しと onDestroy の時間切れは 1 秒以上。秒は「10 秒」のように表示する。下限より下の − と i32 の上限を越える ＋ は何も変えない
 - 「起動の履歴」の節: 見出しの右に UTC と書き、新しい順にアプリの名前と `YYYY-MM-DD HH:MM:SS` を行に並べる。名前が無いときは 完全なアプリ ID。日時は AS で Unix epoch ミリ秒から計算し、1970 年より前とうるう年にも対応する
 
+`apps/cadre/app.json` のサブアプリとして宣言します（親のほかの欄は省略）。
+
 ```json
 {
-  "id": "io.github.nozomi-hiragi.binette.settings",
-  "version": "0.1.0",
-  "binette": "0.2",
-  "name": "設定",
-  "roles": ["settings"],
-  "icon": "icon.svg",
-  "entry": { "as": "src/main.ts", "css": "src/style.css" }
+  "id": "cadre",
+  "sub": {
+    "settings": { "name": "設定", "icon": "settings.svg", "roles": ["settings"] }
+  }
 }
 ```
 
 - 役割 `settings` を名乗り、かつ割り当てられたアプリ（入手元が `binette:system`）だけに、辞書の [`os`](../replique.md#osapi) が届く。名乗っただけの外部のアプリには届かず、`api.get<OsApi>("os")` は null になる（設定アプリは null のとき「設定を使えません」と出す）。辞書を通さずに呼ぶとアプリを終了する
 - ホームの一覧にふつうのアプリとして並び、開くと OS のホームバーが下に出る（[home.md](home.md#os-の枠との分担)）
 - `Settings extends App` は `onCreate(last, api)` で `OsApi` を取り、`build()` で更新・ホーム・Cadre・デバッグ値の操作、履歴を宣言的 UI の部品として作る。ボタンの `arg(i)` で操作対象を渡す（案）
-- トップレベルで `launch(settings)` を一回呼ぶ。「詳しく」の操作で説明を表示する
+- 親の入口で `api.sub()` の `settings` を見て [Settings](../../../apps/cadre/src/settings/main.ts) を起動する。「詳しく」の操作で説明を表示する
 - 値は Worker の写しも更新するので連続した − ＋ に反映する。変更は OS が SystemStore に保存し、[項目ごとの時点](../lifecycle.md#値を変えたときに効く所案実装済み)から使う。ホームを変えたときも設定画面は開いたままにする
 - 履歴はインスタンスを作る直前の写し。ホームから戻すだけでは更新せず、閉じて開き直すと新しくなる
 - 版の `0.2` はアプリに書いたもので、OS から読んではいない
@@ -38,6 +37,5 @@
 
 - ほかにどんな設定の項目を置くか（例: テーマ、アプリごとの権限の取り消し、ストレージ、バックアップ）
 - ほかのアプリが設定画面に項目を差し込めるか（v0.1 の `.bina` の `settings` をどう引き継ぐか）
-- 設定アプリを差し替えられるか
 
 Cadre も `OsApi` の `candidateCount("cadre")`・`candidateName("cadre", i)`・`assign("cadre", i)` で選びます。変更はその場で保存して常駐 Cadre を起動し直し、設定画面と通常アプリのスタックは残します（実装済み、形は案）。

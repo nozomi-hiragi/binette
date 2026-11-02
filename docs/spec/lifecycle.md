@@ -91,7 +91,7 @@ OS がページに読まれるたびに、そのページの識別子を作り�
 - `manifest.webmanifest` は name・short_name が Binette、display が standalone、start_url・scope が `./`。背景色とテーマ色は index.html の白に合わせ、自作の B の SVG を使う。SW・マニフェスト・アイコンは Vite の publicDir から dist 直下へ写す。URL は相対指定でサブパスにも置ける
 - 版付きキャッシュに入口、カーネル、マニフェスト、アイコンを保持する。入口とカーネルは保存した組を使う。有効になったときは、実行中の版と、保存済み /system が組にしている版（切り替えに失敗して戻した場合）だけを残し、ほかの古い版のキャッシュは消す
 - 新しい SW は待機し、設定での更新時にカーネルと `/system` の組を確認してから有効にする。初回の登録はそのまま有効にできる（[更新](boot.md#更新決定-2026-11-02)）
-- `./fs/` への GET は IndexedDB のファイルの木から返す。論理パスは `/user` を `/system` に重ね、`/apps/settings` は `/system` のみを見る。`./fs/system/…` は `/system` を直接読む。`/system` の応答は保存目録の SHA-256 で検証する。パスと応答の形は案
+- `./fs/` への GET は IndexedDB のファイルの木から返す。論理パスは `/user` を `/system` に重ね、`/apps/cadre` は `/system` のみを見る。`./fs/system/…` は `/system` を直接読む。`/system` の応答は保存目録の SHA-256 で検証する。パスと応答の形は案
 - 配布元の `manifest.json` と `system/` の固定物は SW のキャッシュを通さず、カーネルが目録とハッシュを検証する。別のオリジンと GET 以外には触らない
 
 ## アプリの状態（決定）

@@ -45,8 +45,8 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 | パス | 仕事 |
 | --- | --- |
 | `manifest.json` | 目録。版と、各ファイルのパス・SHA-256・大きさ |
-| `system/boot.json` | 役割の既定の割り当て（どのアプリを Cadre・ホーム・設定にするか） |
-| `system/apps/<アプリ>/` | システムアプリ（Cadre、ホーム、設定など）。`app.json` とビルド済みの `.wasm` |
+| `system/boot.json` | 役割の既定の割り当てと既定の提供リスト（`lists`、今は空配列） |
+| `system/apps/<アプリ>/` | システムアプリ。既定は `cadre/` だけで、ホーム・設定をサブアプリとして含む。`app.json` とビルド済みの `.wasm` |
 | `system/bundled/<アプリ>/` | 同梱アプリ。システムアプリと同じファイル形式（案） |
 | `system/tools/asc.js` | AS のコンパイラ。依存込みの minify した JS で、Worker の中で動かす |
 | `system/libraries/replique.ts` | ブラウザでのビルドに渡す Réplique の AS ソース（案） |
@@ -57,7 +57,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 - 保存先は IndexedDB（決定）
 - 見え方は、`/system` の上に `/user` を重ねたもの。同じパスなら `/user` が勝つ。`/user` のファイルを消せば元に戻る
 - アプリはファイルの木に、辞書の API（[roles.md](roles.md)）でしか触れない。権限のないアプリは読むことも書くこともできない（決定）
-- 設定アプリはコアで、`/user` で上書きできない（決定。[roles.md](roles.md#設定アプリ決定)）
+- 設定アプリはコアで、設定を含む `/apps/cadre` パッケージは `/user` で上書きできない（決定。[roles.md](roles.md#設定アプリ決定)）
 
 | パス（案） | 中身 |
 | --- | --- |
@@ -81,7 +81,16 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 }
 ```
 
-`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg`・サブアプリの `sub-icons/<番号>.svg` を置きます。サブアイコンのパスは配布時に書き換え、目録にも含めます。同梱アプリの配置と入手元は案です。既定の Cadre は `apps/cadre` です。
+`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。Binette の出力は次のとおりです。提供リストのページはまだ用意せず、`lists` は空配列です。
+
+```json
+{
+  "roles": { "cadre": "cadre", "home": "cadre.home", "settings": "cadre.settings" },
+  "lists": []
+}
+```
+
+カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg`・サブアプリの `sub-icons/<番号>.svg` を置きます。サブアイコンのパスは配布時に書き換え、目録にも含めます。同梱アプリの配置と入手元は案です。既定の Cadre は `apps/cadre` です。ホーム・設定も同じパッケージとビルド結果を使い、個別の配布フォルダは持ちません。同梱のデザイナーの ID は `designer` です。
 
 ## アプリの置き方（決定 2026-11-01）
 
