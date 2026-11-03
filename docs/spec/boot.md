@@ -154,3 +154,5 @@ ebina-front は同じカーネルを配り、目録の取得元を自分（GitHu
 - 今の `.binapp`・`bundled/`・`binette:system` / `binette:bundled` の入手元を、この形にどう移すか
 - 開発用の配布方法（今の実装は案）
 - `regie-worker.js` の中身を毎回は確かめていない。必要になったら、`regie.js` にそのハッシュを埋め込み、取ってから確かめる案
+
+同梱の Filer は `system/boot.json` の `roles.files` に設定されます。

@@ -567,3 +567,47 @@ Deno.test("共有 IndexedDB は再接続後も承認とファイルを保持し�
     assertEquals((await fixture.content.list()).filter(k => k.startsWith("shared/")), []);
   });
 });
+
+Deno.test("Filer の共有参照は IndexedDB の files 行で原子的に保存され再接続後も読める", async () => {
+  const fixture = databaseFixture(installed, 2);
+  await withDatabase(fixture, async () => {
+    const first = createIndexedDbStorage({ content: fixture.content });
+    const owner = await first.appOwner("filer");
+    await first.forOwner(owner).write("/data/filer/a", new Uint8Array([9]));
+    const share = await first.filerShareOn("filer", owner, "/data/filer/a", "/a");
+    const second = createIndexedDbStorage({ content: fixture.content });
+    const before = await second.filerShareList("filer", owner, "/data/filer");
+    assertEquals("share" in before[0].row && before[0].row.share, share.id);
+    assertEquals(await second.shareFiles(share.id, "filer").read("/a"), new Uint8Array([9]));
+    await second.filerShareRename("filer", owner, share.id, "/a", "/renamed");
+    const renamed = await first.filerShareList("filer", owner, "/data/filer");
+    assertEquals("share" in renamed[0].row && renamed[0].row.path, "/renamed");
+    await second.filerShareOff("filer", owner, "/data/filer/a");
+    assertEquals(await first.forOwner(owner).read("/data/filer/a"), new Uint8Array([9]));
+    assertEquals(await first.shareFiles(share.id, "filer").read("/renamed"), undefined);
+    assertEquals(fixture.transactions.some(tx => tx.mode === "readwrite" && tx.stores.includes("files") && tx.stores.includes("shares")), true);
+  });
+});
+
+Deno.test("Filer の共有フォルダー名と退出は再接続後も保たれ、他の参加者とファイルを残す", async () => {
+  const fixture = databaseFixture(installed, 2);
+  await withDatabase(fixture, async () => {
+    const first = createIndexedDbStorage({ content: fixture.content });
+    const owner = await first.appOwner("filer");
+    const share = await first.createShare("author", "資料");
+    await first.shareFiles(share.id, "author").write("/dir/a", new Uint8Array([8]));
+    await first.inviteShare(share.id, "author", "filer", "write");
+    await first.joinShare(share.id, "filer");
+    await first.filerShareReference("filer", owner, "/data/filer/a", share.id, "/dir/a");
+    await first.filerShareFolderRename("filer", owner, share.id, "別名");
+    const second = createIndexedDbStorage({ content: fixture.content });
+    assertEquals((await second.getShare(share.id))!.members.filer.label, "別名");
+    await second.filerShareSubfolderRename("filer", owner, share.id, "/dir", "/new");
+    const refs = await first.filerShareList("filer", owner, "/data/filer");
+    assertEquals("share" in refs[0].row && refs[0].row.path, "/new/a");
+    await second.filerShareFolderLeave("filer", owner, share.id);
+    assertEquals((await first.getShare(share.id))!.members.filer, undefined);
+    assertEquals(await first.forOwner(owner).read("/data/filer/a"), new Uint8Array([8]));
+    assertEquals(await first.shareFiles(share.id, "author").read("/new/a"), new Uint8Array([8]));
+  });
+});

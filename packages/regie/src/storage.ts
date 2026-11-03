@@ -119,6 +119,18 @@ export interface FileMetadata {
   created: number;
   modified: number;
 }
+/** A Filer entry referring to content in a shared owner. */
+export interface FileReference {
+  share: string;
+  path: string;
+  name: string;
+  size: number;
+  created: number;
+  modified: number;
+  deleted?: number;
+}
+type FileRow = FileMetadata | FileReference;
+function isReference(row: FileRow): row is FileReference { return "share" in row; }
 export interface ProviderRecord {
   number: number;
   url: string;
@@ -132,7 +144,7 @@ export interface ShareRecord {
   creator: string;
   members: Record<
     string,
-    { access: "read" | "write"; state: "invited" | "joined" }
+    { access: "read" | "write"; state: "invited" | "joined"; label?: string }
   >;
 }
 export interface ShareStorage {
@@ -167,6 +179,16 @@ export interface ShareStorage {
     operation: keyof OwnerStorage,
     args: unknown[],
   ): Promise<unknown>;
+  filerShareOn(appId: string, owner: string, path: string, sharedPath: string): Promise<ShareRecord>;
+  filerShareReference(appId: string, owner: string, path: string, share: string, sharedPath: string): Promise<void>;
+  filerShareOff(appId: string, owner: string, path: string): Promise<void>;
+  filerShareRename(appId: string, owner: string, share: string, from: string, to: string): Promise<void>;
+  filerShareDelete(appId: string, owner: string, share: string, path: string): Promise<void>;
+  filerShareList(appId: string, owner: string, prefix: string): Promise<{ path: string; row: FileRow }[]>;
+  filerShareFolderRename(appId: string, owner: string, share: string, label: string): Promise<void>;
+  filerShareFolderLeave(appId: string, owner: string, share: string): Promise<void>;
+  filerShareSubfolderRename(appId: string, owner: string, share: string, from: string, to: string): Promise<void>;
+  filerShareSubfolderDelete(appId: string, owner: string, share: string, prefix: string): Promise<void>;
   moveShareFile(
     id: string,
     appId: string,
@@ -181,7 +203,7 @@ interface State {
   afterCommit?: (() => Promise<void>)[];
   providers: Map<number, Omit<ProviderRecord, "number">>;
   apps: Map<string, string>;
-  files: Map<string, FileMetadata>;
+  files: Map<string, FileRow>;
   counters: Map<string, number>;
 }
 export interface OwnerStorage {
@@ -271,7 +293,7 @@ function backend(
     persistence.run(action, write);
   const read = async (state: State, owner: string, path: string) => {
     const row = state.files.get(key(owner, path));
-    if (!row || row.deleted !== undefined) return undefined;
+    if (!row || row.deleted !== undefined || isReference(row)) return undefined;
     const value = await content.read(`${owner}/${row.hash}`);
     if (!value) throw new Error(`Missing stored content: ${owner}/${row.hash}`);
     return value;
@@ -292,7 +314,7 @@ function backend(
       const previous = state.files.get(key(owner, path));
       updates.push([key(owner, path), {
         hash: digest,
-        history: previous
+        history: previous && !isReference(previous)
           ? (previous.hash === digest
             ? previous.history
             : [previous.hash, ...previous.history.filter((h) => h !== digest)])
@@ -317,6 +339,21 @@ function backend(
       id: parsed.id,
       ...(provider.url.startsWith("binette:") ? {} : { list: provider.url }),
     }, { allowHttp: true });
+  }
+  function checkFilerOwner(s: State, appId: string, owner: string): void {
+    const owned = [...s.apps].some(([k, value]) => {
+      const [p, a] = JSON.parse(k);
+      const parent = currentId(s, k, value);
+      return `_${p.toString(16)}/-${a.toString(16)}` === owner && appId === parent;
+    });
+    if (!owned) throw new Error("自分の保存領域だけを操作できます。");
+  }
+  async function copyContent(from: string, to: string, row: FileMetadata): Promise<void> {
+    for (const digest of [row.hash, ...row.history]) {
+      const bytes = await content.read(`${from}/${digest}`);
+      if (!bytes) throw new Error("ファイルの内容がありません。");
+      if (!await content.read(`${to}/${digest}`)) await content.write(`${to}/${digest}`, bytes);
+    }
   }
   const api: StorageBackend = {
     createShare(creator, name, id = crypto.randomUUID()) {
@@ -455,6 +492,180 @@ function backend(
         return await Reflect.apply(Reflect.get(local, operation), local, args);
       }, !reading);
     },
+    filerShareFolderRename(appId, owner, id, label) {
+      if (!label || label === "." || label === ".." || (label.includes("/") || label.includes("\\") || [...label].some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127))) throw new Error("フォルダー名が不正です。");
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        const member = s.shares.get(id)?.members[appId];
+        if (member?.state !== "joined") throw new Error("共有の権限がありません。");
+        member.label = label;
+      }, true);
+    },
+    filerShareSubfolderRename(appId, owner, id, from, to) {
+      pathCheck(from); pathCheck(to);
+      if (from === "/" || to === "/" || (from !== to && (within(from, to) || within(to, from)))) throw new Error("フォルダーのパスが不正です。");
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        const member = s.shares.get(id)?.members[appId];
+        if (member?.state !== "joined" || member.access !== "write") throw new Error("共有への書き込み権限がありません。");
+        const sharedOwner = `shared/${id}`;
+        const source = [...s.files].flatMap(([fileKey, row]) => {
+          const [fileOwner, path] = JSON.parse(fileKey) as [string, string];
+          return fileOwner === sharedOwner && within(path, from) ? [{ fileKey, path, row }] : [];
+        });
+        if (!source.some(({ row }) => row.deleted === undefined)) throw new Error("共有フォルダーがありません。");
+        if (from === to) return;
+        for (const { path } of source) if (s.files.has(key(sharedOwner, to + path.slice(from.length)))) throw new Error("移動先にファイルがあります。");
+        for (const { fileKey } of source) s.files.delete(fileKey);
+        for (const { path, row } of source) {
+          const next = to + path.slice(from.length);
+          s.files.set(key(sharedOwner, next), { ...row, name: next.split("/").pop()!, modified: now() });
+        }
+        for (const [fileKey, ref] of s.files) {
+          const [fileOwner] = JSON.parse(fileKey) as [string, string];
+          if (fileOwner === owner && isReference(ref) && ref.share === id && within(ref.path, from)) s.files.set(fileKey, { ...ref, path: to + ref.path.slice(from.length), modified: now() });
+        }
+      }, true);
+    },
+    filerShareSubfolderDelete(appId, owner, id, prefix) {
+      pathCheck(prefix);
+      if (prefix === "/") throw new Error("共有ルートには使えません。");
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        const member = s.shares.get(id)?.members[appId];
+        if (member?.state !== "joined" || member.access !== "write") throw new Error("共有への書き込み権限がありません。");
+        const sharedOwner = `shared/${id}`;
+        let found = false;
+        const date = now();
+        for (const [fileKey, row] of s.files) {
+          const [fileOwner, path] = JSON.parse(fileKey) as [string, string];
+          if (fileOwner === sharedOwner && within(path, prefix) && row.deleted === undefined) { found = true; s.files.set(fileKey, { ...row, deleted: date }); }
+          else if (fileOwner === owner && isReference(row) && row.share === id && within(row.path, prefix) && row.deleted === undefined) s.files.set(fileKey, { ...row, deleted: date });
+        }
+        if (!found) throw new Error("共有フォルダーがありません。");
+      }, true);
+    },
+    filerShareFolderLeave(appId, owner, id) {
+      return run(async (s) => {
+        checkFilerOwner(s, appId, owner);
+        const share = s.shares.get(id);
+        if (share?.members[appId]?.state !== "joined") throw new Error("共有の権限がありません。");
+        const sharedOwner = `shared/${id}`;
+        for (const [fileKey, ref] of s.files) {
+          const [fileOwner] = JSON.parse(fileKey) as [string, string];
+          if (fileOwner !== owner || !isReference(ref) || ref.share !== id) continue;
+          const source = s.files.get(key(sharedOwner, ref.path));
+          if (!source || source.deleted !== undefined) { s.files.delete(fileKey); continue; }
+          if (isReference(source)) throw new Error("共有ファイルが不正です。");
+          await copyContent(sharedOwner, owner, source);
+          const { deleted: _deleted, ...contentRow } = source;
+          s.files.set(fileKey, { ...contentRow, name: ref.name, created: ref.created, modified: ref.modified, ...(ref.deleted === undefined ? {} : { deleted: ref.deleted }) });
+        }
+        delete share.members[appId];
+        if (!Object.values(share.members).some(member => member.state === "joined")) {
+          s.shares.delete(id);
+          for (const fileKey of s.files.keys()) if (JSON.parse(fileKey)[0] === sharedOwner) s.files.delete(fileKey);
+        }
+      }, true);
+    },
+    filerShareList(appId, owner, prefix) {
+      pathCheck(prefix);
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        return [...s.files].flatMap(([key, row]) => {
+          const [fileOwner, path] = JSON.parse(key) as [string, string];
+          return fileOwner === owner && row.deleted === undefined && within(path, prefix)
+            ? [{ path, row: structuredClone(row) }] : [];
+        });
+      });
+    },
+    filerShareReference(appId, owner, path, id, sharedPath) {
+      pathCheck(path); pathCheck(sharedPath);
+      if (path === "/" || sharedPath === "/") throw new Error("ファイルのパスにしてください。");
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        if (s.shares.get(id)?.members[appId]?.state !== "joined") throw new Error("共有の権限がありません。");
+        const source = s.files.get(key(`shared/${id}`, sharedPath));
+        if (!source || source.deleted !== undefined || isReference(source)) throw new Error("共有ファイルがありません。");
+        if (s.files.has(key(owner, path))) throw new Error("移動先にファイルがあります。");
+        s.files.set(key(owner, path), { share: id, path: sharedPath, name: path.split("/").pop()!, size: source.size, created: now(), modified: source.modified });
+      }, true);
+    },
+    filerShareOn(appId, owner, path, sharedPath) {
+      pathCheck(path); pathCheck(sharedPath);
+      if (path === "/" || sharedPath === "/") throw new Error("ファイルのパスにしてください。");
+      return run(async (s) => {
+        checkFilerOwner(s, appId, owner);
+        const row = s.files.get(key(owner, path));
+        if (!row || row.deleted !== undefined || isReference(row)) throw new Error("ファイルがありません。");
+        const id = crypto.randomUUID();
+        if (s.shares.has(id)) throw new Error("共有は既にあります。");
+        const share: ShareRecord = { id, name: "shared", created: now(), creator: appId, members: { [appId]: { access: "write", state: "joined" } } };
+        const sharedOwner = `shared/${id}`;
+        await copyContent(owner, sharedOwner, row);
+        s.shares.set(id, share);
+        s.files.set(key(sharedOwner, sharedPath), { ...row, name: sharedPath.split("/").pop()!, modified: now() });
+        s.files.set(key(owner, path), { share: id, path: sharedPath, name: row.name, size: row.size, created: row.created, modified: row.modified });
+        return structuredClone(share);
+      }, true);
+    },
+    filerShareRename(appId, owner, id, from, to) {
+      pathCheck(from); pathCheck(to);
+      if (from === "/" || to === "/") throw new Error("ファイルのパスにしてください。");
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        const member = s.shares.get(id)?.members[appId];
+        if (member?.state !== "joined" || member.access !== "write") throw new Error("共有への書き込み権限がありません。");
+        const sharedOwner = `shared/${id}`, oldKey = key(sharedOwner, from), nextKey = key(sharedOwner, to);
+        const row = s.files.get(oldKey);
+        if (!row || row.deleted !== undefined || isReference(row)) throw new Error("共有ファイルがありません。");
+        if (from === to) return;
+        if (s.files.has(nextKey)) throw new Error("移動先にファイルがあります。");
+        s.files.set(nextKey, { ...row, name: to.split("/").pop()!, modified: now() });
+        s.files.delete(oldKey);
+        for (const [fileKey, ref] of s.files) {
+          const [fileOwner] = JSON.parse(fileKey) as [string, string];
+          if (fileOwner === owner && isReference(ref) && ref.share === id && ref.path === from && ref.deleted === undefined) s.files.set(fileKey, { ...ref, path: to, modified: now() });
+        }
+      }, true);
+    },
+    filerShareDelete(appId, owner, id, path) {
+      pathCheck(path);
+      if (path === "/") throw new Error("ファイルのパスにしてください。");
+      return run((s) => {
+        checkFilerOwner(s, appId, owner);
+        const member = s.shares.get(id)?.members[appId];
+        if (member?.state !== "joined" || member.access !== "write") throw new Error("共有への書き込み権限がありません。");
+        const sharedKey = key(`shared/${id}`, path), row = s.files.get(sharedKey);
+        if (!row || row.deleted !== undefined || isReference(row)) throw new Error("共有ファイルがありません。");
+        const date = now(); s.files.set(sharedKey, { ...row, deleted: date });
+        for (const [fileKey, ref] of s.files) {
+          const [fileOwner] = JSON.parse(fileKey) as [string, string];
+          if (fileOwner === owner && isReference(ref) && ref.share === id && ref.path === path && ref.deleted === undefined) s.files.set(fileKey, { ...ref, deleted: date });
+        }
+      }, true);
+    },
+    filerShareOff(appId, owner, path) {
+      pathCheck(path);
+      return run(async (s) => {
+        checkFilerOwner(s, appId, owner);
+        const ref = s.files.get(key(owner, path));
+        if (!ref || ref.deleted !== undefined || !isReference(ref)) throw new Error("共有参照がありません。");
+        const member = s.shares.get(ref.share)?.members[appId];
+        if (member?.state !== "joined" || member.access !== "write") throw new Error("共有への書き込み権限がありません。");
+        const sharedOwner = `shared/${ref.share}`;
+        const row = s.files.get(key(sharedOwner, ref.path));
+        if (!row || row.deleted !== undefined || isReference(row)) throw new Error("共有ファイルがありません。");
+        await copyContent(sharedOwner, owner, row);
+        for (const [fileKey, other] of s.files) {
+          const [fileOwner] = JSON.parse(fileKey) as [string, string];
+          if (fileOwner === owner && isReference(other) && other.share === ref.share && other.path === ref.path && other.deleted === undefined) {
+            s.files.set(fileKey, { ...row, name: other.name, created: other.created, modified: now() });
+          }
+        }
+        s.files.delete(key(sharedOwner, ref.path));
+      }, true);
+    },
     moveShareFile(id, appId, owner, path, sharedPath, toShare) {
       pathCheck(path);
       pathCheck(sharedPath);
@@ -478,7 +689,7 @@ function backend(
         const fromPath = toShare ? path : sharedPath,
           toPath = toShare ? sharedPath : path;
         const row = s.files.get(key(from, fromPath));
-        if (!row || row.deleted !== undefined) {
+        if (!row || row.deleted !== undefined || isReference(row)) {
           throw new Error("ファイルがありません。");
         }
         if (s.files.has(key(to, toPath))) {
@@ -538,7 +749,7 @@ function backend(
           pathCheck(prefix);
           return run((s) =>
             [...s.files].filter(([k, r]) =>
-              JSON.parse(k)[0] === owner && r.deleted === undefined &&
+              JSON.parse(k)[0] === owner && r.deleted === undefined && !isReference(r) &&
               within(JSON.parse(k)[1], prefix)
             ).map(([k]) => JSON.parse(k)[1] as string).sort()
           );
@@ -556,13 +767,13 @@ function backend(
         },
         metadata(path) {
           pathCheck(path);
-          return run((s) => structuredClone(s.files.get(key(owner, path))));
+          return run((s) => { const row = s.files.get(key(owner, path)); return row && !isReference(row) ? structuredClone(row) : undefined; });
         },
         restore(path, digest) {
           pathCheck(path);
           return run(async (s) => {
             const row = s.files.get(key(owner, path));
-            if (!row) throw new Error("File does not exist.");
+            if (!row || isReference(row)) throw new Error("File does not exist.");
             if (digest !== undefined && digest !== row.hash) {
               if (!row.history.includes(digest)) {
                 throw new Error("Unknown historical content.");
@@ -776,6 +987,7 @@ function backend(
         const live = new Set<string>();
         for (const [k, row] of s.files) {
           const [owner] = JSON.parse(k);
+          if (isReference(row)) continue;
           for (const digest of [row.hash, ...row.history]) {
             live.add(`${owner}/${digest}`);
           }
@@ -1206,7 +1418,7 @@ export function createIndexedDbStorage(
         (method.includes("Share") || method === "removeApp")
       ) {
         selections.push({ store: "shares" }, { store: "files" });
-        if (method === "moveShareFile") {
+        if (method === "moveShareFile" || method.startsWith("filerShare")) {
           selections.push({ store: "apps" }, { store: "providers" });
         }
       }

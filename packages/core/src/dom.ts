@@ -9,7 +9,7 @@ export type DomOp =
   | { op: "listen"; handle: number; type: string; listener: number }
   | { op: "unlisten"; handle: number; type: string; listener: number }
   | { op: "icon"; handle: number; app: number }
-  | { op: "ui-create"; handle: number; kind: "column" | "row" | "text" | "button" | "input" | "grid" | "appIcon" |
+  | { op: "ui-create"; handle: number; kind: "column" | "row" | "text" | "button" | "input" | "filePick" | "grid" | "appIcon" |
       "spacer" | "separator" | "stack" | "checkbox" | "radio" | "slider" | "picker" | "segmented" | "tabs" | "progress" | "spinner" | "image" | "listTile" | "chip" | "badge" | "menuItem" | "appArea"; multiline?: boolean }
   | { op: "ui-update"; theme?: string; handle: number; text: string; padding: number | null; gap: number | null; grow: boolean; label: string | null; enabled: boolean; clickable: boolean; inputVersion?: number; key?: string; minWidth?: number | null; heading?: number; list?: boolean; listItem?: boolean; shown?: boolean; app?: number | null;
       /** 見た目の修飾。省略は既定を表す */

@@ -146,6 +146,8 @@ export async function buildApps(root: string): Promise<void> {
     roles.cadre = cadre.id;
     roles.home = `${cadre.id}.home`;
     roles.settings = `${cadre.id}.settings`;
+    try { roles.files = JSON.parse(await Deno.readTextFile(resolve(system, "bundled/filer/app.json"))).id; }
+    catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
     await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: [] }));
     await buildCompiler(resolve(system, "tools/asc.js"));
     await Deno.mkdir(resolve(system, "libraries"));

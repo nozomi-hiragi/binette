@@ -21,7 +21,7 @@ Deno.test("配布カーネルと Worker は独立した固定名で、HTML の S
     assert(script?.includes(`integrity="${expected}"`));
     const source = new TextDecoder().decode(kernel);
     assert(source.includes("regie-worker.js"));
-    assert(!source.includes("createObjectURL"));
+    assert(!/new Worker\([^;]*createObjectURL/.test(source));
     // 圧縮後の Worker も実際に起動し、WASM の ready と call を確かめる。
     const worker = new Worker(new URL(`file://${outDir}/regie-worker.js`), { type: "module" });
     try {

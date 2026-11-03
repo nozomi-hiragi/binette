@@ -82,7 +82,7 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
   shares: {},
 };
 /** 設定アプリで割り当てを変えられる役割。設定アプリ自体は固定 */
-const ASSIGNABLE_ROLES = ["home", "cadre"];
+const ASSIGNABLE_ROLES = ["home", "cadre", "files"];
 const SYSTEM_SOURCE = "binette:system";
 
 const HOME_RESTART_FIRST = 100;
@@ -256,7 +256,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const chosen = role === "settings" ? undefined : settings.roles[role];
     return list.find(app => app.key === chosen) ?? list.find(app => app.key === bootRoles[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
   };
-  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre") };
+  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre"), files: assign("files") };
   let home = assigned.home;
   let cadre = assigned.cadre;
   const apps = [...installedApps, ...parents.filter(app => !attempted.has(app.key) && app.source !== SYSTEM_SOURCE && app.source !== "binette:bundled")].flatMap(entries).filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
@@ -294,6 +294,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         cutCadre();
         await startCadre();
       }
+      return;
+    }
+    if (role === "files") {
+      assigned.files = list[i]!;
+      settings.roles.files = list[i]!.key;
+      saveSettings();
       return;
     }
     const previous = home;
@@ -353,12 +359,36 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const execute = async () => {
       if (!apiOf(app).keys.has("shares") || !Array.isArray(args) || args.some(arg => typeof arg !== "string")) throw new Error("共有の要求が不正です。");
       const shares = options.store.shares;
-      const required: Record<string, number> = { create: 1, list: 0, join: 1, leave: 1, read: 2, write: 3, readBase64: 2, writeBase64: 3, remove: 2, files: 2 };
+      const required: Record<string, number> = { create: 1, list: 0, join: 1, leave: 1, read: 2, write: 3, readBase64: 2, writeBase64: 3, remove: 2, files: 2, fileInfo: 2, ownList: 1, ownRead: 1, ownWrite: 2, ownRemove: 1, ownMove: 2, ownShareOn: 2, ownShareOff: 1, ownReference: 3, sharedRename: 3, sharedDelete: 2, folderRename: 2, folderLeave: 1, sharedFolderRename: 3, sharedFolderDelete: 2, shareMove: 4, estimate: 0, export: 2, pickReply: 3 };
       if (required[operation] === undefined || args.length !== required[operation]) throw new Error("共有の引数が不正です。");
       const [id, path, value] = args;
+      const filerOperations = ["ownList", "ownRead", "ownWrite", "ownRemove", "ownMove", "ownShareOn", "ownShareOff", "ownReference", "sharedRename", "sharedDelete", "folderRename", "folderLeave", "sharedFolderRename", "sharedFolderDelete", "shareMove", "estimate", "export", "pickReply"];
+      if (filerOperations.includes(operation) && (app.key !== assigned.files?.key || app.source !== "binette:bundled")) throw new Error("Filer の操作は許可されていません。");
+      const ownPath = (path: string) => { if (!path.startsWith("/data/filer/") && path !== "/data/filer") throw new Error("ファイルのパスが不正です。"); return path; };
+      const backend = options.store.fileStorage;
+      const owner = async () => await backend.appOwner(app.parentKey ?? app.key, app.source, app.manifest.name);
+      const base64 = (bytes: Uint8Array) => { let result = ""; for (const byte of bytes) result += String.fromCharCode(byte); return btoa(result); };
       switch (operation) {
+        case "ownList": return (await backend.filerShareList(app.key, await owner(), ownPath(id))).map(({ path, row }) => ({ ...row, path, ...( "share" in row ? { share: row.share, sharePath: row.path } : {}), modified: new Date(row.modified).toLocaleDateString("ja-JP") }));
+        case "ownShareOn": return await backend.filerShareOn(app.key, await owner(), ownPath(id), path);
+        case "ownShareOff": await backend.filerShareOff(app.key, await owner(), ownPath(id)); return;
+        case "ownReference": await backend.filerShareReference(app.key, await owner(), ownPath(id), path, value); return;
+        case "sharedRename": await backend.filerShareRename(app.key, await owner(), id, path, value); return;
+        case "sharedDelete": await backend.filerShareDelete(app.key, await owner(), id, path); return;
+        case "folderRename": await backend.filerShareFolderRename(app.key, await owner(), id, path); return;
+        case "folderLeave": await backend.filerShareFolderLeave(app.key, await owner(), id); return;
+        case "sharedFolderRename": await backend.filerShareSubfolderRename(app.key, await owner(), id, path, value); return;
+        case "sharedFolderDelete": await backend.filerShareSubfolderDelete(app.key, await owner(), id, path); return;
+        case "ownRead": { const bytes = await backend.forOwner(await owner()).read(ownPath(id)); return bytes === undefined ? null : base64(bytes); }
+        case "ownWrite": await backend.forOwner(await owner()).write(ownPath(id), Uint8Array.from(atob(path), c => c.charCodeAt(0))); return;
+        case "ownRemove": await backend.forOwner(await owner()).delete(ownPath(id)); return;
+        case "ownMove": await backend.forOwner(await owner()).move(ownPath(id), ownPath(path)); return;
+        case "shareMove": await backend.moveShareFile(id, app.key, await owner(), ownPath(path), value, args[3] === "true"); return;
+        case "estimate": return await navigator.storage.estimate();
+        case "export": { const bytes = Uint8Array.from(atob(path), c => c.charCodeAt(0)); const url = URL.createObjectURL(new Blob([bytes])); const a = document.createElement("a"); a.href = url; a.download = id; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); return; }
+        case "pickReply": { if (!available.has(id)) throw new Error("宛先がありません。"); const share = await shares.getShare(path); const access = share?.members[id]?.state === "joined" ? share.members[id].access : "write"; if (share?.members[id]?.state !== "joined") { await shares.inviteShare(path, app.key, id, "write"); await shares.joinShare(path, id); } await options.store.pigeon.append(id, { id: ++nextLetter, from: app.key, to: id, kind: "pick.reply", title: "", body: JSON.stringify({ id: path, path: value }), shares: [{ id: path, access }] }); await syncInbox(id); return; }
         case "create": return await shares.createShare(app.key, id);
-        case "list": return await shares.listShares(app.key);
+        case "list": { const list = await shares.listShares(app.key); return app.key === assigned.files?.key && app.source === "binette:bundled" ? list.map(share => ({ ...share, filerState: share.members[app.key]?.state, filerIsCreator: share.creator === app.key, creatorName: share.members[app.key]?.label ?? available.get(share.creator)?.manifest.name ?? share.creator })) : list; }
         case "join": await shares.joinShare(id, app.key); return;
         case "leave": await shares.leaveShare(id, app.key); return;
         case "read": { const bytes = await shares.shareFiles(id, app.key).read(path); return bytes === undefined ? null : new TextDecoder().decode(bytes); }
@@ -367,6 +397,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         case "write": await shares.shareFiles(id, app.key).write(path, new TextEncoder().encode(value)); return;
         case "remove": await shares.shareFiles(id, app.key).delete(path); return;
         case "files": return await shares.shareFiles(id, app.key).list(path);
+        case "fileInfo": { const metadata = await shares.shareFiles(id, app.key).metadata(path); return metadata ? { ...metadata, modified: new Date(metadata.modified).toLocaleDateString("ja-JP") } : null; }
         default: throw new Error("共有の操作が不明です。");
       }
     };

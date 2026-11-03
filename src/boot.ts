@@ -75,6 +75,7 @@ export async function loadBootApps(
         const key = entry.id === manifest.id ? appId(source, manifest.id) : `${appId(source, manifest.id)}.${entry.id.slice(manifest.id.length + 1)}`;
         if (keys.has(key)) throw new Error(`アプリの ID が重複しています: ${entry.id}`);
         keys.add(key);
+        if (source === BUNDLED && key === roleKeys.files && entry.roles?.includes("files")) roles.files = key;
         if (source !== SYSTEM) continue;
         if (entry.roles?.includes("settings") && (!coreSettings || key !== roleKeys.settings)) {
           throw new Error("設定アプリの役割は固定の割り当てから変更できません。");
