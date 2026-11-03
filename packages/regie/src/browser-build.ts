@@ -4,7 +4,7 @@ import type { FileTree } from "./fs.ts";
 import type { RegieWorker } from "./launch.ts";
 import { appPath, iconPath } from "./paths.ts";
 import { encodeAppPathSegment } from "./app-files.ts";
-import { installedAppFiles, appId, type InstalledApp } from "./store.ts";
+import { createAppStore, installedAppFiles, appId, type InstalledApp } from "./store.ts";
 
 /** 検証したコンパイラを独立した Worker で動かす設定。 */
 export interface BrowserBuildOptions extends Pick<BuildOptions, "libraries"> {
@@ -77,7 +77,7 @@ export async function buildAppInWorker(read: (path: string) => Promise<string>, 
   });
 }
 
-/** `/apps/<id>/` のソースをビルドし、成果物と起動用の記録を一括保存する。 */
+/** Build stored sources and save them with the output in their app owner. */
 export async function buildStoredApp(
   tree: FileTree,
   distribution: Pick<SystemDistribution, "readSystem">,
@@ -86,12 +86,29 @@ export async function buildStoredApp(
   options: Omit<BrowserBuildOptions, "distribution"> = {},
 ): Promise<InstalledApp> {
   const directory = `/apps/${encodeAppPathSegment(id)}`;
-  const read = async (name: string) => {
+  const key = appId(source, id);
+  const entry = await tree.storage?.findApp(key);
+  const owner = entry && tree.storage?.forOwner(entry.owner);
+  const files = new Map<string, Uint8Array>();
+  const ownedPaths = owner ? await owner.list("/source") : [];
+  const paths = ownedPaths.length ? ownedPaths.map(path => path.slice("/source/".length))
+    : (await tree.list(directory)).filter(path => path.startsWith(`${directory}/`) && !path.startsWith(`${directory}/build/`))
+      .map(path => path.slice(directory.length + 1));
+  for (const path of paths) {
+    if (!appPath(path)) throw new Error("アプリのフォルダ内の相対パスにしてください。");
+  }
+  const values = ownedPaths.length
+    ? await owner!.readFiles(paths.map(path => `/source/${path}`))
+    : await tree.readFiles(paths.map(path => `${directory}/${path}`));
+  paths.forEach((path, index) => {
+    if (values[index] !== undefined) files.set(path, values[index]);
+  });
+  const read = (name: string): Promise<string> => {
     const path = appPath(name);
     if (!path) throw new Error("アプリのフォルダ内の相対パスにしてください。");
-    const bytes = await tree.read(`${directory}/${path}`);
+    const bytes = files.get(path);
     if (bytes === undefined) throw new Error(`アプリのファイルがありません: ${name}`);
-    return decoder.decode(bytes);
+    return Promise.resolve(decoder.decode(bytes));
   };
   const built = await buildAppInWorker(read, { ...options, distribution });
   if (built.manifest.id !== id) throw new Error("app.json の ID と保存先の ID が一致しません。");
@@ -102,14 +119,17 @@ export async function buildStoredApp(
     if (path !== undefined) subIcons[id] = await read(path);
   }
   const installed: InstalledApp = {
-    ...built, key: appId(source, id), source,
+    ...built, key, source,
     ...(Object.keys(subIcons).length ? { subIcons } : {}),
     icon: icon === undefined ? undefined : await read(icon), installedAt: Date.now(),
   };
-  const files = installedAppFiles(installed);
-  files.set(`${directory}/build/app.wasm`, built.wasm);
-  files.set(`${directory}/build/index.html`, new TextEncoder().encode(built.html));
   if (options.signal?.aborted) throw new Error("ビルドを中止しました。");
-  await tree.writeFiles(files);
+  if (tree.storage) await createAppStore(tree).put(installed, files);
+  else {
+    const output = installedAppFiles(installed);
+    output.set(`${directory}/build/app.wasm`, built.wasm);
+    output.set(`${directory}/build/index.html`, new TextEncoder().encode(built.html));
+    await tree.writeFiles(output);
+  }
   return installed;
 }

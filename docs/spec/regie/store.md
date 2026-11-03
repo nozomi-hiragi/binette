@@ -4,12 +4,11 @@
 
 インストール済みアプリと OS の記録の保存先です。今のコードでは `packages/regie/src/store.ts` にあります（場所は変えません）。
 
-> [!NOTE]
-> 2026-11-03 に、保存の形を [storage.md](../storage.md)（中身は OPFS、メタデータは IndexedDB）に置き換えると決めました。この節は今のコードの形です。
+保存の形は [storage.md](../storage.md) のとおり、中身を OPFS、メタデータと名簿を IndexedDB に置きます。v0.2.0 の旧 IndexedDB の記録は移行しません。
 
 ## ファイルの木（案・実装済み）
 
-`packages/regie/src/fs.ts` の `FileTree` は、パスとバイト列を扱うカーネル用の API です。メモリ版と IndexedDB 版は同じ操作を持ち、読み書きするバイト列を写します。アプリに権限付きで渡す API は後の作業です。
+`packages/regie/src/fs.ts` の `FileTree` は、パスとバイト列を扱うカーネル用の API です。メモリ版と IndexedDB・OPFS 版は同じ操作を持ち、読み書きするバイト列を写します。アプリに権限付きで渡す API は後の作業です。
 
 ```ts
 interface FileTree {
@@ -26,11 +25,13 @@ interface FileTree {
 }
 ```
 
-- `createMemoryFileTree()`、`createIndexedDbFileTree({ name? })` で作る。IndexedDB の既定名は `binette-apps`、接続は初回操作時に開く
+- `createMemoryFileTree()`、`createIndexedDbFileTree({ name? })` で作る。IndexedDB の既定名は `binette-apps`、接続は初回操作時に開く。内容は SHA-256 の名前で OPFS に保存する
 - パスは正規の絶対パス。`list` は指定パス自身とその子孫のファイルを返し、結果は文字コード順。ファイルが無ければ `read` は `undefined`、`delete` は何もしない
 - `readOverlay` と `listOverlay` は `/apps/example/a` のような論理パスを取り、対応する `/user/apps/example/a` と `/system/apps/example/a` を重ねる。設定を含む `/apps/cadre` とその子孫は `/system` だけを使う
 - `readFiles` は複数ファイルを同じ時点の状態から読む。`write`・`writeFiles`・`delete`・`update` は `/system` を変更できない。`writeFiles` は複数ファイルの書き込みと省略可能な削除をまとめて原子的に行う。`replaceSystem` は `/system/…` のファイルの集合を丸ごと入れ替える。`update` は 1 ファイルの読み書きを原子的に行い、起動履歴の同時更新に使う
 - これはカーネル用の API であり、それ自体はアプリごとの権限を検査しない。`replaceSystem` はカーネルの更新処理だけに渡す
+
+保存層の `StorageBackend` は `forOwner(owner)` で所有者を選び、メタデータの参照・復元・移動や `gc()` を扱います。`appOwner` はプロバイダーとアプリの番号を名簿から解決し、`removeApp` は名簿と表からアプリを外します。即時削除を指定しなければ不要な内容は GC が消します。メモリ版と差し替え可能な `ContentStore` はテストにも使います。起動時と 1 日ごとに GC を実行します。
 
 ## AppStore（実装済み）
 
@@ -62,16 +63,16 @@ interface AppStore {
 - `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
 - `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
 - `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
-- `createAppStore(tree)` は指定した `FileTree` を使う。`/apps/<完全な ID>/` に、WASM をそのまま `app.wasm`、残りの記録を `record.json` として置き、2 ファイルを原子的に書く。ID は `encodeURIComponent` で符号化し、空文字と `.`・`..` は正規パスと衝突しないよう別に表す。保存形式と配置は案
-- `list` は `/apps` 以下の記録ファイルを探す。索引は持たず、一覧はパス順に返す。`get` は一覧から key が一致する記録を探す
+- `createAppStore(tree)` は指定した `FileTree` の保存層を使う。アプリの所有者ごとに `/build/app.wasm`・`/build/record.json` と成果物を置き、同じトランザクションで表を更新する
+- `list`・`get` はアプリの名簿から所有者と記録を探す
 
-ソースをファイルの木に置く場合は `/apps/<ID>/app.json` とソース・アイコンを保持し、`buildStoredApp` で `/apps/<ID>/build/app.wasm`・`index.html` を生成します。起動との互換のため、同時に `/apps/<完全な ID>/record.json`・`app.wasm` にも記録します。配置、同じ ID を持つ入手元どうしの扱い、ソースの取得方法は案です。
+取得したソースとアイコンは所有者の `/source/…`、ビルド結果は `/build/…` に保持します。
 
-版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。提供リストの移転時には `moveSource` がアプリと保存データ、OS の記録を付け替えます。権限の許可をユーザーに尋ねる仕組みはまだありません。
+版を比べてビルドするか決めるのはシステム（[system.md](system.md#インストール)）です。提供リストの移転時には `moveSource` がプロバイダーの URL を変更し、アプリと保存データの所有者はそのままです。名簿の ID と登録リストは読み出すときに現在の URL を解決します。権限の許可をユーザーに尋ねる仕組みはまだありません。
 
 ## アプリごとのデータ（案・実装済み）
 
-`AppStore.data` で `/data/<アプリの ID>/<名前>` を読み書きします。ID と名前は `encodeURIComponent` で符号化して 1 つの部品にします（空文字と `.`・`..` は別に表す）。名前は階層にならず、中身は文字列（UTF-8）だけです。ID `system` は OS の記録（`/data/system/`）と同じ場所なので拒みます。
+`AppStore.data` でアプリ自身の所有者の `/data/<名前>` を読み書きします。名前は `encodeURIComponent` で符号化して 1 つの部品にします（空文字と `.`・`..` は別に表す）。名前は階層にならず、中身は文字列（UTF-8）だけです。ID `system` は従来の API 契約に合わせて拒みます。
 
 ```ts
 interface AppDataStore {
@@ -86,7 +87,7 @@ interface AppDataStore {
 
 ## SystemStore（案・実装済み）
 
-AppStore.system で同じファイルの木の OS の記録を読み書きします。最後の状態・履歴・設定は `/data/system/` 以下に置きます（配置は案）。IndexedDB は DB を v3 に上げて files 表を作り、旧 apps・system 表の記録を移します。旧表は残します。各書き込みはトランザクションの完了まで待ちます。
+AppStore.system で同じファイルの木の OS の記録を読み書きします。最後の状態・履歴・設定は `/data/system/` 以下に置きます（配置は案）。IndexedDB の v5 に providers・apps・files の表と番号管理、検索用の索引を置きます。v4 から更新するときは保存済みの行を保ち、索引を作ります。各書き込みはトランザクションの完了まで待ちます。
 
 ```ts
 interface LifecycleRecord {
@@ -120,6 +121,6 @@ interface SystemStore {
 }
 ```
 
-getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。IndexedDB では履歴の読み足しと書き込みを同じトランザクションにし、同時に起動しても失いません。
+getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。履歴の読み足しと書き込みは保存層のロック内で行い、同時更新で失わないようにします。
 
 putSettings は全体を置き換えます。部分的に保存でき、省いた項目はシステムの既定を使います。roles は役割から 完全なアプリ ID への文字列の写し、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。getSettings は、v0.2.0 の途中まで保存していた home を roles.home に読み替えて返します。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。

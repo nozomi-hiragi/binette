@@ -96,7 +96,8 @@ Deno.test("ファイルの木を共有してアプリと OS の記録を読み�
   assertEquals((await first.list()).map(value => value.key).sort(), apps.map(value => value.key).sort());
   for (const value of apps) assertEquals(await second.get(value.key), value);
   const paths = await tree.list("/apps");
-  assertEquals(paths.length, 6);
+  assertEquals(paths.length, 0);
+  assertEquals((await tree.storage!.listApps()).length, 3);
   assertEquals(paths.every(path => path.endsWith("/record.json") || path.endsWith("/app.wasm")), true);
   await Promise.all(Array.from({ length: 20 }, (_, time) =>
     (time % 2 ? first : second).system.recordLaunch({ time, app: apps[0]!.key })));
@@ -107,19 +108,19 @@ Deno.test("ファイルの木を共有してアプリと OS の記録を読み�
   assertEquals(await first.system.getSettings(), { stackSize: 4 });
 });
 
-Deno.test("アプリは索引なしで記録とバイナリを保存し、一覧をパス順に返す", async () => {
+Deno.test("Apps store metadata and binaries in their owner and list by full ID", async () => {
   const { createMemoryFileTree } = await import("../src/fs.ts");
   const { createAppStore } = await import("../src/store.ts");
-  const { appFilePaths, encodeAppPathSegment, decodeAppPathSegment } = await import("../src/app-files.ts");
+  const { encodeAppPathSegment, decodeAppPathSegment } = await import("../src/app-files.ts");
   const tree = createMemoryFileTree();
   const store = createAppStore(tree);
   const values = [app("https://z.test/", "id"), app("https://a.test/", "id"), ...["%", "a/b", "日本語"].map(value => app("https://example.test/", value))];
   for (const value of values) {
     assertEquals(decodeAppPathSegment(encodeAppPathSegment(value.source)), value.source);
     await store.put(value);
-    const paths = appFilePaths(value.manifest.id, value.source);
-    assertEquals(await tree.read(paths.wasm), value.wasm);
-    const record = JSON.parse(new TextDecoder().decode(await tree.read(paths.record)));
+    const owner = tree.storage!.forOwner(await tree.storage!.appOwner(value.key, value.source));
+    assertEquals(await owner.read("/build/app.wasm"), value.wasm);
+    const record = JSON.parse(new TextDecoder().decode(await owner.read("/build/record.json")));
     assertEquals("wasm" in record, false);
     assertEquals(await store.get(value.key), value);
   }
@@ -127,33 +128,33 @@ Deno.test("アプリは索引なしで記録とバイナリを保存し、一覧
   await tree.write("/apps/unrelated.txt", new Uint8Array([1]));
   await tree.write("/apps/other/source/record.json", new TextEncoder().encode("{}"));
   const expected = [...values].sort((a, b) => {
-    const left = appFilePaths(a.manifest.id, a.source).record;
-    const right = appFilePaths(b.manifest.id, b.source).record;
+    const left = a.key;
+    const right = b.key;
     return left < right ? -1 : left > right ? 1 : 0;
   });
   assertEquals(await store.list(), expected);
   const updated = { ...values[0]!, html: "更新", wasm: new Uint8Array([9, 8]), icon: undefined };
   await store.put(updated);
   assertEquals(await store.get(updated.key), updated);
-  assertEquals(await tree.read(appFilePaths(updated.manifest.id, updated.source).wasm), updated.wasm);
+  assertEquals(await tree.storage!.forOwner(await tree.storage!.appOwner(updated.key, updated.source)).read("/build/app.wasm"), updated.wasm);
   assertEquals((await store.list()).length, values.length);
   for (const key of ["missing", "null", "{}", '["one"]', '[1,2]', '[ "z", "id" ]']) assertEquals(await store.get(key), undefined);
 });
 
-Deno.test("アプリごとのデータは /data/<id>/ に名前ごとに保存し、system の ID は拒む", async () => {
+Deno.test("App data is stored below each owner /data and rejects the reserved system ID", async () => {
   const { createMemoryFileTree } = await import("../src/fs.ts");
   const { createAppStore } = await import("../src/store.ts");
   const tree = createMemoryFileTree();
   const store = createAppStore(tree).data;
-  assertEquals(await store.read("io.example.app"), new Map());
-  await store.write("io.example.app", "メモ/1", "中身🏠");
-  await store.write("io.example.app", "b", "2");
+  assertEquals(await store.read("memo"), new Map());
+  await store.write("memo", "メモ/1", "中身🏠");
+  await store.write("memo", "b", "2");
   await store.write("other", "b", "別");
-  assertEquals(await store.read("io.example.app"), new Map([["b", "2"], ["メモ/1", "中身🏠"]]));
-  assertEquals(await tree.list("/data/io.example.app"), ["/data/io.example.app/%E3%83%A1%E3%83%A2%2F1", "/data/io.example.app/b"]);
-  await store.write("io.example.app", "b", null);
-  await store.write("io.example.app", "無い", null);
-  assertEquals([...(await store.read("io.example.app")).keys()], ["メモ/1"]);
+  assertEquals(await store.read("memo"), new Map([["メモ/1", "中身🏠"], ["b", "2"]]));
+  assertEquals(await tree.storage!.forOwner(await tree.storage!.appOwner("memo")).list("/data"), ["/data/%E3%83%A1%E3%83%A2%2F1", "/data/b"]);
+  await store.write("memo", "b", null);
+  await store.write("memo", "無い", null);
+  assertEquals([...(await store.read("memo")).keys()], ["メモ/1"]);
   assertEquals(await store.read("other"), new Map([["b", "別"]]));
   await assertRejects(() => store.read("system"), Error, "system");
   await assertRejects(() => store.write("system", "settings.json", "x"), Error, "system");
@@ -163,4 +164,107 @@ Deno.test("保存済みの旧い home を roles.home に読み替える", async 
   const tree = createMemoryFileTree();
   await tree.write("/data/system/settings.json", new TextEncoder().encode(JSON.stringify({ home: "a", stackSize: 2 })));
   assertEquals(await createAppStore(tree).system.getSettings(), { stackSize: 2, roles: { home: "a" } });
+});
+
+Deno.test("owned app files and data keep their owner when a provider moves", async () => {
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const original = app("https://old.test/", "memo");
+  await store.put(original, new Map([["app.json", new TextEncoder().encode("{}")], ["record.json", new Uint8Array([7])]]));
+  const owner = await tree.storage!.appOwner(original.key, original.source);
+  const files = tree.storage!.forOwner(owner);
+  assertEquals(await files.read("/source/record.json"), new Uint8Array([7]));
+  assertEquals(await files.read("/build/app.wasm"), original.wasm);
+  await store.data.write(original.key, "note", "saved");
+  assertEquals(await store.data.read(`${original.key}.child`), new Map([["note", "saved"]]));
+  await store.system.putPermissions(original.key, ["fs"]);
+  await store.system.putSettings({ roles: { home: `${original.key}.child` } });
+  await store.system.recordLaunch({ time: 1, app: original.key });
+  await store.moveSource(original.source, "https://new.test/");
+  const next = appId("https://new.test/", "memo");
+  assertEquals(await tree.storage!.appOwner(next, "https://new.test/"), owner);
+  assertEquals((await store.get(next))?.source, "https://new.test/");
+  assertEquals(await store.get(original.key), undefined);
+  assertEquals(await store.data.read(next), new Map([["note", "saved"]]));
+  assertEquals(await store.system.getPermissions(next), ["fs"]);
+  assertEquals((await store.system.getSettings())?.roles, { home: `${next}.child` });
+  assertEquals(await store.system.listLaunches(), [{ time: 1, app: next }]);
+  await store.put({ ...original, key: next, source: "https://new.test/", html: "updated" });
+  assertEquals((await store.system.getSettings())?.roles, { home: `${next}.child` });
+  assertEquals(await store.system.listLaunches(), [{ time: 1, app: next }]);
+});
+
+Deno.test("provider registrations preserve boot metadata and resolve moved URLs without rewriting files", async () => {
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const from = "https://registered.test/";
+  const to = "https://moved.test/";
+  await store.system.putLists([{ url: from, boot: from }]);
+  const provider = await tree.storage!.provider(from);
+  assertEquals(typeof provider?.number, "number");
+  const owner = tree.storage!.forOwner("_0/-0");
+  const before = await owner.metadata("/data/system/lists.json");
+  await store.moveSource(from, to, [{ url: to, boot: from }]);
+  assertEquals(await store.system.getLists(), [{ url: to, boot: from }]);
+  assertEquals(await owner.metadata("/data/system/lists.json"), before);
+  assertEquals((await tree.storage!.provider(to))?.number, provider!.number);
+  assertEquals(await tree.storage!.provider(from), undefined);
+  const reopened = createAppStore(tree);
+  assertEquals(await reopened.system.getLists(), [{ url: to, boot: from }]);
+  await tree.write("/data/system/lists.json", new TextEncoder().encode(JSON.stringify([{ url: to, boot: from, provider: 999 }])));
+  assertEquals(await reopened.system.getLists(), [{ url: to, boot: from }]);
+  await reopened.system.putLists(await reopened.system.getLists());
+  assertEquals(await reopened.system.getLists(), [{ url: to, boot: from }]);
+});
+
+Deno.test("settings and launch history preserve unknown and noncanonical app strings", async () => {
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const values = ["後続で使う設定", "missing", "https://EXAMPLE.test:443/apps/#memo", "io.example.app"];
+  for (const value of values) {
+    await store.system.putSettings({ roles: { home: value } });
+    assertEquals((await store.system.getSettings())?.roles, { home: value });
+    await store.system.recordLaunch({ time: 1, app: value });
+  }
+  assertEquals(await store.system.listLaunches(), values.map(app => ({ time: 1, app })));
+  assertEquals((await tree.storage!.listApps()).map(entry => entry.id), ["missing"]);
+});
+
+Deno.test("canonical roles saved before installation follow later provider moves", async () => {
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const original = app("https://pending.test/", "memo");
+  await store.system.putSettings({ roles: { home: `${original.key}.child` } });
+  await store.system.recordLaunch({ time: 1, app: original.key });
+  assertEquals((await store.system.getSettings())?.roles, { home: `${original.key}.child` });
+  assertEquals(await store.get(original.key), undefined);
+  await store.put(original);
+  await store.moveSource(original.source, "https://installed.test/");
+  const next = appId("https://installed.test/", "memo");
+  assertEquals((await store.system.getSettings())?.roles, { home: `${next}.child` });
+  assertEquals(await store.system.listLaunches(), [{ time: 1, app: next }]);
+});
+
+Deno.test("単一アプリと保存済み owner の検索は名簿全体を列挙しない", async () => {
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const original = app("https://lookup.test/", "memo");
+  await store.put(original);
+  await store.system.putSettings({ roles: { home: `${original.key}.child` } });
+  await store.system.recordLaunch({ time: 1, app: original.key });
+  tree.storage!.listApps = () => { throw new Error("名簿全体を列挙しました。"); };
+  assertEquals(await store.get(original.key), original);
+  assertEquals(await store.get("missing"), undefined);
+  assertEquals(await store.get(`${original.key}.child`), undefined);
+  await store.moveSource(original.source, "https://moved.test/");
+  const next = appId("https://moved.test/", "memo");
+  assertEquals((await store.get(next))?.key, next);
+  assertEquals((await store.system.getSettings())?.roles, { home: `${next}.child` });
+  assertEquals(await store.system.listLaunches(), [{ time: 1, app: next }]);
+  let ownerLookups = 0;
+  const findAppByOwner = tree.storage!.findAppByOwner.bind(tree.storage);
+  tree.storage!.findAppByOwner = owner => { ownerLookups++; return findAppByOwner(owner); };
+  await tree.write("/data/system/settings.json", new TextEncoder().encode(JSON.stringify({ roles: { home: "unknown value" } })));
+  assertEquals((await store.system.getSettings())?.roles, { home: "unknown value" });
+  assertEquals(ownerLookups, 0);
 });

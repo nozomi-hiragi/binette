@@ -9,10 +9,15 @@ import { mountStartedApp } from "./mount-helper.ts";
 const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
-  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
   const deadline = performance.now() + 10000;
   while (!condition() && performance.now() < deadline) await sleep(5);
   assert(condition(), "待っても状態が変わりませんでした");
+}
+async function waitForAsync(condition: () => Promise<boolean>): Promise<void> {
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!await condition() && performance.now() < deadline) await sleep(5);
+  assert(await condition(), "待っても状態が変わりませんでした");
 }
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();
@@ -139,11 +144,17 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
 for (const state of ["pause", "stop"] as const) {
   Deno.test(state + " の例外は続く終了通知を呼ばず、ホームへ一度だけエラーを出す", async () => {
     const code = source.replace(`record("${state}");`, `record("${state}"); throw new Error("終了前の例外");`);
-    const window = new Window(); const element = host(window); const errors: unknown[] = [];
-    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: await build(source, true) }, { source: "https://example.test/apps/", prebuilt: await build(code) }], store: createMemoryAppStore(), createWorker, stopDelay: 20, onError: e => errors.push(e) });
+    const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
+    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: await build(source, true) }, { source: "https://example.test/apps/", prebuilt: await build(code) }], store, createWorker, stopDelay: 20, onError: e => errors.push(e) });
     try {
       const home = activeHost(element); click(element, "open");
       await waitFor(() => activeHost(element) !== home && logOf(element) === "create:0;start:1;resume;");
+      await waitForAsync(async () => {
+        const last = await store.system.getLast("https://example.test/apps/#test");
+        return last?.state === State.Resume && last.done;
+      });
+      // Finish mounting after Resume persistence before leaving the app.
+      await sleep(0);
       const previous = activeHost(element);
       element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
       await waitFor(() => errors.length === 1 && activeHost(element) === home && !!logOf(element)?.endsWith("resume;"));
@@ -172,13 +183,23 @@ Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さ�
   const shell = await mountShell(element, { apps: await stackFixtures(), store,
     createWorker() { launches++; const worker = createWorker(); return { ...worker, terminate() { terminated++; worker.terminate(); } }; } });
   const home = activeHost(element);
-  const goHome = async () => { bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home && !!logOf(home)?.endsWith("resume;")); };
-  const openNew = async (id: string) => { click(home, id); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;")); return activeHost(element); };
+  const resumed = async (name: string) => {
+    await waitForAsync(async () => {
+      const view = systemView(element);
+      const instance = view.instances.find(instance => instance.name === name && instance.id === view.front);
+      const last = instance && await store.system.getLast(instance.key);
+      return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
+    });
+    // Let show() finish assigning the mounted process after the persisted lifecycle completes.
+    await sleep(0);
+  };
+  const goHome = async () => { bar(element, "ホームを開く"); await resumed("テスト"); assertEquals(activeHost(element), home); };
+  const openNew = async (id: string) => { click(home, id); await resumed(id === "open" ? "A" : id === "open1" ? "B" : "C"); return activeHost(element); };
   try {
     const a = await openNew("open"); await goHome();
     const b = await openNew("open1"); await goHome();
     // A を再び前面へ出すと、B のほうが古くなる
-    bar(element, "Aを開く"); await waitFor(() => activeHost(element) === a && logOf(a)!.endsWith("pause;resume;"));
+    bar(element, "Aを開く"); await resumed("A"); await waitFor(() => activeHost(element) === a && logOf(a)!.endsWith("pause;resume;"));
     await goHome(); const c = await openNew("open2");
     await waitFor(() => !b.isConnected);
     assertEquals(logOf(b), "create:0;start:1;resume;pause;stop;destroy:1:2;");
@@ -211,12 +232,20 @@ Deno.test("Pause を待つあいだに同じアプリへ戻っても、前面を
       terminate: inner.terminate,
     };
   };
-  const window = new Window(); const element = host(window);
-  const shell = await mountShell(element, { apps: await stackFixtures(), store: createMemoryAppStore(), createWorker: delayedWorker });
+  const window = new Window(); const element = host(window); const store = createMemoryAppStore();
+  const shell = await mountShell(element, { apps: await stackFixtures(), store, createWorker: delayedWorker });
   const home = activeHost(element);
   const visible = () => element.querySelectorAll(".bina-shell-app:not([hidden])").length;
   try {
     click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    await waitForAsync(async () => {
+      const view = systemView(element);
+      const instance = view.instances.find(instance => instance.name === "A" && instance.id === view.front);
+      const last = instance && await store.system.getLast(instance.key);
+      return last?.state === State.Resume && last.done;
+    });
+    // Ensure show() owns the mounted process before intercepting its Pause call.
+    await sleep(0);
     const a = activeHost(element);
     holding = true;
     bar(element, "ホームを開く"); await waitFor(() => release !== undefined);
@@ -258,16 +287,26 @@ Deno.test("起動の途中のクリックは捨てずに Resume のあとに届�
 });
 
 Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
-  const window = new Window(); const element = host(window); const errors: unknown[] = [];
+  const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
   const fixtures = await stackFixtures();
   fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
-  const shell = await mountShell(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, stopDelay: 60, onError: e => errors.push(e) });
+  const shell = await mountShell(element, { apps: fixtures, store, createWorker, stopDelay: 60, onError: e => errors.push(e) });
   const home = activeHost(element);
+  const resumed = async (name: string) => {
+    await waitForAsync(async () => {
+      const view = systemView(element);
+      const instance = view.instances.find(instance => instance.name === name && instance.id === view.front);
+      const last = instance && await store.system.getLast(instance.key);
+      return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
+    });
+    // Complete the host continuation following the final lifecycle persistence.
+    await sleep(0);
+  };
   try {
-    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    click(home, "open"); await resumed("A");
     const a = activeHost(element);
-    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
-    click(home, "open1"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    bar(element, "ホームを開く"); await resumed("テスト"); await waitFor(() => activeHost(element) === home);
+    click(home, "open1"); await resumed("B");
     const b = activeHost(element);
     await waitFor(() => errors.length === 1);
     assertEquals(activeHost(element), b); assert(!a.isConnected);

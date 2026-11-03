@@ -9,6 +9,10 @@ const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
 const tree = createIndexedDbFileTree();
 const distribution = createSystemDistribution(tree, { manifestUrl: new URL("./manifest.json", document.baseURI), origin: location.origin });
+const collectStorage = () => { void tree.storage?.gc().catch(error => console.error(error)); };
+collectStorage();
+const storageTimer = setInterval(collectStorage, 24 * 60 * 60_000);
+import.meta.hot?.dispose(() => clearInterval(storageTimer));
 
 if (new URL(location.href).searchParams.has("recovery")) {
   showRecovery(container, distribution);
