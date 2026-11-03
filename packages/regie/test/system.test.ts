@@ -65,7 +65,7 @@ async function build(code = source, home = false) {
   const stderr = asc.createMemoryStream();
   const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
     readFile(name: string) {
-      if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle } from "jsr:@binette/replique";';
+      if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle, __bina_pigeon, __bina_cadre_sync } from "jsr:@binette/replique";';
       if (name === "node_modules/jsr:@binette/replique.ts") return replique;
       if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
       if (name === "node_modules/jsr:@binette/decor/parts.ts") return decorParts;
@@ -698,6 +698,92 @@ Deno.test("保存した完全 ID の割り当てで非表示のサブアプリ�
     assertEquals(element.view.instances.find(app => app.home)!.key, "https://example.test/other/#test.home");
     assertEquals(element.active.text.get("sub"), "home");
     assertEquals(element.homeApps!.map(app => app.id), ["https://example.test/other/#test"]);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("Pigeon は停止中と動作中に届け、urgent 起動と通知返信とミュートを仲介する", async () => {
+  const target = "https://example.test/pigeon/#receiver";
+  const senderId = "https://example.test/pigeon/#sender";
+  const sending = await build(`import { Api, App, PigeonApi, document, launch } from "jsr:@binette/replique";
+let pigeon: PigeonApi | null = null;
+class Sender extends App { onCreate(last: Last, api: Api): void { pigeon = api.get<PigeonApi>("pigeon"); } }
+import { Last } from "jsr:@binette/replique";
+export function sendMail(): void { pigeon!.send("${target}", "open", "題", "本文"); }
+export function urgentMail(): void { pigeon!.send("${target}", "urgent", "", "至急", true); }
+export function notify(): void { document.getElementById("result").textContent = pigeon!.send("user", "chat", "通知", "通知本文", false, '[{"id":"reply","label":"返信","input":true},{"id":"ack","label":"確認"}]').toString(); }
+launch(new Sender());`);
+  const receiving = await build(`import { Api, App, PigeonApi, Last, document, launch } from "jsr:@binette/replique";
+let pigeon: PigeonApi | null = null;
+function inspect(): void { document.getElementById("count").textContent = pigeon!.count().toString(); if (pigeon!.count()) { document.getElementById("from").textContent = pigeon!.from(0); document.getElementById("kind").textContent = pigeon!.kind(0); document.getElementById("body").textContent = pigeon!.body(0); } }
+class Receiver extends App { onCreate(last: Last, api: Api): void { pigeon = api.get<PigeonApi>("pigeon"); inspect(); } onPigeon(): void { inspect(); } }
+export function acknowledge(): void { pigeon!.done(0); inspect(); }
+launch(new Receiver());`);
+  const cadre = await build(`import { Api, App, Last, CadreApi, StorageApi, launch } from "jsr:@binette/replique";
+let storage: StorageApi | null = null;
+let api: CadreApi | null = null;
+class Frame extends App { onCreate(last: Last, dictionary: Api): void { api = dictionary.get<CadreApi>("cadre"); storage = dictionary.get<StorageApi>("storage"); } }
+export function inspectNotifications(): void { storage!.write("notifications", api!.notificationCount().toString()); }
+export function reply(): void { api!.notificationReply(api!.notificationId(0), "reply", "返事"); }
+export function replyButton(): void { api!.notificationReply(api!.notificationId(0), "ack", "無視する値"); }
+launch(new Frame());`);
+  const settings = await build(`import { Api, App, Last, OsApi, launch } from "jsr:@binette/replique";
+let api: OsApi | null = null;
+class Settings extends App { onCreate(last: Last, dictionary: Api): void { api = dictionary.get<OsApi>("os"); } }
+export function muteSender(): void { for (let i = 0; i < api!.notificationCount(); i++) if (api!.notificationId(i) == "${senderId}") api!.setNotificationMuted(i, true); }
+launch(new Settings());`);
+  const store = createMemoryAppStore(); const element = output();
+  let frame: Process | undefined;
+  const originalPresent = element.ui.present;
+  element.ui.present = (instance, process) => { if (instance.cadre) frame = process; return originalPresent(instance, process); };
+  const system = await mountSystem(element, { apps: [homeApp,
+    { source: "https://example.test/pigeon/", prebuilt: { ...sending, manifest: { ...sending.manifest, id: "sender", permissions: { notify: { reason: "通知" } } } } },
+    { source: "https://example.test/pigeon/", prebuilt: { ...sending, manifest: { ...sending.manifest, id: "denied" } } },
+    { source: "https://example.test/pigeon/", prebuilt: { ...receiving, manifest: { ...receiving.manifest, id: "receiver" } } },
+    { source: "binette:system", prebuilt: { ...cadre, manifest: { ...cadre.manifest, id: "cadre", roles: ["cadre"] } } },
+    { source: "binette:system", prebuilt: { ...settings, manifest: { ...settings.manifest, id: "settings", roles: ["settings"] } } },
+  ], store, createWorker, stackSize: 10 });
+  try {
+    await system.open(senderId); const sender = element.active.process;
+    await sender.app.call("sendMail");
+    await waitForAsync(async () => (await store.pigeon.read(target)).length === 1);
+    assertEquals(element.view.instances.some(instance => instance.key === target), false);
+    await system.open(target);
+    const receiver = element.active;
+    assertEquals(receiver.text.get("count"), "1");
+    assertEquals(receiver.text.get("from"), senderId);
+    await sender.app.call("sendMail");
+    await waitFor(() => receiver.text.get("count") === "2");
+    await receiver.process.app.call("acknowledge");
+    await waitForAsync(async () => (await store.pigeon.read(target)).length === 1);
+    await system.close(receiver.id);
+    await sender.app.call("urgentMail");
+    await waitFor(() => element.view.instances.some(instance => instance.key === target));
+    await waitFor(() => element.active?.text.get("count") === "2");
+    await sender.app.call("notify");
+    assertEquals((await store.pigeon.read(senderId)).length, 0);
+    await sleep(20);
+    await frame!.app.call("reply");
+    await waitForAsync(async () => (await store.pigeon.read(senderId)).length === 1);
+    const reply = (await store.pigeon.read(senderId))[0]!;
+    assertEquals([reply.from, reply.kind, reply.body], ["user", "reply", "返事"]);
+    await sender.app.call("notify");
+    await sleep(20);
+    await frame!.app.call("replyButton");
+    await waitForAsync(async () => (await store.pigeon.read(senderId)).length === 2);
+    assertEquals((await store.pigeon.read(senderId))[1]!.body, "");
+    await system.open("https://example.test/pigeon/#denied");
+    await element.active.process.app.call("notify");
+    assertEquals(element.active.text.get("result"), "false");
+    await system.open("settings");
+    await element.active.process.app.call("muteSender");
+    await waitForAsync(() => store.pigeon.muted(senderId));
+    await sender.app.call("notify");
+    await sleep(20);
+    // The muted notification never becomes an actionable Cadre letter.
+    await frame!.app.call("inspectNotifications");
+    await waitForAsync(async () => (await store.data.read("cadre")).get("notifications") === "0");
+    assertEquals((await store.pigeon.read(senderId)).length, 2);
     assertEquals(element.errors, []);
   } finally { system.stop(); }
 });

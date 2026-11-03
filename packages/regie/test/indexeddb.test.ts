@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { createMemoryContentStore, createMemoryStorage, createIndexedDbStorage, type OwnerStorage } from "../src/storage.ts";
 import { createIndexedDbFileTree } from "../src/fs.ts";
-import { createIndexedDbAppStore, appId, type InstalledApp } from "../src/index.ts";
+import { createIndexedDbAppStore, createIndexedDbPigeonStore, appId, type InstalledApp } from "../src/index.ts";
 
 /** Deno に無い IndexedDB の要求・トランザクション・版更新の境界を代用する。 */
 function databaseFixture(installed: InstalledApp, initialVersion = 1, system = new Map<string, unknown>()) {
@@ -516,5 +516,29 @@ Deno.test("IndexedDB writes provider.json only when that provider changes", asyn
     assertEquals(contentWrites.map(write => write.key), [`_${provider.number.toString(16)}/provider.json`]);
     const { number: _number, ...record } = provider;
     assertEquals(JSON.parse(new TextDecoder().decode(contentWrites[0].value)), { ...record, url: destination });
+  });
+});
+
+
+Deno.test("Pigeon IndexedDB serializes concurrent delivery and preserves IDs across connections", async () => {
+  const fixture = databaseFixture(installed, 2);
+  for (const name of ["inbox", "muted", "sequence"]) fixture.tables.set(name, new Map());
+  await withDatabase(fixture, async () => {
+    const first = createIndexedDbPigeonStore("pigeon-test");
+    const second = createIndexedDbPigeonStore("pigeon-test");
+    const letter = { id: 0, from: "sender", to: "receiver", kind: "open", title: "", body: "data" };
+    await Promise.all(Array.from({ length: 105 }, (_, i) => (i % 2 ? first : second).append("receiver", letter)));
+    const snapshot = await first.read("receiver");
+    assertEquals(snapshot.length, 100);
+    assertEquals(new Set(snapshot.map(letter => letter.id)).size, 100);
+    assertEquals(snapshot[0]!.id, 6);
+    const reopened = createIndexedDbPigeonStore("pigeon-test");
+    await reopened.append("receiver", letter);
+    assertEquals((await reopened.read("receiver")).at(-1)!.id, 106);
+    await first.done("receiver", 55);
+    assertEquals((await second.read("receiver")).filter(letter => letter.id === 55), []);
+    await first.mute("sender", true);
+    assertEquals(await reopened.muted("sender"), true);
+    assertEquals(fixture.transactions.filter(tx => tx.mode === "readwrite" && tx.stores.includes("sequence")).every(tx => tx.stores.includes("inbox")), true);
   });
 });

@@ -247,3 +247,7 @@ const text = new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, pt
 ## Cadre の同期（実装済み、形は案）
 
 起動時の `cadre?: CadreSnapshot` が辞書の `cadre` キーを有効にします。`CadreSnapshot` は `instances`（各アプリの `id`・`appIndex`・`name`・`front`・`hasIcon`）、`homeFront`、`installed`、`installBusy` を持ちます。`syncCadre` で Worker の一覧を更新し、`__bina_cadre_sync` で宣言 UI を描き直します。`onCadreOpen`・`onCadreClose` はインスタンスの ID、`onCadreHome`・`onCadreBack`・`onCadreInstall` は操作、`onCadreNotify` は文字列をシステムへ届けます。権限のない `cadre.*` の直接呼び出しはほかのキーと同じく終了します。
+
+## Pigeon
+
+起動時に受信欄の写しを Worker に渡します。`pigeon.*` は写しを同期的に読み、送信と削除を OS に知らせます。実行中の受信欄の変更は `pigeon.sync` で渡し、`__bina_pigeon` を呼びます。通知と設定の操作も、それぞれ `cadre`・`os` の権限を確認して受け付けます。

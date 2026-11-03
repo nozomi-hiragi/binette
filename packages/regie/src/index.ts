@@ -27,3 +27,7 @@ export { buildAppInWorker, buildStoredApp } from "./browser-build.ts";
 export { createProviderLists } from "./lists.ts";
 export type { ProviderLists, ProviderListsOptions } from "./lists.ts";
 export type { ProviderListRegistration } from "./store.ts";
+
+export type { PigeonLetter, PigeonSnapshot, PigeonSend } from "./launch.ts";
+export type { PigeonStore } from "./pigeon.ts";
+export { createMemoryPigeonStore, createIndexedDbPigeonStore, PIGEON_INBOX_LIMIT } from "./pigeon.ts";

@@ -117,6 +117,7 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 | `cadre`（大枠の操作） | 役割 `cadre` に割り当てられたアプリ | NotAssigned |
 | `apps`（アプリの一覧、アイコン、開く） | 役割 `home` か `cadre` に割り当てられたアプリ | NotAssigned |
 | `os`（OS の設定、役割の割り当て、起動の履歴、更新） | 役割 `settings` に割り当てられたアプリ（入手元が `binette:system`） | NotAssigned |
+| `pigeon`（手紙と受信欄） | すべてのアプリ。ユーザー宛ての送信には `notify` 権限が必要 | — |
 | `storage`（アプリごとのデータ） | すべてのアプリ。アプリのデータの読み込みに失敗したときと、ID が `system` のときだけ載せない | NotGranted |
 | `fs`（ファイルの木） | 誰にも届かない。`app.json` の `permissions` に書くアプリに、ユーザーの許可を得て渡す流れは未決 | NotGranted |
 
@@ -150,7 +151,7 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 
 ## 常駐 Cadre（実装済み、形は案）
 
-Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。通知は入口だけです。
+Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。
 
 落ちたらホームと同じ待ちと `homeRetryWindow` で再起動し、落ち続けたら `cadreUnavailable` を Scene に渡します。Cadre がない場合も最低限の大枠でホームを開きます。`os.assign("cadre", i)` は保存して旧 Cadre を止め、新しい Cadre を起動します。通常のアプリのスタックは残します。
 

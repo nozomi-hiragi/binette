@@ -124,3 +124,7 @@ interface SystemStore {
 getLast・getSettings は記録が無ければ undefined、listLaunches は古い順の配列（初回は空）を返します。recordLaunch は既定 100 件を上限に、古いものから消します。0 件にもできます。履歴の読み足しと書き込みは保存層のロック内で行い、同時更新で失わないようにします。
 
 putSettings は全体を置き換えます。部分的に保存でき、省いた項目はシステムの既定を使います。roles は役割から 完全なアプリ ID への文字列の写し、stackSize は 1 以上の整数、historyLimit は 0 以上の整数、時間は有限の 0 以上の数です。範囲外と知らない項目はエラーです。getSettings は、v0.2.0 の途中まで保存していた home を roles.home に読み替えて返します。DEFAULT_SYSTEM_SETTINGS と validateSystemSettings(settings) も公開します。内部 API では短い時間も使えるままにし、設定アプリの os.set は呼び出しと onDestroy の時間切れを 1000 ミリ秒以上に制限します。
+
+## Pigeon の受信欄
+
+`AppStore.pigeon` はアプリ ID ごとの受信欄と通知停止設定を扱います。ブラウザ版はファイル内容用の OPFS と分けた IndexedDB に保存し、追加時の ID 採番と上限の適用を一つのトランザクションで行います。メモリ版もあります（[Pigeon](../pigeon.md)）。

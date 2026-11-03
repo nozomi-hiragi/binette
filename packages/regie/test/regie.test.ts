@@ -560,3 +560,35 @@ Deno.test("Cadre の同期は完了を返し、時間切れにならない", asy
   assertEquals(exited, undefined);
   app.stop();
 });
+
+Deno.test("Pigeon は同期受信欄を読み、安定した ID で消して通知権限を守る", async () => {
+  const wasm = await build(`
+@external("binette", "pigeon.count") declare function count(): i32;
+@external("binette", "pigeon.body") declare function body(i: i32): string;
+@external("binette", "pigeon.done") declare function done(i: i32): void;
+@external("binette", "pigeon.send") declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string): bool;
+@external("binette", "dom.text") declare function text(i: i32, value: string): void;
+export function inspect(): void { text(1, count().toString() + body(0)); done(0); text(2, count().toString()); }
+export function deliver(): void { text(3, send("user", "message", "題", "本文", false, "[]").toString()); send("target", "open", "", "data", true, "[]"); }
+export function __bina_pigeon(): void { text(4, count().toString()); }
+export function readCount(): void { text(5, count().toString()); }
+`, true);
+  const sent: unknown[] = [];
+  const removed: number[] = [];
+  const text: string[] = [];
+  const app = await launchApp(wasm, { createWorker, pigeon: { letters: [{ id: 42, from: "sender", to: "target", kind: "open", title: "", body: "内容" }], notify: false }, onPigeonSend: letter => sent.push(letter), onPigeonDone: id => removed.push(id), onDom: ops => { for (const op of ops) if (op.op === "text") text.push(op.value); } });
+  try {
+    await app.call("inspect");
+    await app.call("deliver");
+    assertEquals(removed, [42]);
+    assertEquals(text, ["1内容", "0", "false"]);
+    assertEquals(sent, [{ to: "target", kind: "open", title: "", body: "data", urgent: true, actions: [] }]);
+    app.syncPigeon?.({ letters: [], notify: true });
+    await app.call("deliver");
+    assertEquals(text.slice(-2), ["0", "true"]);
+    assertEquals(sent.length, 3);
+    app.syncPigeon?.({ letters: [{ id: 42, from: "sender", to: "target", kind: "open", title: "", body: "内容" }], notify: true });
+    await app.call("readCount");
+    assertEquals(text.at(-1), "0");
+  } finally { app.stop(); }
+});

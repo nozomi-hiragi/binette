@@ -1,8 +1,23 @@
 import type { DomOp } from "@binette/core";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
+/** A letter whose sender is supplied by the OS. */
+export interface PigeonLetter {
+  id: number;
+  from: string;
+  to: string;
+  kind: string;
+  title: string;
+  body: string;
+  urgent?: boolean;
+  actions?: { id: string; label: string; input?: boolean; placeholder?: string }[];
+}
+export interface PigeonSnapshot { letters: PigeonLetter[]; notify: boolean }
+export type PigeonSend = Omit<PigeonLetter, "id" | "from">;
+
 /** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
+  notifications?: { id: string; name: string; muted: boolean }[];
   settings: Omit<SystemSettings, "roles" | "allowHttpLists">;
   /** 役割に割り当てたアプリ */
   roles: Record<string, string>;
@@ -28,6 +43,7 @@ export interface CadreInstance {
 
 /** Cadre アプリの起動時に渡す写し */
 export interface CadreSnapshot {
+  notifications?: PigeonLetter[];
   instances: CadreInstance[];
   homeFront: boolean;
   installed: boolean;
@@ -35,7 +51,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -86,6 +102,13 @@ export interface LaunchOptions {
   onCadreSettings?: () => void;
   onCadreNotify?: (text: string) => void;
   onCadreInstall?: () => void;
+  pigeon?: PigeonSnapshot;
+  onPigeonSend?: (letter: PigeonSend) => void;
+  onPigeonDone?: (id: number) => void;
+  onNotificationMuted?: (i: number, muted: boolean) => void;
+  onNotificationOpen?: (id: number) => void;
+  onNotificationDismiss?: (id: number) => void;
+  onNotificationReply?: (id: number, action: string, body: string) => void;
   /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted として扱う */
   denied?: Record<string, ApiDenial>;
   /** アプリを終了しない呼び出しの失敗 */
@@ -109,6 +132,7 @@ export interface RegieApp {
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncPigeon?(snapshot: PigeonSnapshot): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -175,7 +199,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -192,6 +216,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
                 try { worker.postMessage({ type: "call", id, name, args }); }
                 catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
               });
+            },
+            syncPigeon(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "pigeon.sync", id, pigeon: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             syncOs(snapshot) {
               if (stopped) return;
@@ -226,6 +257,12 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.checkUpdate": options.onCheckUpdate?.(); break;
         case "os.update": options.onUpdate?.(); break;
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
+        case "pigeon.send": options.onPigeonSend?.(data.letter!); break;
+        case "pigeon.done": options.onPigeonDone?.(data.i!); break;
+        case "os.notificationMuted": options.onNotificationMuted?.(data.i!, data.muted!); break;
+        case "cadre.notificationOpen": options.onNotificationOpen?.(data.i!); break;
+        case "cadre.notificationDismiss": options.onNotificationDismiss?.(data.i!); break;
+        case "cadre.notificationReply": options.onNotificationReply?.(data.i!, data.action!, data.body!); break;
         case "cadre.open": options.onCadreOpen?.(data.i!); break;
         case "cadre.close": options.onCadreClose?.(data.i!); break;
         case "cadre.back": options.onCadreBack?.(); break;
@@ -257,7 +294,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

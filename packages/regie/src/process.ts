@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -36,6 +36,7 @@ export interface ProcessOptions {
     os?: LaunchOptions["os"];
     storage?: LaunchOptions["storage"];
     cadre?: LaunchOptions["cadre"];
+    pigeon?: LaunchOptions["pigeon"];
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
@@ -53,6 +54,12 @@ export interface ProcessOptions {
   onCadreSettings?: LaunchOptions["onCadreSettings"];
   onCadreNotify?: LaunchOptions["onCadreNotify"];
   onCadreInstall?: LaunchOptions["onCadreInstall"];
+  onPigeonSend?: LaunchOptions["onPigeonSend"];
+  onPigeonDone?: LaunchOptions["onPigeonDone"];
+  onNotificationMuted?: LaunchOptions["onNotificationMuted"];
+  onNotificationOpen?: LaunchOptions["onNotificationOpen"];
+  onNotificationDismiss?: LaunchOptions["onNotificationDismiss"];
+  onNotificationReply?: LaunchOptions["onNotificationReply"];
 }
 
 /** 状態を進めるアプリ */
@@ -74,6 +81,7 @@ export interface Process {
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncPigeon?(snapshot: PigeonSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -146,6 +154,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     os: options.grants?.os,
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
+    pigeon: options.grants?.pigeon,
     denied: options.grants?.denied,
     onSet: options.onSet,
     onAssign(role, i) { assignments.push([role, i]); notifyRequests(); },
@@ -160,6 +169,12 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onCadreSettings: options.onCadreSettings,
     onCadreNotify: options.onCadreNotify,
     onCadreInstall: options.onCadreInstall,
+    onPigeonSend: options.onPigeonSend,
+    onPigeonDone: options.onPigeonDone,
+    onNotificationMuted: options.onNotificationMuted,
+    onNotificationOpen: options.onNotificationOpen,
+    onNotificationDismiss: options.onNotificationDismiss,
+    onNotificationReply: options.onNotificationReply,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -336,6 +351,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       if (frozen) cancelTimer();
       else armTimer();
     },
+    syncPigeon(snapshot) { running?.syncPigeon?.(snapshot); },
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
     syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },

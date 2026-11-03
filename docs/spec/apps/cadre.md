@@ -10,8 +10,8 @@ ID は `cadre` です。`apps/cadre/app.json` の `sub` にホーム（`cadre.ho
 
 バーの左にホーム、中央の台に起動中アプリのアイコン（無ければ頭文字）、右にライブモードのインストールを並べます。前面のアプリには点を付け、名前はマウスを載せるかキーボードでフォーカスすると吹き出しに出します。右クリック・長押し・メニューキー・Shift+F10 のメニューからアプリを開くか閉じます。設定はホームから開きます。起動中の一覧と前面の変化は Régie が Worker に知らせ、再描画します。切り替え・終了の判断は Régie が行います。
 
-`CadreApi` は `count()`（別名 `running()`）、`name(i)`、`isFront(i)`、`isHome()`、`hasIcon(i)`、`appIndex(i)`（`appIcon` に渡す番号）、`isInstalled()`、`installBusy()`、`install()`、`open(i)`、`close(i)`、`openHome()`（別名 `home()`）、`back()`、`openSettings()`（設定の役割に割り当てたアプリを開く）を持ちます。番号は起動中の一覧の番号で、`AppsApi` のインストール済み一覧とは別です。`notify(text)` は入口だけで、通知表示は未実装です。
+`CadreApi` は `count()`（別名 `running()`）、`name(i)`、`isFront(i)`、`isHome()`、`hasIcon(i)`、`appIndex(i)`（`appIcon` に渡す番号）、`isInstalled()`、`installBusy()`、`install()`、`open(i)`、`close(i)`、`openHome()`（別名 `home()`）、`back()`、`openSettings()`（設定の役割に割り当てたアプリを開く）を持ちます。番号は起動中の一覧の番号で、`AppsApi` のインストール済み一覧とは別です。Pigeon のユーザー宛ての手紙は通知として表示し、操作の結果を差出人に届けます。
 
-ライブモードではインストールボタンを表示し、確認を待つ間は押せなくします。吹き出しとメニューは Décor の部品、見た目はアプリの CSS で指定します。通知の表示と見た目の細部は案です。Cadre の差し替えはブートと保存設定で選べますが、設定画面からも変更できます。
+ライブモードではインストールボタンを表示し、確認を待つ間は押せなくします。吹き出しとメニューは Décor の部品、見た目はアプリの CSS で指定します。通知の見た目の細部は案です。Cadre の差し替えはブートと保存設定で選べますが、設定画面からも変更できます。
 
 落ちたときは Régie が待ちを入れて再起動し、`homeRetryWindow` を過ぎても落ち続ければ、Scene がアプリの表示領域とホームボタンだけを出します（[lifecycle.md](../lifecycle.md#落ちたとき決定)）。

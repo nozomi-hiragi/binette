@@ -1,6 +1,6 @@
 import { createUiDiffer } from "@binette/decor";
 import type { DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -20,6 +20,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let os: OsSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
+  let pigeon: PigeonSnapshot | undefined;
+  const acknowledgedLetters = new Set<number>();
   let denied: Record<string, ApiDenial> = {};
   let page = "";
   let sub = "";
@@ -60,7 +62,12 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     if (cadre === undefined) throw new Error("この呼び出しは cadre が届いたアプリだけが使えます。");
     return cadre;
   };
-  const granted = (key: string) => key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
+  const inbox = () => { if (!pigeon) throw new Error("pigeon が届いていません。"); return pigeon; };
+  const letterAt = (i: number) => { const letter = inbox().letters[i]; if (!Number.isInteger(i) || !letter) throw new Error("手紙の番号が範囲外です。"); return letter; };
+  const notificationAt = (i: number) => { const letter = cadreState().notifications?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("通知の番号が範囲外です。"); return letter; };
+  const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
+  const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
+  const granted = (key: string) => key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -89,6 +96,45 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   const imports = {
     binette: {
+      "pigeon.send": (to: number, kind: number, title: number, body: number, urgent: number, actions: number) => {
+        const state = inbox();
+        const target = readString(to);
+        if (target === "user" && !state.notify) return false;
+        let buttons;
+        try { buttons = JSON.parse(readString(actions)); } catch { return false; }
+        if (!Array.isArray(buttons) || buttons.some(a => !a || typeof a.id !== "string" || typeof a.label !== "string" || (a.input !== undefined && typeof a.input !== "boolean") || (a.placeholder !== undefined && typeof a.placeholder !== "string"))) return false;
+        if (buttons.some(a => !a.id) || new Set(buttons.map(a => a.id)).size !== buttons.length) return false;
+        if (!target || !readString(kind)) return false;
+        scope.postMessage({ type: "pigeon.send", letter: { to: target, kind: readString(kind), title: readString(title), body: readString(body), urgent: !!urgent, actions: buttons } });
+        return true;
+      },
+      "pigeon.count": () => inbox().letters.length,
+      "pigeon.done": (i: number) => { const letter = letterAt(i); acknowledgedLetters.add(letter.id); inbox().letters.splice(i, 1); scope.postMessage({ type: "pigeon.done", i: letter.id }); },
+      "pigeon.urgent": (i: number) => !!letterAt(i).urgent,
+      "pigeon.actions": (i: number) => writeString(JSON.stringify(letterAt(i).actions ?? [])),
+      "pigeon.from": (i: number) => writeString(letterAt(i).from),
+      "pigeon.to": (i: number) => writeString(letterAt(i).to),
+      "pigeon.kind": (i: number) => writeString(letterAt(i).kind),
+      "pigeon.title": (i: number) => writeString(letterAt(i).title),
+      "pigeon.body": (i: number) => writeString(letterAt(i).body),
+      "os.notificationCount": () => system().notifications?.length ?? 0,
+      "os.notificationName": (i: number) => writeString(notificationSetting(i).name),
+      "os.notificationId": (i: number) => writeString(notificationSetting(i).id),
+      "os.notificationMuted": (i: number) => notificationSetting(i).muted,
+      "os.setNotificationMuted": (i: number, muted: number) => { notificationSetting(i).muted = !!muted; scope.postMessage({ type: "os.notificationMuted", i, muted: !!muted }); },
+      "cadre.notificationCount": () => cadreState().notifications?.length ?? 0,
+      "cadre.notificationId": (i: number) => notificationAt(i).id,
+      "cadre.notificationActionCount": (i: number) => notificationAt(i).actions?.length ?? 0,
+      "cadre.notificationActionInput": (i: number, a: number) => !!actionAt(i,a).input,
+      "cadre.notificationActionPlaceholder": (i: number, a: number) => writeString(actionAt(i,a).placeholder ?? ""),
+      "cadre.notificationOpen": (i: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationOpen", i }); },
+      "cadre.notificationDismiss": (i: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationDismiss", i }); },
+      "cadre.notificationReply": (i: number, action: number, body: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationReply", i, action: readString(action), body: readString(body) }); },
+      "cadre.notificationFrom": (i: number) => writeString(notificationAt(i).from),
+      "cadre.notificationTitle": (i: number) => writeString(notificationAt(i).title),
+      "cadre.notificationBody": (i: number) => writeString(notificationAt(i).body),
+      "cadre.notificationActionId": (i: number, a: number) => writeString(actionAt(i,a).id),
+      "cadre.notificationActionLabel": (i: number, a: number) => writeString(actionAt(i,a).label),
       "os.get": (ptr: number) => {
         const settings = system().settings;
         const name = readString(ptr);
@@ -253,13 +299,14 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; denied?: Record<string, ApiDenial> };
     if (data.type === "init") {
       try {
         apps = data.apps;
         os = data.os;
         storage = data.storage;
         cadre = data.cadre;
+        pigeon = data.pigeon;
         denied = data.denied ?? {};
         page = data.page ?? "";
         sub = data.sub ?? "";
@@ -278,12 +325,14 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         ops = [];
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
       }
-    } else if (data.type === "cadre.sync" || data.type === "os.sync") {
-      if (data.type === "os.sync" && data.os) os = { ...data.os, launches: os?.launches ?? data.os.launches };
+    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync") {
+      if (data.type === "pigeon.sync") { pigeon = data.pigeon; if (pigeon) pigeon.letters = pigeon.letters.filter(letter => !acknowledgedLetters.has(letter.id)); }
+      else if (data.type === "os.sync" && data.os) os = { ...data.os, launches: os?.launches ?? data.os.launches };
       else cadre = data.cadre;
-      if (instance && typeof instance.exports.__bina_cadre_sync === "function") {
+      const syncName = data.type === "pigeon.sync" ? "__bina_pigeon" : "__bina_cadre_sync";
+      if (instance && typeof instance.exports[syncName] === "function") {
         try {
-          (instance.exports.__bina_cadre_sync as () => void)();
+          (instance.exports[syncName] as () => void)();
           flush();
         } catch (error) {
           ops = [];

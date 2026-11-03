@@ -1,3 +1,4 @@
+import { createMemoryPigeonStore, createIndexedDbPigeonStore, type PigeonStore } from "./pigeon.ts";
 import {
   createIndexedDbStorage,
   createMemoryStorage,
@@ -9,6 +10,7 @@ export * from "./storage.ts";
 /** パスをキーにした保存先。読み書きの値は毎回コピーする。 */
 export interface FileTree {
   readonly storage?: StorageBackend;
+  readonly pigeon?: PigeonStore;
   read(path: string): Promise<Uint8Array | undefined>;
   /** 同じ時点の複数ファイルを、指定した順でコピーして読む。 */
   readFiles(paths: readonly string[]): Promise<(Uint8Array | undefined)[]>;
@@ -113,7 +115,7 @@ function overlay(
 
 /** In-memory metadata and immutable content with the same storage semantics. */
 export function createMemoryFileTree(): FileTree {
-  return storageFileTree(createMemoryStorage());
+  return storageFileTree(createMemoryStorage(), createMemoryPigeonStore());
 }
 
 /** IndexedDB metadata and OPFS immutable file contents. */
@@ -121,12 +123,13 @@ export type IndexedDbFileTreeOptions = IndexedDbStorageOptions;
 export function createIndexedDbFileTree(
   options: IndexedDbFileTreeOptions = {},
 ): FileTree {
-  return storageFileTree(createIndexedDbStorage(options));
+  return storageFileTree(createIndexedDbStorage(options), createIndexedDbPigeonStore(`${options.name ?? "binette-apps"}-pigeon`));
 }
-function storageFileTree(storage: StorageBackend): FileTree {
+function storageFileTree(storage: StorageBackend, pigeon: PigeonStore): FileTree {
   const owner = storage.forOwner("_0/-0");
   return overlay({
     storage,
+    pigeon,
     read(path) {
       validatePath(path);
       return owner.read(path);

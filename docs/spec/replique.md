@@ -155,9 +155,10 @@ export class Api {
 
 | キー | クラス | 届く相手 | 内容 |
 | --- | --- | --- | --- |
-| `cadre` | `CadreApi` | Cadre | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知は入口だけ（[apps/cadre.md](apps/cadre.md)） |
+| `cadre` | `CadreApi` | Cadre | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知の表示と応答（[apps/cadre.md](apps/cadre.md)） |
 | `apps` | `AppsApi` | ホーム（と Cadre） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
+| `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
 | `fs` | `FsApi` | 誰にも届かない（案） | 空のクラス。範囲の決め方が未決なので、キーだけ用意している |
 
@@ -180,6 +181,10 @@ class Home extends App {
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ完全なアプリ ID。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
 - `updateAvailable()` は準備済みの新しい版があるかです。`updateCurrent()`・`updateNext()` は現在と新しい版の表示用の文字列、`updatePhase()` は確認や更新の状態です。`checkUpdate()` は確認を、`update()` は準備済みの組への更新を、`openRecovery()` は復旧画面を開くことを OS に頼みます。状態の変化は設定アプリに同期され、画面を描き直します。呼び出し名と状態の形は案です
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
+
+### PigeonApi
+
+`api.get<PigeonApi>("pigeon")` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
 
 ### StorageApi
 

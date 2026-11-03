@@ -1,3 +1,4 @@
+import { createMemoryPigeonStore, createIndexedDbPigeonStore, type PigeonStore } from "./pigeon.ts";
 import { appId } from "./app-key.ts";
 export { appId } from "./app-key.ts";
 import { normalizeAppIdentifier, parseAppId, type AppManifest } from "@binette/core";
@@ -32,6 +33,7 @@ export interface InstalledApp {
 export interface AppStore {
   /** 同じ保存先の OS の記録 */
   readonly system: SystemStore;
+  readonly pigeon: PigeonStore;
   /** App-owned data below `/data`. */
   readonly data: AppDataStore;
   list(): Promise<InstalledApp[]>;
@@ -201,6 +203,7 @@ export function createAppStore(tree: FileTree): AppStore {
     } catch { return undefined; }
   };
   const store: AppStore = {
+    pigeon: tree.pigeon ?? createMemoryPigeonStore(),
     system: {
       getLists: async () => {
         const lists = decode<(ProviderListRegistration & { provider?: number })[]>(await tree.read(listsPath)) ?? [];
@@ -361,6 +364,7 @@ export function createAppStore(tree: FileTree): AppStore {
     return result;
   };
   return {
+    pigeon: store.pigeon,
     list: () => serial(() => store.list()),
     get: key => serial(() => store.get(key)),
     put: (app, files) => { const copy = structuredClone(app); const source = files && structuredClone(files); return serial(() => store.put(copy, source)); },
@@ -406,6 +410,7 @@ export function createIndexedDbAppStore(options: IndexedDbAppStoreOptions = {}):
   const system = store.system;
   return {
     ...store,
+    pigeon: createIndexedDbPigeonStore(`${options.name ?? "binette-apps"}-pigeon`),
     system: {
       ...system,
       // IndexedDB 版は検証エラーも Promise の拒否で返す従来の契約を保つ。

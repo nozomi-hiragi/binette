@@ -59,6 +59,10 @@ function checkUpdate(): void {
   const os = osApi;
   if (os != null) os.checkUpdate();
 }
+function toggleNotification(index: i32): void {
+  const os = osApi;
+  if (os != null) os.setNotificationMuted(index, !os.notificationMuted(index));
+}
 function change(change: i32): void {
   const os = osApi;
   if (os == null) return;
@@ -106,6 +110,15 @@ export class Settings extends App {
         text(selected ? "✓" : "").tone("accent").key("selection-mark"),
       ], chooseCadre).arg(i).selected(selected).label(os.candidateName("cadre", i) + (selected ? "（使用中）" : "を Cadre にする")).key("cadre-" + i.toString()));
     }
+    const notifications: View[] = [];
+    for (let i: i32 = 0; i < os.notificationCount(); i++) {
+      const name = os.notificationName(i);
+      const muted = os.notificationMuted(i);
+      notifications.push(listTile(name, muted ? "通知を停止中" : "通知を許可", null,
+        button(muted ? "許可する" : "停止する", toggleNotification).arg(i)
+          .label(name + "の通知を" + (muted ? "許可する" : "停止する")),
+      ).key("notification-setting-" + os.notificationId(i)));
+    }
     const debug: View[] = [];
     for (let i: i32 = 0; i < names.length; i++) {
       const value = os.get(names[i]);
@@ -150,6 +163,7 @@ export class Settings extends App {
       ]).key("update-section"),
       column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),
       column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"),
+      column([text("通知").heading(2), column(notifications).surface("card").key("notifications-card")]).key("notifications-section"),
       column([text("デバッグ").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"),
       column([
         row([text("起動の履歴").heading(2).grow().key("history-title"), text("UTC").small().tone("muted")]),
