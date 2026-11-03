@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { createMemoryFileTree } from "../src/fs.ts";
 
 Deno.test("File trees validate canonical paths, preserve prefix boundaries, and copy values", async () => {
@@ -110,7 +110,7 @@ Deno.test("Concurrent updates retain earlier updates and failures preserve store
     ),
   );
   assertEquals(await tree.read("/data/count"), new Uint8Array([20]));
-  assertThrows(() =>
+  await assertRejects(() =>
     tree.update("/data/count", (value) => {
       value![0] = 0;
       throw new Error("failure");

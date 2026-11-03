@@ -3,14 +3,18 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 const source = await Deno.readTextFile(new URL("../public/sw.js", import.meta.url));
 const BASE = "https://example.test/binette/";
 const kernelHash = new Uint8Array(await crypto.subtle.digest("SHA-384", new TextEncoder().encode("シェル:./regie.js")));
-const ENTRY = `<meta name="binette-kernel" content="binette-v0.2.0-4"><script integrity="sha384-${btoa(String.fromCharCode(...kernelHash))}" type="module" src="./regie.js"></script>`;
-const CACHE = "binette-v0.2.0-4";
+const ENTRY = `<meta name="binette-kernel" content="binette-v0.2.0-6"><script integrity="sha384-${btoa(String.fromCharCode(...kernelHash))}" type="module" src="./regie.js"></script>`;
+const CACHE = "binette-v0.2.0-6";
 type Fetcher = (request: Request) => Promise<Response>;
 type TestEvent = { data?: unknown; ports?: { postMessage(value: unknown): void }[]; request?: Request; waitUntil(promise: Promise<unknown>): void; respondWith(promise: Promise<Response>): void };
 
 function setup(base = BASE) {
   const files = new Map<string, Uint8Array>();
   const opened: string[] = [];
+  const contents = new Map<string, Uint8Array>();
+  let missingContent = false;
+  let deleted = false;
+  let databaseVersion = 5;
   let failDatabase = false;
   let mixedInstall = false;
   let transactions = 0;
@@ -20,6 +24,7 @@ function setup(base = BASE) {
       opened.push(name);
       const request = {
         result: {
+          get version() { return databaseVersion; },
           close() { closed++; },
           transaction(name: string, mode: string) {
             assertEquals([name, mode], ["files", "readonly"]);
@@ -29,8 +34,12 @@ function setup(base = BASE) {
               oncomplete: () => {},
               objectStore(name: string) {
                 assertEquals(name, "files");
-                return { get(path: string) {
-                  const result = { result: snapshot.get(path), onsuccess: () => {} };
+                return { get(key: [string, string]) {
+                  assertEquals(key[0], "_0/-0");
+                  const data = snapshot.get(key[1]);
+                  const hash = String(contents.size).padStart(64, "0");
+                  if (data) contents.set(hash, data);
+                  const result = { result: data ? { hash, size: data.byteLength, ...(deleted && key[1].startsWith("/user/") ? { deleted: 1 } : {}) } : undefined, onsuccess: () => {} };
                   queueMicrotask(() => result.onsuccess());
                   return result;
                 } };
@@ -85,7 +94,23 @@ function setup(base = BASE) {
     delete(name: string) { return Promise.resolve(stored.delete(name)); },
   };
   // 実際に配る classic worker を、グローバルを共有せずに実行する
-  new Function("self", "caches", "indexedDB", "fetch", source)(worker, caches, indexedDB, (request: Request) => {
+  const navigator = {
+    locks: { request(name: string, options: { mode: string }, callback: () => Promise<unknown>) {
+      assertEquals([name, options.mode], ["binette-storage:binette-apps", "shared"]);
+      return callback();
+    } },
+    storage: { getDirectory() { return Promise.resolve({ getDirectoryHandle(name: string) {
+      assertEquals(name, "_0");
+      return Promise.resolve({ getDirectoryHandle(name: string) {
+        assertEquals(name, "-0");
+        return Promise.resolve({ getFileHandle(hash: string) {
+          if (missingContent || !contents.has(hash)) return Promise.reject(new Error("Missing content"));
+          return Promise.resolve({ getFile() { return Promise.resolve(new Blob([contents.get(hash)!.slice()])); } });
+        } });
+      } });
+    } }); } },
+  };
+  new Function("self", "caches", "indexedDB", "navigator", "fetch", source)(worker, caches, indexedDB, navigator, (request: Request) => {
     requests.push(request.url);
     return network(request);
   });
@@ -102,6 +127,9 @@ function setup(base = BASE) {
   }
   return {
     stored, requests, open, dispatch, request, files, opened,
+    set missingContent(value: boolean) { missingContent = value; },
+    set deleted(value: boolean) { deleted = value; },
+    set databaseVersion(value: number) { databaseVersion = value; },
     set mixedInstall(value: boolean) { mixedInstall = value; },
     set failDatabase(value: boolean) { failDatabase = value; },
     get transactions() { return transactions; }, get closed() { return closed; },
@@ -327,7 +355,7 @@ Deno.test("SW は保存済み system が選んだ旧版キャッシュからカ�
 });
 
 Deno.test("SW は別の印の入口を install しない", async () => {
-  const changed = source.replace('const CACHE = "binette-v0.2.0-4";', 'const CACHE = "binette-other";');
+  const changed = source.replace('const CACHE = "binette-v0.2.0-6";', 'const CACHE = "binette-other";');
   let install: ((event: { waitUntil(promise: Promise<unknown>): void }) => void) | undefined;
   const worker = { location: new URL("sw.js", BASE), addEventListener(type: string, listener: typeof install) { if (type === "install") install = listener; } };
   const cache = { addAll: () => Promise.resolve(), match: () => Promise.resolve(new Response(ENTRY)) };
@@ -335,4 +363,22 @@ Deno.test("SW は別の印の入口を install しない", async () => {
   let pending: Promise<unknown> | undefined;
   install!({ waitUntil(promise) { pending = promise; } });
   await assertRejects(() => pending!, Error, "入口と Service Worker の印が一致しません");
+});
+
+Deno.test("SW rejects old schemas and missing OPFS content and ignores deleted metadata", async () => {
+  const sw = setup();
+  await systemFiles(sw, { "tools/asc.js": "verified", "apps/a/file.txt": "system" });
+  sw.databaseVersion = 3;
+  assertEquals((await sw.request("fs/tools/asc.js").response!).status, 500);
+  sw.databaseVersion = 4;
+  assertEquals(await (await sw.request("fs/tools/asc.js").response!).text(), "verified");
+  sw.databaseVersion = 5;
+  assertEquals(await (await sw.request("fs/tools/asc.js").response!).text(), "verified");
+  sw.missingContent = true;
+  assertEquals((await sw.request("fs/tools/asc.js").response!).status, 500);
+  sw.missingContent = false;
+  sw.deleted = true;
+  sw.files.set("/user/apps/a/file.txt", new TextEncoder().encode("deleted"));
+  assertEquals(await (await sw.request("fs/apps/a/file.txt").response!).text(), "system");
+  assertEquals(sw.requests, []);
 });

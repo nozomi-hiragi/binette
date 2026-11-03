@@ -2,7 +2,7 @@
 
 ## v0.2.0（未リリース）
 
-- 仕様: ストレージを追加する（[docs/spec/storage.md](docs/spec/storage.md)、未実装）。中身は OPFS、メタデータは IndexedDB に置く。OPFS は `_<プロバイダー番号>/-<アプリ番号>/` のフォルダに SHA-256 の名前で平置きし、編集・削除・移動は表の書き換えと履歴で行い、参照されない実ファイルは GC で消す
+- 破壊的変更: IndexedDB のファイルの木を、OPFS の内容と IndexedDB のメタデータに分けたストレージへ変更する（[docs/spec/storage.md](docs/spec/storage.md)）。v0.2.0 は未リリースのため、旧 IndexedDB の保存データは移行しない。中身は OPFS、メタデータは IndexedDB に置く。OPFS は `_<プロバイダー番号>/-<アプリ番号>/` のフォルダに SHA-256 の名前で平置きし、編集・削除・移動は表の書き換えと履歴で行い、参照されない実ファイルは GC で消す
 - 仕様: Pigeon（[docs/spec/pigeon.md](docs/spec/pigeon.md)）とアプリ間のファイル共有（[docs/spec/file-sharing.md](docs/spec/file-sharing.md)）を追加する（未実装）。Pigeon は宛先がユーザーなら Cadre の通知、アプリなら受信欄に届く手紙。共有は `shared/<UUID>` を招待と承認で渡し、Filer がユーザーのファイルを持ってピッカーを受け持つ
 
 - Régie に提供リストの登録・取得、アプリのインストール、起動時と 30 分ごとの更新確認、`movedTo` による ID の付け替えを追加する。`http:` はデバッグ設定でのみ許可する。整合性は取得した全ファイルを対象にした `/` と、ファイル・取得済みファイルを対象にしたフォルダを検証する（[仕様](docs/spec/app-id.md)）

@@ -158,7 +158,7 @@ export class Api {
 | `cadre` | `CadreApi` | Cadre | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知は入口だけ（[apps/cadre.md](apps/cadre.md)） |
 | `apps` | `AppsApi` | ホーム（と Cadre） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
-| `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリごとのデータ（`/data/<id>/`） |
+| `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
 | `fs` | `FsApi` | 誰にも届かない（案） | 空のクラス。範囲の決め方が未決なので、キーだけ用意している |
 
 ```ts
@@ -183,11 +183,11 @@ class Home extends App {
 
 ### StorageApi
 
-アプリごとのデータ（`/data/<アプリの ID>/`）です。名前は 1 つの部品（`/` を含めてもよいが、階層にはならない）で、1〜256 文字。中身は文字列だけです。
+アプリ自身の領域のデータ（`/data/…`）です。サブアプリは親の領域を共有します。名前は 1 つの部品（`/` を含めてもよいが、階層にはならない）で、1〜256 文字。中身は文字列だけです。
 
 - 起動のときにアプリのデータを Worker に写し、`read`・`has`・`count`・`name(i)`（名前の辞書順）はその写しから返します。`write`・`remove` は写しを更新して OS に知らせ、OS が順に保存します。完了は待てません
 - `read` は無ければ null です。`write` は名前が空か 256 文字を超えるとき false を返して保存しません。無い名前の `remove` は何もしません
-- 容量の上限と、ほかのタブや窓との同時書き込みの扱いは未決です。アプリの ID `system` は使えません（OS の記録と同じ場所のため）
+- 容量の上限と、ほかのタブや窓との同時書き込みの扱いは未決です。アプリの ID `system` は従来の API 契約に合わせて使えません
 
 `@external("binette", "dom.text")` と `// @ts-ignore: decorator` で import を宣言します。型検査は Deno と asc の両方で行います。AS235（クラスや名前空間自体は WASM の export にならない）は想定した警告です。
 

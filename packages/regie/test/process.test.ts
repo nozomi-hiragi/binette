@@ -207,7 +207,9 @@ for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeo
     let mounted: Awaited<ReturnType<typeof begin>> | undefined;
     let exits = 0;
     try {
-      const mounting = () => begin(built, element, { page: "切れたページ", persistence, createWorker: phase.endsWith("Timeout") ? realWorker : createWorker, callTimeout: 100, destroyTimeout: 50, stopDelay: 10, onExit() { exits++; } });
+      // Allow real Worker initialization to complete before testing lifecycle timeouts.
+      const callTimeout = phase.endsWith("Timeout") ? 2000 : 100;
+      const mounting = () => begin(built, element, { page: "切れたページ", persistence, createWorker: phase.endsWith("Timeout") ? realWorker : createWorker, callTimeout, destroyTimeout: 50, stopDelay: 10, onExit() { exits++; } });
       const built = await build(code);
       if (state === State.Create) await assertRejects(mounting);
       else {

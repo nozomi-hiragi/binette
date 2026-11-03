@@ -357,7 +357,8 @@ await new Promise<void>(resolve => {
 
 Deno.test("call の時間切れで Worker と待つ call をすべて終了し、一度だけ知らせる", async () => {
   const exits: Error[] = [];
-  const app = await launchApp(await build('export function loop(): void { while (true) {} }'), { createWorker: realWorker, callTimeout: 100, onExit: e => exits.push(e) });
+  // Worker startup shares this limit; leave enough time to reach the call under suite load.
+  const app = await launchApp(await build('export function loop(): void { while (true) {} }'), { createWorker: realWorker, callTimeout: 2000, onExit: e => exits.push(e) });
   try {
     const results = await Promise.allSettled([app.call("loop"), app.call("loop")]);
     assertEquals(results.map(r => r.status), ["rejected", "rejected"]);

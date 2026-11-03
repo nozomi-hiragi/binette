@@ -159,7 +159,7 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     const app: InstalledApp = { ...built, key, source: url, icon, subIcons, listVersion: entry.version, installedAt: previous?.installedAt ?? Date.now() };
     await options.changing?.(url, entry.id);
     alive();
-    try { await store.put(app); }
+    try { await store.put(app, files); }
     catch (error) { await options.changed?.(); throw error; }
     await options.changed?.();
     return app;

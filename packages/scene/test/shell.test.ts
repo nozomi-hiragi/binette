@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
 import { createProviderLists, createMemoryAppStore, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
+import { State } from "@binette/core";
 import { createShellUi } from "../src/index.ts";
 import { mountSystem as mountShell, operate, systemView } from "./system-helper.ts";
 import { buildApp } from "@binette/regie/build";
@@ -45,6 +46,17 @@ async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
   while (!condition() && performance.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
   assert(condition(), "待ってもホームの状態が変わりませんでした");
+}
+async function waitForResumed(store: AppStore, key: string): Promise<void> {
+  const deadline = performance.now() + 10000;
+  let last = await store.system.getLast(key);
+  while ((last?.state !== State.Resume || !last.done) && performance.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+    last = await store.system.getLast(key);
+  }
+  assert(last?.state === State.Resume && last.done, "待っても Resume が完了しませんでした");
+  // Finish show() after lifecycle persistence before requesting another transition.
+  await new Promise(resolve => setTimeout(resolve, 0));
 }
 function workers() {
   let live = 0;
@@ -155,9 +167,11 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     });
     // build は起動の途中にも届く。両方の Resume が完了してから移動する。
     await waitFor(() => worker.resumed === 2);
+    await waitForResumed(store, fixtures[0]!.key);
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(element.querySelector("[data-bina-key=description]")!.textContent, "ブラウザだけで動く、アプリの土台です。");
+    await waitForResumed(store, builtHome.manifest.id);
     operate(element, "設定", "開く");
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=description]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(worker.created, 2); assertEquals(worker.maximum, 2); assertEquals(worker.live, 2);
@@ -333,6 +347,7 @@ Deno.test("動作中のホームが落ち続けると Apps を出し、ホーム
       worker.emit({ type: "done", id });
     }
     await waitFor(() => resumed === index + 1);
+    await waitForResumed(store, builtHome.manifest.id);
   };
   await boot(0);
   const shell = await mounting;
@@ -438,9 +453,11 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
     const host = element.querySelector<HTMLElement>(".bina-shell-apps")!;
     host.querySelector<HTMLButtonElement>("button")!.click();
     await waitFor(() => resumed === 1);
+    await waitForResumed(store, fixtures[0]!.key);
     assertEquals(host.hidden, true);
     operate(element, "ホーム", "開く");
     await waitFor(() => resumed === 2);
+    await waitForResumed(store, builtHome.manifest.id);
     operate(element, "設定", "開く");
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     operate(element, "設定", "閉じる");

@@ -5,7 +5,7 @@
 
 /** @type {ServiceWorkerGlobalScope} */
 const worker = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
-const CACHE = "binette-v0.2.0-4";
+const CACHE = "binette-v0.2.0-6";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./regie.js", "./regie-worker.js", "./build-worker.js"];
 
 worker.addEventListener("install", event => {
@@ -89,26 +89,37 @@ function canonical(path) {
     path.slice(1).split("/").every(part => part && part !== "." && part !== "..");
 }
 
-/** 目録と本体を同じ readonly トランザクションで読み、更新中の版を混ぜない。
+/** Read one metadata snapshot before loading immutable OPFS content.
  * @param {string[]} paths
  * @returns {Promise<(Uint8Array | undefined)[]>}
  */
 async function readFiles(paths) {
+  return await navigator.locks.request("binette-storage:binette-apps", { mode: "shared" }, () => readStoredFiles(paths));
+}
+
+/** @param {string[]} paths
+ * @returns {Promise<(Uint8Array | undefined)[]>}
+ */
+async function readStoredFiles(paths) {
+  /** @type {IDBDatabase} */
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open("binette-apps");
-    // SW は DB の新規作成や移行を受け持たない。
+    // The application owns schema creation and upgrades.
     request.onupgradeneeded = () => request.transaction?.abort();
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
   });
+  /** @type {({ hash: string, size: number, deleted?: number } | undefined)[]} */
+  let entries;
   try {
-    return await new Promise((resolve, reject) => {
+    if (db.version !== 4 && db.version !== 5) throw new Error("保存領域の版が一致しません。");
+    entries = await new Promise((resolve, reject) => {
       const transaction = db.transaction("files", "readonly");
       const store = transaction.objectStore("files");
-      /** @type {(Uint8Array | undefined)[]} */
+      /** @type {({ hash: string, size: number, deleted?: number } | undefined)[]} */
       const values = new Array(paths.length);
       paths.forEach((path, index) => {
-        const request = store.get(path);
+        const request = store.get(["_0/-0", path]);
         request.onsuccess = () => { values[index] = request.result; };
       });
       transaction.oncomplete = () => resolve(values);
@@ -117,6 +128,20 @@ async function readFiles(paths) {
   } finally {
     db.close();
   }
+  if (entries.every(entry => !entry || entry.deleted !== undefined)) return entries.map(() => undefined);
+  const root = await navigator.storage.getDirectory();
+  const provider = await root.getDirectoryHandle("_0");
+  const owner = await provider.getDirectoryHandle("-0");
+  return await Promise.all(entries.map(async entry => {
+    if (!entry || entry.deleted !== undefined) return undefined;
+    if (!/^[0-9a-f]{64}$/.test(entry.hash) || !Number.isSafeInteger(entry.size) || entry.size < 0) {
+      throw new Error("ファイルの情報が不正です。");
+    }
+    const handle = await owner.getFileHandle(entry.hash);
+    const file = await handle.getFile();
+    if (file.size !== entry.size) throw new Error("ファイルの大きさが一致しません。");
+    return new Uint8Array(await file.arrayBuffer());
+  }));
 }
 
 /** @param {string} path */

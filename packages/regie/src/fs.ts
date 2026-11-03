@@ -1,13 +1,23 @@
-import { appFilePaths } from "./app-files.ts";
+import {
+  createIndexedDbStorage,
+  createMemoryStorage,
+  type IndexedDbStorageOptions,
+  type StorageBackend,
+} from "./storage.ts";
+export * from "./storage.ts";
 
 /** パスをキーにした保存先。読み書きの値は毎回コピーする。 */
 export interface FileTree {
+  readonly storage?: StorageBackend;
   read(path: string): Promise<Uint8Array | undefined>;
   /** 同じ時点の複数ファイルを、指定した順でコピーして読む。 */
   readFiles(paths: readonly string[]): Promise<(Uint8Array | undefined)[]>;
   write(path: string, data: Uint8Array): Promise<void>;
   /** すべての検証とコピーを終えてから、ひとまとまりとして保存する。 */
-  writeFiles(files: ReadonlyMap<string, Uint8Array>, remove?: readonly string[]): Promise<void>;
+  writeFiles(
+    files: ReadonlyMap<string, Uint8Array>,
+    remove?: readonly string[],
+  ): Promise<void>;
   list(prefix: string): Promise<string[]>;
   delete(path: string): Promise<void>;
   replaceSystem(files: ReadonlyMap<string, Uint8Array>): Promise<void>;
@@ -45,7 +55,6 @@ function writable(path: string): void {
 }
 // 設定サブアプリは親と実行物を共有するため、Cadre 全体を固定物から読む。
 const fixedCadre = (path: string) => within(path, "/apps/cadre");
-const copy = (value: Uint8Array | undefined) => value?.slice();
 function writableFiles(
   files: ReadonlyMap<string, Uint8Array>,
 ): Map<string, Uint8Array> {
@@ -102,238 +111,53 @@ function overlay(
   };
 }
 
-/** メモリに保存する。 */
+/** In-memory metadata and immutable content with the same storage semantics. */
 export function createMemoryFileTree(): FileTree {
-  const files = new Map<string, Uint8Array>();
-  return overlay({
-    read(path) {
-      validatePath(path);
-      return Promise.resolve(copy(files.get(path)));
-    },
-    readFiles(paths) {
-      for (const path of paths) validatePath(path);
-      return Promise.resolve(paths.map((path) => copy(files.get(path))));
-    },
-    write(path, data) {
-      writable(path);
-      files.set(path, data.slice());
-      return Promise.resolve();
-    },
-    writeFiles(input, remove = []) {
-      const updates = writableFiles(input);
-      const deletions = [...remove];
-      for (const path of deletions) writable(path);
-      for (const path of deletions) files.delete(path);
-      for (const [path, data] of updates) files.set(path, data);
-      return Promise.resolve();
-    },
-    list(prefix) {
-      validatePath(prefix);
-      return Promise.resolve(
-        [...files.keys()].filter((path) => within(path, prefix)).sort(),
-      );
-    },
-    delete(path) {
-      writable(path);
-      files.delete(path);
-      return Promise.resolve();
-    },
-    replaceSystem(input) {
-      const replacements = systemFiles(input);
-      for (const path of files.keys()) {
-        if (within(path, "/system")) files.delete(path);
-      }
-      for (const [path, data] of replacements) files.set(path, data);
-      return Promise.resolve();
-    },
-    update(path, transform) {
-      writable(path);
-      files.set(path, transform(copy(files.get(path))).slice());
-      return Promise.resolve();
-    },
-  });
+  return storageFileTree(createMemoryStorage());
 }
 
-/** IndexedDB の保存先。既定の DB 名は binette-apps。 */
-export interface IndexedDbFileTreeOptions {
-  name?: string;
-}
-
-/** 最初の操作で接続し、旧 AppStore・SystemStore は DB 更新時に移す。 */
+/** IndexedDB metadata and OPFS immutable file contents. */
+export type IndexedDbFileTreeOptions = IndexedDbStorageOptions;
 export function createIndexedDbFileTree(
   options: IndexedDbFileTreeOptions = {},
 ): FileTree {
-  let opening: Promise<IDBDatabase> | undefined;
-  const open = () =>
-    opening ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = globalThis.indexedDB.open(
-        options.name ?? "binette-apps",
-        3,
-      );
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        const files = db.createObjectStore("files");
-        const transaction = request.transaction!;
-        const encode = (value: unknown) =>
-          new TextEncoder().encode(JSON.stringify(value));
-        if (db.objectStoreNames.contains("apps")) {
-          const cursor = transaction.objectStore("apps").openCursor();
-          cursor.onsuccess = () => {
-            const entry = cursor.result;
-            if (!entry) return;
-            const app = entry.value;
-            const paths = appFilePaths(app.manifest.id, app.source);
-            const metadata = { ...app };
-            delete metadata.wasm;
-            files.put(encode(metadata), paths.record);
-            files.put(app.wasm, paths.wasm);
-            entry.continue();
-          };
-        }
-        if (db.objectStoreNames.contains("system")) {
-          const cursor = transaction.objectStore("system").openCursor();
-          cursor.onsuccess = () => {
-            const entry = cursor.result;
-            if (!entry) return;
-            const key = String(entry.key);
-            const path = key.startsWith("last:")
-              ? `last/${encodeURIComponent(key.slice(5))}`
-              : key;
-            if (
-              key === "settings" || key === "launches" ||
-              key.startsWith("last:")
-            ) files.put(encode(entry.value), `/data/system/${path}.json`);
-            entry.continue();
-          };
-        }
-      };
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-        db.onversionchange = () => {
-          db.close();
-          opening = undefined;
-        };
-        resolve(db);
-      };
-    }).catch((error: unknown) => {
-      opening = undefined;
-      throw error;
-    });
-
-  const run = async <T>(
-    mode: IDBTransactionMode,
-    action: (
-      store: IDBObjectStore,
-      set: (value: T) => void,
-      fail: (error: unknown) => void,
-    ) => void,
-  ): Promise<T> => {
-    const db = await open();
-    return new Promise<T>((resolve, reject) => {
-      const transaction = db.transaction("files", mode);
-      let value: T;
-      let failure: unknown;
-      transaction.oncomplete = () => resolve(value);
-      transaction.onabort = () =>
-        reject(
-          failure ?? transaction.error ??
-            new Error("File transaction aborted."),
-        );
-      transaction.onerror = () => reject(failure ?? transaction.error);
-      try {
-        action(transaction.objectStore("files"), (result) => {
-          value = result;
-        }, (error) => {
-          failure = error;
-          transaction.abort();
-        });
-      } catch (error) {
-        failure = error;
-        transaction.abort();
-      }
-    });
-  };
+  return storageFileTree(createIndexedDbStorage(options));
+}
+function storageFileTree(storage: StorageBackend): FileTree {
+  const owner = storage.forOwner("_0/-0");
   return overlay({
+    storage,
     read(path) {
       validatePath(path);
-      return run<Uint8Array | undefined>("readonly", (store, set) => {
-        const request = store.get(path);
-        request.onsuccess = () => set(copy(request.result));
-      });
+      return owner.read(path);
     },
     readFiles(paths) {
-      const requested = [...paths];
-      for (const path of requested) validatePath(path);
-      if (requested.length === 0) return Promise.resolve([]);
-      return run<(Uint8Array | undefined)[]>("readonly", (store, set) => {
-        const values: (Uint8Array | undefined)[] = new Array(requested.length);
-        set(values);
-        requested.forEach((path, index) => {
-          const request = store.get(path);
-          request.onsuccess = () => {
-            values[index] = copy(request.result);
-          };
-        });
-      });
+      paths.forEach(validatePath);
+      return owner.readFiles(paths);
     },
     write(path, data) {
       writable(path);
-      const value = data.slice();
-      return run<void>("readwrite", (store) => {
-        store.put(value, path);
-      });
+      return owner.write(path, data);
     },
-    writeFiles(input, remove = []) {
-      const updates = writableFiles(input);
-      const deletions = [...remove];
-      for (const path of deletions) writable(path);
-      return run<void>("readwrite", (store) => {
-        for (const path of deletions) store.delete(path);
-        for (const [path, data] of updates) store.put(data, path);
-      });
+    writeFiles(files, remove = []) {
+      const updates = writableFiles(files);
+      remove.forEach(writable);
+      return owner.writeFiles(updates, remove);
     },
     list(prefix) {
       validatePath(prefix);
-      return run<string[]>("readonly", (store, set) => {
-        const request = store.getAllKeys();
-        request.onsuccess = () =>
-          set(
-            request.result.map(String).filter((path) => within(path, prefix))
-              .sort(),
-          );
-      });
+      return owner.list(prefix);
     },
     delete(path) {
       writable(path);
-      return run<void>("readwrite", (store) => {
-        store.delete(path);
-      });
+      return owner.delete(path);
     },
-    replaceSystem(input) {
-      const replacements = systemFiles(input);
-      return run<void>("readwrite", (store) => {
-        const request = store.getAllKeys();
-        request.onsuccess = () => {
-          for (const key of request.result) {
-            if (within(String(key), "/system")) store.delete(key);
-          }
-          for (const [path, data] of replacements) store.put(data, path);
-        };
-      });
+    replaceSystem(files) {
+      return owner.replace("/system", systemFiles(files));
     },
     update(path, transform) {
       writable(path);
-      return run<void>("readwrite", (store, _set, fail) => {
-        const request = store.get(path);
-        request.onsuccess = () => {
-          try {
-            store.put(transform(copy(request.result)).slice(), path);
-          } catch (error) {
-            fail(error);
-          }
-        };
-      });
+      return owner.update(path, transform);
     },
   });
 }

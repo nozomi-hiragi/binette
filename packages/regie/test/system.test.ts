@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { parseAppManifest, type DomOp } from "@binette/core";
+import { parseAppManifest, State, type DomOp } from "@binette/core";
 import { createMemoryAppStore, appId, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
 import asc from "assemblyscript/asc";
 import { loadCompiler, type Compiler } from "../src/build.ts";
@@ -12,6 +12,11 @@ async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
   while (!condition() && performance.now() < deadline) await sleep(5);
   assert(condition(), "待っても状態が変わりませんでした");
+}
+async function waitForAsync(condition: () => Promise<boolean>): Promise<void> {
+  const deadline = performance.now() + 10000;
+  while (!await condition() && performance.now() < deadline) await sleep(5);
+  assert(await condition(), "待っても状態が変わりませんでした");
 }
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();
@@ -108,6 +113,15 @@ function output() {
 }
 type Output = ReturnType<typeof output>;
 type RecordOutput = Output["active"];
+async function waitForResumed(element: Output, store: ReturnType<typeof createMemoryAppStore>, name: string) {
+  await waitForAsync(async () => {
+    const instance = element.view.instances.find(instance => instance.name === name && instance.id === element.view.front);
+    const last = instance && await store.system.getLast(instance.key);
+    return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
+  });
+  // Finish the host continuation after Resume persistence before the next operation.
+  await sleep(0);
+}
 const activeHost = (result: Output) => result.active;
 const logOf = (result: Output | RecordOutput) => ("active" in result ? result.active : result)?.text.get("log");
 const click = (result: Output | RecordOutput, id: string) => {
@@ -136,21 +150,35 @@ async function stackFixtures() {
 
 Deno.test("ホームに戻っても画面を残し、finish は User・App で閉じる。ページの識別子は共有する", async () => {
   const builtHome = await build(source, true), built = await build();
-  const element = output(); const errors = element.errors;
-  const cadre = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "https://example.test/apps/", prebuilt: built }], store: createMemoryAppStore(), createWorker });
+  const element = output(); const errors = element.errors; const store = createMemoryAppStore();
+  const cadre = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "https://example.test/apps/", prebuilt: built }], store, createWorker });
   const page = activeHost(element).text.get("page");
   const home = activeHost(element);
+  const resumed = async (record: RecordOutput) => {
+    await waitForAsync(async () => {
+      const key = element.view.instances.find(instance => instance.id === record.id)?.key;
+      const last = key && await store.system.getLast(key);
+      return !!last && last.state === State.Resume && last.done;
+    });
+    // Finish show() after its persisted Resume before requesting another transition.
+    await sleep(0);
+  };
   try {
     assert(page); click(home, "open");
     await waitFor(() => activeHost(element) !== home && logOf(element) === "create:0;start:1;resume;");
     const app = activeHost(element);
+    await resumed(app);
+    await waitFor(() => logOf(home) === "create:0;start:1;resume;pause;");
     assertEquals(logOf(home), "create:0;start:1;resume;pause;");
     assertEquals(app.text.get("page"), page);
     void cadre.openHome();
     await waitFor(() => activeHost(element) === home && logOf(home)!.endsWith("pause;resume;"));
+    await resumed(home);
+    await waitFor(() => logOf(app) === "create:0;start:1;resume;pause;");
     assertEquals(logOf(app), "create:0;start:1;resume;pause;");
     click(home, "open");
     await waitFor(() => activeHost(element) === app && logOf(app)!.endsWith("pause;resume;"));
+    await resumed(app);
     click(app, "finish");
     await waitFor(() => activeHost(element) === home && !app.connected);
     assert(logOf(app)!.endsWith("before;after;pause;stop;destroy:0:1;"));
@@ -204,14 +232,14 @@ Deno.test("保存した設定は ShellOptions より優先し、スタック 1 �
 
 
 Deno.test("スタック内では前面だけを Pause・Resume し、freeze は全インスタンスの計時を止める", async () => {
-  const element = output();
+  const element = output(); const store = createMemoryAppStore();
   let visible = true, frozen = false;
   const event = (type: string) => { frozen = type === "freeze"; cadre.setPage({ visible, frozen }); };
   const visibility = (value: string) => { visible = value === "visible"; cadre.setPage({ visible, frozen }); };
-  const cadre = await mountSystem(element, { apps: await stackFixtures(), store: createMemoryAppStore(), createWorker, stopDelay: 150 });
+  const cadre = await mountSystem(element, { apps: await stackFixtures(), store, createWorker, stopDelay: 150 });
   const home = activeHost(element);
   try {
-    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    click(home, "open"); await waitForResumed(element, store, "A");
     const a = activeHost(element);
     visibility("hidden"); await waitFor(() => logOf(a)!.endsWith("pause;"));
     const homeLog = logOf(home), appLog = logOf(a);
@@ -228,16 +256,16 @@ Deno.test("スタック内では前面だけを Pause・Resume し、freeze は�
 
 
 Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
-  const element = output(); const errors = element.errors;
+  const element = output(); const errors = element.errors; const store = createMemoryAppStore();
   const fixtures = await stackFixtures();
   fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
-  const cadre = await mountSystem(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, stopDelay: 60 });
+  const cadre = await mountSystem(element, { apps: fixtures, store, createWorker, stopDelay: 60 });
   const home = activeHost(element);
   try {
-    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    click(home, "open"); await waitForResumed(element, store, "A");
     const a = activeHost(element);
-    bar(element, cadre, "ホームを開く"); await waitFor(() => activeHost(element) === home);
-    click(home, "open1"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    bar(element, cadre, "ホームを開く"); await waitForResumed(element, store, "テスト"); await waitFor(() => activeHost(element) === home);
+    click(home, "open1"); await waitForResumed(element, store, "B");
     const b = activeHost(element);
     await waitFor(() => errors.length === 1);
     assertEquals(activeHost(element), b); assert(!a.connected);
@@ -513,7 +541,7 @@ export function save(): void { storageApi!.write("メモ", "保存した"); stor
 export function load(): void { const value = storageApi!.read("メモ"); document.getElementById("memo").textContent = value == null ? "なし" : value; }
 `);
 
-Deno.test("storage はすべてのアプリに届き、アプリごとに /data/<id>/ へ保存して次の起動で読む", async () => {
+Deno.test("storage reaches every app and persists owner data across launches", async () => {
   const store = createMemoryAppStore();
   const app = { source: "https://example.test/apps/", prebuilt: storageApp };
   const other = { source: "https://example.test/apps/", prebuilt: { ...storageApp, manifest: { ...storageApp.manifest, id: "other" } } };
@@ -643,7 +671,7 @@ export function readShared(): void { const value = storage!.read("shared"); docu
     assertEquals(child.text.get("shared"), "共通");
     assertEquals(element.view.instances.find(i => i.name === "子")!.icon, "<svg>child</svg>");
     assertEquals(await store.data.read("https://example.test/list/#parent"), new Map([["shared", "共通"]]));
-    assertEquals(await store.data.read("https://example.test/list/#parent.child"), new Map());
+    assertEquals(await store.data.read("https://example.test/list/#parent.child"), new Map([["shared", "共通"]]));
     assertEquals((await store.list()).filter(app => app.source === "https://example.test/list/").length, 1);
     await system.open("settings");
     await element.active.process.app.call("readHomes");

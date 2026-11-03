@@ -1,8 +1,8 @@
 import { appId } from "./app-key.ts";
 export { appId } from "./app-key.ts";
-import { normalizeAppIdentifier, type AppManifest } from "@binette/core";
+import { normalizeAppIdentifier, parseAppId, type AppManifest } from "@binette/core";
 import { appFilePaths, decodeAppPathSegment, encodeAppPathSegment } from "./app-files.ts";
-import { createIndexedDbFileTree, createMemoryFileTree, type FileTree } from "./fs.ts";
+import { createIndexedDbFileTree, createMemoryFileTree, type FileTree, type IndexedDbFileTreeOptions } from "./fs.ts";
 
 /** インストールしたアプリのビルド結果 */
 export interface InstalledApp {
@@ -32,12 +32,12 @@ export interface InstalledApp {
 export interface AppStore {
   /** 同じ保存先の OS の記録 */
   readonly system: SystemStore;
-  /** アプリごとのデータ（`/data/<id>/`） */
+  /** App-owned data below `/data`. */
   readonly data: AppDataStore;
   list(): Promise<InstalledApp[]>;
   get(key: string): Promise<InstalledApp | undefined>;
-  put(app: InstalledApp): Promise<void>;
-  /** 提供リストの引っ越し。保存データと OS の記録も付け替える */
+  put(app: InstalledApp, files?: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  /** Change the provider URL while keeping app owners and saved records stable. */
   moveSource(from: string, to: string, lists?: ProviderListRegistration[]): Promise<void>;
 }
 
@@ -146,6 +146,48 @@ export function installedAppFiles(app: InstalledApp): Map<string, Uint8Array> {
 
 /** 同じファイルの木にアプリと OS の記録を保存する。一覧はパス順に返す。 */
 export function createAppStore(tree: FileTree): AppStore {
+  const storage = tree.storage;
+  const ownerFor = async (id: string) => {
+    if (id === "system") throw new Error("system はアプリの ID に使えません。");
+    const parsed = parseAppId(id, { allowHttp: true });
+    const parent = parsed.sub ? appId(parsed.list ?? "binette:bundled", parsed.id) : id;
+    return storage!.forOwner(await storage!.appOwner(parent, parsed.list));
+  };
+  const readOwnedApp = async (id: string, owner: string): Promise<InstalledApp | undefined> => {
+    const [record, wasm] = await storage!.forOwner(owner).readFiles(["/build/record.json", "/build/app.wasm"]);
+    if (record === undefined || wasm === undefined) return undefined;
+    try {
+      const saved = decode<StoredApp>(record);
+      if (!saved || typeof saved.manifest?.id !== "string") return undefined;
+      const parsed = parseAppId(id, { allowHttp: true });
+      if (appId(parsed.list ?? saved.source, saved.manifest.id) !== id) return undefined;
+      return { ...saved, key: id, source: parsed.list ?? saved.source, icon: saved.icon, wasm };
+    } catch { return undefined; }
+  };
+  const canonicalKey = async (key: string): Promise<string> => {
+    if (!storage) return key;
+    const reference = /^binette:owner:(_[0-9a-f]+\/-[0-9a-f]+)(\..*)?$/s.exec(key);
+    if (!reference) return key;
+    const entry = await storage.findAppByOwner(reference[1]!);
+    return entry ? entry.id + (reference[2] ?? "") : key;
+  };
+  const stableKey = async (key: string): Promise<string> => {
+    if (!storage) return key;
+    let parsed;
+    try { parsed = parseAppId(key, { allowHttp: true }); } catch { return key; }
+    const parent = appId(parsed.list ?? "binette:bundled", parsed.id);
+    const suffix = parsed.sub ? `.${parsed.sub}` : "";
+    if (`${parent}${suffix}` !== key) return key;
+    const owner = await storage.appOwner(parent, parsed.list);
+    return `binette:owner:${owner}${suffix}`;
+  };
+  const systemAppPath = async (key: string, kind: "permissions" | "last") => {
+    if (!storage) return kind === "permissions" ? permissionsPath(key) : lastPath(key);
+    const parsed = parseAppId(await canonicalKey(key), { allowHttp: true });
+    const parent = appId(parsed.list ?? "binette:bundled", parsed.id);
+    const owner = await storage.appOwner(parent, parsed.list);
+    return `/data/system/${kind}/${encodeURIComponent(owner)}${parsed.sub ? `.${encodeURIComponent(parsed.sub)}` : ""}.json`;
+  };
   const readApp = async (recordPath: string): Promise<InstalledApp | undefined> => {
     const [record, wasm] = await tree.readFiles([recordPath, recordPath.replace(/record\.json$/, "app.wasm")]);
     if (record === undefined || wasm === undefined) return undefined;
@@ -160,16 +202,27 @@ export function createAppStore(tree: FileTree): AppStore {
   };
   const store: AppStore = {
     system: {
-      getLists: async () => decode<ProviderListRegistration[]>(await tree.read(listsPath)) ?? [],
-      putLists: lists => tree.write(listsPath, encode(lists)),
-      getPermissions: async key => decode<string[]>(await tree.read(permissionsPath(key))) ?? [],
-      putPermissions: (key, permissions) => tree.write(permissionsPath(key), encode(permissions)),
-      getLast: async key => decode<LifecycleRecord>(await tree.read(lastPath(key))),
-      putLast(key, record) { return tree.write(lastPath(key), encode(record)); },
-      listLaunches: async () => decode<LaunchRecord[]>(await tree.read(launchesPath)) ?? [],
-      recordLaunch(record, limit = 100) {
+      getLists: async () => {
+        const lists = decode<(ProviderListRegistration & { provider?: number })[]>(await tree.read(listsPath)) ?? [];
+        if (!storage) return lists;
+        return Promise.all(lists.map(async ({ url, boot, provider }) => {
+          const current = await storage.provider(provider ?? url);
+          return { url: current?.url ?? url, ...(boot === undefined ? {} : { boot }) };
+        }));
+      },
+      putLists: async lists => {
+        if (!storage) return tree.write(listsPath, encode(lists));
+        const records = await Promise.all(lists.map(async list => ({ ...list, provider: (await storage.registerProvider(list.url)).number })));
+        await tree.write(listsPath, encode(records));
+      },
+      getPermissions: async key => decode<string[]>(await tree.read(await systemAppPath(key, "permissions"))) ?? [],
+      putPermissions: async (key, permissions) => tree.write(await systemAppPath(key, "permissions"), encode(permissions)),
+      getLast: async key => decode<LifecycleRecord>(await tree.read(await systemAppPath(key, "last"))),
+      async putLast(key, record) { return tree.write(await systemAppPath(key, "last"), encode(record)); },
+      listLaunches: async () => Promise.all((decode<LaunchRecord[]>(await tree.read(launchesPath)) ?? []).map(async record => ({ ...record, app: await canonicalKey(record.app) }))),
+      async recordLaunch(record, limit = 100) {
         const size = historySize(limit);
-        const copy = structuredClone(record);
+        const copy = { ...structuredClone(record), app: await stableKey(record.app) };
         return tree.update(launchesPath, value => {
           const launches = [...(decode<LaunchRecord[]>(value) ?? []), copy];
           return encode(size ? launches.slice(-size) : []);
@@ -177,18 +230,27 @@ export function createAppStore(tree: FileTree): AppStore {
       },
       async getSettings() {
         const settings = decode<Partial<SystemSettings> & { home?: unknown }>(await tree.read(settingsPath));
+        if (settings?.roles) settings.roles = Object.fromEntries(await Promise.all(Object.entries(settings.roles).map(async ([role, key]) => [role, await canonicalKey(key)])));
         if (settings === undefined || !("home" in settings)) return settings;
         // v0.2.0 の途中まで使っていた home を roles.home に読み替える
         const { home, ...rest } = settings;
         return typeof home === "string" ? { ...rest, roles: { home, ...rest.roles } } : rest;
       },
-      putSettings(settings) {
+      async putSettings(settings) {
         validateSystemSettings(settings);
-        return tree.write(settingsPath, encode(settings));
+        const copy = structuredClone(settings);
+        if (copy.roles) copy.roles = Object.fromEntries(await Promise.all(Object.entries(copy.roles).map(async ([role, key]) => [role, await stableKey(key)])));
+        return tree.write(settingsPath, encode(copy));
       },
     },
     data: {
       async read(id) {
+        if (storage) {
+          const owner = await ownerFor(id);
+          const paths = await owner.list("/data");
+          const values = await owner.readFiles(paths);
+          return new Map(paths.flatMap((path, i) => values[i] === undefined ? [] : [[decodeAppPathSegment(path.slice(6)), decoder.decode(values[i])]]));
+        }
         const directory = dataDirectory(id);
         const names = (await tree.list(directory)).filter(path => path.startsWith(`${directory}/`));
         const values = await tree.readFiles(names);
@@ -197,6 +259,12 @@ export function createAppStore(tree: FileTree): AppStore {
         return result;
       },
       async write(id, name, value) {
+        if (storage) {
+          const owner = await ownerFor(id);
+          const path = `/data/${encodeAppPathSegment(name)}`;
+          await (value === null ? owner.delete(path) : owner.write(path, encoder.encode(value)));
+          return;
+        }
         const path = `${dataDirectory(id)}/${encodeAppPathSegment(name)}`;
         await (value === null ? tree.delete(path) : tree.write(path, encoder.encode(value)));
       },
@@ -204,14 +272,30 @@ export function createAppStore(tree: FileTree): AppStore {
     async list() {
       const paths = (await tree.list("/apps")).filter(path => /^\/apps\/[^/]+\/record\.json$/.test(path));
       const apps = await Promise.all(paths.map(readApp));
-      return apps.filter((app): app is InstalledApp => app !== undefined);
+      const result = new Map(apps.filter((app): app is InstalledApp => app !== undefined).map(app => [app.key, app]));
+      if (storage) for (const entry of await storage.listApps()) {
+        const app = await readOwnedApp(entry.id, entry.owner);
+        if (app) result.set(app.key, app);
+      }
+      return [...result.values()].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
     },
     async get(key) {
+      if (storage) {
+        const entry = await storage.findApp(key);
+        if (entry) {
+          const app = await readOwnedApp(key, entry.owner);
+          if (app) return app;
+        }
+      }
       // キーは完全な ID。旧い [source, id] の記録は移行しない。
       return await readApp(`/apps/${encodeAppPathSegment(key)}/record.json`);
     },
     async moveSource(from, to, lists) {
       if (from === to) return;
+      if (storage) {
+        await storage.moveProvider(from, to);
+        return;
+      }
       const parents = (await this.list()).filter(app => app.source === from);
       const mapping = new Map<string, string>();
       const files = new Map<string, Uint8Array>();
@@ -253,8 +337,20 @@ export function createAppStore(tree: FileTree): AppStore {
       // 登録・アプリ・データ・OS の記録の付け替えと元の削除を同じトランザクションで行う。
       await tree.writeFiles(files, [...remove]);
     },
-    async put(app) {
-      await tree.writeFiles(installedAppFiles(app));
+    async put(app, files) {
+      if (storage) {
+        const owner = storage.forOwner(await storage.appOwner(app.parentKey ?? app.key, app.source, app.manifest.name));
+        const { wasm, ...record } = app;
+        const output = new Map<string, Uint8Array>();
+        for (const [path, bytes] of files ?? []) output.set(`/source/${path}`, bytes);
+        output.set("/build/record.json", encode(record));
+        output.set("/build/app.wasm", wasm);
+        output.set("/build/index.html", encoder.encode(app.html));
+        if (app.css !== undefined) output.set("/build/entry.css", encoder.encode(app.css));
+        const remove = files ? (await owner.list("/source")).filter(path => !output.has(path)) : [];
+        if (app.css === undefined) remove.push("/build/entry.css");
+        await owner.writeFiles(output, remove);
+      } else await tree.writeFiles(installedAppFiles(app));
     },
   };
   // 引っ越しの読み取りから一括保存まで、同じ保存先の storage・履歴・設定更新を待たせる。
@@ -267,7 +363,7 @@ export function createAppStore(tree: FileTree): AppStore {
   return {
     list: () => serial(() => store.list()),
     get: key => serial(() => store.get(key)),
-    put: app => { const copy = structuredClone(app); return serial(() => store.put(copy)); },
+    put: (app, files) => { const copy = structuredClone(app); const source = files && structuredClone(files); return serial(() => store.put(copy, source)); },
     moveSource: (from, to, lists) => { const copy = structuredClone(lists); return serial(() => store.moveSource(from, to, copy)); },
     data: {
       read: id => serial(() => store.data.read(id)),
@@ -302,10 +398,7 @@ export function createMemoryAppStore(): AppStore {
 }
 
 /** IndexedDB の保存先。 */
-export interface IndexedDbAppStoreOptions {
-  /** DB 名。省略すると binette-apps。 */
-  name?: string;
-}
+export type IndexedDbAppStoreOptions = IndexedDbFileTreeOptions;
 
 /** グローバルの indexedDB に保存する。接続は最初の読み書きで開く。 */
 export function createIndexedDbAppStore(options: IndexedDbAppStoreOptions = {}): AppStore {
