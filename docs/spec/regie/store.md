@@ -4,6 +4,9 @@
 
 インストール済みアプリと OS の記録の保存先です。今のコードでは `packages/regie/src/store.ts` にあります（場所は変えません）。
 
+> [!NOTE]
+> 2026-11-03 に、保存の形を [storage.md](../storage.md)（中身は OPFS、メタデータは IndexedDB）に置き換えると決めました。この節は今のコードの形です。
+
 ## ファイルの木（案・実装済み）
 
 `packages/regie/src/fs.ts` の `FileTree` は、パスとバイト列を扱うカーネル用の API です。メモリ版と IndexedDB 版は同じ操作を持ち、読み書きするバイト列を写します。アプリに権限付きで渡す API は後の作業です。
