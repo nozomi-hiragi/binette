@@ -1,3 +1,4 @@
+import { createMemoryStorage, type ShareStorage } from "./storage.ts";
 import { createMemoryPigeonStore, createIndexedDbPigeonStore, type PigeonStore } from "./pigeon.ts";
 import { appId } from "./app-key.ts";
 export { appId } from "./app-key.ts";
@@ -34,6 +35,7 @@ export interface AppStore {
   /** 同じ保存先の OS の記録 */
   readonly system: SystemStore;
   readonly pigeon: PigeonStore;
+  readonly shares: ShareStorage;
   /** App-owned data below `/data`. */
   readonly data: AppDataStore;
   list(): Promise<InstalledApp[]>;
@@ -204,6 +206,7 @@ export function createAppStore(tree: FileTree): AppStore {
   };
   const store: AppStore = {
     pigeon: tree.pigeon ?? createMemoryPigeonStore(),
+    shares: storage ?? createMemoryStorage(),
     system: {
       getLists: async () => {
         const lists = decode<(ProviderListRegistration & { provider?: number })[]>(await tree.read(listsPath)) ?? [];
@@ -365,6 +368,7 @@ export function createAppStore(tree: FileTree): AppStore {
   };
   return {
     pigeon: store.pigeon,
+    shares: store.shares,
     list: () => serial(() => store.list()),
     get: key => serial(() => store.get(key)),
     put: (app, files) => { const copy = structuredClone(app); const source = files && structuredClone(files); return serial(() => store.put(copy, source)); },

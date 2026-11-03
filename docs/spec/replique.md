@@ -159,6 +159,7 @@ export class Api {
 | `apps` | `AppsApi` | ホーム（と Cadre） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
 | `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
+| `shares` | `SharesApi` | すべてのアプリ | 共有の作成・一覧・承認・退出とファイル操作（[file-sharing.md](file-sharing.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
 | `fs` | `FsApi` | 誰にも届かない（案） | 空のクラス。範囲の決め方が未決なので、キーだけ用意している |
 
@@ -185,6 +186,12 @@ class Home extends App {
 ### PigeonApi
 
 `api.get<PigeonApi>("pigeon")` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
+
+### SharesApi
+
+`api.get<SharesApi>("shares")` で取得します。`create(name)`・`list()`・`join(id)`・`leave(id)`・`read(id, path)`・`write(id, path, value)`・`remove(id, path)`・`files(id, prefix)` は要求番号を返します。保存が終わると `onShare()` が呼ばれ、`result(番号)` で結果を一度だけ取得できます。未完了なら null、完了時は `{ "ok": true, "value": ... }` または `{ "ok": false, "error": "..." }` の JSON です。`create` は共有の行、`list` は招待中・参加済みの共有の行の配列、`files` はパスの配列、`read` は文字列または不存在を表す null を返します。変更操作の値は null です。各操作時に参加状態とアクセス権を再確認します。`read`・`write` は UTF-8 の文字列を扱い、任意のバイト列には `readBase64`・`writeBase64` を使います。
+
+`PigeonApi.send` の第 7 引数に `[{"id":"共有 ID","access":"read"}]` の JSON を渡すと手紙に共有を添付できます。受信欄では `shares(i)` で添付の JSON を読みます。ユーザー宛ての通知には添付できません。招待されたアプリが `join` する前に共有が無くなった場合、結果はエラーです。
 
 ### StorageApi
 

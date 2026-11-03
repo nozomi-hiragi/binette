@@ -64,6 +64,7 @@ files      キー [持ち主, パス] → { hash, history, deleted?, name, size,
 ```
 
 - `providers` と `apps` が名簿。完全なアプリ ID（[app-id.md](app-id.md)）は URL や `.` を含むので、フォルダ名には番号を使い、ID との対応をこの名簿で持つ
+- `shared/<共有 ID>` も通常の持ち主と同じハッシュ方式で保存し、共有の名簿と権限は共有の層が管理します。
 - `files` の持ち主は `_<プロバイダー番号>/-<アプリ番号>` か `shared/<共有 ID>`。パスはその中の論理パス（例 `/data/notes/memo.txt`）
 - `hash` は今の中身の実ファイル名。`history` は古いハッシュの新しい順のリストで、10 個まで
 - `deleted` は消した日時。付いている間は一覧に出さない
