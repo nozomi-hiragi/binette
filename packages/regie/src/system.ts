@@ -4,7 +4,7 @@ import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, PigeonLetter, PigeonSend } from "./launch.ts";
 import { type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -78,6 +78,7 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
   storage: {},
   fs: { permission: "fs" },
   cadre: { roles: ["cadre"] },
+  pigeon: {},
 };
 /** 設定アプリで割り当てを変えられる役割。設定アプリ自体は固定 */
 const ASSIGNABLE_ROLES = ["home", "cadre"];
@@ -320,10 +321,42 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     return { keys, denied };
   };
   /** 設定アプリの起動時に渡す OS の写し */
+  const muted = new Map<string, boolean>();
+  for (const app of available.values()) muted.set(app.key, await options.store.pigeon.muted(app.parentKey ?? app.key));
+  let nextLetter = 0;
+  const notifications: PigeonLetter[] = [];
+  const canNotify = (app: InstalledApp) => Object.hasOwn(app.manifest.permissions ?? {}, "notify");
+  const pigeonSnapshot = async (app: InstalledApp) => ({ letters: await options.store.pigeon.read(app.key), notify: canNotify(app) });
+  const syncInbox = async (key: string) => {
+    const app = available.get(key);
+    if (!app || stopped) return;
+    const snapshot = await pigeonSnapshot(app);
+    for (const session of [...sessions, ...(cadreSession ? [cadreSession] : [])]) if (session.installed.key === key) session.mounted?.syncPigeon?.(snapshot);
+  };
+  const routePigeon = (sender: InstalledApp, request: PigeonSend) => {
+    if (stopped || (request.to === "user" && (!canNotify(sender) || muted.get(sender.key)))) return;
+    const target = request.to === "user" ? undefined : available.get(request.to);
+    if (request.to !== "user" && !target) return;
+    const letter: PigeonLetter = { ...structuredClone(request), from: sender.key, id: ++nextLetter };
+    if (request.to === "user") { notifications.push(letter); if (notifications.length > 100) notifications.shift(); renderBar(); return; }
+    saving = saving.then(async () => {
+      await options.store.pigeon.append(request.to, letter);
+      await syncInbox(request.to);
+      if (request.urgent && target && !stopped) void show(target, target.key === home?.key).catch(report);
+    }).catch(report);
+  };
+  const donePigeon = (app: InstalledApp, id: number) => {
+    saving = saving.then(async () => { await options.store.pigeon.done(app.key, id); }).catch(report);
+  };
+  const dismissNotification = (id: number) => {
+    const i = notifications.findIndex(letter => letter.id === id);
+    if (i >= 0) { notifications.splice(i, 1); renderBar(); }
+  };
   const osSnapshot = (launches: { time: number; name: string }[]) => {
     const { roles: _roles, allowHttpLists: _allowHttpLists, ...numeric } = settings;
     return {
       settings: numeric,
+      notifications: [...available.values()].filter(canNotify).map(app => ({ id: app.key, name: app.manifest.name, muted: muted.get(app.key) ?? false })),
       roles: Object.fromEntries(Object.entries(assigned).flatMap(([role, app]) => app ? [[role, app.key]] : [])),
       candidates: Object.fromEntries(ASSIGNABLE_ROLES.map(role => [role, candidates(role).map(app => ({ id: app.key, name: app.manifest.name }))])),
       launches,
@@ -340,7 +373,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       hasIcon: s.installed.icon !== undefined,
     }));
     const homeFront = active !== undefined && active.home;
-    return { instances, homeFront, installed, installBusy };
+    return { instances, homeFront, installed, installBusy, notifications: structuredClone(notifications) };
   };
 
   function renderBar(clearError = false) {
@@ -450,6 +483,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(installed.parentKey ?? installed.key)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
+      const pigeon = await saving.then(() => pigeonSnapshot(installed));
       const updateAtStart = options.update?.snapshot?.();
       const mounting = startProcess(installed.wasm, {
         sub: installed.sub,
@@ -480,6 +514,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         grants: {
           denied: api.denied,
+          pigeon,
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
           ...(storage ? { storage } : {}),
@@ -487,6 +522,18 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onOpen(i: number) {
           if (!api.keys.has("apps") || active !== started || !Number.isInteger(i) || !apps[i]) return;
           void show(apps[i]!, false);
+        },
+        onPigeonSend(letter) { routePigeon(installed, letter); },
+        onPigeonDone(id) { donePigeon(installed, id); },
+        onNotificationMuted(i, value) {
+          if (!api.keys.has("os")) return;
+          const target = osSnapshot([]).notifications[i];
+          if (!target) return;
+          const owner = available.get(target.id)?.parentKey ?? target.id;
+          for (const app of available.values()) if ((app.parentKey ?? app.key) === owner) muted.set(app.key, value);
+          saving = saving.then(() => options.store.pigeon.mute(owner, value)).catch(report);
+          if (value) for (const letter of [...notifications]) if (muted.get(letter.from)) dismissNotification(letter.id);
+          for (const session of sessions) if (apiOf(session.installed).keys.has("os")) session.mounted?.syncOs?.(osSnapshot([]));
         },
         onSet(name: string, value: number) { if (api.keys.has("os")) setSetting(name, value); },
         onAssign(role: string, i: number) { if (api.keys.has("os")) void selectRole(role, i).catch(report); },
@@ -508,6 +555,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await mounted.begin();
       if (!sessions.has(started) || stopped) { mounted.stop(); started.view.remove(); return; }
       started.mounted = mounted;
+      await saving;
+      const latestPigeon = await pigeonSnapshot(installed);
+      if (JSON.stringify(latestPigeon) !== JSON.stringify(pigeon)) mounted.syncPigeon?.(latestPigeon);
       if (api.keys.has("os") && JSON.stringify(updateAtStart) !== JSON.stringify(options.update?.snapshot?.())) mounted.syncOs?.(osSnapshot(launches));
       mounted.setStopDelay(settings.stopDelay);
       started.startedAt = performance.now();
@@ -562,6 +612,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedCadre.parentKey ?? selectedCadre.key)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (cadreSession !== session || stopped) return;
+      const pigeon = await saving.then(() => pigeonSnapshot(selectedCadre));
       const mounting = startProcess(selectedCadre.wasm, {
         sub: selectedCadre.sub,
         declarative: selectedCadre.manifest.entry.html === undefined,
@@ -598,12 +649,31 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         grants: {
           denied: api.denied,
           cadre: cadreSnapshot(),
+          pigeon,
           ...(storage ? { storage } : {}),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
         },
         onStorage(name, value) {
           if (!api.keys.has("storage")) return;
           saving = saving.then(() => options.store.data.write(selectedCadre.parentKey ?? selectedCadre.key, name, value)).catch(report);
+        },
+        onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
+        onPigeonDone(id) { donePigeon(selectedCadre, id); },
+        onNotificationDismiss: dismissNotification,
+        onNotificationOpen(id) {
+          const letter = notifications.find(letter => letter.id === id);
+          if (!letter || letter.actions?.length) return;
+          const target = available.get(letter.from);
+          dismissNotification(id);
+          if (target) void show(target, target.key === home?.key).catch(report);
+        },
+        onNotificationReply(id, action, body) {
+          const letter = notifications.find(letter => letter.id === id);
+          const button = letter?.actions?.find(button => button.id === action);
+          if (!letter || !button) return;
+          const reply: PigeonLetter = { id: ++nextLetter, from: "user", to: letter.from, kind: action, title: letter.title, body: button.input ? body : "" };
+          saving = saving.then(async () => { await options.store.pigeon.append(reply.to, reply); await syncInbox(reply.to); }).catch(report);
+          dismissNotification(id);
         },
         onCadreOpen(id) {
           const target = [...sessions].find(s => s.id === id && !s.home && !s.closing);
@@ -621,7 +691,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onCadreBack() {
           if (active && !active.home) void returnHome();
         },
-        onCadreNotify(_text) {},
+        onCadreNotify(text) { routePigeon(selectedCadre, { to: "user", kind: "notification", title: "", body: text }); },
         onCadreInstall() { options.ui.install?.(); },
         onOpen(i) {
           if (!api.keys.has("apps") || !Number.isInteger(i) || !apps[i]) return;
@@ -638,6 +708,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await mounted.begin();
       if (cadreSession !== session || stopped) { mounted.stop(); session.view.remove(); return; }
       session.mounted = mounted;
+      await saving;
+      const latestPigeon = await pigeonSnapshot(selectedCadre);
+      if (JSON.stringify(latestPigeon) !== JSON.stringify(pigeon)) mounted.syncPigeon?.(latestPigeon);
       mounted.setStopDelay(settings.stopDelay);
       session.startedAt = performance.now();
       mounted.setFrozen(frozen);

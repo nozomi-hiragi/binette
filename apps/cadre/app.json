@@ -26,5 +26,10 @@
         "settings"
       ]
     }
+  },
+  "permissions": {
+    "notify": {
+      "reason": "通知を表示するため"
+    }
   }
 }

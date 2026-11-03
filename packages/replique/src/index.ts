@@ -187,6 +187,22 @@ namespace hostApps {
 
 namespace hostOs {
   // @ts-ignore: decorator
+  @external("binette", "os.notificationCount")
+  export declare function notificationCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "os.notificationName")
+  export declare function notificationName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.notificationId")
+  export declare function notificationId(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "os.notificationMuted")
+  export declare function notificationMuted(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette", "os.setNotificationMuted")
+  export declare function setNotificationMuted(i: i32, muted: bool): void;
+
+  // @ts-ignore: decorator
   @external("binette", "os.get")
   export declare function get(name: string): i32;
   // @ts-ignore: decorator
@@ -260,6 +276,81 @@ namespace hostStorage {
   export declare function name(i: i32): string;
 }
 
+namespace hostPigeon {
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.send")
+  export declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string): bool;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.count")
+  export declare function count(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.from")
+  export declare function from(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.to")
+  export declare function to(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.kind")
+  export declare function kind(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.title")
+  export declare function title(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.body")
+  export declare function body(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.urgent")
+  export declare function urgent(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.actions")
+  export declare function actions(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.done")
+  export declare function done(i: i32): void;
+}
+
+namespace hostCadreNotifications {
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationCount")
+  export declare function notificationCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationId")
+  export declare function notificationId(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationFrom")
+  export declare function notificationFrom(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationTitle")
+  export declare function notificationTitle(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationBody")
+  export declare function notificationBody(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationActionCount")
+  export declare function notificationActionCount(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationActionId")
+  export declare function notificationActionId(i: i32, action: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationActionLabel")
+  export declare function notificationActionLabel(i: i32, action: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationActionPlaceholder")
+  export declare function notificationActionPlaceholder(i: i32, action: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationActionInput")
+  export declare function notificationActionInput(i: i32, action: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationOpen")
+  export declare function notificationOpen(id: i32): void;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationDismiss")
+  export declare function notificationDismiss(id: i32): void;
+  // @ts-ignore: decorator
+  @external("binette", "cadre.notificationReply")
+  export declare function notificationReply(id: i32, actionId: string, body: string): void;
+}
+
 // @ts-ignore: decorator
 @external("binette", "api.why")
 declare function whyImport(key: string): i32;
@@ -283,6 +374,13 @@ export class AppsApi {
 
 /** `api.get<OsApi>("os")`。OS の設定、役割の割り当て、起動の履歴、更新。設定アプリ（役割 settings）に届く */
 export class OsApi {
+  /** Per-app notification settings, indexed by the notificationCount list. */
+  notificationCount(): i32 { return hostOs.notificationCount(); }
+  notificationName(i: i32): string { return hostOs.notificationName(i); }
+  notificationId(i: i32): string { return hostOs.notificationId(i); }
+  notificationMuted(i: i32): bool { return hostOs.notificationMuted(i); }
+  setNotificationMuted(i: i32, muted: bool): void { hostOs.setNotificationMuted(i, muted); }
+
   get(name: string): i32 { return hostOs.get(name); }
   /** 範囲外と知らない名前は false を返して保存しない */
   set(name: string, value: i32): bool { return hostOs.set(name, value); }
@@ -321,11 +419,45 @@ export class StorageApi {
   name(i: i32): string { return hostStorage.name(i); }
 }
 
+/** `api.get<PigeonApi>("pigeon")`: OS-authenticated letters and the app inbox. Available to all apps. */
+export class PigeonApi {
+  /** Sending to the user requires notify permission. actions is a JSON array of buttons or inputs. Returns false when rejected. */
+  send(to: string, kind: string, title: string, body: string, urgent: bool = false, actions: string = "[]"): bool {
+    return hostPigeon.send(to, kind, title, body, urgent, actions);
+  }
+  count(): i32 { return hostPigeon.count(); }
+  from(i: i32): string { return hostPigeon.from(i); }
+  to(i: i32): string { return hostPigeon.to(i); }
+  kind(i: i32): string { return hostPigeon.kind(i); }
+  title(i: i32): string { return hostPigeon.title(i); }
+  body(i: i32): string { return hostPigeon.body(i); }
+  urgent(i: i32): bool { return hostPigeon.urgent(i); }
+  /** JSON array of buttons or inputs. */
+  actions(i: i32): string { return hostPigeon.actions(i); }
+  /** Removes a processed letter from the inbox. */
+  done(i: i32): void { hostPigeon.done(i); }
+}
+
 /** `api.get<FsApi>("fs")`。ファイルの木。範囲の決め方が未決なので、キーだけ用意して今は誰にも届かない */
 export class FsApi {}
 
 /** `api.get<CadreApi>("cadre")`。Cadre の役割に割り当てられたアプリにだけ届く */
 export class CadreApi {
+  /** User notifications. Pass notificationId to operations rather than the list index. */
+  notificationCount(): i32 { return hostCadreNotifications.notificationCount(); }
+  notificationId(i: i32): i32 { return hostCadreNotifications.notificationId(i); }
+  notificationFrom(i: i32): string { return hostCadreNotifications.notificationFrom(i); }
+  notificationTitle(i: i32): string { return hostCadreNotifications.notificationTitle(i); }
+  notificationBody(i: i32): string { return hostCadreNotifications.notificationBody(i); }
+  notificationActionCount(i: i32): i32 { return hostCadreNotifications.notificationActionCount(i); }
+  notificationActionId(i: i32, action: i32): string { return hostCadreNotifications.notificationActionId(i, action); }
+  notificationActionLabel(i: i32, action: i32): string { return hostCadreNotifications.notificationActionLabel(i, action); }
+  notificationActionPlaceholder(i: i32, action: i32): string { return hostCadreNotifications.notificationActionPlaceholder(i, action); }
+  notificationActionInput(i: i32, action: i32): bool { return hostCadreNotifications.notificationActionInput(i, action); }
+  notificationOpen(id: i32): void { hostCadreNotifications.notificationOpen(id); }
+  notificationDismiss(id: i32): void { hostCadreNotifications.notificationDismiss(id); }
+  notificationReply(id: i32, actionId: string, body: string): void { hostCadreNotifications.notificationReply(id, actionId, body); }
+
   /** 起動中のアプリ（ホームを除く）の数 */
   count(): i32 { return cadreCountImport(); }
   /** running の別名 */
@@ -363,8 +495,8 @@ export class CadreApi {
 }
 
 /**
- * OS が `onCreate` で渡す API の辞書。キーで取り出す。
- * AS には動的な型がないので、キーと型引数が合う既知のクラス（`apps` は AppsApi、`os` は OsApi、`storage` は StorageApi、`fs` は FsApi、`cadre` は CadreApi）を返す
+ * API dictionary supplied by the OS to onCreate, accessed by key.
+ * Returns a known class matching both key and type: AppsApi, OsApi, StorageApi, FsApi, CadreApi, or PigeonApi.
  */
 export class Api {
   /** 起動したサブアプリの識別子。親として開いたときは空文字列 */
@@ -375,6 +507,7 @@ export class Api {
     if (key == "apps" && idof<T>() == idof<AppsApi>()) return changetype<T>(new AppsApi());
     if (key == "os" && idof<T>() == idof<OsApi>()) return changetype<T>(new OsApi());
     if (key == "storage" && idof<T>() == idof<StorageApi>()) return changetype<T>(new StorageApi());
+    if (key == "pigeon" && idof<T>() == idof<PigeonApi>()) return changetype<T>(new PigeonApi());
     if (key == "fs" && idof<T>() == idof<FsApi>()) return changetype<T>(new FsApi());
     if (key == "cadre" && idof<T>() == idof<CadreApi>()) return changetype<T>(new CadreApi());
     return null;
@@ -568,6 +701,8 @@ export class App {
   onCreate(_last: Last, _api: Api): void {}
   onStart(_last: State): void {}
   onResume(): void {}
+  /** Called when a letter arrives while the app is running. */
+  onPigeon(): void {}
   onPause(): void {}
   onStop(): void {}
   onDestroy(_reason: DestroyReason): void {}
@@ -601,5 +736,13 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
 
 /** OS が Cadre の状態（起動中の一覧や前面）の更新を知らせる */
 export function __bina_cadre_sync(): void {
+  rebuild();
+}
+
+/** The OS reports new inbox letters. Initial letters can be read synchronously in onCreate. */
+export function __bina_pigeon(): void {
+  const app = application;
+  if (app === null) return;
+  app.onPigeon();
   rebuild();
 }
