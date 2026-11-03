@@ -251,3 +251,7 @@ const text = new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, pt
 ## Pigeon
 
 起動時に受信欄の写しを Worker に渡します。`pigeon.*` は写しを同期的に読み、送信と削除を OS に知らせます。実行中の受信欄の変更は `pigeon.sync` で渡し、`__bina_pigeon` を呼びます。通知と設定の操作も、それぞれ `cadre`・`os` の権限を確認して受け付けます。
+
+## ファイル共有
+
+`shares.*` の要求には番号を付けてシステムへ渡します。結果は Worker に戻し、`onShare()` を呼んでアプリへ知らせます。Pigeon の添付は差出人と宛先をシステムが検証して招待します。

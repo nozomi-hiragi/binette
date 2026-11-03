@@ -20,6 +20,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let os: OsSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
+  let shares = false;
+  let nextShareRequest = 0;
+  const shareResults = new Map<number, string>();
   let pigeon: PigeonSnapshot | undefined;
   const acknowledgedLetters = new Set<number>();
   let denied: Record<string, ApiDenial> = {};
@@ -67,7 +70,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   const notificationAt = (i: number) => { const letter = cadreState().notifications?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("通知の番号が範囲外です。"); return letter; };
   const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
   const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
-  const granted = (key: string) => key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
+  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -96,16 +99,30 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   const imports = {
     binette: {
-      "pigeon.send": (to: number, kind: number, title: number, body: number, urgent: number, actions: number) => {
+      "shares.request": (operation: number, args: number) => {
+        if (!shares) throw new Error("共有 API は許可されていません。");
+        const values: unknown = JSON.parse(readString(args));
+        if (!Array.isArray(values) || values.some(value => typeof value !== "string")) throw new Error("共有の引数が不正です。");
+        if (nextShareRequest >= 2147483647) throw new Error("共有の要求番号を使い切りました。");
+        const id = ++nextShareRequest;
+        scope.postMessage({ type: "shares.request", id, operation: readString(operation), args: values });
+        return id;
+      },
+      "shares.result": (id: number) => { const result = shareResults.get(id); if (result === undefined) return 0; shareResults.delete(id); return writeString(result); },
+      "pigeon.shares": (i: number) => writeString(JSON.stringify(letterAt(i).shares ?? [])),
+      "pigeon.send": (to: number, kind: number, title: number, body: number, urgent: number, actions: number, attachments: number) => {
         const state = inbox();
         const target = readString(to);
         if (target === "user" && !state.notify) return false;
+        let attached;
+        try { attached = attachments ? JSON.parse(readString(attachments)) : []; } catch { return false; }
+        if (!Array.isArray(attached) || attached.some(a => !a || typeof a.id !== "string" || !["read", "write"].includes(a.access)) || (target === "user" && attached.length)) return false;
         let buttons;
         try { buttons = JSON.parse(readString(actions)); } catch { return false; }
         if (!Array.isArray(buttons) || buttons.some(a => !a || typeof a.id !== "string" || typeof a.label !== "string" || (a.input !== undefined && typeof a.input !== "boolean") || (a.placeholder !== undefined && typeof a.placeholder !== "string"))) return false;
         if (buttons.some(a => !a.id) || new Set(buttons.map(a => a.id)).size !== buttons.length) return false;
         if (!target || !readString(kind)) return false;
-        scope.postMessage({ type: "pigeon.send", letter: { to: target, kind: readString(kind), title: readString(title), body: readString(body), urgent: !!urgent, actions: buttons } });
+        scope.postMessage({ type: "pigeon.send", letter: { to: target, kind: readString(kind), title: readString(title), body: readString(body), urgent: !!urgent, actions: buttons, ...(attached.length ? { shares: attached } : {}) } });
         return true;
       },
       "pigeon.count": () => inbox().letters.length,
@@ -299,7 +316,13 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
+    if (data.type === "shares.result") {
+      shareResults.set(data.id!, data.result!);
+      const callback = instance?.exports.__bina_share;
+      if (typeof callback === "function") { try { callback(); flush(); } catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); } }
+      return;
+    }
     if (data.type === "init") {
       try {
         apps = data.apps;
@@ -307,6 +330,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         storage = data.storage;
         cadre = data.cadre;
         pigeon = data.pigeon;
+        shares = data.shares === true;
         denied = data.denied ?? {};
         page = data.page ?? "";
         sub = data.sub ?? "";

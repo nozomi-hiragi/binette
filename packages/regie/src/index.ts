@@ -11,7 +11,7 @@ export type { AppDataStore, AppStore, IndexedDbAppStoreOptions, InstalledApp, Li
 export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, appId, validateSystemSettings } from "./store.ts";
 export type { FileTree, IndexedDbFileTreeOptions } from "./fs.ts";
 export { createIndexedDbFileTree, createMemoryFileTree } from "./fs.ts";
-export type { ContentStore, FileMetadata, IndexedDbStorageOptions, OwnerStorage, ProviderRecord, StorageBackend, StorageOptions } from "./storage.ts";
+export type { ContentStore, FileMetadata, IndexedDbStorageOptions, OwnerStorage, ProviderRecord, StorageBackend, StorageOptions, ShareRecord, ShareStorage } from "./storage.ts";
 export { createIndexedDbStorage, createMemoryContentStore, createMemoryStorage, createOpfsContentStore } from "./storage.ts";
 export type { RecoveryAction, SystemDistribution, SystemDistributionOptions, SystemManifest, SystemUpdate } from "./distribution.ts";
 export { createSystemDistribution, parseSystemManifest, SYSTEM_MANIFEST_PATH } from "./distribution.ts";

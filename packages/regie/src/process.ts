@@ -37,6 +37,7 @@ export interface ProcessOptions {
     storage?: LaunchOptions["storage"];
     cadre?: LaunchOptions["cadre"];
     pigeon?: LaunchOptions["pigeon"];
+    shares?: boolean;
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
@@ -54,6 +55,7 @@ export interface ProcessOptions {
   onCadreSettings?: LaunchOptions["onCadreSettings"];
   onCadreNotify?: LaunchOptions["onCadreNotify"];
   onCadreInstall?: LaunchOptions["onCadreInstall"];
+  onShare?: LaunchOptions["onShare"];
   onPigeonSend?: LaunchOptions["onPigeonSend"];
   onPigeonDone?: LaunchOptions["onPigeonDone"];
   onNotificationMuted?: LaunchOptions["onNotificationMuted"];
@@ -155,6 +157,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
     pigeon: options.grants?.pigeon,
+    shares: options.grants?.shares,
+    onShare: options.onShare,
     denied: options.grants?.denied,
     onSet: options.onSet,
     onAssign(role, i) { assignments.push([role, i]); notifyRequests(); },

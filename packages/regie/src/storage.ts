@@ -125,7 +125,59 @@ export interface ProviderRecord {
   name: string;
   added: number;
 }
+export interface ShareRecord {
+  id: string;
+  name: string;
+  created: number;
+  creator: string;
+  members: Record<
+    string,
+    { access: "read" | "write"; state: "invited" | "joined" }
+  >;
+}
+export interface ShareStorage {
+  createShare(creator: string, name: string, id?: string): Promise<ShareRecord>;
+  getShare(id: string): Promise<ShareRecord | undefined>;
+  listShares(appId: string): Promise<ShareRecord[]>;
+  inviteShare(
+    id: string,
+    actor: string,
+    target: string,
+    access: "read" | "write",
+  ): Promise<void>;
+  inviteSharesWithDelivery(
+    actor: string,
+    target: string,
+    attachments: readonly { id: string; access: "read" | "write" }[],
+    deliver: () => Promise<void>,
+  ): Promise<void>;
+  inviteShareWithDelivery(
+    id: string,
+    actor: string,
+    target: string,
+    access: "read" | "write",
+    deliver: () => Promise<void>,
+  ): Promise<void>;
+  joinShare(id: string, appId: string): Promise<void>;
+  leaveShare(id: string, appId: string): Promise<void>;
+  shareFiles(id: string, appId: string): OwnerStorage;
+  accessShareFile(
+    id: string,
+    appId: string,
+    operation: keyof OwnerStorage,
+    args: unknown[],
+  ): Promise<unknown>;
+  moveShareFile(
+    id: string,
+    appId: string,
+    owner: string,
+    path: string,
+    sharedPath: string,
+    toShare: boolean,
+  ): Promise<void>;
+}
 interface State {
+  shares: Map<string, ShareRecord>;
   afterCommit?: (() => Promise<void>)[];
   providers: Map<number, Omit<ProviderRecord, "number">>;
   apps: Map<string, string>;
@@ -154,7 +206,7 @@ export interface OwnerStorage {
     files: ReadonlyMap<string, Uint8Array>,
   ): Promise<void>;
 }
-export interface StorageBackend {
+export interface StorageBackend extends ShareStorage {
   forOwner(owner: string): OwnerStorage;
   appOwner(appId: string, providerUrl?: string, name?: string): Promise<string>;
   provider(url: string | number): Promise<ProviderRecord | undefined>;
@@ -178,6 +230,7 @@ export interface StorageBackend {
   syncProviders(): Promise<void>;
 }
 const emptyState = (): State => ({
+  shares: new Map(),
   providers: new Map([[0, {
     url: "binette:system",
     name: "Binette",
@@ -266,6 +319,186 @@ function backend(
     }, { allowHttp: true });
   }
   const api: StorageBackend = {
+    createShare(creator, name, id = crypto.randomUUID()) {
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(id)
+      ) throw new Error("共有 ID は UUID v4 にしてください。");
+      return run((s) => {
+        if (s.shares.has(id)) throw new Error("共有は既にあります。");
+        const record: ShareRecord = {
+          id,
+          name,
+          created: now(),
+          creator,
+          members: { [creator]: { access: "write", state: "joined" } },
+        };
+        s.shares.set(id, record);
+        return structuredClone(record);
+      }, true);
+    },
+    getShare(id) {
+      return run((s) => structuredClone(s.shares.get(id)));
+    },
+    listShares(appId) {
+      return run((s) =>
+        structuredClone(
+          [...s.shares.values()].filter((r) => Object.hasOwn(r.members, appId)),
+        )
+      );
+    },
+    inviteShare(id, actor, target, access) {
+      if (access !== "read" && access !== "write") {
+        throw new Error("共有の権限が不正です。");
+      }
+      return run((s) => {
+        const row = s.shares.get(id);
+        if (
+          !row || row.members[actor]?.state !== "joined" ||
+          row.members[actor]?.access !== "write"
+        ) throw new Error("共有への書き込み権限がありません。");
+        if (row.members[target]?.state === "joined") {
+          throw new Error("既に参加しています。");
+        }
+        row.members[target] = { access, state: "invited" };
+      }, true);
+    },
+    inviteSharesWithDelivery(actor, target, attachments, deliver) {
+      const copies = structuredClone(attachments);
+      return run(async (s) => {
+        for (const { id, access } of copies) {
+          if (access !== "read" && access !== "write") {
+            throw new Error("共有の権限が不正です。");
+          }
+          const row = s.shares.get(id);
+          if (
+            !row || row.members[actor]?.state !== "joined" ||
+            row.members[actor]?.access !== "write"
+          ) throw new Error("共有への書き込み権限がありません。");
+          if (row.members[target]?.state === "joined") {
+            throw new Error("既に参加しています。");
+          }
+          row.members[target] = { access, state: "invited" };
+        }
+        await deliver();
+      }, true);
+    },
+    inviteShareWithDelivery(id, actor, target, access, deliver) {
+      return run(async (s) => {
+        if (access !== "read" && access !== "write") {
+          throw new Error("共有の権限が不正です。");
+        }
+        const row = s.shares.get(id);
+        if (
+          !row || row.members[actor]?.state !== "joined" ||
+          row.members[actor]?.access !== "write"
+        ) throw new Error("共有への書き込み権限がありません。");
+        if (row.members[target]?.state === "joined") {
+          throw new Error("既に参加しています。");
+        }
+        row.members[target] = { access, state: "invited" };
+        await deliver();
+      }, true);
+    },
+    joinShare(id, appId) {
+      return run((s) => {
+        const member = s.shares.get(id)?.members[appId];
+        if (!member) throw new Error("共有が無いか、招待されていません。");
+        member.state = "joined";
+      }, true);
+    },
+    leaveShare(id, appId) {
+      return run((s) => {
+        const row = s.shares.get(id);
+        if (!row) return;
+        delete row.members[appId];
+        if (!Object.values(row.members).some((m) => m.state === "joined")) {
+          s.shares.delete(id);
+          for (const k of s.files.keys()) {
+            if (JSON.parse(k)[0] === `shared/${id}`) s.files.delete(k);
+          }
+        }
+      }, true);
+    },
+    shareFiles(id, appId) {
+      return checkedShareFiles(api, id, appId);
+    },
+    accessShareFile(id, appId, operation, args) {
+      const reading = ["read", "readFiles", "list", "metadata"].includes(
+        operation,
+      );
+      if (
+        ![
+          "read",
+          "readFiles",
+          "list",
+          "metadata",
+          "write",
+          "writeFiles",
+          "delete",
+          "update",
+          "restore",
+          "move",
+          "replace",
+        ].includes(operation)
+      ) throw new Error("ファイル操作が不正です。");
+      return run(async (s) => {
+        const member = s.shares.get(id)?.members[appId];
+        if (
+          member?.state !== "joined" || (!reading && member.access !== "write")
+        ) throw new Error("共有の権限がありません。");
+        const local = backend(
+          { run: async (action) => await action(s) },
+          content,
+          now,
+        ).forOwner(`shared/${id}`);
+        return await Reflect.apply(Reflect.get(local, operation), local, args);
+      }, !reading);
+    },
+    moveShareFile(id, appId, owner, path, sharedPath, toShare) {
+      pathCheck(path);
+      pathCheck(sharedPath);
+      if (path === "/" || sharedPath === "/") {
+        throw new Error("ファイルのパスにしてください。");
+      }
+      return run(async (s) => {
+        const member = s.shares.get(id)?.members[appId];
+        if (member?.state !== "joined" || member.access !== "write") {
+          throw new Error("共有への書き込み権限がありません。");
+        }
+        const owned = [...s.apps].some(([k, value]) => {
+          const [p, a] = JSON.parse(k);
+          const parent = currentId(s, k, value);
+          return `_${p.toString(16)}/-${a.toString(16)}` === owner &&
+            (appId === parent || appId.startsWith(`${parent}.`));
+        });
+        if (!owned) throw new Error("自分の保存領域だけを移動できます。");
+        const shared = `shared/${id}`;
+        const from = toShare ? owner : shared, to = toShare ? shared : owner;
+        const fromPath = toShare ? path : sharedPath,
+          toPath = toShare ? sharedPath : path;
+        const row = s.files.get(key(from, fromPath));
+        if (!row || row.deleted !== undefined) {
+          throw new Error("ファイルがありません。");
+        }
+        if (s.files.has(key(to, toPath))) {
+          throw new Error("移動先にファイルがあります。");
+        }
+        for (const digest of [row.hash, ...row.history]) {
+          const bytes = await content.read(`${from}/${digest}`);
+          if (!bytes) throw new Error("ファイルの内容がありません。");
+          if (!await content.read(`${to}/${digest}`)) {
+            await content.write(`${to}/${digest}`, bytes);
+          }
+        }
+        s.files.set(key(to, toPath), {
+          ...row,
+          name: toPath.split("/").pop()!,
+          modified: now(),
+        });
+        s.files.delete(key(from, fromPath));
+      }, true);
+    },
     forOwner(owner) {
       if (
         !/^_[0-9a-f]+\/-[0-9a-f]+$/.test(owner) &&
@@ -480,10 +713,39 @@ function backend(
           throw new Error("Provider already exists.");
         }
         found[1].url = to;
+        const migrate = (id: string) => {
+          const parsed = parseAppId(id, { allowHttp: true });
+          return parsed.list === from
+            ? formatAppId({ ...parsed, list: to }, { allowHttp: true })
+            : id;
+        };
+        for (const share of s.shares.values()) {
+          share.creator = migrate(share.creator);
+          share.members = Object.fromEntries(
+            Object.entries(share.members).map((
+              [id, member],
+            ) => [migrate(id), member]),
+          );
+        }
       }, true);
     },
     removeApp(id, immediate = false) {
       return run((s) => {
+        for (const [shareId, share] of s.shares) {
+          for (const member of Object.keys(share.members)) {
+            const parsed = parseAppId(member, { allowHttp: true });
+            const parent = formatAppId({ id: parsed.id, list: parsed.list }, {
+              allowHttp: true,
+            });
+            if (member === id || parent === id) delete share.members[member];
+          }
+          if (!Object.values(share.members).some((m) => m.state === "joined")) {
+            s.shares.delete(shareId);
+            for (const k of s.files.keys()) {
+              if (JSON.parse(k)[0] === `shared/${shareId}`) s.files.delete(k);
+            }
+          }
+        }
         for (const [k, value] of s.apps) {
           if (currentId(s, k, value) !== id) continue;
           const [p, a] = JSON.parse(k);
@@ -587,7 +849,7 @@ export function createIndexedDbStorage(
   let pending = Promise.resolve();
   const open = () =>
     opening ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(name, 5);
+      const request = indexedDB.open(name, 6);
       request.onupgradeneeded = (event) => {
         const db = request.result;
         if (event.oldVersion > 0 && event.oldVersion < 4) {
@@ -596,7 +858,14 @@ export function createIndexedDbStorage(
           }
         }
         for (
-          const store of ["providers", "apps", "files", "counters", "appIds"]
+          const store of [
+            "providers",
+            "apps",
+            "files",
+            "counters",
+            "appIds",
+            "shares",
+          ]
         ) {
           if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
         }
@@ -638,13 +907,14 @@ export function createIndexedDbStorage(
         resolve(db);
       };
     });
-  type Store = "providers" | "apps" | "files" | "counters";
+  type Store = "providers" | "apps" | "files" | "counters" | "shares";
   type Selection = { store: Store; query?: IDBValidKey | IDBKeyRange };
   async function load(
     db: IDBDatabase,
     selections: Selection[],
   ): Promise<State> {
     const state: State = {
+      shares: new Map(),
       providers: new Map(),
       apps: new Map(),
       files: new Map(),
@@ -684,10 +954,12 @@ export function createIndexedDbStorage(
     return state;
   }
   async function save(db: IDBDatabase, before: State, state: State) {
-    const changed = (["providers", "apps", "files", "counters"] as const)
-      .filter((store) =>
-        JSON.stringify([...before[store]]) !== JSON.stringify([...state[store]])
-      );
+    const changed =
+      (["providers", "apps", "files", "counters", "shares"] as const)
+        .filter((store) =>
+          JSON.stringify([...before[store]]) !==
+            JSON.stringify([...state[store]])
+        );
     if (!changed.length) return;
     const stores: string[] = [...changed];
     if (changed.includes("apps")) stores.push("appIds");
@@ -863,6 +1135,8 @@ export function createIndexedDbStorage(
             query: [owner, path],
           }));
         }
+      } else if (method.includes("Share")) {
+        selections = [{ store: "shares" }, { store: "files" }];
       } else if (method === "gc") selections = [{ store: "files" }];
       else if (method === "findAppByOwner") {
         const matched = /^_([0-9a-f]+)\/-([0-9a-f]+)$/.exec(args[0]);
@@ -927,6 +1201,16 @@ export function createIndexedDbStorage(
           }
         }
       }
+      if (
+        owner === undefined &&
+        (method.includes("Share") || method === "removeApp")
+      ) {
+        selections.push({ store: "shares" }, { store: "files" });
+        if (method === "moveShareFile") {
+          selections.push({ store: "apps" }, { store: "providers" });
+        }
+      }
+      if (method === "moveProvider") selections.push({ store: "shares" });
       const state = await load(db, selections);
       const before = structuredClone(state);
       const local = backend(
@@ -965,7 +1249,7 @@ export function createIndexedDbStorage(
     pending = result.then(() => {}, () => {});
     return result;
   }
-  return new Proxy({} as StorageBackend, {
+  const resultBackend = new Proxy({} as StorageBackend, {
     get: (_, method: string) =>
       method === "then"
         ? undefined
@@ -1013,6 +1297,39 @@ export function createIndexedDbStorage(
                 },
           });
         }
+        : method === "shareFiles"
+        ? (id: string, appId: string) =>
+          checkedShareFiles(resultBackend, id, appId)
         : (...args: Parameters<typeof execute>[1]) => execute(method, args),
+  });
+  return resultBackend;
+}
+
+/** Check membership and access for every shared file operation. */
+function checkedShareFiles(
+  storage: StorageBackend,
+  id: string,
+  appId: string,
+): OwnerStorage {
+  return new Proxy({} as OwnerStorage, {
+    get(_, operation: keyof OwnerStorage) {
+      if (String(operation) === "then") return undefined;
+      return (...args: unknown[]) => {
+        if (operation === "write") args[1] = (args[1] as Uint8Array).slice();
+        if (operation === "readFiles") args[0] = [...args[0] as string[]];
+        if (operation === "writeFiles" || operation === "replace") {
+          const index = operation === "replace" ? 1 : 0;
+          args[index] = new Map(
+            [...(args[index] as ReadonlyMap<string, Uint8Array>)].map((
+              [path, bytes],
+            ) => [path, bytes.slice()]),
+          );
+          if (operation === "writeFiles" && args[1]) {
+            args[1] = [...args[1] as string[]];
+          }
+        }
+        return storage.accessShareFile(id, appId, operation, args);
+      };
+    },
   });
 }

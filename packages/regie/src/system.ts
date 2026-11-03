@@ -79,6 +79,7 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
   fs: { permission: "fs" },
   cadre: { roles: ["cadre"] },
   pigeon: {},
+  shares: {},
 };
 /** 設定アプリで割り当てを変えられる役割。設定アプリ自体は固定 */
 const ASSIGNABLE_ROLES = ["home", "cadre"];
@@ -337,13 +338,41 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     if (stopped || (request.to === "user" && (!canNotify(sender) || muted.get(sender.key)))) return;
     const target = request.to === "user" ? undefined : available.get(request.to);
     if (request.to !== "user" && !target) return;
+    if (!Array.isArray(request.shares ?? []) || (request.to === "user" && request.shares?.length) || request.shares?.some(share => !share || typeof share.id !== "string" || !["read", "write"].includes(share.access))) return;
     const letter: PigeonLetter = { ...structuredClone(request), from: sender.key, id: ++nextLetter };
     if (request.to === "user") { notifications.push(letter); if (notifications.length > 100) notifications.shift(); renderBar(); return; }
     saving = saving.then(async () => {
-      await options.store.pigeon.append(request.to, letter);
+      const deliver = () => options.store.pigeon.append(request.to, letter);
+      if (request.shares?.length) await options.store.shares.inviteSharesWithDelivery(sender.key, request.to, request.shares, deliver);
+      else await deliver();
       await syncInbox(request.to);
       if (request.urgent && target && !stopped) void show(target, target.key === home?.key).catch(report);
     }).catch(report);
+  };
+  const shareRequest = (app: InstalledApp, operation: string, args: string[]) => {
+    const execute = async () => {
+      if (!apiOf(app).keys.has("shares") || !Array.isArray(args) || args.some(arg => typeof arg !== "string")) throw new Error("共有の要求が不正です。");
+      const shares = options.store.shares;
+      const required: Record<string, number> = { create: 1, list: 0, join: 1, leave: 1, read: 2, write: 3, readBase64: 2, writeBase64: 3, remove: 2, files: 2 };
+      if (required[operation] === undefined || args.length !== required[operation]) throw new Error("共有の引数が不正です。");
+      const [id, path, value] = args;
+      switch (operation) {
+        case "create": return await shares.createShare(app.key, id);
+        case "list": return await shares.listShares(app.key);
+        case "join": await shares.joinShare(id, app.key); return;
+        case "leave": await shares.leaveShare(id, app.key); return;
+        case "read": { const bytes = await shares.shareFiles(id, app.key).read(path); return bytes === undefined ? null : new TextDecoder().decode(bytes); }
+        case "readBase64": { const bytes = await shares.shareFiles(id, app.key).read(path); if (bytes === undefined) return null; let encoded = ""; for (const byte of bytes) encoded += String.fromCharCode(byte); return btoa(encoded); }
+        case "writeBase64": { const encoded = atob(value); await shares.shareFiles(id, app.key).write(path, Uint8Array.from(encoded, char => char.charCodeAt(0))); return; }
+        case "write": await shares.shareFiles(id, app.key).write(path, new TextEncoder().encode(value)); return;
+        case "remove": await shares.shareFiles(id, app.key).delete(path); return;
+        case "files": return await shares.shareFiles(id, app.key).list(path);
+        default: throw new Error("共有の操作が不明です。");
+      }
+    };
+    const pending = saving.then(execute);
+    saving = pending.then(() => {}, () => {});
+    return pending;
   };
   const donePigeon = (app: InstalledApp, id: number) => {
     saving = saving.then(async () => { await options.store.pigeon.done(app.key, id); }).catch(report);
@@ -515,6 +544,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         grants: {
           denied: api.denied,
           pigeon,
+          shares: api.keys.has("shares"),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
           ...(storage ? { storage } : {}),
@@ -523,6 +553,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           if (!api.keys.has("apps") || active !== started || !Number.isInteger(i) || !apps[i]) return;
           void show(apps[i]!, false);
         },
+        onShare(operation, args) { return shareRequest(installed, operation, args); },
         onPigeonSend(letter) { routePigeon(installed, letter); },
         onPigeonDone(id) { donePigeon(installed, id); },
         onNotificationMuted(i, value) {
@@ -650,6 +681,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           denied: api.denied,
           cadre: cadreSnapshot(),
           pigeon,
+          shares: api.keys.has("shares"),
           ...(storage ? { storage } : {}),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
         },
@@ -657,6 +689,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           if (!api.keys.has("storage")) return;
           saving = saving.then(() => options.store.data.write(selectedCadre.parentKey ?? selectedCadre.key, name, value)).catch(report);
         },
+        onShare(operation, args) { return shareRequest(selectedCadre, operation, args); },
         onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
         onPigeonDone(id) { donePigeon(selectedCadre, id); },
         onNotificationDismiss: dismissNotification,

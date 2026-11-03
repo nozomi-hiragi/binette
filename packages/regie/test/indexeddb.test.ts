@@ -231,7 +231,7 @@ for (const version of [1, 2]) Deno.test(`IndexedDB resets v${version} storage an
     const store = createIndexedDbAppStore({ content: fixture.content });
     assertEquals(fixture.opened, []);
     assertEquals(await store.get(installed.key), undefined);
-    assertEquals(fixture.opened, [5]);
+    assertEquals(fixture.opened, [6]);
     await store.put(installed);
     assertEquals(fixture.tables.has("files"), true);
     const tree = createIndexedDbFileTree({ content: fixture.content });
@@ -540,5 +540,30 @@ Deno.test("Pigeon IndexedDB serializes concurrent delivery and preserves IDs acr
     await first.mute("sender", true);
     assertEquals(await reopened.muted("sender"), true);
     assertEquals(fixture.transactions.filter(tx => tx.mode === "readwrite" && tx.stores.includes("sequence")).every(tx => tx.stores.includes("inbox")), true);
+  });
+});
+
+Deno.test("共有 IndexedDB は再接続後も承認とファイルを保持し最後の参加者退出を永続化する", async () => {
+  const fixture = databaseFixture(installed, 2);
+  await withDatabase(fixture, async () => {
+    const first = createIndexedDbStorage({ content: fixture.content });
+    const owner = await first.appOwner("author");
+    await first.forOwner(owner).write("/data/file", new Uint8Array([3]));
+    const share = await first.createShare("author", "資料");
+    await first.moveShareFile(share.id, "author", owner, "/data/file", "/file", true);
+    await first.inviteShare(share.id, "author", "reader", "read");
+    const second = createIndexedDbStorage({ content: fixture.content });
+    assertEquals((await second.listShares("reader"))[0].members.reader.state, "invited");
+    await assertRejects(() => second.shareFiles(share.id, "reader").read("/file"));
+    await second.joinShare(share.id, "reader");
+    assertEquals(await second.shareFiles(share.id, "reader").read("/file"), new Uint8Array([3]));
+    await assertRejects(() => first.inviteSharesWithDelivery("author", "other", [{ id: share.id, access: "read" }], () => Promise.reject(new Error("delivery"))));
+    assertEquals((await second.getShare(share.id))!.members.other, undefined);
+    await first.removeApp("author");
+    assertEquals(await second.shareFiles(share.id, "reader").list("/"), ["/file"]);
+    await second.leaveShare(share.id, "reader");
+    assertEquals(await first.getShare(share.id), undefined);
+    await first.gc();
+    assertEquals((await fixture.content.list()).filter(k => k.startsWith("shared/")), []);
   });
 });

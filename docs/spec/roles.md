@@ -5,7 +5,7 @@
 Cadre（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
 
 > [!NOTE]
-> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`api.get<T>`、`api.why`）・`apps`・`os`・`storage`・`pigeon` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。Cadre の常駐起動・`CadreApi`・`appArea()` も実装済みです。通知は Pigeon を通して届けます。役割名 `cadre` は決定です。ほかのキーや関数の形は案です。
+> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`api.get<T>`、`api.why`）・`apps`・`os`・`storage`・`pigeon`・`shares` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。Cadre の常駐起動・`CadreApi`・`appArea()` も実装済みです。通知は Pigeon を通して届けます。役割名 `cadre` は決定です。ほかのキーや関数の形は案です。
 
 ## 方針（決定 2026-11-01）
 
@@ -123,6 +123,7 @@ override build(): View {
 | `os` | OS の設定、役割の割り当て、起動の履歴、更新（`OsApi`） | 設定アプリ | 実装済み |
 | `fs` | ファイルの木を読む・書く（範囲つき。`FsApi`） | 権限を許したアプリ（デザイナー、エディタなど） | キーだけ。今は誰にも届かない |
 | `pigeon` | 手紙の送受信と通知（`PigeonApi`） | すべてのアプリ | 実装済み。ユーザーへの送信には `notify` 権限が必要 |
+| `shares` | 共有の作成・承認・退出とファイル操作（`SharesApi`） | すべてのアプリ | 実装済み。共有ごとに参加状態とアクセス権を確認 |
 | `storage` | アプリ自身の領域のデータ（`/data/…`。`StorageApi`） | すべてのアプリ | 実装済み（読む・書く・一覧・削除） |
 
 ## 未決のこと

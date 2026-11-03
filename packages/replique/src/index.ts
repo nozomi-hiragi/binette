@@ -276,13 +276,62 @@ namespace hostStorage {
   export declare function name(i: i32): string;
 }
 
+namespace hostShares {
+  // @ts-ignore: decorator
+  @external("binette", "shares.request")
+  export declare function request(operation: string, args: string): i32;
+  // @ts-ignore: decorator
+  @external("binette", "shares.result")
+  export declare function result(id: i32): string | null;
+}
+
+/** Encode sharing arguments as a JSON array. */
+function shareArguments(values: string[]): string {
+  let result = "[";
+  const hex = "0123456789abcdef";
+  for (let i = 0; i < values.length; i++) {
+    if (i > 0) result += ",";
+    result += "\"";
+    const value = values[i];
+    for (let j = 0; j < value.length; j++) {
+      const code = value.charCodeAt(j);
+      if (code == 34 || code == 92) result += "\\" + value.charAt(j);
+      else if (code < 32) result += "\\u00" + hex.charAt(code >> 4) + hex.charAt(code & 15);
+      else result += value.charAt(j);
+    }
+    result += "\"";
+  }
+  return result + "]";
+}
+
+/** Sharing operations return a request ID. Read result in onShare and inspect JSON ok/value/error. */
+export class SharesApi {
+  request(operation: string, args: string = "[]"): i32 { return hostShares.request(operation, args); }
+  /** Returns null while pending. Each completed result can be consumed once. */
+  result(id: i32): string | null { return hostShares.result(id); }
+  create(name: string): i32 { return this.request("create", shareArguments([name])); }
+  list(): i32 { return this.request("list"); }
+  join(id: string): i32 { return this.request("join", shareArguments([id])); }
+  leave(id: string): i32 { return this.request("leave", shareArguments([id])); }
+  read(id: string, path: string): i32 { return this.request("read", shareArguments([id, path])); }
+  write(id: string, path: string, value: string): i32 { return this.request("write", shareArguments([id, path, value])); }
+  /** Transfer binary data as base64 strings. */
+  readBase64(id: string, path: string): i32 { return this.request("readBase64", shareArguments([id, path])); }
+  writeBase64(id: string, path: string, value: string): i32 { return this.request("writeBase64", shareArguments([id, path, value])); }
+  remove(id: string, path: string): i32 { return this.request("remove", shareArguments([id, path])); }
+  files(id: string, prefix: string = "/"): i32 { return this.request("files", shareArguments([id, prefix])); }
+}
+
 namespace hostPigeon {
   // @ts-ignore: decorator
   @external("binette", "pigeon.send")
-  export declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string): bool;
+  export declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string, shares: string): bool;
   // @ts-ignore: decorator
   @external("binette", "pigeon.count")
   export declare function count(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "pigeon.shares")
+  export declare function shares(i: i32): string;
   // @ts-ignore: decorator
   @external("binette", "pigeon.from")
   export declare function from(i: i32): string;
@@ -422,9 +471,10 @@ export class StorageApi {
 /** `api.get<PigeonApi>("pigeon")`: OS-authenticated letters and the app inbox. Available to all apps. */
 export class PigeonApi {
   /** Sending to the user requires notify permission. actions is a JSON array of buttons or inputs. Returns false when rejected. */
-  send(to: string, kind: string, title: string, body: string, urgent: bool = false, actions: string = "[]"): bool {
-    return hostPigeon.send(to, kind, title, body, urgent, actions);
+  send(to: string, kind: string, title: string, body: string, urgent: bool = false, actions: string = "[]", shares: string = "[]"): bool {
+    return hostPigeon.send(to, kind, title, body, urgent, actions, shares);
   }
+  shares(i: i32): string { return hostPigeon.shares(i); }
   count(): i32 { return hostPigeon.count(); }
   from(i: i32): string { return hostPigeon.from(i); }
   to(i: i32): string { return hostPigeon.to(i); }
@@ -507,6 +557,7 @@ export class Api {
     if (key == "apps" && idof<T>() == idof<AppsApi>()) return changetype<T>(new AppsApi());
     if (key == "os" && idof<T>() == idof<OsApi>()) return changetype<T>(new OsApi());
     if (key == "storage" && idof<T>() == idof<StorageApi>()) return changetype<T>(new StorageApi());
+    if (key == "shares" && idof<T>() == idof<SharesApi>()) return changetype<T>(new SharesApi());
     if (key == "pigeon" && idof<T>() == idof<PigeonApi>()) return changetype<T>(new PigeonApi());
     if (key == "fs" && idof<T>() == idof<FsApi>()) return changetype<T>(new FsApi());
     if (key == "cadre" && idof<T>() == idof<CadreApi>()) return changetype<T>(new CadreApi());
@@ -703,6 +754,7 @@ export class App {
   onResume(): void {}
   /** Called when a letter arrives while the app is running. */
   onPigeon(): void {}
+  onShare(): void {}
   onPause(): void {}
   onStop(): void {}
   onDestroy(_reason: DestroyReason): void {}
@@ -744,5 +796,13 @@ export function __bina_pigeon(): void {
   const app = application;
   if (app === null) return;
   app.onPigeon();
+  rebuild();
+}
+
+/** The OS reports a completed sharing request. */
+export function __bina_share(): void {
+  const app = application;
+  if (app === null) return;
+  app.onShare();
   rebuild();
 }

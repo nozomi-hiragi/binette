@@ -787,3 +787,43 @@ launch(new Settings());`);
     assertEquals(element.errors, []);
   } finally { system.stop(); }
 });
+
+Deno.test("共有添付は招待になり、承認とバイナリと失効を OS が毎回検査する", async () => {
+  const source = "https://example.test/shares/";
+  const senderId = source + "#sender", receiverId = source + "#receiver";
+  const store = createMemoryAppStore();
+  const share = await store.shares.createShare(senderId, "資料");
+  const program = await build(`import { App, SharesApi, PigeonApi, document, launch } from "jsr:@binette/replique";
+export { __bina_share } from "jsr:@binette/replique";
+let request = 0;
+class Page extends App { onShare(): void { const result = new SharesApi().result(request); if (result !== null) document.getElementById("result").textContent = result; } }
+export function invite(): void { new PigeonApi().send("${receiverId}", "share", "", "", false, "[]", '[{"id":"${share.id}","access":"read"}]'); }
+export function join(): void { request = new SharesApi().join("${share.id}"); }
+export function read(): void { request = new SharesApi().readBase64("${share.id}", "/binary"); }
+export function write(): void { request = new SharesApi().writeBase64("${share.id}", "/binary", "AP+A"); }
+launch(new Page());`);
+  const element = output();
+  const system = await mountSystem(element, { apps: [homeApp, ...["sender", "receiver"].map(id => ({ source, prebuilt: { ...program, manifest: { ...program.manifest, id } } }))], store, createWorker, stackSize: 10 });
+  try {
+    await system.open(senderId); const sender = element.active;
+    await sender.process.app.call("write");
+    await waitFor(() => sender.text.has("result"));
+    assertEquals(JSON.parse(sender.text.get("result")!).ok, true);
+    assertEquals(await store.shares.shareFiles(share.id, senderId).read("/binary"), new Uint8Array([0, 255, 128]));
+    await sender.process.app.call("invite");
+    await waitForAsync(async () => (await store.pigeon.read(receiverId)).length === 1);
+    assertEquals((await store.pigeon.read(receiverId))[0]!.from, senderId);
+    assertEquals((await store.shares.getShare(share.id))!.members[receiverId]!.state, "invited");
+    await system.open(receiverId); const receiver = element.active;
+    const invoke = async (name: string) => { receiver.text.delete("result"); await receiver.process.app.call(name); await waitFor(() => receiver.text.has("result")); return JSON.parse(receiver.text.get("result")!); };
+    assertEquals((await invoke("read")).ok, false);
+    assertEquals((await invoke("join")).ok, true);
+    assertEquals(await invoke("read"), { ok: true, value: "AP+A" });
+    assertEquals((await invoke("write")).ok, false);
+    await store.shares.leaveShare(share.id, receiverId);
+    assertEquals((await invoke("read")).ok, false);
+    await store.shares.leaveShare(share.id, senderId);
+    assertEquals((await invoke("join")).ok, false);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});

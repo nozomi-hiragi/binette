@@ -34,6 +34,8 @@ override onPigeon(): void { /* 受信欄が増えた */ }
 
 ## 実装の形
 
+- アプリ宛ての手紙には共有 ID と `read`・`write` 権限を添付できます。配送時に招待し、受け手は別途承認します（[アプリ間のファイル共有](file-sharing.md)）。ユーザー宛ての通知には添付できません。
+
 - `send(to, kind, title, body, urgent = false, actions = "[]")` は同期的な受付結果を bool で返し、保存完了は待ちません。保存に失敗した場合は OS がエラーを表示します。差出人は呼び出し元の完全なアプリ ID です
 - `actions` は JSON 配列の文字列です。各要素は `{ "id": "reply", "label": "返信", "input": true, "placeholder": "入力" }` の形で、`input` と `placeholder` は省略できます。`input` が true なら入力欄、それ以外はボタンです
 - 通知の操作結果は `from: "user"`、`to: 元の差出人`、`kind: 操作の id`、`title: 元の題`、`body: 入力値`（ボタンは空文字列）の手紙として届きます

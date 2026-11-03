@@ -592,3 +592,29 @@ export function readCount(): void { text(5, count().toString()); }
     assertEquals(text.at(-1), "0");
   } finally { app.stop(); }
 });
+
+Deno.test("共有の非同期結果は完了通知から一度だけ読め、失敗も JSON で届く", async () => {
+  const code = `
+import { SharesApi } from "./replique";
+@external("binette", "dom.text") declare function text(handle: i32, value: string): void;
+let id = 0;
+export function request(): void { id = new SharesApi().create("資料"); }
+export function __bina_share(): void { const result = new SharesApi().result(id); if (result !== null) text(1, result); }
+export function consumed(): void { text(2, new SharesApi().result(id) === null ? "済" : "未"); }
+`;
+  const results: DomOp[] = [];
+  let failure = false;
+  const app = await launchApp(await build(code, true), { createWorker, shares: true, onDom: ops => results.push(...ops), onShare(operation, args) {
+    assertEquals(operation, "create"); assertEquals(args, ["資料"]);
+    if (failure) throw new Error("もう無い");
+    return Promise.resolve({ id: "共有" });
+  } });
+  const wait = async () => { const limit = performance.now() + 5000; while (!results.length && performance.now() < limit) await new Promise(resolve => setTimeout(resolve, 5)); assert(results.length > 0); };
+  try {
+    await app.call("request"); await wait();
+    assertEquals(results.splice(0), [{ op: "text", handle: 1, value: JSON.stringify({ ok: true, value: { id: "共有" } }) }]);
+    await app.call("consumed"); assertEquals(results.splice(0), [{ op: "text", handle: 2, value: "済" }]);
+    failure = true; await app.call("request"); await wait();
+    assertEquals(results, [{ op: "text", handle: 1, value: JSON.stringify({ ok: false, error: "もう無い" }) }]);
+  } finally { app.stop(); }
+});

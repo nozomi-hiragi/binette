@@ -10,6 +10,7 @@ export interface PigeonLetter {
   title: string;
   body: string;
   urgent?: boolean;
+  shares?: { id: string; access: "read" | "write" }[];
   actions?: { id: string; label: string; input?: boolean; placeholder?: string }[];
 }
 export interface PigeonSnapshot { letters: PigeonLetter[]; notify: boolean }
@@ -51,7 +52,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -102,6 +103,8 @@ export interface LaunchOptions {
   onCadreSettings?: () => void;
   onCadreNotify?: (text: string) => void;
   onCadreInstall?: () => void;
+  shares?: boolean;
+  onShare?: (operation: string, args: string[]) => Promise<unknown>;
   pigeon?: PigeonSnapshot;
   onPigeonSend?: (letter: PigeonSend) => void;
   onPigeonDone?: (id: number) => void;
@@ -199,7 +202,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string; operation?: string; args?: string[] };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -257,6 +260,11 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.checkUpdate": options.onCheckUpdate?.(); break;
         case "os.update": options.onUpdate?.(); break;
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
+        case "shares.request": {
+          const reply = (result: unknown) => { if (!stopped) worker.postMessage({ type: "shares.result", id: data.id, result: JSON.stringify(result) }); };
+          Promise.resolve().then(() => { if (!options.shares || !options.onShare) throw new Error("共有 API は許可されていません。"); return options.onShare(data.operation!, data.args!); }).then(value => reply({ ok: true, value: value ?? null }), error => reply({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+          break;
+        }
         case "pigeon.send": options.onPigeonSend?.(data.letter!); break;
         case "pigeon.done": options.onPigeonDone?.(data.i!); break;
         case "os.notificationMuted": options.onNotificationMuted?.(data.i!, data.muted!); break;
@@ -294,7 +302,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();
