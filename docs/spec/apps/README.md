@@ -31,7 +31,7 @@
 | `apps/cadre` の `sub.home`（`cadre.home`） | ホーム | `roles: ["home"]`。ほかのアプリを並べて開く | [home.md](home.md) |
 | `apps/cadre` の `sub.settings`（`cadre.settings`） | 設定 | `roles: ["settings"]`。ホームの選択、更新、デバッグ値、履歴 | [settings.md](settings.md) |
 
-通常の同梱アプリとしてデザイナーを `bundled/designer/` に置く構成です。ルートの Deno workspace と `deno task check` の入口にも含めます。通常の同梱アプリなので、システムアプリの権限は持ちません。
+通常の同梱アプリとしてデザイナーを `bundled/designer/` に置く構成です。[Filer](filer.md) は `bundled/filer/` に置くファイル管理アプリです。デザイナーはルートの Deno workspace と `deno task check` の入口にも含めます。通常の同梱アプリなので、システムアプリの権限は持ちません。
 
 ## 未決のこと
 

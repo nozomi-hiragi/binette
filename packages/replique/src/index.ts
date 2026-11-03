@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
 /** アプリが Régie を呼ぶためのライブラリ（AssemblyScript）。 */
 import { View, UiCallback } from "jsr:@binette/decor/as";
-export { View, column, row, text, button, buttonOf, input, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
+export { View, column, row, text, button, buttonOf, input, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
   spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/decor/as";
 // @ts-ignore: decorator
 @external("binette", "dom.byId")

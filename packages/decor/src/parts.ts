@@ -176,6 +176,8 @@ export function column(children: Array<View>): View { const v = new View("column
 export function grid(children: Array<View>): View { const v = new View("grid"); v.children = children; return v; }
 /** 文字入力を作る。 */
 export function input(value: string, onText: (value: string) => void): View { const v = new View("input"); v.value = value; v.textCallback = onText; return v; }
+/** Select multiple files; the callback receives a JSON array of {name, data} with base64 data. */
+export function filePick(label: string, handler: (value: string) => void): View { const v = new View("filePick"); v.value = label; v.textCallback = handler; return v; }
 /** アプリのアイコンを描く。 */
 export function appIcon(index: number): View { const v = new View("appIcon"); v.appValue = index; return v; }
 /** アプリの表示領域。カーネルがホームやほかのアプリをこの中に出す */

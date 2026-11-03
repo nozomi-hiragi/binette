@@ -207,3 +207,37 @@ launch(new Demo());`,
     dom.clear(); dom.stop(); process.stop(); await window.happyDOM.close();
   }
 });
+
+Deno.test("AS の filePick は選択されたファイルの文字列を Worker 経由で受け取る", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, filePick, text } from "jsr:@binette/replique/ui";
+let result = "";
+function selected(value: string): void { result = value; }
+class Demo extends App { build(): View { return column([filePick("取り込む", selected), text(result)]); } }
+launch(new Demo());`;
+  const files: Record<string, string> = { "app.json": JSON.stringify({ id: "filepick", name: "File pick", entry: { as: "main.ts" } }), "main.ts": code };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const process = await startProcess(built.wasm, { createWorker: realWorker });
+  const dom = createUiDom(host, process);
+  try {
+    let handle = -1;
+    process.attach(ops => { for (const op of ops) if (op.op === "ui-create" && op.kind === "filePick") handle = op.handle; dom.apply(ops); });
+    await process.begin();
+    assert(handle > 0);
+    const button = host.querySelector(".bina-ui-filePick") as HTMLButtonElement;
+    const field = button.querySelector('input[type="file"]') as HTMLInputElement;
+    assert(field.multiple);
+    let opened = false;
+    field.addEventListener("click", () => { opened = true; });
+    button.click();
+    assert(opened);
+    const selection = new window.DataTransfer();
+    selection.items.add(new window.File(["a"], "a.txt", { type: "text/plain" }));
+    field.files = selection.files as unknown as FileList;
+    field.dispatchEvent(new window.Event("change") as unknown as Event);
+    await waitFor(() => host.querySelector(".bina-ui-text")?.textContent === '[{"name":"a.txt","data":"YQ=="}]');
+    assert(button.querySelector('input[type="file"]') === field);
+  } finally { dom.clear(); dom.stop(); process.stop(); await window.happyDOM.close(); }
+});

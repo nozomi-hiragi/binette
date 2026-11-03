@@ -267,7 +267,7 @@ const kindPadding: Record<string, string> = { listTile: `${length(-2)} ${length(
 const kindRoles: Record<string, string> = { menuItem: "menuitem", segmented: "radiogroup", tabs: "tablist", progress: "progressbar", spinner: "progressbar" };
 const nativeKinds = ["checkbox", "radio", "slider", "picker", "image", "separator"];
 /** 文字を自分の子として描く部品 */
-const textKinds = ["text", "button", "chip", "badge", "menuItem"];
+const textKinds = ["text", "button", "filePick", "chip", "badge", "menuItem"];
 // 値が変わるときだけ書き換え、描き直しで DOM を無駄に触らない
 function setClass(node: HTMLElement, name: string, on: boolean): void {
   if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
@@ -399,11 +399,12 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           element.appendChild(uiStyle);
         }
         const kind: string = op.kind;
-        const tags: Record<string, string> = { appIcon: "img", image: "img", button: "button", text: "span", chip: "span", badge: "span",
+        const tags: Record<string, string> = { filePick: "button", appIcon: "img", image: "img", button: "button", text: "span", chip: "span", badge: "span",
           checkbox: "input", radio: "input", slider: "input", picker: "select", separator: "hr", menuItem: "button" };
         const tag = kind === "input" ? (op.multiline ? "textarea" : "input") : Object.hasOwn(tags, kind) ? tags[kind]! : "div";
         const node = element.ownerDocument.createElement(tag);
         node.className = `bina-ui-${kind}`;
+        if (kind === "filePick") node.classList.add("bina-ui-button");
         if (tag === "button") node.setAttribute("type", "button");
         const entry: Entry = { node, kind, clickable: false, enabled: true, textNode: null, inputVersion: 0, composing: false, theme: [], lastText: null, pending: null, options: null, index: -1, remove: () => {}, tip: undefined, items: [], owner: undefined };
         byNode.set(node, entry);
@@ -415,7 +416,29 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         };
         /** 値を返す部品の操作を送る。版を進め、古い描き直しで DOM の値を戻さないようにする */
         const send = (value: number) => { process.dispatchUiValue?.(op.handle, value, ++entry.inputVersion); };
-        if (tag === "button") listen("click", () => { if (entry.clickable) process.dispatchUi(op.handle); });
+        if (tag === "button" && kind !== "filePick") listen("click", () => { if (entry.clickable) process.dispatchUi(op.handle); });
+        if (kind === "filePick") {
+          const field = element.ownerDocument.createElement("input");
+          field.type = "file";
+          field.multiple = true;
+          field.hidden = true;
+          node.appendChild(field);
+          field.addEventListener("click", event => event.stopPropagation());
+          listen("click", () => { if (entry.clickable && entry.enabled) field.click(); });
+          field.addEventListener("change", () => {
+            const files = Array.from(field.files ?? []);
+            field.value = "";
+            if (!files.length) return;
+            void Promise.all(files.map(file => new Promise<{ name: string; data: string }>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve({ name: file.name, data: String(reader.result).split(",", 2)[1] ?? "" });
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(file);
+            }))).then(values => {
+              if (uiNodes.get(op.handle) === entry && entry.clickable && entry.enabled) process.dispatchUiText(op.handle, JSON.stringify(values), ++entry.inputVersion);
+            }).catch(() => {});
+          });
+        }
         if (tag === "img") node.setAttribute("alt", "");
         if (kind === "checkbox" || kind === "radio" || kind === "slider") {
           const field = node as HTMLInputElement;

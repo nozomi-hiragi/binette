@@ -16,7 +16,7 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 
 ## 宣言的 UI（案）
 
-`App.build(): View | null` と `jsr:@binette/replique/ui` の部品で画面を作れます。詳しくは [宣言的 UI](ui.md) を参照してください。既定の `build()` は `null` です。
+`App.build(): View | null` と `jsr:@binette/replique/ui` の部品で画面を作れます。`filePick(label, handler)` は端末のファイル選択画面を開き、選択した名前と Base64 の内容を JSON 文字列で届けます。詳しくは [宣言的 UI](ui.md) を参照してください。既定の `build()` は `null` です。
 
 ## 使い方（実装済み）
 
