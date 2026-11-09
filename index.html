@@ -64,6 +64,8 @@
       --bina-shell-focus: var(--color-primary);
     }
     #app > [role="alert"] { padding: 16px; color: #b3261e; }
+    /* 起動の前だけ見える。Scene と復旧画面は #app の中身を置き換える */
+    .boot-loading { margin: auto; padding: 16px; color: color-mix(in srgb, var(--color-base-content) 62%, var(--color-base-100)); text-align: center; }
     .bina-shell-content { padding: 16px; }
     /* fill() を付けた Décor のアプリは、アプリの領域を端まで使う */
     .bina-shell-content:has(> .bina-ui-fill) { padding: 0; }
@@ -75,7 +77,7 @@
   </style>
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app"><p class="boot-loading" role="status">読み込み中…<br><small>初回はシステムのファイルを取得するため、時間がかかります。</small></p></div>
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>
