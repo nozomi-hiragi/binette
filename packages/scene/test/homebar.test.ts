@@ -9,6 +9,9 @@ const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("pa
 const apps = await Promise.all(["cadre"].map(async name => {
   const read = (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root));
   const built = await buildApp(read, { libraries });
+  // ドックの試験では、ホームのタイルを設定とアイコンなしの 2 つにする
+  const sub = built.manifest.sub ? { ...built.manifest.sub, apps: { ...built.manifest.sub.apps!, listed: false } } : undefined;
+  built.manifest = { ...built.manifest, sub };
   return { source: "binette:system", prebuilt: { ...built, ...(built.manifest.sub ? { subIcons: Object.fromEntries(await Promise.all(Object.entries(built.manifest.sub).map(async ([id, sub]) => [id, sub.icon ? await read(sub.icon) : ""]))) } : {}), icon: built.manifest.icon ? await read(built.manifest.icon) : undefined } };
 }));
 const plain = await buildApp(path => Promise.resolve(path === "app.json"

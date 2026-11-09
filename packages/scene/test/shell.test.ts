@@ -123,7 +123,7 @@ Deno.test("実際の Cadre は同じ入口からホームと設定を別の Work
   try {
     await waitFor(() => element.querySelector("[data-bina-key=home-grid]") !== null);
     const tiles = element.querySelectorAll<HTMLButtonElement>("[data-bina-key^=home-tile-]");
-    assertEquals([...tiles].map(tile => tile.textContent), ["設定"]);
+    assertEquals([...tiles].map(tile => tile.textContent), ["設定", "アプリ"]);
     tiles[0]!.click();
     await waitFor(() => element.querySelector("[data-bina-key=debug]") !== null);
     assertEquals(systemView(element).instances.map(instance => instance.key).sort(), ["cadre.home", "cadre.settings"]);

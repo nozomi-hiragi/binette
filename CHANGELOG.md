@@ -2,6 +2,10 @@
 
 ## v0.2.0（未リリース）
 
+- アプリ管理の画面を足す。Cadre のサブアプリ `cadre.apps`（「アプリ」、役割 `apps-manager`）に、探す・入っている・リストの 3 つのタブと詳細を持たせる。入れる・更新・適用・中止・削除（本体だけ・データごと）、更新の確認、自動更新のトグル（アプリごと・リストごと・全体）、提供リストの追加と削除を扱う。カタログのアイコンは、画面に URL の画像を描けないため、今は名前の頭文字で代える
+- Scene の枠が、インストールと権限が増える更新の前に権限を確かめるダイアログを出す（`SystemUi.confirmInstall`）。アプリ名・出どころ・権限と理由を出し、更新では増える権限を先に強調する。確認は 1 つずつ出し、Esc はやめるとみなす
+- Cadre は、起動し直したときに開いているアプリがあれば、ホームを開かずに前面をそのままにする。アプリを入れると Cadre が起動し直すため、アプリ管理からホームに戻されていた
+- アプリ管理の写しに、追加の途中と追加に失敗した提供リストも出す（状態 `loading`・`error: 理由`）。削除で消える
 - 辞書のキー `manager`（Réplique の `AppManagerApi`）を足す。役割 `apps-manager` の、入手元が `binette:system` のアプリにだけ届く（設定と同じく割り当ては固定）。提供リストの一覧・追加・削除、カタログと入っているアプリ（本体なし・データありを含む）の一覧、状態・進捗、詳細（権限と理由、増える権限、役割、`integrity` の有無）、インストール・削除・中止・適用、更新の確認、自動更新の設定を扱う。状態が変わると OS が写しを送り直し、アプリの `build()` をやり直させる。`SystemUi` に任意の `confirmInstall` を足す（権限の確認）
 
 - Régie にアプリ管理の TS API を足す（[docs/spec/app-manager.md](docs/spec/app-manager.md)）。`system.lists` に `uninstall(key, withData)`・`details`・`check(url?)`・`updates`・`apply`・`cancel`・`state`・`autoUpdate`・`setAutoUpdate`・`autoUpdates`・`applying`・`exited`・`subscribe`・`cached` を足す。取得とビルドは並列（既定 2 本）、保存は 1 つずつ。自動更新はアプリごとの既定がオン、リストごと・全体のオンで上書きする。権限が増える更新と動いているアプリの更新は自動では入れず、準備だけをして、終了時または `apply` で入れる。`ProviderListsOptions` に `confirm`（権限の確認）・`running`・`concurrency` を足す。更新の適用中のアプリは起動しない

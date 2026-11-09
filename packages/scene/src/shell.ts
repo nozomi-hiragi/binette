@@ -1,6 +1,7 @@
 import { startSystem, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "@binette/regie";
 import { mountApp } from "./mount.ts";
 import { mountLiveMode } from "./live.ts";
+import { mountInstallConfirm } from "./confirm.ts";
 
 /** 表示の設定 */
 export interface ShellUiOptions {
@@ -37,6 +38,10 @@ const css = `
 :where(.bina-shell-apps) { display: flex; flex-direction: column; align-items: flex-start; flex: 1; box-sizing: border-box; min-height: 0; width: 100%; height: 100%; overflow: auto; gap: var(--bina-shell-gap, 8px); padding: var(--bina-shell-padding, 12px); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); }
 :where(.bina-shell-apps-link) { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; text-align: start; text-decoration: underline; overflow-wrap: anywhere; }
 :where(.bina-shell-apps-link):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
+:where(.bina-shell-confirm-source) { margin-top: 0; color: var(--bina-shell-muted, #5b6472); }
+:where(.bina-shell-confirm-permissions) { padding-inline-start: 1.25em; }
+:where(.bina-shell-confirm-reason) { color: var(--bina-shell-muted, #5b6472); }
+:where(.bina-shell-confirm-actions) { display: flex; justify-content: flex-end; gap: var(--bina-shell-gap, 8px); }
 :where(.bina-shell-status) { color: var(--bina-shell-error, #b3261e); margin: var(--bina-shell-padding, 12px); }
 `;
 
@@ -79,6 +84,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   const live = mountLiveMode(root, options.installed, () => {
     system?.setInstallState?.(live.installed, live.busy);
   });
+  const confirm = mountInstallConfirm(root);
   root.append(style, cadreHost, fallback, appsHost, status);
   element.replaceChildren(root);
 
@@ -106,6 +112,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   const ui: ShellUi = {
     bind(value) { if (!stopped) { system = value; system.setInstallState?.(live.installed, live.busy); setPage(); } },
     install() { void live.install(); },
+    confirmInstall: request => confirm.confirm(request),
     present(instance, process) {
       if (instance.cadre) {
         cadreMounted?.stop();
@@ -189,6 +196,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       document.removeEventListener("freeze", freeze);
       document.removeEventListener("resume", resume);
       live.stop();
+      confirm.stop();
       root.remove();
     },
   };
