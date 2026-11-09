@@ -115,7 +115,7 @@ Cadre のサブアプリとして `apps/cadre/app.json` の `sub` に宣言し�
 
 - ブランチごとに GitHub Pages に置く（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/apps/`）。そのブランチの `system/boot.json` の `lists` に書く
 - ページ（HTML と `apps.json`）だけを、Docs の workflow で生成する。アプリのコードは写さない
-- `source` は、更新しても変わらないアプリの置き場所（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/v0.2.0/bundled/designer/`）。中身の固定は `integrity`、更新の判定は `version` で行う
+- `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/bundled/designer/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
 - `version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`。`integrity` の `"/"` は CI が Régie の CLI で計算する
 - 載せるのは designer とドキュメントアプリ（`docs`）。Filer は役割 `files` の既定なので同梱のまま
 
