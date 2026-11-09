@@ -1550,6 +1550,11 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
+      "bundled/docs": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
       "bundled/filer": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
