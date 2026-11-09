@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { createProviderLists, createMemoryAppStore, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
+import { createProviderLists, createMemoryAppStore, createScheduler, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
 import { State } from "@binette/core";
 import { createShellUi } from "../src/index.ts";
@@ -652,11 +652,13 @@ Deno.test("createShellUi は bind 前のボタンを無視し、bind で現在�
   Object.defineProperty(window.document, "visibilityState", { configurable: true, value: "hidden" });
   const pages: { visible: boolean; frozen: boolean }[] = [];
   let opened = 0;
-  const lists = await createProviderLists({ store: createMemoryAppStore() });
+  const store = createMemoryAppStore();
+  const lists = await createProviderLists({ store });
+  const scheduler = await createScheduler({ store: store.system });
   const system: BinetteSystem = {
-    lists,
+    lists, scheduler,
     openHome() { opened++; return Promise.resolve(); }, open: () => Promise.resolve(), close: () => Promise.resolve(),
-    setPage(page) { pages.push(page); }, stop() { lists.stop(); },
+    setPage(page) { pages.push(page); }, stop() { lists.stop(); scheduler.stop(); },
   };
   const ui = createShellUi(element, { installed: true });
   try {

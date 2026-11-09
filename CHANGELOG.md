@@ -2,6 +2,10 @@
 
 ## v0.2.0（未リリース）
 
+- 破壊的変更: 独自の `SystemStore` 実装に `getSchedules`・`putSchedules`（予定の保存先）が必要になる。`BinetteSystem` に `scheduler` が加わる
+- Régie にスケジューラ（`createScheduler`、[docs/spec/scheduler.md](docs/spec/scheduler.md)）を追加する。予定の形（`every`・`at`・`daily`・`weekly`・`monthly`）を検査し、前回の実行のあとで最初に来る時刻を過ぎた予定を 1 つずつ実行する。閉じていた間に何回分過ぎても 1 回だけ実行し、`every` の下限は OS 60 秒・アプリ 900 秒。予定は `/data/system/schedules.json` に保存し、保存した形は登録の初期値より優先する
+- OS の更新確認（`os/update`、30 分）・カタログの更新確認（`os/catalogs`、30 分）・ストレージの片付け（`os/gc`、1 日）を `setInterval` からスケジューラの予定に移す。`createProviderLists` は自分のタイマーを持たなくなる。起動のたびの確認はやめ、前回＋間隔を過ぎていたときだけ起動時に実行する。初めて登録したときは間隔が過ぎるまで実行しない
+
 - 仕様: スケジューラ（定期実行）を追加する（[docs/spec/scheduler.md](docs/spec/scheduler.md)、未実装）。OS の更新確認・カタログの更新確認・ストレージの片付けとアプリの予定を Régie にまとめ、設定アプリで一覧して変える。アプリは `schedule` 権限で自分の予定を登録し、画面なしの起動で `onSchedule(slot, api)` を受ける
 
 - 仕様: アプリ管理（[docs/spec/app-manager.md](docs/spec/app-manager.md)）を追加する（未実装）。役割 `apps-manager` と辞書のキー `manager`、提供リストの任意の表示用の欄 `name`・`icon`・`description`、自動更新のトグル、権限の確認、本体だけの削除、Cadre のサブアプリ `cadre.apps`、Binette の既定の提供リストを決める
