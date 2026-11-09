@@ -120,6 +120,8 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 | `shares`（共有とファイル操作） | すべてのアプリ。共有ごとの参加状態と権限を各操作で確認 | — |
 | `pigeon`（手紙と受信欄） | すべてのアプリ。ユーザー宛ての送信には `notify` 権限が必要 | — |
 | `storage`（アプリごとのデータ） | すべてのアプリ。アプリのデータの読み込みに失敗したときと、ID が `system` のときだけ載せない | NotGranted |
+| `scheduler`（すべての予定の一覧と変更） | 役割 `settings` に割り当てられたアプリ（入手元が `binette:system`） | NotAssigned（未実装、[scheduler.md](../scheduler.md)） |
+| `schedule`（自分の予定） | `app.json` の `permissions` に `schedule` を書いたアプリ | NotGranted（未実装） |
 | `fs`（ファイルの木） | 誰にも届かない。`app.json` の `permissions` に書くアプリに、ユーザーの許可を得て渡す流れは未決 | NotGranted |
 
 - `os` には、設定・役割の割り当て・役割ごとの候補・新しい順の履歴・更新があるかを写して渡す。履歴の写しは、設定アプリ自身の起動記録を足す直前に作る

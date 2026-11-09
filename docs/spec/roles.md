@@ -127,6 +127,8 @@ override build(): View {
 | `pigeon` | 手紙の送受信と通知（`PigeonApi`） | すべてのアプリ | 実装済み。ユーザーへの送信には `notify` 権限が必要 |
 | `shares` | 共有の作成・承認・退出とファイル操作（`SharesApi`） | すべてのアプリ | 実装済み。共有ごとに参加状態とアクセス権を確認 |
 | `storage` | アプリ自身の領域のデータ（`/data/…`。`StorageApi`） | すべてのアプリ | 実装済み（読む・書く・一覧・削除） |
+| `scheduler` | すべての予定の一覧と変更（`SchedulerApi`、[scheduler.md](scheduler.md)） | 設定アプリ | 未実装 |
+| `schedule` | 自分の予定の登録・変更（`ScheduleApi`） | `permissions` に `schedule` を書いたアプリ | 未実装 |
 
 ## 未決のこと
 
