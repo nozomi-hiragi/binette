@@ -1,6 +1,6 @@
 import { createUiDiffer } from "@binette/decor";
 import type { DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -18,6 +18,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let instance: WebAssembly.Instance | undefined;
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
+  let manager: ManagerSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
   let shares = false;
@@ -70,7 +71,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   const notificationAt = (i: number) => { const letter = cadreState().notifications?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("通知の番号が範囲外です。"); return letter; };
   const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
   const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
-  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
+  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -97,8 +98,84 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     return new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, ptr, length));
   };
 
+  const managerState = () => {
+    if (!manager) throw new Error("この呼び出しは manager が届いたアプリだけが使えます。");
+    return manager;
+  };
+  const at = <T>(items: readonly T[], i: number, what: string): T => {
+    if (!Number.isInteger(i) || i < 0 || i >= items.length) throw new Error(`${what}の番号が範囲外です。`);
+    return items[i]!;
+  };
+  const managerApp = (key: string): ManagerApp | undefined => managerState().apps.find(app => app.key === key);
+  const catalog = (url: string) => managerState().apps.filter(app => app.listed && (url === "" || app.list === url));
+  const installedApps = () => managerState().apps.filter(app => app.present || app.removed);
+  const updateKeys = (url: string) => managerState().updates.filter(key => url === "" || managerApp(key)?.list === url);
+  const details = (key: string): ManagerDetails | undefined => managerState().details[key];
+  const managerText = (query: string, key: string, i: number): string => {
+    const state = managerState();
+    const app = managerApp(key);
+    switch (query) {
+      case "repoUrl": return at(state.repos, i, "提供リスト").url;
+      case "repoName": return at(state.repos, i, "提供リスト").name;
+      case "repoHost": return at(state.repos, i, "提供リスト").host;
+      case "repoState": return at(state.repos, i, "提供リスト").state;
+      case "appId": return at(catalog(key), i, "アプリ").key;
+      case "installedId": return at(installedApps(), i, "アプリ").key;
+      case "updateId": return at(updateKeys(key), i, "更新");
+      case "list": return app?.list ?? "";
+      case "name": return app?.name ?? "";
+      case "icon": return app?.icon ?? "";
+      case "description": return app?.description ?? "";
+      case "version": return app?.version ?? "";
+      case "installedVersion": return app?.installed ?? "";
+      case "state": return app?.state ?? "none";
+      case "error": return app?.error ?? "";
+      case "detailError": return details(key)?.error ?? "";
+      case "detailListName": return details(key)?.listName ?? "";
+      case "permissionName": return at(details(key)?.permissions ?? [], i, "権限")[0];
+      case "permissionReason": return at(details(key)?.permissions ?? [], i, "権限")[1];
+      case "addedName": return at(details(key)?.added ?? [], i, "権限");
+      case "roleName": return at(details(key)?.roles ?? [], i, "役割");
+    }
+    throw new Error(`知らない manager の問い合わせです: ${query}`);
+  };
+  const managerNumber = (query: string, key: string, i: number): number => {
+    const state = managerState();
+    const app = managerApp(key);
+    switch (query) {
+      case "repoCount": return state.repos.length;
+      case "repoRemovable": return at(state.repos, i, "提供リスト").removable ? 1 : 0;
+      case "appCount": return catalog(key).length;
+      case "installedCount": return installedApps().length;
+      case "updateCount": return updateKeys(key).length;
+      case "removed": return app?.removed ? 1 : 0;
+      case "removable": return app?.removable ? 1 : 0;
+      case "files": return app?.files ?? 0;
+      case "bytes": return app?.bytes ?? 0;
+      case "auto": return app?.auto ? 1 : 0;
+      case "autoAll": return state.auto.all ? 1 : 0;
+      case "autoList": return state.auto.lists[key] ? 1 : 0;
+      case "autoApp": return (state.auto.apps[key] ?? true) ? 1 : 0;
+      case "detailReady": { const d = details(key); return d && !d.loading ? 1 : 0; }
+      case "permissionCount": return details(key)?.permissions.length ?? 0;
+      case "addedCount": return details(key)?.added.length ?? 0;
+      case "roleCount": return details(key)?.roles.length ?? 0;
+      case "integrity": return details(key)?.integrity ? 1 : 0;
+    }
+    throw new Error(`知らない manager の問い合わせです: ${query}`);
+  };
+  const managerActions = ["addRepo", "removeRepo", "checkUpdates", "install", "uninstall", "cancel", "apply", "details", "setAutoUpdate"];
+
   const imports = {
     binette: {
+      "manager.text": (query: number, key: number, i: number) => writeString(managerText(readString(query), readString(key), i)),
+      "manager.number": (query: number, key: number, i: number) => managerNumber(readString(query), readString(key), i),
+      "manager.do": (action: number, a: number, b: number, flag: number) => {
+        managerState();
+        const name = readString(action);
+        if (!managerActions.includes(name)) throw new Error(`知らない manager の操作です: ${name}`);
+        scope.postMessage({ type: "manager.do", action: name, managerArgs: [readString(a), readString(b), !!flag] });
+      },
       "shares.request": (operation: number, args: number) => {
         if (!shares) throw new Error("共有 API は許可されていません。");
         const values: unknown = JSON.parse(readString(args));
@@ -316,7 +393,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
     if (data.type === "shares.result") {
       shareResults.set(data.id!, data.result!);
       const callback = instance?.exports.__bina_share;
@@ -327,6 +404,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       try {
         apps = data.apps;
         os = data.os;
+        manager = data.manager;
         storage = data.storage;
         cadre = data.cadre;
         pigeon = data.pigeon;
@@ -349,8 +427,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         ops = [];
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
       }
-    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync") {
-      if (data.type === "pigeon.sync") { pigeon = data.pigeon; if (pigeon) pigeon.letters = pigeon.letters.filter(letter => !acknowledgedLetters.has(letter.id)); }
+    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync") {
+      if (data.type === "manager.sync") manager = data.manager;
+      else if (data.type === "pigeon.sync") { pigeon = data.pigeon; if (pigeon) pigeon.letters = pigeon.letters.filter(letter => !acknowledgedLetters.has(letter.id)); }
       else if (data.type === "os.sync" && data.os) os = { ...data.os, launches: os?.launches ?? data.os.launches };
       else cadre = data.cadre;
       const syncName = data.type === "pigeon.sync" ? "__bina_pigeon" : "__bina_cadre_sync";

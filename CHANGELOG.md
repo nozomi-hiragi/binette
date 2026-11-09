@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- 辞書のキー `manager`（Réplique の `AppManagerApi`）を足す。役割 `apps-manager` の、入手元が `binette:system` のアプリにだけ届く（設定と同じく割り当ては固定）。提供リストの一覧・追加・削除、カタログと入っているアプリ（本体なし・データありを含む）の一覧、状態・進捗、詳細（権限と理由、増える権限、役割、`integrity` の有無）、インストール・削除・中止・適用、更新の確認、自動更新の設定を扱う。状態が変わると OS が写しを送り直し、アプリの `build()` をやり直させる。`SystemUi` に任意の `confirmInstall` を足す（権限の確認）
+
 - Régie にアプリ管理の TS API を足す（[docs/spec/app-manager.md](docs/spec/app-manager.md)）。`system.lists` に `uninstall(key, withData)`・`details`・`check(url?)`・`updates`・`apply`・`cancel`・`state`・`autoUpdate`・`setAutoUpdate`・`autoUpdates`・`applying`・`exited`・`subscribe`・`cached` を足す。取得とビルドは並列（既定 2 本）、保存は 1 つずつ。自動更新はアプリごとの既定がオン、リストごと・全体のオンで上書きする。権限が増える更新と動いているアプリの更新は自動では入れず、準備だけをして、終了時または `apply` で入れる。`ProviderListsOptions` に `confirm`（権限の確認）・`running`・`concurrency` を足す。更新の適用中のアプリは起動しない
 - 破壊的変更: `AppStore` に `uninstall(key, withData)` と `listRemoved()` が必要になる。本体だけを消すとデータと「本体なし」の印（`/build/removed.json`）を残し、入れ直すと引き継ぐ。`SystemStore` に任意の `getAutoUpdate`・`putAutoUpdate` を足す
 - `@binette/core` の `parseAppList` が、提供リストの各アプリの任意の `name`・`icon`（JSON の URL を基準に解決）・`description` を読む
