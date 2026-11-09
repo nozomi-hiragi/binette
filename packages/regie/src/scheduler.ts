@@ -48,6 +48,10 @@ export interface Scheduler {
   /** 予定を登録する。保存した予定があれば、形・止めているか・前回はそちらを使う。返す関数で登録を外す（保存は残す） */
   register(job: ScheduleJob): () => void;
   list(): ScheduleInfo[];
+  /** 保存したすべての予定。登録していないものも含む */
+  saved(): (SavedSchedule & { id: string })[];
+  /** 登録を外し、保存も消す。無ければ何もしない */
+  remove(id: string): Promise<void>;
   update(id: string, change: { rule?: ScheduleRule; enabled?: boolean }): Promise<void>;
   /** 止めていても、今すぐ実行する。終わるまで待つ */
   runNow(id: string): Promise<void>;
@@ -257,6 +261,16 @@ export async function createScheduler(options: SchedulerOptions): Promise<Schedu
         const record = saved.get(id)!;
         return structuredClone({ id, ...record, next: nextOf(record), running: running.has(id) });
       });
+    },
+    saved() {
+      return [...saved].map(([id, record]) => structuredClone({ id, ...record }));
+    },
+    async remove(id) {
+      if (!saved.has(id) && !jobs.has(id)) return;
+      jobs.delete(id);
+      saved.delete(id);
+      await persist();
+      notify();
     },
     async update(id, change) {
       const record = saved.get(id);

@@ -279,6 +279,18 @@ namespace hostScheduler {
   export declare function act(action: string, id: string, value: string, flag: bool): void;
 }
 
+namespace hostSchedule {
+  // @ts-ignore: decorator
+  @external("binette", "schedule.text")
+  export declare function text(query: string, slot: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "schedule.number")
+  export declare function number(query: string, slot: i32): f64;
+  // @ts-ignore: decorator
+  @external("binette", "schedule.do")
+  export declare function act(action: string, slot: i32, rule: string, label: string): bool;
+}
+
 namespace hostStorage {
   // @ts-ignore: decorator
   @external("binette", "storage.has")
@@ -688,8 +700,35 @@ export class SchedulerApi {
 }
 
 /**
+ * `api.get<ScheduleApi>("schedule")`。自分の予定（定期実行）。app.json の permissions に `schedule` を書いたアプリにだけ届く。
+ * 予定は枠番号（0 から）で指す。今の枠は 0 だけで、枠の外の番号には何もせず false を返す。
+ * 予定の形は JSON の文字列（例 `{"every":1800}`、`{"daily":"07:30"}`）。`every` は 900 秒以上。
+ * 予定の時刻が来ると、OS が `App.onSchedule(slot, api)` を呼ぶ。
+ */
+export class ScheduleApi {
+  /** 枠の数 */
+  count(): i32 { return <i32>hostSchedule.number("count", 0); }
+  /** その枠が空いているときだけ登録する。すでにあるか、形が正しくなければ何もせず false。起動のたびに呼んでも、ユーザーが変えた値は消えない */
+  register(slot: i32, rule: string, label: string = ""): bool { return hostSchedule.act("register", slot, rule, label); }
+  /** その枠に予定があるときだけ形を変える */
+  update(slot: i32, rule: string): bool { return hostSchedule.act("update", slot, rule, ""); }
+  remove(slot: i32): bool { return hostSchedule.act("remove", slot, "", ""); }
+  /** 止めていても今すぐ実行する */
+  runNow(slot: i32): bool { return hostSchedule.act("runNow", slot, "", ""); }
+  exists(slot: i32): bool { return hostSchedule.number("exists", slot) != 0; }
+  /** 予定の形の JSON。無ければ空 */
+  rule(slot: i32): string { return hostSchedule.text("rule", slot); }
+  label(slot: i32): string { return hostSchedule.text("label", slot); }
+  enabled(slot: i32): bool { return hostSchedule.number("enabled", slot) != 0; }
+  /** 前回の実行（Unix epoch ミリ秒）。まだなら 0 */
+  lastTime(slot: i32): f64 { return hostSchedule.number("lastTime", slot); }
+  /** `ok` か `error: …`。まだなら空 */
+  lastResult(slot: i32): string { return hostSchedule.text("lastResult", slot); }
+}
+
+/**
  * API dictionary supplied by the OS to onCreate, accessed by key.
- * Returns a known class matching both key and type: AppsApi, OsApi, StorageApi, FsApi, CadreApi, PigeonApi, AppManagerApi, or SchedulerApi.
+ * Returns a known class matching both key and type: AppsApi, OsApi, StorageApi, FsApi, CadreApi, PigeonApi, AppManagerApi, SchedulerApi, or ScheduleApi.
  */
 export class Api {
   /** 起動したサブアプリの識別子。親として開いたときは空文字列 */
@@ -706,6 +745,7 @@ export class Api {
     if (key == "cadre" && idof<T>() == idof<CadreApi>()) return changetype<T>(new CadreApi());
     if (key == "manager" && idof<T>() == idof<AppManagerApi>()) return changetype<T>(new AppManagerApi());
     if (key == "scheduler" && idof<T>() == idof<SchedulerApi>()) return changetype<T>(new SchedulerApi());
+    if (key == "schedule" && idof<T>() == idof<ScheduleApi>()) return changetype<T>(new ScheduleApi());
     return null;
   }
   /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
@@ -900,6 +940,11 @@ export class App {
   /** Called when a letter arrives while the app is running. */
   onPigeon(): void {}
   onShare(): void {}
+  /**
+   * 自分の予定の時刻が来た。画面なしで起こされたとき（onCreate は呼ばれない）も、開いているインスタンスでも呼ばれる。
+   * 上限は 30 秒。返ったら結果は ok になる
+   */
+  onSchedule(_slot: i32, _api: Api): void {}
   onPause(): void {}
   onStop(): void {}
   onDestroy(_reason: DestroyReason): void {}
@@ -909,6 +954,8 @@ export class App {
 
 // グローバルで持ち、アプリを GC から守る
 let application: App | null = null;
+// onCreate を呼んだか。画面なしの起動では build を呼ばない
+let created = false;
 
 /** トップレベルで一回だけインスタンスを渡す */
 export function launch(app: App): void {
@@ -921,7 +968,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
   const app = application;
   if (app === null) return;
   switch (kind) {
-    case State.Create: app.onCreate(new Last(a, b != 0, lastPageImport(), new DestroyReason(lastKindImport(), lastCauseImport())), new Api()); break;
+    case State.Create: created = true; app.onCreate(new Last(a, b != 0, lastPageImport(), new DestroyReason(lastKindImport(), lastCauseImport())), new Api()); break;
     case State.Start: app.onStart(a); break;
     case State.Resume: app.onResume(); break;
     case State.Pause: app.onPause(); break;
@@ -934,6 +981,14 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
 /** OS が Cadre の状態（起動中の一覧や前面）の更新を知らせる */
 export function __bina_cadre_sync(): void {
   rebuild();
+}
+
+/** OS が予定の実行を知らせる。画面なしの起動では描かない */
+export function __bina_schedule(slot: i32): void {
+  const app = application;
+  if (app === null) return;
+  app.onSchedule(slot, new Api());
+  if (created) rebuild();
 }
 
 /** The OS reports new inbox letters. Initial letters can be read synchronously in onCreate. */

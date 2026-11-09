@@ -1,11 +1,12 @@
 import { createProviderLists, type InstallConfirmation, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
 import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
+import { launchApp } from "./launch.ts";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend, SchedulerSnapshot } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot } from "./launch.ts";
 import { type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -77,12 +78,14 @@ export interface BinetteSystem {
 /**
  * API の辞書のキーごとの届け先。roles は割り当てを受けた役割のどれか、permission は app.json の permissions に書く権限。
  * どちらも無いキーはすべてのアプリに届く。権限を許す流れは未決なので、permission のキーは今は誰にも届かない。
+ * declared のキーは、permissions に書いてあれば届く（インストールの確認で権限を見せている）。
  */
-const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
+const API_RULES: Record<string, { roles?: string[]; permission?: string; declared?: boolean }> = {
   apps: { roles: ["home", "cadre"] },
   os: { roles: ["settings"] },
   manager: { roles: ["apps-manager"] },
   scheduler: { roles: ["settings"] },
+  schedule: { permission: "schedule", declared: true },
   storage: {},
   fs: { permission: "fs" },
   cadre: { roles: ["cadre"] },
@@ -92,6 +95,10 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
 /** 設定アプリで割り当てを変えられる役割。設定アプリ自体は固定 */
 const ASSIGNABLE_ROLES = ["home", "cadre", "files"];
 const SYSTEM_SOURCE = "binette:system";
+
+/** アプリの予定の枠の数と、1 回の実行の上限（ミリ秒） */
+const SCHEDULE_SLOTS = 1;
+const SCHEDULE_TIMEOUT = 30_000;
 
 const HOME_RESTART_FIRST = 100;
 const HOME_RESTART_MAX = 1000;
@@ -155,6 +162,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   type Session = { controller: AbortController; starting?: Promise<Process>; mounted?: Process; view?: { remove(): void }; id: number; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
   let shown = 0;
   const sessions = new Set<Session>();
+  // 画面なしで起こして予定を実行しているアプリ。キーは完全なアプリ ID
+  const headless = new Map<string, { owner: string; controller: AbortController; done: Promise<void> }>();
   let active: Session | undefined;
   let hiding: Session | undefined;
   const report = (error: unknown) => {
@@ -172,6 +181,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     if (!running(owner)) lists.exited(owner);
   };
   const running = (key: string) => [...sessions].some(other => (other.installed.parentKey ?? other.installed.key) === key) ||
+    [...headless.values()].some(run => run.owner === key) ||
     (cadreSession !== undefined && (cadreSession.installed.parentKey ?? cadreSession.installed.key) === key);
   const cutCadre = () => {
     if (!cadreSession) return;
@@ -338,7 +348,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (rule.roles) {
         if (rule.roles.some(role => assigned[role]?.key === installed.key)) keys.add(key);
         else denied[key] = "NotAssigned";
-      } else if (rule.permission) denied[key] = "NotGranted";
+      } else if (rule.permission) {
+        if (rule.declared && Object.hasOwn(installed.manifest.permissions ?? {}, rule.permission)) keys.add(key);
+        else denied[key] = "NotGranted";
+      }
       else keys.add(key);
     }
     return { keys, denied };
@@ -408,7 +421,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const unregisterCatalogs = scheduler.register({ id: "os/catalogs", owner: "os", label: "カタログの更新確認", rule: { every: 30 * 60 }, run: () => lists.check() });
   const schedulerSnapshot = (): SchedulerSnapshot => ({
     schedules: scheduler.list().map(info => ({
-      id: info.id, owner: info.owner, label: info.label ?? "", rule: JSON.stringify(info.rule), enabled: info.enabled,
+      id: info.id, owner: info.owner, rule: JSON.stringify(info.rule), enabled: info.enabled,
+      label: info.label ?? (info.owner === "os" ? "" : `スケジュール${Number(info.id.slice(info.owner.length + 1)) + 1}`),
       ownerName: info.owner === "os" ? "OS" : available.get(info.owner)?.manifest.name ?? info.owner,
       next: info.next ?? 0, lastTime: info.last?.time ?? 0, lastResult: info.last?.result ?? "", running: info.running,
     })),
@@ -421,6 +435,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (stopped) return;
       const snapshot = schedulerSnapshot();
       for (const session of sessions) if (apiOf(session.installed).keys.has("scheduler")) session.mounted?.syncScheduler?.(snapshot);
+      for (const session of [...sessions, ...(cadreSession ? [cadreSession] : [])]) {
+        if (apiOf(session.installed).keys.has("schedule")) session.mounted?.syncSchedule?.(scheduleSnapshot(session.installed));
+      }
     }, 0);
   };
   const unsubscribeScheduler = scheduler.subscribe(syncScheduler);
@@ -435,6 +452,120 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       }
       case "setEnabled": done(scheduler.update(id, { enabled: on })); break;
       case "runNow": done(scheduler.runNow(id)); break;
+    }
+  };
+  // アプリの予定（schedule）。ID は完全なアプリ ID と枠番号
+  const scheduleId = (key: string, slot: number) => `${key}/${slot}`;
+  const scheduleSnapshot = (app: InstalledApp): ScheduleSnapshot => {
+    const infos = scheduler.list();
+    return {
+      slots: Array.from({ length: SCHEDULE_SLOTS }, (_, slot) => {
+        const info = infos.find(info => info.id === scheduleId(app.key, slot) && info.owner === app.key);
+        return info ? { rule: JSON.stringify(info.rule), label: info.label ?? "", enabled: info.enabled, lastTime: info.last?.time ?? 0, lastResult: info.last?.result ?? "" } : null;
+      }),
+    };
+  };
+  const registered = new Map<string, () => void>();
+  const registerApp = (key: string, slot: number, rule: unknown, label?: string) => {
+    const id = scheduleId(key, slot);
+    if (registered.has(id)) return;
+    registered.set(id, scheduler.register({ id, owner: key, ...(label ? { label } : {}), rule: rule as never, run: () => runAppSchedule(key, slot) }));
+  };
+  /** 保存した予定を、今のアプリに合わせる。消えたアプリの予定は消し、権限の無いアプリの予定は登録を外す（保存は残す） */
+  const syncAppSchedules = async () => {
+    for (const record of scheduler.saved()) {
+      if (record.owner === "os") continue;
+      const slot = Number(record.id.slice(record.owner.length + 1));
+      const app = available.get(record.owner);
+      if (!app) {
+        registered.get(record.id)?.();
+        registered.delete(record.id);
+        await scheduler.remove(record.id);
+      } else if (!apiOf(app).keys.has("schedule") || record.id !== scheduleId(app.key, slot) || !Number.isInteger(slot) || slot < 0 || slot >= SCHEDULE_SLOTS) {
+        registered.get(record.id)?.();
+        registered.delete(record.id);
+      } else {
+        try { registerApp(app.key, slot, record.rule, record.label); } catch (error) { report(error); }
+      }
+    }
+  };
+  const scheduleAction = (app: InstalledApp, action: string, slot: number, rule: string, label: string) => {
+    if (!apiOf(app).keys.has("schedule") || !Number.isInteger(slot) || slot < 0 || slot >= SCHEDULE_SLOTS) return;
+    const id = scheduleId(app.key, slot);
+    const exists = scheduler.saved().some(record => record.id === id);
+    const done = (work: Promise<unknown>) => { void work.catch(report).finally(syncScheduler); };
+    try {
+      switch (action) {
+        case "register": if (!exists) registerApp(app.key, slot, JSON.parse(rule), label); break;
+        case "update": if (exists) done(scheduler.update(id, { rule: JSON.parse(rule) })); break;
+        case "remove":
+          registered.get(id)?.();
+          registered.delete(id);
+          done(scheduler.remove(id));
+          break;
+        case "runNow": if (exists) done(scheduler.runNow(id)); break;
+      }
+    } catch (error) { report(error); }
+    syncScheduler();
+  };
+  /** 予定を実行する。インスタンスがあればそこへ、無ければ画面なしで起こす */
+  const runAppSchedule = async (key: string, slot: number) => {
+    const app = available.get(key);
+    if (!app) throw new Error("アプリがありません。");
+    if (changingApps || lists.applying(app.parentKey ?? app.key)) throw new Error("アプリの入れ替えの途中です。");
+    const session = [...sessions, ...(cadreSession ? [cadreSession] : [])].find(session => !session.closing && session.installed.key === key);
+    if (session) {
+      if (!session.mounted) throw new Error("アプリの起動の途中です。");
+      await session.mounted.schedule(slot, SCHEDULE_TIMEOUT);
+      return;
+    }
+    await runHeadless(app, slot);
+  };
+  /** 画面なしの起動。onCreate を呼ばず、onSchedule が返ったら Worker を止める。スタックと履歴には数えない */
+  const runHeadless = async (app: InstalledApp, slot: number) => {
+    const owner = app.parentKey ?? app.key;
+    const controller = new AbortController();
+    let finished = () => {};
+    const done = new Promise<void>(resolve => { finished = resolve; });
+    headless.set(app.key, { owner, controller, done });
+    let worker: Awaited<ReturnType<typeof launchApp>> | undefined;
+    try {
+      const api = apiOf(app);
+      const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(owner)).catch(() => undefined) : undefined;
+      if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
+      const pigeon = await saving.then(() => pigeonSnapshot(app));
+      let exit: Error | undefined;
+      worker = await launchApp(app.wasm, {
+        createWorker: options.createWorker,
+        workerUrl: options.workerUrl,
+        signal: controller.signal,
+        callTimeout: settings.callTimeout,
+        page,
+        sub: app.sub,
+        declarative: app.manifest.entry.html === undefined,
+        denied: api.denied,
+        pigeon,
+        shares: api.keys.has("shares"),
+        ...(storage ? { storage } : {}),
+        ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(app) } : {}),
+        onStorage(name, value) {
+          if (!api.keys.has("storage")) return;
+          saving = saving.then(() => options.store.data.write(owner, name, value)).catch(report);
+        },
+        onShare(operation, args) { return shareRequest(app, operation, args); },
+        onPigeonSend(letter) { routePigeon(app, letter); },
+        onPigeonDone(id) { donePigeon(app, id); },
+        onSchedule(action, slot, rule, label) { scheduleAction(app, action, slot, rule, label); },
+        onExit(error) { exit = error; },
+      });
+      await worker.callWithin(SCHEDULE_TIMEOUT, "__bina_schedule", slot);
+      if (exit) throw exit;
+    } finally {
+      worker?.stop();
+      controller.abort();
+      headless.delete(app.key);
+      finished();
+      if (!running(owner)) lists.exited(owner);
     }
   };
   const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -666,6 +797,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const closing = [...sessions].find(s => s.closing && s.installed.key === installed.key);
     if (closing) await closing.closed;
     if (stopped || current !== generation) return;
+    // 画面なしで予定を実行している間は、終わるのを待ってから開く
+    const scheduled = headless.get(installed.key);
+    if (scheduled) await scheduled.done;
+    if (stopped || current !== generation) return;
     let session = [...sessions].find(s => !s.closing && s.installed.key === installed.key);
     if (session && !session.mounted) return;
     appsShown = false;
@@ -733,6 +868,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
           ...(manager ? { manager } : {}),
           ...(api.keys.has("scheduler") ? { scheduler: schedulerSnapshot() } : {}),
+          ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(installed) } : {}),
           ...(storage ? { storage } : {}),
         },
         onOpen(i: number) {
@@ -742,6 +878,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onShare(operation, args) { return shareRequest(installed, operation, args); },
         onManager(action, args) { if (api.keys.has("manager")) managerAction(action, args); },
         onScheduler(action, id, value, on) { if (api.keys.has("scheduler")) schedulerAction(action, id, value, on); },
+        onSchedule(action, slot, rule, label) { scheduleAction(installed, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(installed, letter); },
         onPigeonDone(id) { donePigeon(installed, id); },
         onNotificationMuted(i, value) {
@@ -868,6 +1005,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         grants: {
           denied: api.denied,
           cadre: cadreSnapshot(),
+          ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(selectedCadre) } : {}),
           pigeon,
           shares: api.keys.has("shares"),
           ...(storage ? { storage } : {}),
@@ -878,6 +1016,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           saving = saving.then(() => options.store.data.write(selectedCadre.parentKey ?? selectedCadre.key, name, value)).catch(report);
         },
         onShare(operation, args) { return shareRequest(selectedCadre, operation, args); },
+        onSchedule(action, slot, rule, label) { scheduleAction(selectedCadre, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
         onPigeonDone(id) { donePigeon(selectedCadre, id); },
         onNotificationDismiss: dismissNotification,
@@ -956,6 +1095,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   // 移転元の storage・ライフサイクル書き込みが残らないよう、付け替え前に終了を待つ。
   changing = async (source, id) => {
     changingApps = true;
+    // 画面なしの実行は短いので、入れ替えの前にすべて止める
+    for (const run of headless.values()) run.controller.abort();
+    await Promise.all([...headless.values()].map(run => run.done));
     for (const session of [...sessions]) if ((session.installed.source === source && (id === undefined || (session.installed.parentKey ?? session.installed.key) === appId(source, id))) || apiOf(session.installed).keys.has("apps")) {
       const process = session.mounted ?? await session.starting?.catch(() => undefined);
       await process?.destroy(DestroyKind.System, DestroyCause.Os).catch(report);
@@ -978,6 +1120,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     // bootAppStore は埋め込みを隠すので、今回の配布物を戻す。
     for (const app of installedApps) if (!available.has(app.key)) for (const entry of entries(app)) available.set(entry.key, entry);
     for (const role of ["home", "settings", "cadre", "apps-manager"]) assigned[role] = assign(role);
+    await syncAppSchedules().catch(report);
     home = assigned.home;
     cadre = assigned.cadre;
     apps.splice(0, apps.length, ...[...available.values()].filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre")));
@@ -992,6 +1135,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       session.mounted?.syncOs?.(osSnapshot([]));
     }
   });
+  await syncAppSchedules().catch(report);
   renderBar();
   if (!home) report(new Error("ホームのシステムアプリがありません。"));
   if (cadre) {
@@ -1047,6 +1191,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       unsubscribeLists();
       clearTimeout(managerSyncing);
       unregisterCatalogs();
+      for (const unregister of registered.values()) unregister();
+      for (const run of headless.values()) run.controller.abort();
       unsubscribeScheduler();
       clearTimeout(schedulerSyncing);
       if (ownScheduler) scheduler.stop();

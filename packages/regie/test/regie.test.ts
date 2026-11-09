@@ -370,6 +370,16 @@ Deno.test("call の時間切れで Worker と待つ call をすべて終了し�
   } finally { app.stop(); }
 });
 
+Deno.test("callWithin は渡した時間で切り、時間切れでアプリを終了する", async () => {
+  const exits: Error[] = [];
+  const app = await launchApp(await build('export function loop(): void { while (true) {} }\nexport function quick(): void {}'), { createWorker: realWorker, callTimeout: 60_000, onExit: e => exits.push(e) });
+  try {
+    await app.callWithin(5000, "quick");
+    await assertRejects(() => app.callWithin(300, "loop"), Error, "時間切れ");
+    assertEquals(exits.map(e => e.message), ["時間切れ"]);
+  } finally { app.stop(); }
+});
+
 Deno.test("_start の無限ループは ready 前の時間切れとして reject する", async () => {
   const exits: Error[] = [];
   await assertRejects(async () => launchApp(await build('while (true) {}'), { createWorker: realWorker, callTimeout: 100, onExit: e => exits.push(e) }), Error, "応答しない");
