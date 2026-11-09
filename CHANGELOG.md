@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- 辞書のキー `scheduler`（Réplique の `SchedulerApi`）を足す。設定アプリ（`binette:system` の役割 settings）にだけ届き、OS とアプリの予定の一覧、形の変更、止める・再開、今すぐ実行を扱う。設定アプリに「定期実行」の節を足し、間隔の予定は − ＋ で変えられる
+
 - 破壊的変更: `BinetteSystem` に `scheduler` が加わる。`SystemStore` に任意の `getSchedules`・`putSchedules`（予定の保存先）を足す。省いた実装では予定を保存しない
 - Régie にスケジューラ（`createScheduler`、[docs/spec/scheduler.md](docs/spec/scheduler.md)）を追加する。予定の形（`every`・`at`・`daily`・`weekly`・`monthly`）を検査し、前回の実行のあとで最初に来る時刻を過ぎた予定を 1 つずつ実行する。閉じていた間に何回分過ぎても 1 回だけ実行し、`every` の下限は OS 60 秒・アプリ 900 秒。予定は `/data/system/schedules.json` に保存し、保存した形は登録の初期値より優先する
 - OS の更新確認（`os/update`、30 分）・カタログの更新確認（`os/catalogs`、30 分）・ストレージの片付け（`os/gc`、1 日）を `setInterval` からスケジューラの予定に移す。`createProviderLists` は自分のタイマーを持たなくなる。起動のたびの確認はやめ、前回＋間隔を過ぎていたときだけ起動時に実行する。初めて登録したときは間隔が過ぎるまで実行しない

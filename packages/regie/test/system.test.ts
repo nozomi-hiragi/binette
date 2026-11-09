@@ -857,3 +857,39 @@ Deno.test("manager は binette:system の apps-manager にだけ届き、操作�
     } finally { system.stop(); }
   }
 });
+
+const schedulerApp = await build(source + `
+import { SchedulerApi } from "jsr:@binette/replique";
+const schedulerApi = new Api().get<SchedulerApi>("scheduler");
+export function hasScheduler(): void { document.getElementById("scheduler").textContent = (schedulerApi != null).toString(); }
+export function list(): void {
+  const s = schedulerApi!;
+  document.getElementById("list").textContent = s.count().toString() + ":" + s.id(0) + ":" + s.ownerName(0) + ":" + s.description(0) + ":" + s.enabled(0).toString();
+}
+export function slower(): void { schedulerApi!.update(schedulerApi!.id(0), '{"every":3600}'); }
+export function pause(): void { schedulerApi!.setEnabled(schedulerApi!.id(0), false); }
+`);
+
+Deno.test("scheduler は binette:system の設定アプリにだけ届き、操作で予定を変えて写しを送り直す", async () => {
+  for (const [source, roles] of [["binette:system", ["settings"]], ["binette:bundled", ["settings"]], ["binette:system", undefined]] as const) {
+    const granted = source === "binette:system" && roles !== undefined;
+    const element = output(); const store = createMemoryAppStore();
+    const app = { source, prebuilt: { ...schedulerApp, manifest: { ...schedulerApp.manifest, id: "settings", roles: roles as string[] | undefined } } };
+    const system = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+    try {
+      await system.open(appId(source, "settings"));
+      const process = element.active.process;
+      await process.app.call("hasScheduler");
+      assertEquals(element.active.text.get("scheduler"), String(granted));
+      if (granted) {
+        await process.app.call("list");
+        assertEquals(element.active.text.get("list"), "1:os/catalogs:OS:30 分ごと:true");
+        await process.app.call("slower");
+        await waitForAsync(async () => JSON.stringify((await store.system.getSchedules!())["os/catalogs"]?.rule) === `{"every":3600}`);
+        await process.app.call("pause");
+        await waitForAsync(async () => (await store.system.getSchedules!())["os/catalogs"]?.enabled === false);
+        await waitForAsync(async () => { await process.app.call("list"); return element.active.text.get("list") === "1:os/catalogs:OS:1 時間ごと:false"; });
+      }
+    } finally { system.stop(); }
+  }
+});

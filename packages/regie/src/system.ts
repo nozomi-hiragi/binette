@@ -5,7 +5,7 @@ import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend, SchedulerSnapshot } from "./launch.ts";
 import { type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -82,6 +82,7 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
   apps: { roles: ["home", "cadre"] },
   os: { roles: ["settings"] },
   manager: { roles: ["apps-manager"] },
+  scheduler: { roles: ["settings"] },
   storage: {},
   fs: { permission: "fs" },
   cadre: { roles: ["cadre"] },
@@ -401,6 +402,41 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }, 0);
   };
   const unsubscribeLists = lists.subscribe(syncManager);
+  // 定期実行（scheduler）。設定アプリに一覧を渡し、操作を受ける
+  const ownScheduler = !options.scheduler;
+  const scheduler = options.scheduler ?? await createScheduler({ store: options.store.system, report });
+  const unregisterCatalogs = scheduler.register({ id: "os/catalogs", owner: "os", label: "カタログの更新確認", rule: { every: 30 * 60 }, run: () => lists.check() });
+  const schedulerSnapshot = (): SchedulerSnapshot => ({
+    schedules: scheduler.list().map(info => ({
+      id: info.id, owner: info.owner, label: info.label ?? "", rule: JSON.stringify(info.rule), enabled: info.enabled,
+      ownerName: info.owner === "os" ? "OS" : available.get(info.owner)?.manifest.name ?? info.owner,
+      next: info.next ?? 0, lastTime: info.last?.time ?? 0, lastResult: info.last?.result ?? "", running: info.running,
+    })),
+  });
+  let schedulerSyncing: ReturnType<typeof setTimeout> | undefined;
+  const syncScheduler = () => {
+    if (schedulerSyncing !== undefined || stopped) return;
+    schedulerSyncing = setTimeout(() => {
+      schedulerSyncing = undefined;
+      if (stopped) return;
+      const snapshot = schedulerSnapshot();
+      for (const session of sessions) if (apiOf(session.installed).keys.has("scheduler")) session.mounted?.syncScheduler?.(snapshot);
+    }, 0);
+  };
+  const unsubscribeScheduler = scheduler.subscribe(syncScheduler);
+  const schedulerAction = (action: string, id: string, value: string, on: boolean) => {
+    const done = (work: Promise<unknown>) => { void work.catch(report).finally(syncScheduler); };
+    switch (action) {
+      case "update": {
+        let rule: unknown;
+        try { rule = JSON.parse(value); } catch { report(new Error("予定の形を JSON として読めません。")); return; }
+        done(scheduler.update(id, { rule: rule as never }));
+        break;
+      }
+      case "setEnabled": done(scheduler.update(id, { enabled: on })); break;
+      case "runNow": done(scheduler.runNow(id)); break;
+    }
+  };
   const message = (error: unknown) => error instanceof Error ? error.message : String(error);
   const managerAction = (action: string, [a, b, flag]: (string | boolean)[]) => {
     const text = String(a ?? ""), other = String(b ?? ""), on = flag === true;
@@ -696,6 +732,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
           ...(manager ? { manager } : {}),
+          ...(api.keys.has("scheduler") ? { scheduler: schedulerSnapshot() } : {}),
           ...(storage ? { storage } : {}),
         },
         onOpen(i: number) {
@@ -704,6 +741,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         onShare(operation, args) { return shareRequest(installed, operation, args); },
         onManager(action, args) { if (api.keys.has("manager")) managerAction(action, args); },
+        onScheduler(action, id, value, on) { if (api.keys.has("scheduler")) schedulerAction(action, id, value, on); },
         onPigeonSend(letter) { routePigeon(installed, letter); },
         onPigeonDone(id) { donePigeon(installed, id); },
         onNotificationMuted(i, value) {
@@ -963,9 +1001,6 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     renderBar();
     await openHome();
   }
-  const ownScheduler = !options.scheduler;
-  const scheduler = options.scheduler ?? await createScheduler({ store: options.store.system, report });
-  const unregisterCatalogs = scheduler.register({ id: "os/catalogs", owner: "os", label: "カタログの更新確認", rule: { every: 30 * 60 }, run: () => lists.check() });
   // 呼び出し元の UI の起動完了を待ち、接続失敗も通常のエラーとして届ける。
   // 更新の確認はスケジューラに任せ、起動時はアプリ管理に出す中身だけを取る（更新は入れない）
   const firstCheck = setTimeout(() => {
@@ -1012,6 +1047,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       unsubscribeLists();
       clearTimeout(managerSyncing);
       unregisterCatalogs();
+      unsubscribeScheduler();
+      clearTimeout(schedulerSyncing);
       if (ownScheduler) scheduler.stop();
       lists.stop();
       generation++;

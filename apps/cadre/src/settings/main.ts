@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
-import { Api, App, Last, OsApi } from "jsr:@binette/replique";
+import { Api, App, Last, OsApi, SchedulerApi } from "jsr:@binette/replique";
 import { View, button, buttonOf, column, listTile, row, show, text } from "jsr:@binette/replique/ui";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
@@ -33,6 +33,9 @@ function utc(time: f64): string {
 
 // 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
 let osApi: OsApi | null = null;
+let schedulerApi: SchedulerApi | null = null;
+// 間隔の予定の − ＋ で選べる値（秒）
+const intervals: i32[] = [60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
 let details = false;
 
 function showDetails(): void { details = true; }
@@ -74,8 +77,67 @@ function change(change: i32): void {
   os.set(names[i], <i32>next);
 }
 
+function minimumEvery(owner: string): i32 { return owner == "os" ? 60 : 900; }
+// 今の間隔から、表の 1 つ下（-1）か上（+1）の値。無ければ 0
+function stepEvery(current: i32, owner: string, direction: i32): i32 {
+  if (direction < 0) {
+    for (let k = intervals.length - 1; k >= 0; k--) if (intervals[k] < current && intervals[k] >= minimumEvery(owner)) return intervals[k];
+  } else {
+    for (let k = 0; k < intervals.length; k++) if (intervals[k] > current) return intervals[k];
+  }
+  return 0;
+}
+function changeEvery(change: i32): void {
+  const s = schedulerApi;
+  if (s == null) return;
+  const i = change / 2;
+  if (i >= s.count()) return;
+  const next = stepEvery(s.every(i), s.owner(i), change % 2 == 0 ? -1 : 1);
+  if (next > 0) s.update(s.id(i), "{\"every\":" + next.toString() + "}");
+}
+function toggleSchedule(i: i32): void {
+  const s = schedulerApi;
+  if (s != null && i < s.count()) s.setEnabled(s.id(i), !s.enabled(i));
+}
+function runSchedule(i: i32): void {
+  const s = schedulerApi;
+  if (s != null && i < s.count()) s.runNow(s.id(i));
+}
+function scheduleView(s: SchedulerApi, i: i32): View {
+  const label = s.label(i);
+  const title = s.owner(i) == "os" ? label : s.ownerName(i) + (label.length > 0 ? "　" + label : "");
+  const enabled = s.enabled(i);
+  const running = s.running(i);
+  const next = s.next(i);
+  const last = s.lastTime(i);
+  const result = s.lastResult(i);
+  let detail = s.description(i);
+  if (!enabled) detail += "・止めています";
+  else if (running) detail += "・実行中…";
+  else if (next.length > 0) detail += "・次 " + next;
+  const lastLine = last.length > 0 ? "前回 " + last + "（" + (result == "ok" ? "成功" : result) + "）" : "まだ実行していません";
+  const every = s.every(i);
+  const owner = s.owner(i);
+  const controls: View[] = [];
+  if (every > 0) controls.push(row([
+    button("−", changeEvery).arg(i * 2).enabled(stepEvery(every, owner, -1) > 0).label(title + "の間隔を短くする"),
+    text(s.description(i)).key("schedule-every"),
+    button("＋", changeEvery).arg(i * 2 + 1).enabled(stepEvery(every, owner, 1) > 0).label(title + "の間隔を長くする"),
+  ]).key("stepper"));
+  controls.push(button(enabled ? "止める" : "再開する", toggleSchedule).arg(i).variant("ghost").label(title + "を" + (enabled ? "止める" : "再開する")).key("schedule-toggle"));
+  controls.push(button("今すぐ実行", runSchedule).arg(i).variant("ghost").enabled(!running).label(title + "を今すぐ実行する").key("schedule-run"));
+  return column([
+    listTile(title, detail).key("schedule-summary"),
+    text(lastLine).small().tone(result.startsWith("error") ? "danger" : "muted").key("schedule-last"),
+    row(controls).key("schedule-controls"),
+  ]).key("schedule-" + s.id(i));
+}
+
 export class Settings extends App {
-  override onCreate(_last: Last, api: Api): void { osApi = api.get<OsApi>("os"); }
+  override onCreate(_last: Last, api: Api): void {
+    osApi = api.get<OsApi>("os");
+    schedulerApi = api.get<SchedulerApi>("scheduler");
+  }
 
   override build(): View {
     const os = osApi;
@@ -134,6 +196,9 @@ export class Settings extends App {
         ]).key("debug-controls"),
       ]).key("settings-row-" + i.toString()));
     }
+    const schedules: View[] = [];
+    const scheduler = schedulerApi;
+    if (scheduler != null) for (let i: i32 = 0; i < scheduler.count(); i++) schedules.push(scheduleView(scheduler, i));
     const history: View[] = [];
     for (let i: i32 = 0; i < os.launchCount(); i++) {
       history.push(listTile(os.launchName(i), utc(os.launchTime(i))).key("launch-" + i.toString()));
@@ -164,6 +229,13 @@ export class Settings extends App {
       column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),
       column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"),
       column([text("通知").heading(2), column(notifications).surface("card").key("notifications-card")]).key("notifications-section"),
+      show(scheduler != null, column([
+        text("定期実行").heading(2).key("schedules-title"),
+        column([
+          show(schedules.length == 0, text("予定はありません。").tone("muted").key("schedules-empty")),
+          column(schedules).key("schedules"),
+        ]).surface("card").key("schedules-card"),
+      ]).key("schedules-section")),
       column([text("デバッグ").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"),
       column([
         row([text("起動の履歴").heading(2).grow().key("history-title"), text("UTC").small().tone("muted")]),

@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -35,6 +35,7 @@ export interface ProcessOptions {
     apps?: { id: string; name: string; icon?: string }[];
     os?: LaunchOptions["os"];
     manager?: LaunchOptions["manager"];
+    scheduler?: LaunchOptions["scheduler"];
     storage?: LaunchOptions["storage"];
     cadre?: LaunchOptions["cadre"];
     pigeon?: LaunchOptions["pigeon"];
@@ -48,6 +49,7 @@ export interface ProcessOptions {
   onUpdate?: LaunchOptions["onUpdate"];
   onCheckUpdate?: LaunchOptions["onCheckUpdate"];
   onManager?: LaunchOptions["onManager"];
+  onScheduler?: LaunchOptions["onScheduler"];
   onOpenRecovery?: LaunchOptions["onOpenRecovery"];
   onStorage?: LaunchOptions["onStorage"];
   onCadreOpen?: LaunchOptions["onCadreOpen"];
@@ -86,6 +88,7 @@ export interface Process {
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
+  syncScheduler?(snapshot: SchedulerSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
@@ -159,6 +162,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     os: options.grants?.os,
     manager: options.grants?.manager,
     onManager: options.onManager,
+    scheduler: options.grants?.scheduler,
+    onScheduler: options.onScheduler,
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
     pigeon: options.grants?.pigeon,
@@ -363,6 +368,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     syncPigeon(snapshot) { running?.syncPigeon?.(snapshot); },
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
     syncManager(snapshot) { running?.syncManager?.(snapshot); },
+    syncScheduler(snapshot) { running?.syncScheduler?.(snapshot); },
     syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,
