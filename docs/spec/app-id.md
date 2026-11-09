@@ -134,7 +134,7 @@ ID は、アプリをどう入れたかで分けます。
 - 既定の Cadre は、OS に埋め込んでも（生の ID）、初回の起動でリストから取ってきても（URL の ID）よい。どちらにするかは OS を配る人が決める
 - Binette は既定の Cadre を埋め込む。ID は `cadre`・`cadre.home`・`cadre.settings` で、OS の更新で新しくなり、復旧画面（`?recovery`）で OS のものに戻せる
 - 普通のアプリ（designer など）は埋め込まない。既定のリストに載せ、アプリ管理（[app-manager.md](app-manager.md)）からインストールできるようにする
-- Binette の既定のリストは、ブランチごとに置く（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/apps/`）。リストのアプリはブランチごとに別のアプリになる
+- Binette の既定のリストは、ブランチごとに置く（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）。リストのアプリはブランチごとに別のアプリになる
 
 ## サブアプリ
 

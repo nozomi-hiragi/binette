@@ -113,7 +113,8 @@ Cadre のサブアプリとして `apps/cadre/app.json` の `sub` に宣言し�
 
 ## Binette の既定の提供リスト
 
-- ブランチごとに GitHub Pages に置く（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/apps/`）。そのブランチの `system/boot.json` の `lists` に書く
+- ブランチごとに GitHub Pages に置く（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）。そのブランチの `system/boot.json` の `lists` に書く
+- OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため（API ドキュメントの `api/<ブランチ>/` と同じ）
 - ページ（HTML と `apps.json`）だけを、Docs の workflow で生成する。アプリのコードは写さない
 - `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/bundled/designer/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
 - `version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`。`integrity` の `"/"` は CI が Régie の CLI で計算する
