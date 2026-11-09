@@ -31,6 +31,7 @@
     "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",
     "docs": "deno run -A scripts/docs.ts",
     "docs:app": "deno run -A scripts/docs-app.ts",
+    "pages": "deno run -A scripts/pages.ts",
     "test": "deno run --allow-read scripts/check-version.ts && deno test -A",
     "start": "deno task build:system && deno run -A --node-modules-dir=auto npm:vite@8.3.4 --port 5175",
     "build": "deno task build:system && deno run -A --node-modules-dir=auto npm:vite@8.3.4 build",
