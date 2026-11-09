@@ -30,6 +30,55 @@ export interface OsSnapshot {
   updateState?: { phase: string; current: string; next: string; available: boolean };
 }
 
+/** アプリ管理（役割 apps-manager）に渡す写し。アプリは完全な ID で引く */
+export interface ManagerSnapshot {
+  repos: { url: string; name: string; host: string; removable: boolean; state: string }[];
+  apps: ManagerApp[];
+  /** 更新があるアプリの完全な ID */
+  updates: string[];
+  auto: { all: boolean; lists: Record<string, boolean>; apps: Record<string, boolean> };
+  details: Record<string, ManagerDetails>;
+}
+
+/** アプリ管理に見せるアプリ 1 つ。カタログにあるもの、入っているもの、本体なし・データありのもの */
+export interface ManagerApp {
+  key: string;
+  /** 提供リストの URL。埋め込みは空 */
+  list: string;
+  name: string;
+  /** アイコンの URL（カタログの URL か、入っているアプリの SVG の data URL）。無ければ空 */
+  icon: string;
+  description: string;
+  /** カタログの版。カタログに無ければ空 */
+  version: string;
+  /** 入っている（本体がある） */
+  present: boolean;
+  /** 入っている版。版が無ければ空 */
+  installed: string;
+  removed: boolean;
+  /** カタログに載っている */
+  listed: boolean;
+  removable: boolean;
+  /** none・installed・update・waiting・fetching・building・saving・prepared・failed */
+  state: string;
+  error: string;
+  files: number;
+  bytes: number;
+  /** 自動更新がオンとして扱われるか */
+  auto: boolean;
+}
+
+/** `details` で取った内容 */
+export interface ManagerDetails {
+  loading: boolean;
+  error: string;
+  permissions: [string, string][];
+  added: string[];
+  roles: string[];
+  integrity: boolean;
+  listName: string;
+}
+
 /** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
 export type ApiDenial = "NotGranted" | "NotAssigned";
 
@@ -52,7 +101,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -89,6 +138,10 @@ export interface LaunchOptions {
   onUpdate?: () => void;
   onCheckUpdate?: () => void;
   onOpenRecovery?: () => void;
+  /** 辞書の `manager`。アプリ管理だけに渡す。省略時は manager.* を使えない */
+  manager?: ManagerSnapshot;
+  /** アプリ管理の操作。args は文字列と真偽値 */
+  onManager?: (action: string, args: (string | boolean)[]) => void;
   /** 辞書の `storage`。アプリごとのデータの写し。省略時は storage.* を使えない */
   storage?: Map<string, string>;
   /** データの書き込み。value が null なら削除 */
@@ -136,6 +189,7 @@ export interface RegieApp {
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
+  syncManager?(snapshot: ManagerSnapshot): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -234,6 +288,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               try { worker.postMessage({ type: "os.sync", id, os: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
+            syncManager(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "manager.sync", id, manager: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
             syncCadre(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
@@ -259,6 +320,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.openRecovery": options.onOpenRecovery?.(); break;
         case "os.checkUpdate": options.onCheckUpdate?.(); break;
         case "os.update": options.onUpdate?.(); break;
+        case "manager.do": options.onManager?.(data.action!, (data as { managerArgs?: (string | boolean)[] }).managerArgs ?? []); break;
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
         case "shares.request": {
           const reply = (result: unknown) => { if (!stopped) worker.postMessage({ type: "shares.result", id: data.id, result: JSON.stringify(result) }); };
@@ -302,7 +364,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

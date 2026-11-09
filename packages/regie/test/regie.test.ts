@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import type { DomOp } from "@binette/core";
-import { launchApp, type OsSnapshot, serveApp, type RegieWorker } from "../src/index.ts";
+import { launchApp, type ManagerSnapshot, type OsSnapshot, serveApp, type RegieWorker } from "../src/index.ts";
 
 const source = `
 @external("binette", "dom.text")
@@ -617,4 +617,51 @@ export function consumed(): void { text(2, new SharesApi().result(id) === null ?
     failure = true; await app.call("request"); await wait();
     assertEquals(results, [{ op: "text", handle: 1, value: JSON.stringify({ ok: false, error: "もう無い" }) }]);
   } finally { app.stop(); }
+});
+
+const managerSource = `import { document, Api, AppManagerApi } from "./replique";
+const api = new Api();
+function m(): AppManagerApi { return api.get<AppManagerApi>("manager")!; }
+function text(value: string): void { document.getElementById("value").textContent = value; }
+export function summary(): void {
+  const x = m();
+  const id = x.appId("", 0);
+  text([x.repoCount().toString(), x.repoName(0), x.repoHost(0), x.repoRemovable(0).toString(), x.appCount().toString(), id, x.name(id), x.version(id),
+    x.installedCount().toString(), x.installedId(0), x.removed(x.installedId(0)).toString(), x.updateCount().toString(), x.state(id), x.files(id).toString(),
+    x.autoUpdates(id).toString(), x.autoUpdateApp(id).toString(), x.detailsReady(id).toString(), x.permissionCount(id).toString(), x.permissionName(id, 0), x.permissionReason(id, 0),
+    x.addedName(id, 0), x.integrity(id).toString()].join(","));
+}
+export function act(): void {
+  const x = m(); const id = x.appId("", 0);
+  x.addRepo("https://more.test/"); x.install(id); x.uninstall(id, true); x.cancel(id); x.apply(id); x.details(id); x.checkUpdates(); x.setAutoUpdateRepo("https://list.test/", true);
+}
+export function outOfRange(): void { m().appId("", 5); }
+`;
+
+Deno.test("manager の写しを読み、操作を OS に渡す。届いていなければ終了する", async () => {
+  const wasm = await build(managerSource, true);
+  const key = "https://list.test/#memo";
+  const manager: ManagerSnapshot = {
+    repos: [{ url: "https://list.test/", name: "のぞみ", host: "list.test", removable: false, state: "" }],
+    apps: [
+      { key, list: "https://list.test/", name: "メモ", icon: "", description: "", version: "2", present: true, installed: "1", removed: false, listed: true, removable: true, state: "fetching", error: "", files: 3, bytes: 10, auto: true },
+      { key: "https://list.test/#old", list: "https://list.test/", name: "古い", icon: "", description: "", version: "", present: false, installed: "", removed: true, listed: false, removable: true, state: "none", error: "", files: 0, bytes: 0, auto: true },
+    ],
+    updates: [key], auto: { all: false, lists: {}, apps: {} },
+    details: { [key]: { loading: false, error: "", permissions: [["notify", "知らせる"]], added: ["notify"], roles: [], integrity: true, listName: "のぞみ" } },
+  };
+  const texts: string[] = []; const actions: [string, (string | boolean)[]][] = [];
+  const app = await launchApp(wasm, { createWorker, manager, onManager: (action, args) => actions.push([action, args]), onDom(ops) { for (const op of ops) if (op.op === "text") texts.push(op.value); } });
+  try {
+    await app.call("summary");
+    assertEquals(texts, [["1", "のぞみ", "list.test", "false", "1", key, "メモ", "2", "2", key, "false", "1", "fetching", "3", "true", "true", "true", "1", "notify", "知らせる", "notify", "true"].join(",")]);
+    await app.call("act");
+    assertEquals(actions, [
+      ["addRepo", ["https://more.test/", "", false]], ["install", [key, "", false]], ["uninstall", [key, "", true]], ["cancel", [key, "", false]],
+      ["apply", [key, "", false]], ["details", [key, "", false]], ["checkUpdates", ["", "", false]], ["setAutoUpdate", ["list", "https://list.test/", true]],
+    ]);
+    await assertRejects(() => app.call("outOfRange"), Error, "番号が範囲外");
+  } finally { app.stop(); }
+  const denied = await launchApp(wasm, { createWorker });
+  try { await assertRejects(() => denied.call("summary"), Error, "アプリが中断しました"); } finally { denied.stop(); }
 });

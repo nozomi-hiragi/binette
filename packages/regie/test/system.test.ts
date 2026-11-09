@@ -827,3 +827,33 @@ launch(new Page());`);
     assertEquals(element.errors, []);
   } finally { system.stop(); }
 });
+
+const managerApp = await build(source + `
+import { AppManagerApi } from "jsr:@binette/replique";
+const managerApi = new Api().get<AppManagerApi>("manager");
+export function hasManager(): void { document.getElementById("manager").textContent = (managerApi != null).toString(); }
+export function repos(): void { document.getElementById("repos").textContent = managerApi!.repoCount().toString() + ":" + managerApi!.installedCount().toString(); }
+export function autoAll(): void { managerApi!.setAutoUpdateAll(true); }
+`);
+
+Deno.test("manager は binette:system の apps-manager にだけ届き、操作で自動更新の設定を保存する", async () => {
+  for (const [source, roles] of [["binette:system", ["apps-manager"]], ["binette:bundled", ["apps-manager"]], ["binette:system", undefined]] as const) {
+    const granted = source === "binette:system" && roles !== undefined;
+    const element = output(); const store = createMemoryAppStore();
+    const app = { source, prebuilt: { ...managerApp, manifest: { ...managerApp.manifest, id: "manager", roles: roles as string[] | undefined } } };
+    const system = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+    try {
+      await system.open(appId(source, "manager"));
+      const process = element.active.process;
+      await process.app.call("hasManager");
+      assertEquals(element.active.text.get("manager"), String(granted));
+      if (granted) {
+        await process.app.call("repos");
+        assertEquals(element.active.text.get("repos"), "0:2");
+        await process.app.call("autoAll");
+        await waitForAsync(async () => (await store.system.getAutoUpdate?.())?.all === true);
+        assertEquals(system.lists.autoUpdate().all, true);
+      }
+    } finally { system.stop(); }
+  }
+});
