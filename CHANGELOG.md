@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- 同梱アプリ「ドキュメント」（`bundled/docs`、ID `docs`）を追加する。`docs/` の Markdown を `deno task docs:app` で AS のソース（`bundled/docs/src/content.ts`）に変換してコミットし、テストで `docs/` との一致を確かめる。目次とページ、ページ間のリンク、見出しへの移動、前に開いていたページの復元に対応する
+
 - 破壊的変更: 独自の `AppStore` 実装に `fileStorage` が必要になる。
 - Filer と `files` の既定割り当てを追加する。端末からの読み込み・書き出し、共有とピッカー、共有フォルダーの名前変更と退出に対応する
 
