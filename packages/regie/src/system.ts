@@ -18,7 +18,7 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
   apps: SystemApp[];
   /** boot.json の提供リスト */
   lists?: string[];
-  providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout">;
+  providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout" | "confirm" | "concurrency">;
   /** 指定するとソースのビルドを検証済みコンパイラの Worker で行う。 */
   browserBuild?: BrowserBuildOptions;
   /** 役割の既定の割り当て（役割 → appId）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
@@ -160,7 +160,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     session.view?.remove();
     sessions.delete(session);
     renderBar();
+    const owner = session.installed.parentKey ?? session.installed.key;
+    if (!running(owner)) lists.exited(owner);
   };
+  const running = (key: string) => [...sessions].some(other => (other.installed.parentKey ?? other.installed.key) === key) ||
+    (cadreSession !== undefined && (cadreSession.installed.parentKey ?? cadreSession.installed.key) === key);
   const cutCadre = () => {
     if (!cadreSession) return;
     const session = cadreSession;
@@ -215,9 +219,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   }
   let changing = async (_source: string, _id?: string) => {};
   let changed = async () => {};
-  const lists = await createProviderLists({
+  // cut と show から参照する。セッションはこれより後にしか作らない
+  const lists: ProviderLists = await createProviderLists({
     store: options.store, lists: options.lists, browserBuild: options.browserBuild,
-    ...options.providerLists, report,
+    ...options.providerLists, report, running,
     changing: (source, id) => changing(source, id),
     async changed(move) {
       if (move) for (const [role, key] of Object.entries(bootRoles)) {
@@ -492,6 +497,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   }
   async function show(installed: InstalledApp, atHome: boolean, clearStatus = true): Promise<void> {
     if (stopped || changingApps) return;
+    // 更新の適用中のアプリは起動させない
+    if (lists.applying(installed.parentKey ?? installed.key)) return;
     if (active?.installed.key === installed.key && !active.mounted) return;
     clearTimeout(restartTimer);
     const current = ++generation;

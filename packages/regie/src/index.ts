@@ -25,7 +25,7 @@ export type { BrowserBuildOptions } from "./browser-build.ts";
 export { buildAppInWorker, buildStoredApp } from "./browser-build.ts";
 
 export { createProviderLists } from "./lists.ts";
-export type { ProviderLists, ProviderListsOptions } from "./lists.ts";
+export type { AppDetails, AppUpdate, AutoUpdateSettings, InstallConfirmation, InstallPhase, InstallState, ProviderLists, ProviderListsOptions } from "./lists.ts";
 export type { ProviderListRegistration } from "./store.ts";
 
 export type { PigeonLetter, PigeonSnapshot, PigeonSend } from "./launch.ts";
