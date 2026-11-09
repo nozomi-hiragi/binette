@@ -103,6 +103,23 @@ export interface SchedulerEntry {
   running: boolean;
 }
 
+/** アプリに渡す自分の予定の写し（[scheduler.md](../../../docs/spec/scheduler.md#アプリの予定)）。枠の番号で並べ、予定の無い枠は null */
+export interface ScheduleSnapshot {
+  slots: (ScheduleSlot | null)[];
+}
+
+/** アプリの予定 1 つ */
+export interface ScheduleSlot {
+  /** 予定の形の JSON */
+  rule: string;
+  /** 表示名。無ければ空 */
+  label: string;
+  enabled: boolean;
+  /** 前回の実行。無ければ 0 と空 */
+  lastTime: number;
+  lastResult: string;
+}
+
 /** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
 export type ApiDenial = "NotGranted" | "NotAssigned";
 
@@ -125,7 +142,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler", "schedule"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -170,6 +187,10 @@ export interface LaunchOptions {
   scheduler?: SchedulerSnapshot;
   /** 予定の操作。action は update・setEnabled・runNow */
   onScheduler?: (action: string, id: string, value: string, flag: boolean) => void;
+  /** 辞書の `schedule`。`permissions` に `schedule` を書いたアプリに渡す自分の予定。省略時は schedule.* を使えない */
+  schedule?: ScheduleSnapshot;
+  /** 自分の予定の操作。action は register・update・remove・runNow */
+  onSchedule?: (action: string, slot: number, rule: string, label: string) => void;
   /** 辞書の `storage`。アプリごとのデータの写し。省略時は storage.* を使えない */
   storage?: Map<string, string>;
   /** データの書き込み。value が null なら削除 */
@@ -213,12 +234,15 @@ export interface RegieApp {
   readonly exports: readonly string[];
   /** export した関数を呼ぶ。終わったら解決する。呼び出し中の DOM 操作は、解決より先に `onDom` に届く */
   call(name: string, ...args: (number | string)[]): Promise<void>;
+  /** call と同じだが、時間切れを timeout（ミリ秒）にする。過ぎたら `時間切れ` でアプリを終了する */
+  callWithin(timeout: number, name: string, ...args: (number | string)[]): Promise<void>;
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
+  syncSchedule?(snapshot: ScheduleSnapshot): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -267,6 +291,16 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const exit = (error: Error) => finish(error, true);
 
   const expired = () => exit(new Error("アプリが応答しないので終了しました。"));
+  const send = (limit: number, onTimeout: () => void, name: string, args: (number | string)[]) => {
+    if (stopped) return Promise.reject(new Error("アプリは止まっています。"));
+    return new Promise<void>((resolveCall, rejectCall) => {
+      const id = nextId++;
+      const timer = setTimeout(onTimeout, limit);
+      pending.set(id, { resolve: resolveCall, reject: rejectCall, timer });
+      try { worker.postMessage({ type: "call", id, name, args }); }
+      catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+    });
+  };
   const notifyRequests = () => {
     if (rejectLaunch || pending.size || stopped) return;
     for (const [role, i] of assignments.splice(0)) options.onAssign?.(role, i);
@@ -293,16 +327,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           const exports = Object.freeze([...data.exports!]);
           resolve({
             exports,
-            call(name, ...args) {
-              if (stopped) return Promise.reject(new Error("アプリは止まっています。"));
-              return new Promise<void>((resolveCall, rejectCall) => {
-                const id = nextId++;
-                const timer = setTimeout(expired, timeout);
-                pending.set(id, { resolve: resolveCall, reject: rejectCall, timer });
-                try { worker.postMessage({ type: "call", id, name, args }); }
-                catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
-              });
-            },
+            call(name, ...args) { return send(timeout, expired, name, args); },
+            callWithin(limit, name, ...args) { return send(limit, () => exit(new Error("時間切れ")), name, args); },
             syncPigeon(snapshot) {
               if (stopped) return;
               const id = nextId++;
@@ -329,6 +355,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               const id = nextId++;
               pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
               try { worker.postMessage({ type: "scheduler.sync", id, scheduler: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
+            syncSchedule(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "schedule.sync", id, schedule: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             syncCadre(snapshot) {
@@ -358,6 +391,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.update": options.onUpdate?.(); break;
         case "manager.do": options.onManager?.(data.action!, (data as { managerArgs?: (string | boolean)[] }).managerArgs ?? []); break;
         case "scheduler.do": { const args = (data as { schedulerArgs?: [string, string, boolean] }).schedulerArgs ?? ["", "", false]; options.onScheduler?.(data.action!, args[0], args[1], args[2]); break; }
+        case "schedule.do": { const args = (data as { scheduleArgs?: [number, string, string] }).scheduleArgs ?? [-1, "", ""]; options.onSchedule?.(data.action!, args[0], args[1], args[2]); break; }
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
         case "shares.request": {
           const reply = (result: unknown) => { if (!stopped) worker.postMessage({ type: "shares.result", id: data.id, result: JSON.stringify(result) }); };
@@ -401,7 +435,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

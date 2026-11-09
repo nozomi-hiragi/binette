@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -36,6 +36,7 @@ export interface ProcessOptions {
     os?: LaunchOptions["os"];
     manager?: LaunchOptions["manager"];
     scheduler?: LaunchOptions["scheduler"];
+    schedule?: LaunchOptions["schedule"];
     storage?: LaunchOptions["storage"];
     cadre?: LaunchOptions["cadre"];
     pigeon?: LaunchOptions["pigeon"];
@@ -50,6 +51,7 @@ export interface ProcessOptions {
   onCheckUpdate?: LaunchOptions["onCheckUpdate"];
   onManager?: LaunchOptions["onManager"];
   onScheduler?: LaunchOptions["onScheduler"];
+  onSchedule?: LaunchOptions["onSchedule"];
   onOpenRecovery?: LaunchOptions["onOpenRecovery"];
   onStorage?: LaunchOptions["onStorage"];
   onCadreOpen?: LaunchOptions["onCadreOpen"];
@@ -89,6 +91,9 @@ export interface Process {
   syncOs?(snapshot: OsSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
+  syncSchedule?(snapshot: ScheduleSnapshot): void;
+  /** 予定の実行（onSchedule）を、どの状態でも届ける。timeout を過ぎたら `時間切れ` でアプリを終了する */
+  schedule(slot: number, timeout: number): Promise<void>;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
@@ -164,6 +169,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onManager: options.onManager,
     scheduler: options.grants?.scheduler,
     onScheduler: options.onScheduler,
+    schedule: options.grants?.schedule,
+    onSchedule: options.onSchedule,
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
     pigeon: options.grants?.pigeon,
@@ -369,6 +376,14 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
     syncManager(snapshot) { running?.syncManager?.(snapshot); },
     syncScheduler(snapshot) { running?.syncScheduler?.(snapshot); },
+    syncSchedule(snapshot) { running?.syncSchedule?.(snapshot); },
+    schedule(slot, timeout) {
+      if (closing || !alive) return Promise.reject(new Error("アプリを閉じています。"));
+      return enqueue(async () => {
+        if (closing || !running) throw new Error("アプリを閉じています。");
+        await running.callWithin(timeout, "__bina_schedule", slot);
+      });
+    },
     syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,
