@@ -4,6 +4,7 @@ import { View } from "jsr:@binette/replique/ui";
 import { CadreApp } from "./cadre.ts";
 import { Home } from "./home/main.ts";
 import { Settings } from "./settings/main.ts";
+import { Apps } from "./apps/main.ts";
 
 /** 親とサブアプリは同じ入口を使い、それぞれ別の Worker で動く。 */
 class Entry extends App {
@@ -13,6 +14,7 @@ class Entry extends App {
     const sub = api.sub();
     if (sub == "home") this.app = new Home();
     else if (sub == "settings") this.app = new Settings();
+    else if (sub == "apps") this.app = new Apps();
     this.app.onCreate(last, api);
   }
 

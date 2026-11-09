@@ -369,11 +369,17 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       else if (app.present) app.state = updates.includes(app.key) ? "update" : "installed";
     }
     const auto = lists.autoUpdate();
+    const hostOf = (url: string) => { try { return new URL(url).host; } catch { return url; } };
+    const registered = new Set(registrations.map(registration => registration.url));
     return {
-      repos: registrations.map(registration => ({
-        url: registration.url, name: lists.cached(registration.url)?.name ?? registration.url, host: new URL(registration.url).host,
-        removable: registration.boot === undefined, state: repoStates.get(registration.url) ?? "",
-      })),
+      repos: [
+        ...registrations.map(registration => ({
+          url: registration.url, name: lists.cached(registration.url)?.name ?? registration.url, host: hostOf(registration.url),
+          removable: registration.boot === undefined, state: repoStates.get(registration.url) ?? "",
+        })),
+        // 追加の途中と、追加に失敗したリストも出す。失敗したものは削除で消える
+        ...[...repoStates].filter(([url]) => !registered.has(url)).map(([url, state]) => ({ url, name: url, host: hostOf(url), removable: true, state })),
+      ],
       apps: [...result.values()].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
       updates,
       auto: { all: auto.all ?? false, lists: { ...auto.lists }, apps: { ...auto.apps } },
@@ -403,7 +409,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           repoStates.set(text, "loading");
           quiet(lists.add(text).then(() => { repoStates.delete(text); }, error => { repoStates.set(text, `error: ${message(error)}`); throw error; }));
           break;
-        case "removeRepo": quiet(lists.remove(text).then(() => { repoStates.delete(text); })); break;
+        case "removeRepo": repoStates.delete(text); quiet(lists.remove(text)); break;
         case "checkUpdates": quiet(lists.check(text || undefined)); break;
         case "install": { const { list, id } = target(); quiet(lists.install(list, id)); break; }
         case "uninstall": quiet(lists.uninstall(text, on)); break;
