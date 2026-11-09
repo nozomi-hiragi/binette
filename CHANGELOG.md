@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- 仕様: スケジューラ（定期実行）を追加する（[docs/spec/scheduler.md](docs/spec/scheduler.md)、未実装）。OS の更新確認・カタログの更新確認・ストレージの片付けとアプリの予定を Régie にまとめ、設定アプリで一覧して変える。アプリは `schedule` 権限で自分の予定を登録し、画面なしの起動で `onSchedule(slot, api)` を受ける
+
 - GitHub Pages のブランチごとのページを、Lume の仕様書から動く OS に変える（`deno task pages`）。API ドキュメントは OS の Service Worker の範囲から外すため `api/<ブランチ>/` に移す。仕様書はドキュメントアプリで読む。Lume の `deno task docs` はローカル用に残す
 - 同梱アプリ「ドキュメント」（`bundled/docs`、ID `docs`）を追加する。`docs/` の Markdown を `deno task docs:app` で AS のソース（`bundled/docs/src/content.ts`）に変換してコミットし、テストで `docs/` との一致を確かめる。目次とページ、ページ間のリンク、見出しへの移動、前に開いていたページの復元に対応する
 
