@@ -1,4 +1,5 @@
-# main と v で始まるブランチの API ドキュメントを作り、GitHub Pages にまとめて出す。
+# main と v で始まるブランチを GitHub Pages にまとめて出す。
+# pages タスクのあるブランチは動く OS（と api/ に API ドキュメント）、それ以外は API ドキュメントを出す。
 # どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
 name: Docs
 
@@ -47,7 +48,9 @@ jobs:
             elif [ -f "$dir/deno.json" ]; then
               (
                 cd "$dir"
-                if [ -f _config.ts ]; then
+                if grep -q '"pages":' deno.json; then
+                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" deno task pages
+                elif [ -f _config.ts ]; then
                   BINETTE_DOCS_OUT="$RUNNER_TEMP/site/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
                 else
                   entries=(packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
@@ -59,7 +62,11 @@ jobs:
               )
               label="$branch"
               [ "$branch" = main ] && label="main（現行）"
-              links="$links<li><a href=\"./$branch/\">$label</a></li>"
+              if grep -q '"pages":' "$dir/deno.json" 2>/dev/null; then
+                links="$links<li><a href=\"./$branch/\">$label（Binette を開く）</a> · <a href=\"./$branch/api/\">API</a></li>"
+              else
+                links="$links<li><a href=\"./$branch/\">$label（API ドキュメント）</a></li>"
+              fi
             fi
           done
           cat > "$RUNNER_TEMP/site/index.html" <<HTML
@@ -68,7 +75,7 @@ jobs:
           <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>Binette API ドキュメント</title>
+          <title>Binette</title>
           <style>
           :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
           body { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.6; }
@@ -77,8 +84,8 @@ jobs:
           </style>
           </head>
           <body>
-          <h1>Binette API ドキュメント</h1>
-          <p>ブランチごとのドキュメントです。</p>
+          <h1>Binette</h1>
+          <p>ブランチごとの Binette と API ドキュメントです。v0.2 からは、仕様書は Binette の中の「ドキュメント」アプリで読めます。</p>
           <ul>$links</ul>
           <p><a href="https://github.com/nozomi-hiragi/binette">GitHub</a></p>
           </body>

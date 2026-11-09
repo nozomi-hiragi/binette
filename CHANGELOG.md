@@ -2,6 +2,7 @@
 
 ## v0.2.0（未リリース）
 
+- GitHub Pages のブランチごとのページを、Lume の仕様書から動く OS に変える（`deno task pages`）。API ドキュメントは `api/` のまま。仕様書はドキュメントアプリで読む。Lume の `deno task docs` はローカル用に残す
 - 同梱アプリ「ドキュメント」（`bundled/docs`、ID `docs`）を追加する。`docs/` の Markdown を `deno task docs:app` で AS のソース（`bundled/docs/src/content.ts`）に変換してコミットし、テストで `docs/` との一致を確かめる。目次とページ、ページ間のリンク、見出しへの移動、前に開いていたページの復元に対応する
 
 - 破壊的変更: 独自の `AppStore` 実装に `fileStorage` が必要になる。
