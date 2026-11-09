@@ -2,6 +2,7 @@
 
 ## v0.2.0（未リリース）
 
+- 仕様: アプリ管理（[docs/spec/app-manager.md](docs/spec/app-manager.md)）を追加する（未実装）。役割 `apps-manager` と辞書のキー `manager`、提供リストの任意の表示用の欄 `name`・`icon`・`description`、自動更新のトグル、権限の確認、本体だけの削除、Cadre のサブアプリ `cadre.apps`、Binette の既定の提供リストを決める
 - 起動が終わるまで「読み込み中…」を出す。初回はシステムのファイル（ブラウザ内ビルド用の asc を含む）を取得し終えるまで、何も出なかった
 - GitHub Pages のブランチごとのページを、Lume の仕様書から動く OS に変える（`deno task pages`）。API ドキュメントは OS の Service Worker の範囲から外すため `api/<ブランチ>/` に移す。仕様書はドキュメントアプリで読む。Lume の `deno task docs` はローカル用に残す
 - 同梱アプリ「ドキュメント」（`bundled/docs`、ID `docs`）を追加する。`docs/` の Markdown を `deno task docs:app` で AS のソース（`bundled/docs/src/content.ts`）に変換してコミットし、テストで `docs/` との一致を確かめる。目次とページ、ページ間のリンク、見出しへの移動、前に開いていたページの復元に対応する
