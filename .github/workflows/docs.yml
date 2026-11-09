@@ -22,6 +22,8 @@ concurrency:
 
 jobs:
   build:
+    # ブランチの削除では main の workflow が動く。Pages に載せない PR のブランチを消したときは作り直さない
+    if: github.event_name != 'delete' || github.event.ref == 'main' || startsWith(github.event.ref, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
