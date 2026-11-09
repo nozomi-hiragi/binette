@@ -1,6 +1,6 @@
 import { createUiDiffer } from "@binette/decor";
 import type { DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot } from "./launch.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -19,6 +19,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
   let manager: ManagerSnapshot | undefined;
+  let scheduler: SchedulerSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
   let shares = false;
@@ -71,7 +72,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   const notificationAt = (i: number) => { const letter = cadreState().notifications?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("通知の番号が範囲外です。"); return letter; };
   const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
   const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
-  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
+  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "scheduler" ? scheduler !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -166,8 +167,67 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   };
   const managerActions = ["addRepo", "removeRepo", "checkUpdates", "install", "uninstall", "cancel", "apply", "details", "setAutoUpdate"];
 
+  const pad = (value: number) => String(value).padStart(2, "0");
+  // 端末の時刻帯で「YYYY-MM-DD HH:MM」。0 は空
+  const localTime = (time: number) => {
+    if (!time) return "";
+    const date = new Date(time);
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const dayNames: Record<string, string> = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金", sat: "土", sun: "日" };
+  const duration = (seconds: number) =>
+    seconds % 86400 === 0 ? `${seconds / 86400} 日` : seconds % 3600 === 0 ? `${seconds / 3600} 時間` : seconds % 60 === 0 ? `${seconds / 60} 分` : `${seconds} 秒`;
+  const describeRule = (json: string) => {
+    const rule = JSON.parse(json) as { every?: number; at?: string; daily?: string; weekly?: { days: string[]; time: string }; monthly?: { day: number; time: string } };
+    if (rule.every !== undefined) return `${duration(rule.every)}ごと`;
+    if (rule.at !== undefined) return `${rule.at.replace("T", " ")} に 1 回`;
+    if (rule.daily !== undefined) return `毎日 ${rule.daily}`;
+    if (rule.weekly) return `毎週 ${rule.weekly.days.map(day => dayNames[day] ?? day).join("・")} ${rule.weekly.time}`;
+    if (rule.monthly) return `毎月 ${rule.monthly.day} 日 ${rule.monthly.time}`;
+    return json;
+  };
+  const schedulerState = () => {
+    if (!scheduler) throw new Error("この呼び出しは scheduler が届いたアプリだけが使えます。");
+    return scheduler;
+  };
+  const schedule = (i: number) => at(schedulerState().schedules, i, "予定");
+  const schedulerText = (query: string, i: number): string => {
+    switch (query) {
+      case "id": return schedule(i).id;
+      case "owner": return schedule(i).owner;
+      case "ownerName": return schedule(i).ownerName;
+      case "label": return schedule(i).label;
+      case "rule": return schedule(i).rule;
+      case "lastResult": return schedule(i).lastResult;
+      case "description": return describeRule(schedule(i).rule);
+      case "nextText": return localTime(schedule(i).next);
+      case "lastText": return localTime(schedule(i).lastTime);
+    }
+    throw new Error(`知らない scheduler の問い合わせです: ${query}`);
+  };
+  const schedulerNumber = (query: string, i: number): number => {
+    switch (query) {
+      case "count": return schedulerState().schedules.length;
+      case "enabled": return schedule(i).enabled ? 1 : 0;
+      case "running": return schedule(i).running ? 1 : 0;
+      case "next": return schedule(i).next;
+      case "lastTime": return schedule(i).lastTime;
+      case "every": { const rule = JSON.parse(schedule(i).rule) as { every?: number }; return typeof rule.every === "number" ? rule.every : 0; }
+    }
+    throw new Error(`知らない scheduler の問い合わせです: ${query}`);
+  };
+  const schedulerActions = ["update", "setEnabled", "runNow"];
+
   const imports = {
     binette: {
+      "scheduler.text": (query: number, i: number) => writeString(schedulerText(readString(query), i)),
+      "scheduler.number": (query: number, i: number) => schedulerNumber(readString(query), i),
+      "scheduler.do": (action: number, id: number, value: number, flag: number) => {
+        schedulerState();
+        const name = readString(action);
+        if (!schedulerActions.includes(name)) throw new Error(`知らない scheduler の操作です: ${name}`);
+        scope.postMessage({ type: "scheduler.do", action: name, schedulerArgs: [readString(id), readString(value), !!flag] });
+      },
       "manager.text": (query: number, key: number, i: number) => writeString(managerText(readString(query), readString(key), i)),
       "manager.number": (query: number, key: number, i: number) => managerNumber(readString(query), readString(key), i),
       "manager.do": (action: number, a: number, b: number, flag: number) => {
@@ -393,7 +453,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
     if (data.type === "shares.result") {
       shareResults.set(data.id!, data.result!);
       const callback = instance?.exports.__bina_share;
@@ -405,6 +465,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         apps = data.apps;
         os = data.os;
         manager = data.manager;
+        scheduler = data.scheduler;
         storage = data.storage;
         cadre = data.cadre;
         pigeon = data.pigeon;
@@ -427,8 +488,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         ops = [];
         scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
       }
-    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync") {
+    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync" || data.type === "scheduler.sync") {
       if (data.type === "manager.sync") manager = data.manager;
+      else if (data.type === "scheduler.sync") scheduler = data.scheduler;
       else if (data.type === "pigeon.sync") { pigeon = data.pigeon; if (pigeon) pigeon.letters = pigeon.letters.filter(letter => !acknowledgedLetters.has(letter.id)); }
       else if (data.type === "os.sync" && data.os) os = { ...data.os, launches: os?.launches ?? data.os.launches };
       else cadre = data.cadre;

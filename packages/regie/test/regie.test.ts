@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import type { DomOp } from "@binette/core";
-import { launchApp, type ManagerSnapshot, type OsSnapshot, serveApp, type RegieWorker } from "../src/index.ts";
+import { launchApp, type ManagerSnapshot, type OsSnapshot, type SchedulerSnapshot, serveApp, type RegieWorker } from "../src/index.ts";
 
 const source = `
 @external("binette", "dom.text")
@@ -660,6 +660,45 @@ Deno.test("manager の写しを読み、操作を OS に渡す。届いていな
       ["addRepo", ["https://more.test/", "", false]], ["install", [key, "", false]], ["uninstall", [key, "", true]], ["cancel", [key, "", false]],
       ["apply", [key, "", false]], ["details", [key, "", false]], ["checkUpdates", ["", "", false]], ["setAutoUpdate", ["list", "https://list.test/", true]],
     ]);
+    await assertRejects(() => app.call("outOfRange"), Error, "番号が範囲外");
+  } finally { app.stop(); }
+  const denied = await launchApp(wasm, { createWorker });
+  try { await assertRejects(() => denied.call("summary"), Error, "アプリが中断しました"); } finally { denied.stop(); }
+});
+
+const schedulerSource = `import { document, Api, SchedulerApi } from "./replique";
+const api = new Api();
+function s(): SchedulerApi { return api.get<SchedulerApi>("scheduler")!; }
+export function summary(): void {
+  const x = s();
+  const parts: string[] = [x.count().toString()];
+  for (let i = 0; i < x.count(); i++) {
+    parts.push(x.id(i)); parts.push(x.owner(i)); parts.push(x.ownerName(i)); parts.push(x.label(i)); parts.push(x.description(i));
+    parts.push(x.every(i).toString()); parts.push(x.enabled(i).toString()); parts.push(x.running(i).toString()); parts.push(x.lastResult(i));
+    parts.push(x.next(i).length.toString()); parts.push(x.lastTime(i).length.toString());
+  }
+  document.getElementById("value").textContent = parts.join(",");
+}
+export function act(): void { const x = s(); x.update(x.id(0), '{"every":3600}'); x.setEnabled(x.id(1), false); x.runNow(x.id(1)); }
+export function outOfRange(): void { s().id(5); }
+`;
+
+Deno.test("scheduler の写しを読み、操作を OS に渡す。届いていなければ終了する", async () => {
+  const wasm = await build(schedulerSource, true);
+  const scheduler: SchedulerSnapshot = { schedules: [
+    { id: "os/update", owner: "os", ownerName: "OS", label: "OS の更新確認", rule: '{"every":1800}', enabled: true, next: Date.UTC(2026, 10, 9), lastTime: 0, lastResult: "", running: false },
+    { id: "https://list.test/#mail/0", owner: "https://list.test/#mail", ownerName: "メール", label: "", rule: '{"weekly":{"days":["mon","thu"],"time":"07:30"}}', enabled: false, next: 0, lastTime: Date.UTC(2026, 10, 8), lastResult: "error: 時間切れ", running: true },
+  ] };
+  const texts: string[] = []; const actions: [string, string, string, boolean][] = [];
+  const app = await launchApp(wasm, { createWorker, scheduler, onScheduler: (action, id, value, on) => actions.push([action, id, value, on]), onDom(ops) { for (const op of ops) if (op.op === "text") texts.push(op.value); } });
+  try {
+    await app.call("summary");
+    assertEquals(texts, [["2",
+      "os/update", "os", "OS", "OS の更新確認", "30 分ごと", "1800", "true", "false", "", "16", "0",
+      "https://list.test/#mail/0", "https://list.test/#mail", "メール", "", "毎週 月・木 07:30", "0", "false", "true", "error: 時間切れ", "0", "16",
+    ].join(",")]);
+    await app.call("act");
+    assertEquals(actions, [["update", "os/update", '{"every":3600}', false], ["setEnabled", "https://list.test/#mail/0", "", false], ["runNow", "https://list.test/#mail/0", "", false]]);
     await assertRejects(() => app.call("outOfRange"), Error, "番号が範囲外");
   } finally { app.stop(); }
   const denied = await launchApp(wasm, { createWorker });

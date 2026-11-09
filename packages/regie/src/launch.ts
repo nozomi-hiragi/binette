@@ -79,6 +79,30 @@ export interface ManagerDetails {
   listName: string;
 }
 
+/** 設定アプリ（役割 settings）に渡す予定の一覧（[scheduler.md](../../../docs/spec/scheduler.md#設定アプリ)） */
+export interface SchedulerSnapshot {
+  schedules: SchedulerEntry[];
+}
+
+/** 予定 1 つ */
+export interface SchedulerEntry {
+  id: string;
+  /** `os` か完全なアプリ ID */
+  owner: string;
+  /** 持ち主の表示名。OS は「OS」 */
+  ownerName: string;
+  label: string;
+  /** 予定の形の JSON */
+  rule: string;
+  enabled: boolean;
+  /** 次の実行（Unix epoch ミリ秒）。無ければ 0 */
+  next: number;
+  /** 前回の実行。無ければ 0 と空 */
+  lastTime: number;
+  lastResult: string;
+  running: boolean;
+}
+
 /** API の辞書に載らなかった理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned） */
 export type ApiDenial = "NotGranted" | "NotAssigned";
 
@@ -101,7 +125,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -142,6 +166,10 @@ export interface LaunchOptions {
   manager?: ManagerSnapshot;
   /** アプリ管理の操作。args は文字列と真偽値 */
   onManager?: (action: string, args: (string | boolean)[]) => void;
+  /** 辞書の `scheduler`。設定アプリだけに渡す。省略時は scheduler.* を使えない */
+  scheduler?: SchedulerSnapshot;
+  /** 予定の操作。action は update・setEnabled・runNow */
+  onScheduler?: (action: string, id: string, value: string, flag: boolean) => void;
   /** 辞書の `storage`。アプリごとのデータの写し。省略時は storage.* を使えない */
   storage?: Map<string, string>;
   /** データの書き込み。value が null なら削除 */
@@ -190,6 +218,7 @@ export interface RegieApp {
   syncOs?(snapshot: OsSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
+  syncScheduler?(snapshot: SchedulerSnapshot): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -295,6 +324,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               try { worker.postMessage({ type: "manager.sync", id, manager: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
+            syncScheduler(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "scheduler.sync", id, scheduler: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
             syncCadre(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
@@ -321,6 +357,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.checkUpdate": options.onCheckUpdate?.(); break;
         case "os.update": options.onUpdate?.(); break;
         case "manager.do": options.onManager?.(data.action!, (data as { managerArgs?: (string | boolean)[] }).managerArgs ?? []); break;
+        case "scheduler.do": { const args = (data as { schedulerArgs?: [string, string, boolean] }).schedulerArgs ?? ["", "", false]; options.onScheduler?.(data.action!, args[0], args[1], args[2]); break; }
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
         case "shares.request": {
           const reply = (result: unknown) => { if (!stopped) worker.postMessage({ type: "shares.result", id: data.id, result: JSON.stringify(result) }); };
@@ -364,7 +401,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

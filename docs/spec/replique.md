@@ -158,6 +158,7 @@ export class Api {
 | `cadre` | `CadreApi` | Cadre | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知の表示と応答（[apps/cadre.md](apps/cadre.md)） |
 | `apps` | `AppsApi` | ホーム（と Cadre） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
+| `scheduler` | `SchedulerApi` | 設定アプリ | OS とすべてのアプリの予定の一覧、形の変更、止める・再開、今すぐ実行（[scheduler.md](scheduler.md)） |
 | `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
 | `shares` | `SharesApi` | すべてのアプリ | 共有の作成・一覧・承認・退出とファイル操作（[file-sharing.md](file-sharing.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
@@ -182,6 +183,16 @@ class Home extends App {
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ完全なアプリ ID。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
 - `updateAvailable()` は準備済みの新しい版があるかです。`updateCurrent()`・`updateNext()` は現在と新しい版の表示用の文字列、`updatePhase()` は確認や更新の状態です。`checkUpdate()` は確認を、`update()` は準備済みの組への更新を、`openRecovery()` は復旧画面を開くことを OS に頼みます。状態の変化は設定アプリに同期され、画面を描き直します。呼び出し名と状態の形は案です
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
+
+### SchedulerApi
+
+設定アプリ（役割 settings に割り当てられた `binette:system` のアプリ）だけに届きます。一覧は番号で数え、操作は予定の ID で指します（実装済み、形は案）。
+
+- `count()`・`id(i)`・`owner(i)`（`os` か完全なアプリ ID）・`ownerName(i)`（OS は「OS」）・`label(i)`・`rule(i)`（予定の形の JSON）
+- `description(i)` は予定の形を読める文にしたもの（「30 分ごと」「毎日 07:30」「毎週 月・木 07:30」など）。`every(i)` は間隔の予定なら秒、ほかは 0
+- `enabled(i)`・`running(i)`・`next(i)`・`lastTime(i)`（端末の時刻帯で `YYYY-MM-DD HH:MM`、無ければ空）・`lastResult(i)`（`ok`・`error: …`・空）
+- `update(id, rule)`・`setEnabled(id, on)`・`runNow(id)` は OS に頼むだけで、すぐ戻ります。予定が変わると OS が写しを送り直し、画面を描き直します。形の検査に落ちた変更は OS のエラー表示に出ます
+- 番号の範囲外は例外です
 
 ### PigeonApi
 
