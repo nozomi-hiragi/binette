@@ -169,7 +169,7 @@ function contents(): View {
     const label = row([text("").width(f64(depth * 14)), text(titles[i]).grow()]).align("start");
     items.push(buttonOf([label], openPage).arg(i).variant("ghost").selected(i == current).label(titles[i]).key("page-" + id));
   }
-  return column(items).gap(space.xs).padding(space.sm).width(300).fill().scroll().surface("surface").divider("right").label("目次");
+  return column([column(items).gap(space.xs).padding(space.sm).width(760).align("center")]).fill().grow().scroll().label("目次").key("toc");
 }
 
 class Docs extends App {
@@ -184,8 +184,10 @@ class Docs extends App {
       button(toc ? "目次を閉じる" : "目次", toggleToc).variant("ghost").selected(toc),
       text(titles[current]).bold().truncate().grow(),
     ]).gap(space.sm).padding(space.sm).surface("surface").divider("bottom");
-    const page = column([column(body()).gap(space.md).padding(space.md).width(760).align("center")]).fill().grow().scroll().key("body-" + ids[current] + "-" + start.toString());
-    return column([header, row(toc ? [contents(), page] : [page]).fill().grow().collapse()]).fill();
+    const page = toc ? column([]) : column([column(body()).gap(space.md).padding(space.md).width(760).align("center")]).fill().grow().scroll().key("body-" + ids[current] + "-" + start.toString());
+    // The table of contents replaces the page instead of sitting beside it, so on every width the page
+    // (or the contents) owns its scroll and a new page always opens at the top.
+    return column([header, toc ? contents() : page]).fill();
   }
 }
 launch(new Docs());
