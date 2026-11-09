@@ -86,3 +86,10 @@ Deno.test("movedTo があるリストは apps を読まない", () => {
   fails(() => moved("https://new.example.com/apps/?x"));
   fails(() => moved(1));
 });
+
+Deno.test("表示用の name・icon・description を読み、icon は JSON の URL を基準に解決する", () => {
+  const list = parseAppList(JSON.stringify({ name: "n", apps: [{ id: "memo", source: "memo/", version: "1", name: "メモ", icon: "memo.svg", description: "書く" }] }), "https://example.com/apps/apps.json");
+  assertEquals(list.apps[0], { id: "memo", source: "https://example.com/apps/memo/", version: "1", name: "メモ", icon: "https://example.com/apps/memo.svg", description: "書く" });
+  fails(() => parseAppList(JSON.stringify({ name: "n", apps: [{ id: "a", source: "a/", version: "1", name: 1 }] }), page), "apps[0] の name は文字列で指定してください。");
+  fails(() => parseAppList(JSON.stringify({ name: "n", apps: [{ id: "a", source: "a/", version: "1", icon: "" }] }), page), "apps[0] の icon は URL の文字列で指定してください。");
+});

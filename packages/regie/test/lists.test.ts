@@ -385,7 +385,7 @@ Deno.test("stop は signal を無視する取得を待たずに中断する", as
   } finally { await f.stop(); }
 });
 
-Deno.test("保存済みの boot 移転先でホームを開き、保留中の初回取得を待たず、後からの移転と更新で再起動する", async () => {
+Deno.test("保存済みの boot 移転先でホームを開き、保留中の初回取得を待たず、後からの移転と、更新の適用で再起動する", async () => {
   const f = await fixture({}, true);
   const storedUrl = "https://stored.test/apps/";
   const next = "https://next.test/apps/";
@@ -418,6 +418,13 @@ Deno.test("保存済みの boot 移転先でホームを開き、保留中の初
       assertEquals(shown.length, 1);
       pending.resolve(new Response(moved(next)));
       await system.lists.list();
+      // 動いているホームの自動更新は準備だけ。適用すると再起動する
+      assertEquals(shown, [
+        { key: storedUrl + "#memo", version: "list-version" },
+        { key: next + "#memo", version: "list-version" },
+      ]);
+      assertEquals(system.lists.state(next + "#memo")?.phase, "prepared");
+      await system.lists.apply(next + "#memo");
       assertEquals(shown, [
         { key: storedUrl + "#memo", version: "list-version" },
         { key: next + "#memo", version: "list-version" },
@@ -429,4 +436,98 @@ Deno.test("保存済みの boot 移転先でホームを開き、保留中の初
       assertEquals(reports, []);
     } finally { system.stop(); }
   } finally { pending.resolve(new Response(html())); await f.stop(); }
+});
+
+Deno.test("自動更新のトグル・権限が増える更新・動いているアプリ・確認・進捗を扱う", async () => {
+  const confirmations: unknown[] = [];
+  let answer = true;
+  let busy = false;
+  const f = await fixture({ confirm: request => { confirmations.push(request); return Promise.resolve(answer); }, running: () => busy }, true);
+  const key = listUrl + "#memo";
+  const phases: string[] = [];
+  f.lists.subscribe(() => { const phase = f.lists.state(key)?.phase; if (phase && phases.at(-1) !== phase) phases.push(phase); });
+  try {
+    await f.lists.add(listUrl);
+    answer = false;
+    await assertRejects(() => f.lists.install(listUrl, "memo"), Error, "やめました");
+    assertEquals(await f.store.get(key), undefined);
+    answer = true;
+    await f.lists.install(listUrl, "memo");
+    assertEquals(confirmations.at(-1), { key, name: "メモ", list: listUrl, listName: "提供者", permissions: {} });
+    assertEquals(phases.slice(0, 3), ["waiting", "fetching", "building"]);
+    assert(phases.includes("saving"));
+    assertEquals(f.lists.state(key), undefined);
+
+    // アプリごとにオフなら更新を知らせるだけ。リストごとのオンが上書きする
+    await f.lists.setAutoUpdate("app", key, false);
+    f.responses.set(listUrl, html([entry("v2")]));
+    await f.lists.check();
+    assertEquals(f.lists.updates().map(update => [update.key, update.current, update.version, update.prepared]), [[key, "list-version", "v2", false]]);
+    assertEquals((await f.store.get(key))?.listVersion, "list-version");
+    await f.lists.setAutoUpdate("list", listUrl, true);
+    assert(f.lists.autoUpdates(key));
+    await f.lists.check(listUrl);
+    assertEquals((await f.store.get(key))?.listVersion, "v2");
+    assertEquals(f.lists.updates(), []);
+
+    // 動いているあいだは準備だけ。終了したら入れる
+    busy = true;
+    f.responses.set(listUrl, html([entry("v3")]));
+    await f.lists.check();
+    assertEquals(f.lists.state(key)?.phase, "prepared");
+    assertEquals(f.lists.updates()[0].prepared, true);
+    assertEquals((await f.store.get(key))?.listVersion, "v2");
+    busy = false;
+    f.lists.exited(key);
+    for (let i = 0; i < 50 && (await f.store.get(key))?.listVersion !== "v3"; i++) await new Promise(resolve => setTimeout(resolve, 20));
+    assertEquals((await f.store.get(key))?.listVersion, "v3");
+
+    // 権限が増える更新は自動で入れず、確認で増える権限を見せる
+    f.responses.set(sourceUrl + "app.json", JSON.stringify({ ...manifest, permissions: { notify: { reason: "知らせる" } } }));
+    f.responses.set(listUrl, html([entry("v4")]));
+    await f.lists.check();
+    assertEquals((await f.store.get(key))?.listVersion, "v3");
+    assertEquals(f.lists.updates()[0].added, ["notify"]);
+    f.lists.exited(key);
+    assertEquals((await f.store.get(key))?.listVersion, "v3");
+    const details = await f.lists.details(listUrl, "memo");
+    assertEquals([details.installed?.version, details.update?.version, details.update?.added, details.manifest.permissions], ["v3", "v4", ["notify"], { notify: { reason: "知らせる" } }]);
+    await f.lists.apply(key);
+    assertEquals(confirmations.at(-1), { key, name: "メモ", list: listUrl, listName: "提供者", permissions: { notify: "知らせる" }, added: ["notify"] });
+    assertEquals((await f.store.get(key))?.listVersion, "v4");
+    assertEquals(await f.store.system.getPermissions(key), ["notify"]);
+    assertEquals((await f.store.system.getAutoUpdate?.())?.lists, { [listUrl]: true });
+  } finally { await f.stop(); }
+});
+
+Deno.test("中止は取得をやめて保存せず、削除は本体だけかデータごとかを選べる", async () => {
+  let release: (() => void) | undefined;
+  const f = await fixture({}, true);
+  const key = listUrl + "#memo";
+  const fetch = f.options.fetch!;
+  let hold = false;
+  const lists = await createProviderLists({ ...f.options, fetch: async (input, init) => {
+    if (hold && String(input).endsWith("main.ts")) await new Promise<void>(resolve => { release = resolve; init?.signal?.addEventListener("abort", () => resolve()); });
+    return fetch(input, init);
+  } });
+  try {
+    await lists.add(listUrl);
+    hold = true;
+    const install = lists.install(listUrl, "memo");
+    for (let i = 0; i < 100 && !release; i++) await new Promise(resolve => setTimeout(resolve, 10));
+    lists.cancel(key);
+    await assertRejects(() => install, Error, "中止");
+    assertEquals(await f.store.get(key), undefined);
+    assertEquals(lists.state(key), undefined);
+    hold = false;
+    await lists.install(listUrl, "memo");
+    await f.store.data.write(key, "note", "残す");
+    await lists.uninstall(key, false);
+    assertEquals(await f.store.get(key), undefined);
+    assertEquals((await f.store.listRemoved()).map(app => app.key), [key]);
+    assertEquals((await f.store.data.read(key)).get("note"), "残す");
+    await lists.uninstall(key, true);
+    assertEquals(await f.store.listRemoved(), []);
+    await assertRejects(() => lists.uninstall("cadre", true));
+  } finally { lists.stop(); await f.stop(); }
 });

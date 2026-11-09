@@ -2,6 +2,10 @@
 
 ## v0.2.0（未リリース）
 
+- Régie にアプリ管理の TS API を足す（[docs/spec/app-manager.md](docs/spec/app-manager.md)）。`system.lists` に `uninstall(key, withData)`・`details`・`check(url?)`・`updates`・`apply`・`cancel`・`state`・`autoUpdate`・`setAutoUpdate`・`autoUpdates`・`applying`・`exited`・`subscribe`・`cached` を足す。取得とビルドは並列（既定 2 本）、保存は 1 つずつ。自動更新はアプリごとの既定がオン、リストごと・全体のオンで上書きする。権限が増える更新と動いているアプリの更新は自動では入れず、準備だけをして、終了時または `apply` で入れる。`ProviderListsOptions` に `confirm`（権限の確認）・`running`・`concurrency` を足す。更新の適用中のアプリは起動しない
+- 破壊的変更: `AppStore` に `uninstall(key, withData)` と `listRemoved()` が必要になる。本体だけを消すとデータと「本体なし」の印（`/build/removed.json`）を残し、入れ直すと引き継ぐ。`SystemStore` に任意の `getAutoUpdate`・`putAutoUpdate` を足す
+- `@binette/core` の `parseAppList` が、提供リストの各アプリの任意の `name`・`icon`（JSON の URL を基準に解決）・`description` を読む
+
 - 仕様: アプリ管理（[docs/spec/app-manager.md](docs/spec/app-manager.md)）を追加する（未実装）。役割 `apps-manager` と辞書のキー `manager`、提供リストの任意の表示用の欄 `name`・`icon`・`description`、自動更新のトグル、権限の確認、本体だけの削除、Cadre のサブアプリ `cadre.apps`、Binette の既定の提供リストを決める
 - 起動が終わるまで「読み込み中…」を出す。初回はシステムのファイル（ブラウザ内ビルド用の asc を含む）を取得し終えるまで、何も出なかった
 - GitHub Pages のブランチごとのページを、Lume の仕様書から動く OS に変える（`deno task pages`）。API ドキュメントは OS の Service Worker の範囲から外すため `api/<ブランチ>/` に移す。仕様書はドキュメントアプリで読む。Lume の `deno task docs` はローカル用に残す

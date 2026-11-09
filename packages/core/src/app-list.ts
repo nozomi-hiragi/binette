@@ -25,6 +25,12 @@ export interface AppListEntry {
   version: string;
   /** 改ざん検出のハッシュの辞書（キーは `source` から見たパス） */
   integrity?: Record<string, string>;
+  /** 表示名（表示用。入れたあとは `app.json` を正とする） */
+  name?: string;
+  /** アイコンの URL（解決済み、表示用） */
+  icon?: string;
+  /** 短い説明（表示用） */
+  description?: string;
 }
 
 /** 読み終えた提供リスト */
@@ -152,6 +158,15 @@ export function parseAppList(text: string, jsonUrl: string, options: AppIdOption
       version: entry.version,
     };
     if (Object.hasOwn(entry, "integrity")) result.integrity = validateIntegrity(entry.integrity, where);
+    for (const key of ["name", "description"] as const) {
+      if (!Object.hasOwn(entry, key)) continue;
+      if (typeof entry[key] !== "string") invalid(`${where} の ${key} は文字列で指定してください。`);
+      result[key] = entry[key] as string;
+    }
+    if (Object.hasOwn(entry, "icon")) {
+      if (typeof entry.icon !== "string" || entry.icon === "") invalid(`${where} の icon は URL の文字列で指定してください。`);
+      result.icon = resolveHttp(entry.icon, jsonUrl, options, `${where} の icon`);
+    }
     return result;
   });
   return { name, apps };
