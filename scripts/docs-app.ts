@@ -10,7 +10,7 @@ export const TARGET = "\u001c";
 
 /** Pages links outside docs/ point to, matching the Lume site. */
 const REPOSITORY = "https://github.com/nozomi-hiragi/binette/blob/v0.2.0";
-const API = "https://nozomi-hiragi.github.io/binette/v0.2.0/api/";
+const API = "https://nozomi-hiragi.github.io/binette/api/v0.2.0/";
 
 export interface Page {
   /** Path from docs/ without ".md"; README and index become their folder ("" or "spec/"). */

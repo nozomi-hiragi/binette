@@ -23,8 +23,10 @@ export async function run(args: string[]): Promise<void> {
 }
 
 /** Writes the API reference into `output`. */
-export function api(output: string): Promise<void> {
-  return run(["doc", "--html", "--name=Binette", `--output=${output}`, ...API_ENTRIES]);
+export async function api(output: string): Promise<void> {
+  // deno doc creates only the last folder of the path.
+  await Deno.mkdir(output, { recursive: true });
+  await run(["doc", "--html", "--name=Binette", `--output=${output}`, ...API_ENTRIES]);
 }
 
 if (import.meta.main) {

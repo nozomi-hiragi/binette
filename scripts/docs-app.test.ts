@@ -19,7 +19,7 @@ Deno.test("リンクは docs のページ、API、GitHub に分ける", () => {
   assertEquals(resolveLink("./spec/", "index.md", ids), { page: "spec/", anchor: "" });
   assertEquals(resolveLink("#方針", "spec/app-id.md", ids), { page: "spec/app-id", anchor: "方針" });
   assertEquals(resolveLink("README.md", "spec/regie/run.md", ids), { page: "spec/regie/", anchor: "" });
-  assertEquals(resolveLink("./api/", "index.md", ids), { url: "https://nozomi-hiragi.github.io/binette/v0.2.0/api/" });
+  assertEquals(resolveLink("./api/", "index.md", ids), { url: "https://nozomi-hiragi.github.io/binette/api/v0.2.0/" });
   assertEquals(resolveLink("../../packages/core/src/index.ts", "spec/app.md", ids), { url: "https://github.com/nozomi-hiragi/binette/blob/v0.2.0/packages/core/src/index.ts" });
   assertEquals(resolveLink("https://example.com/", "index.md", ids), { url: "https://example.com/" });
 });

@@ -1,5 +1,6 @@
 # main と v で始まるブランチを GitHub Pages にまとめて出す。
-# pages タスクのあるブランチは動く OS（と api/ に API ドキュメント）、それ以外は API ドキュメントを出す。
+# pages タスクのあるブランチは動く OS を <ブランチ>/ に、API ドキュメントを api/<ブランチ>/ に出す（OS の Service Worker の範囲の外）。
+# それ以外のブランチは API ドキュメントを <ブランチ>/ に出す。
 # どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
 name: Docs
 
@@ -49,7 +50,7 @@ jobs:
               (
                 cd "$dir"
                 if grep -q '"pages":' deno.json; then
-                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" deno task pages
+                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/api/$branch" deno task pages
                 elif [ -f _config.ts ]; then
                   BINETTE_DOCS_OUT="$RUNNER_TEMP/site/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
                 else
@@ -63,7 +64,7 @@ jobs:
               label="$branch"
               [ "$branch" = main ] && label="main（現行）"
               if grep -q '"pages":' "$dir/deno.json" 2>/dev/null; then
-                links="$links<li><a href=\"./$branch/\">$label（Binette を開く）</a> · <a href=\"./$branch/api/\">API</a></li>"
+                links="$links<li><a href=\"./$branch/\">$label（Binette を開く）</a> · <a href=\"./api/$branch/\">API</a></li>"
               else
                 links="$links<li><a href=\"./$branch/\">$label（API ドキュメント）</a></li>"
               fi
