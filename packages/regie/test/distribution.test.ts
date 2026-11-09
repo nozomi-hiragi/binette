@@ -3,6 +3,7 @@ import {
   createSystemDistribution,
   parseSystemManifest,
   SYSTEM_MANIFEST_PATH,
+  type InstallProgress,
   type SystemManifest,
 } from "../src/distribution.ts";
 import { createMemoryFileTree, type FileTree } from "../src/fs.ts";
@@ -584,4 +585,131 @@ Deno.test("Online manifest inspection failures never fall back to a valid saved 
     installedVersion: "1",
     updateAvailable: false,
   });
+});
+
+Deno.test("install onProgress: 保存済みと取得の混在で進捗を通知し、合計は size の和になる", async () => {
+  const tree = createMemoryFileTree();
+  const file1Data = encode("cached-file-content");
+  const file1Hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", file1Data))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const file2Data = encode("downloaded-file-content");
+  const file2Hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", file2Data))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const manifest: SystemManifest = {
+    version: "1",
+    files: [
+      { path: "system/file1.txt", sha256: file1Hash, size: file1Data.length },
+      { path: "system/file2.txt", sha256: file2Hash, size: file2Data.length },
+    ],
+  };
+  await tree.replaceSystem(new Map([
+    ["/system/file1.txt", file1Data],
+  ]));
+  const responses = new Map<string, Uint8Array>([
+    ["/release/manifest.json", encode(JSON.stringify(manifest))],
+    ["/release/system/file2.txt", file2Data],
+  ]);
+  const fetcher: typeof globalThis.fetch = (input) => {
+    const path = new URL(String(input)).pathname;
+    const body = responses.get(path);
+    return Promise.resolve(new Response(body?.slice(), { status: body ? 200 : 404 }));
+  };
+  const api = distribution(tree, fetcher);
+  const progressCalls: InstallProgress[] = [];
+  await api.install(manifest, {
+    onProgress: (p) => progressCalls.push({ ...p }),
+  });
+  assertEquals(progressCalls.length > 0, true);
+  const expectedTotal = file1Data.length + file2Data.length;
+  for (const call of progressCalls) {
+    assertEquals(call.total, expectedTotal);
+    assertEquals(call.totalFiles, 2);
+  }
+  assertEquals(progressCalls[0].files, 1);
+  assertEquals(progressCalls[0].loaded, file1Data.length);
+  const last = progressCalls[progressCalls.length - 1];
+  assertEquals(last.files, 2);
+  assertEquals(last.loaded, expectedTotal);
+});
+
+Deno.test("install onProgress: 少しずつ届く body をストリーミングで読み進捗を通知する", async () => {
+  const tree = createMemoryFileTree();
+  const chunk1 = encode("hello-");
+  const chunk2 = encode("world-");
+  const chunk3 = encode("stream");
+  const fullData = new Uint8Array([...chunk1, ...chunk2, ...chunk3]);
+  const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", fullData))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const manifest: SystemManifest = {
+    version: "1",
+    files: [
+      { path: "system/stream.txt", sha256: hash, size: fullData.length },
+    ],
+  };
+  const fetcher: typeof globalThis.fetch = (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/release/manifest.json") {
+      return Promise.resolve(new Response(JSON.stringify(manifest)));
+    }
+    if (path === "/release/system/stream.txt") {
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          controller.enqueue(chunk1);
+          await new Promise((r) => setTimeout(r, 110));
+          controller.enqueue(chunk2);
+          await new Promise((r) => setTimeout(r, 110));
+          controller.enqueue(chunk3);
+          controller.close();
+        },
+      });
+      return Promise.resolve(new Response(stream));
+    }
+    return Promise.resolve(new Response(null, { status: 404 }));
+  };
+  const api = distribution(tree, fetcher);
+  const progressCalls: InstallProgress[] = [];
+  await api.install(manifest, {
+    onProgress: (p) => progressCalls.push({ ...p }),
+  });
+  assertEquals(progressCalls.length >= 3, true);
+  const last = progressCalls[progressCalls.length - 1];
+  assertEquals(last.loaded, fullData.length);
+  assertEquals(last.total, fullData.length);
+  assertEquals(last.files, 1);
+  assertEquals(last.totalFiles, 1);
+  assertEquals(await api.readSystem("/system/stream.txt"), fullData);
+});
+
+Deno.test("install onProgress: サイズ超過で打ち切り（エラーになり、reader が中断される）", async () => {
+  const tree = createMemoryFileTree();
+  const expectedSize = 10;
+  const manifest: SystemManifest = {
+    version: "1",
+    files: [
+      { path: "system/overflow.txt", sha256: "0".repeat(64), size: expectedSize },
+    ],
+  };
+  let cancelled = false;
+  const fetcher: typeof globalThis.fetch = (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/release/manifest.json") {
+      return Promise.resolve(new Response(JSON.stringify(manifest)));
+    }
+    if (path === "/release/system/overflow.txt") {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(expectedSize + 5));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return Promise.resolve(new Response(stream));
+    }
+    return Promise.resolve(new Response(null, { status: 404 }));
+  };
+  const api = distribution(tree, fetcher);
+  await assertRejects(
+    () => api.install(manifest),
+    Error,
+    "大きさが一致しません",
+  );
+  assertEquals(cancelled, true);
 });

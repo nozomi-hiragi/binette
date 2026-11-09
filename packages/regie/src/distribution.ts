@@ -23,12 +23,26 @@ export interface SystemUpdate {
 
 export type RecoveryAction = "clear-user" | "refetch-system" | "clear-all";
 
+export interface InstallProgress {
+  loaded: number;
+  total: number;
+  files: number;
+  totalFiles: number;
+}
+
+export interface InstallOptions {
+  onProgress?: (progress: InstallProgress) => void;
+}
+
 export interface SystemDistribution {
   /** 取得できない場合だけ、検証した保存済み配布物を更新なしとして返す。 */
   checkUpdate(online?: boolean): Promise<SystemUpdate>;
-  install(manifest?: SystemManifest): Promise<void>;
+  install(manifest?: SystemManifest, options?: InstallOptions): Promise<void>;
   /** 現行版を変えずに取得・検証し、切替操作を返す。 */
-  prepare(manifest: SystemManifest): Promise<{ commit(): Promise<void> }>;
+  prepare(
+    manifest: SystemManifest,
+    options?: InstallOptions,
+  ): Promise<{ commit(): Promise<void> }>;
   installed(): Promise<SystemManifest | undefined>;
   readSystem(path: string): Promise<Uint8Array | undefined>;
   readOverlay(path: string): Promise<Uint8Array | undefined>;
@@ -135,7 +149,7 @@ export function createSystemDistribution(
   sameOrigin(manifestUrl);
   const fetcher = options.fetch ?? globalThis.fetch;
   let trustedManifest: SystemManifest | undefined;
-  const fetchBytes = async (url: URL, manifest = false) => {
+  const fetchResponse = async (url: URL, manifest = false) => {
     sameOrigin(url);
     let response: Response;
     try {
@@ -164,6 +178,10 @@ export function createSystemDistribution(
         `取得に失敗しました: ${url.pathname} (${response.status})`,
       );
     }
+    return response;
+  };
+  const fetchBytes = async (url: URL, manifest = false) => {
+    const response = await fetchResponse(url, manifest);
     try {
       return new Uint8Array(await response.arrayBuffer());
     } catch (cause) {
@@ -172,12 +190,78 @@ export function createSystemDistribution(
       });
     }
   };
+  // 本文を少しずつ読み、読んだバイト数を知らせる。目録の大きさを超えたら打ち切る。
+  const fetchFile = async (
+    file: SystemManifest["files"][number],
+    onChunk: (delta: number) => void,
+  ) => {
+    const url = new URL(file.path, manifestUrl);
+    const response = await fetchResponse(url);
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    let oversize = false;
+    try {
+      if (!response.body) {
+        chunks.push(new Uint8Array(await response.arrayBuffer()));
+        received = chunks[0].byteLength;
+        oversize = received > file.size;
+        if (!oversize) onChunk(received);
+      } else {
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          received += value.byteLength;
+          if (received > file.size) {
+            oversize = true;
+            await reader.cancel().catch(() => {});
+            break;
+          }
+          chunks.push(value);
+          onChunk(value.byteLength);
+        }
+      }
+    } catch (cause) {
+      throw new DistributionUnavailable(`取得に失敗しました: ${url.pathname}`, { cause });
+    }
+    if (oversize) throw new Error(`大きさが一致しません: ${file.path}`);
+    if (chunks.length === 1) return chunks[0];
+    const data = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      data.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return data;
+  };
   const fetchManifest = async () =>
     decodeManifest(await fetchBytes(manifestUrl, true));
-  const prepare = async (input?: SystemManifest, refetch = false) => {
+  const prepare = async (
+    input?: SystemManifest,
+    refetch = false,
+    options?: InstallOptions,
+  ) => {
     const manifest = input === undefined
       ? await fetchManifest()
       : parseSystemManifest(input);
+    const totalFiles = manifest.files.length;
+    const total = manifest.files.reduce((sum, f) => sum + f.size, 0);
+    let loaded = 0;
+    let filesCompleted = 0;
+    let lastNotified = 0;
+    const notify = (force = false) => {
+      if (!options?.onProgress) return;
+      const now = Date.now();
+      if (force || now - lastNotified >= 100) {
+        lastNotified = now;
+        options.onProgress({
+          loaded,
+          total,
+          files: filesCompleted,
+          totalFiles,
+        });
+      }
+    };
     const files = new Map<string, Uint8Array>();
     for (const file of manifest.files) {
       let data = refetch ? undefined : await tree.read(`/${file.path}`);
@@ -188,12 +272,22 @@ export function createSystemDistribution(
           data = undefined;
         }
       }
-      if (!data) {
-        data = await fetchBytes(new URL(file.path, manifestUrl));
+      if (data) {
+        loaded += file.size;
+        filesCompleted += 1;
+        notify();
+      } else {
+        data = await fetchFile(file, (delta) => {
+          loaded += delta;
+          notify();
+        });
         await verify(data, file);
+        filesCompleted += 1;
+        notify();
       }
       files.set(`/${file.path}`, data);
     }
+    notify(true);
     files.set(SYSTEM_MANIFEST_PATH, encoder.encode(JSON.stringify(manifest)));
     return { async commit() {
       await tree.replaceSystem(files);
@@ -259,8 +353,10 @@ export function createSystemDistribution(
         updateAvailable: installedVersion !== manifest.version || installed?.kernel !== manifest.kernel,
       };
     },
-    install: async (manifest) => { await (await prepare(manifest)).commit(); },
-    prepare: (manifest) => prepare(manifest),
+    install: async (manifest, options) => {
+      await (await prepare(manifest, false, options)).commit();
+    },
+    prepare: (manifest, options) => prepare(manifest, false, options),
     async installed() {
       const saved = await tree.read(SYSTEM_MANIFEST_PATH);
       return saved ? decodeManifest(saved) : undefined;
