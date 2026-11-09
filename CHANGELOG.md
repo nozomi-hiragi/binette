@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- Régie の `SystemDistribution.install` と `prepare` に任意の `options.onProgress({ loaded, total, files, totalFiles })` を追加する。保存済みファイルの即時算入、本文の逐次読み込みによる進捗通知、目録の大きさを超える取得の中断を扱う
+
 - 辞書のキー `scheduler`（Réplique の `SchedulerApi`）を足す。設定アプリ（`binette:system` の役割 settings）にだけ届き、OS とアプリの予定の一覧、形の変更、止める・再開、今すぐ実行を扱う。設定アプリに「定期実行」の節を足し、間隔の予定は − ＋ で変えられる
 
 - 破壊的変更: `BinetteSystem` に `scheduler` が加わる。`SystemStore` に任意の `getSchedules`・`putSchedules`（予定の保存先）を足す。省いた実装では予定を保存しない

@@ -1,4 +1,4 @@
-import type { SystemDistribution, SystemManifest } from "@binette/regie";
+import type { InstallOptions, SystemDistribution, SystemManifest } from "@binette/regie";
 
 export interface UpdateState {
   phase: string;
@@ -23,7 +23,7 @@ export function createUpdater(distribution: SystemDistribution, kernels: KernelU
   return {
     snapshot: () => ({ ...state }),
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    async boot() {
+    async boot(options?: InstallOptions) {
       // 起動前のオンライン同版照合と、オフライン時の保存物検証も維持する。
       const found = await distribution.checkUpdate();
       let installed = await distribution.installed();
@@ -33,7 +33,7 @@ export function createUpdater(distribution: SystemDistribution, kernels: KernelU
         if (!paired(found.manifest.kernel)) {
           throw new Error("実行中のカーネルと組になるシステムを取得できません。");
         }
-        await distribution.install(found.manifest);
+        await distribution.install(found.manifest, options);
         installed = found.manifest;
       }
       emit({ current: installed.label ?? installed.version });

@@ -13,7 +13,7 @@ export type { FileTree, IndexedDbFileTreeOptions } from "./fs.ts";
 export { createIndexedDbFileTree, createMemoryFileTree } from "./fs.ts";
 export type { ContentStore, FileMetadata, IndexedDbStorageOptions, OwnerStorage, ProviderRecord, StorageBackend, StorageOptions, ShareRecord, ShareStorage } from "./storage.ts";
 export { createIndexedDbStorage, createMemoryContentStore, createMemoryStorage, createOpfsContentStore } from "./storage.ts";
-export type { RecoveryAction, SystemDistribution, SystemDistributionOptions, SystemManifest, SystemUpdate } from "./distribution.ts";
+export type { InstallOptions, InstallProgress, RecoveryAction, SystemDistribution, SystemDistributionOptions, SystemManifest, SystemUpdate } from "./distribution.ts";
 export { createSystemDistribution, parseSystemManifest, SYSTEM_MANIFEST_PATH } from "./distribution.ts";
 export type { ProcessOptions, Process } from "./process.ts";
 export { startProcess } from "./process.ts";

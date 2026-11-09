@@ -4,6 +4,7 @@ import { mountShell } from "@binette/scene";
 import { bootAppStore, loadBootApps } from "./boot.ts";
 import { browserKernels, createUpdater, kernelIdentity } from "./update.ts";
 import { showRecovery } from "./recovery.ts";
+import { setBootProgress, setBootStage } from "./boot-screen.ts";
 
 const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
@@ -22,6 +23,7 @@ if (new URL(location.href).searchParams.has("recovery")) {
 
 async function start(container: HTMLElement): Promise<void> {
 try {
+  setBootStage("起動中", container);
   const registration = import.meta.env.PROD && "serviceWorker" in navigator
     ? await navigator.serviceWorker.register(new URL("./sw.js", document.baseURI), { scope: "./", updateViaCache: "none" }) : undefined;
   const current = document.querySelector<HTMLMetaElement>('meta[name="binette-kernel"]')?.content;
@@ -36,9 +38,12 @@ try {
         await browserKernels(registration, activeKernel).activate(current);
       } else {
         // 全タブの終了で新 SW が通常有効化した場合も、同じ組へ揃えてから入口を読み直す。
+        setBootStage("更新を確認中", container);
         const update = await distribution.checkUpdate(true);
         if (update.manifest.kernel !== activeKernel) throw new Error("実行中のカーネルと組になるシステムを取得できません。");
-        await distribution.install(update.manifest);
+        await distribution.install(update.manifest, {
+          onProgress: (p) => setBootProgress(p, container),
+        });
         location.reload();
         return;
       }
@@ -48,7 +53,11 @@ try {
   const updater = createUpdater(distribution, registration ? browserKernels(registration, current) : {
     current, check(kernel) { return current && kernel && kernel !== current ? Promise.reject(new Error("カーネルを更新できません。")) : Promise.resolve(); }, activate() { return Promise.resolve(); },
   }, () => { if (!reloading) { reloading = true; location.reload(); } });
-  await updater.boot();
+  setBootStage("更新を確認中", container);
+  await updater.boot({
+    onProgress: (p) => setBootProgress(p, container),
+  });
+  setBootStage("起動中", container);
   const { apps, roles, lists } = await loadBootApps(tree, distribution);
   let booting = true;
   const errors: unknown[] = [];
