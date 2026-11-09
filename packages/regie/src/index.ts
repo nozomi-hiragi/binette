@@ -5,7 +5,7 @@
  */
 export type { WorkerScope } from "./worker.ts";
 export { serveApp } from "./worker.ts";
-export type { ApiDenial, LaunchOptions, OsSnapshot, RegieApp, RegieWorker } from "./launch.ts";
+export type { ApiDenial, LaunchOptions, ManagerApp, ManagerDetails, ManagerSnapshot, OsSnapshot, RegieApp, RegieWorker } from "./launch.ts";
 export { API_KEYS, launchApp } from "./launch.ts";
 export type { AppDataStore, AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord, LaunchRecord, SystemSettings, SystemStore } from "./store.ts";
 export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, appId, validateSystemSettings } from "./store.ts";
@@ -28,7 +28,7 @@ export { createScheduler, nextScheduleTime, parseScheduleRule, SCHEDULE_MIN_EVER
 export type { ScheduleDay, ScheduleInfo, ScheduleJob, ScheduleRule, ScheduleRun, Scheduler, SchedulerOptions } from "./scheduler.ts";
 export type { SavedSchedule } from "./store.ts";
 export { createProviderLists } from "./lists.ts";
-export type { ProviderLists, ProviderListsOptions } from "./lists.ts";
+export type { AppDetails, AppUpdate, AutoUpdateSettings, InstallConfirmation, InstallPhase, InstallState, ProviderLists, ProviderListsOptions } from "./lists.ts";
 export type { ProviderListRegistration } from "./store.ts";
 
 export type { PigeonLetter, PigeonSnapshot, PigeonSend } from "./launch.ts";

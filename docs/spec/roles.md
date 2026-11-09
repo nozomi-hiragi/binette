@@ -122,7 +122,7 @@ override build(): View {
 | `cadre` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | Cadre | 実装済み（形は案） |
 | `apps` | アプリの一覧、アイコン、開く（`AppsApi`） | ホームと Cadre | 実装済み |
 | `os` | OS の設定、役割の割り当て、起動の履歴、更新（`OsApi`） | 設定アプリ | 実装済み |
-| `manager` | 提供リストとアプリの管理（`AppManagerApi`、[app-manager.md](app-manager.md)） | アプリ管理（役割 `apps-manager`） | 決定 2026-11-09。未実装 |
+| `manager` | 提供リストとアプリの管理（`AppManagerApi`、[app-manager.md](app-manager.md)） | アプリ管理（役割 `apps-manager`） | 決定 2026-11-09。実装済み |
 | `fs` | ファイルの木を読む・書く（範囲つき。`FsApi`） | 権限を許したアプリ（デザイナー、エディタなど） | キーだけ。今は誰にも届かない |
 | `pigeon` | 手紙の送受信と通知（`PigeonApi`） | すべてのアプリ | 実装済み。ユーザーへの送信には `notify` 権限が必要 |
 | `shares` | 共有の作成・承認・退出とファイル操作（`SharesApi`） | すべてのアプリ | 実装済み。共有ごとに参加状態とアクセス権を確認 |

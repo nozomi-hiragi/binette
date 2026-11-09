@@ -1545,12 +1545,12 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
-      "bundled/designer": {
+      "catalog/designer": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]
       },
-      "bundled/docs": {
+      "catalog/docs": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]

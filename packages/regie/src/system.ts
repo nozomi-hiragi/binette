@@ -1,11 +1,11 @@
-import { createProviderLists, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
+import { createProviderLists, type InstallConfirmation, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
+import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
-import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppManifest } from "@binette/core";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot, PigeonLetter, PigeonSend } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend } from "./launch.ts";
 import { type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -19,7 +19,7 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
   apps: SystemApp[];
   /** boot.json の提供リスト */
   lists?: string[];
-  providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout">;
+  providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout" | "confirm" | "concurrency">;
   /** 指定するとソースのビルドを検証済みコンパイラの Worker で行う。 */
   browserBuild?: BrowserBuildOptions;
   /** 役割の既定の割り当て（役割 → appId）。設定で変えていない役割に使う。省略すると入手元が `binette:system` の最初のもの */
@@ -47,6 +47,8 @@ export interface SystemUi {
   update(view: SystemView): void;
   report(error: unknown): void;
   install?(): void;
+  /** アプリのインストールと、権限が増える更新の前に権限を確かめる。省くと確かめずに入れる */
+  confirmInstall?(request: InstallConfirmation): Promise<boolean>;
 }
 
 /** ホームバーと前面と Apps に見せる状態 */
@@ -79,6 +81,7 @@ export interface BinetteSystem {
 const API_RULES: Record<string, { roles?: string[]; permission?: string }> = {
   apps: { roles: ["home", "cadre"] },
   os: { roles: ["settings"] },
+  manager: { roles: ["apps-manager"] },
   storage: {},
   fs: { permission: "fs" },
   cadre: { roles: ["cadre"] },
@@ -164,7 +167,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     session.view?.remove();
     sessions.delete(session);
     renderBar();
+    const owner = session.installed.parentKey ?? session.installed.key;
+    if (!running(owner)) lists.exited(owner);
   };
+  const running = (key: string) => [...sessions].some(other => (other.installed.parentKey ?? other.installed.key) === key) ||
+    (cadreSession !== undefined && (cadreSession.installed.parentKey ?? cadreSession.installed.key) === key);
   const cutCadre = () => {
     if (!cadreSession) return;
     const session = cadreSession;
@@ -219,9 +226,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   }
   let changing = async (_source: string, _id?: string) => {};
   let changed = async () => {};
-  const lists = await createProviderLists({
+  // cut と show から参照する。セッションはこれより後にしか作らない
+  const lists: ProviderLists = await createProviderLists({
     store: options.store, lists: options.lists, browserBuild: options.browserBuild,
-    ...options.providerLists, report,
+    ...(options.ui.confirmInstall ? { confirm: (request: InstallConfirmation) => options.ui.confirmInstall!(request) } : {}),
+    ...options.providerLists, report, running,
     changing: (source, id) => changing(source, id),
     async changed(move) {
       if (move) for (const [role, key] of Object.entries(bootRoles)) {
@@ -256,11 +265,13 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const holders = (role: string) => [...available.values()].filter(app => app.manifest.roles?.includes(role));
   const candidates = (role: string) => ASSIGNABLE_ROLES.includes(role) ? holders(role) : [];
   const assign = (role: string): InstalledApp | undefined => {
-    const list = role === "settings" ? holders(role).filter(app => app.source === SYSTEM_SOURCE) : holders(role);
-    const chosen = role === "settings" ? undefined : settings.roles[role];
+    // 設定とアプリ管理は固定。入手元が binette:system のものだけ
+    const fixed = role === "settings" || role === "apps-manager";
+    const list = fixed ? holders(role).filter(app => app.source === SYSTEM_SOURCE) : holders(role);
+    const chosen = fixed ? undefined : settings.roles[role];
     return list.find(app => app.key === chosen) ?? list.find(app => app.key === bootRoles[role]) ?? list.find(app => app.source === SYSTEM_SOURCE);
   };
-  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre"), files: assign("files") };
+  const assigned: Record<string, InstalledApp | undefined> = { home: assign("home"), settings: assign("settings"), cadre: assign("cadre"), files: assign("files"), "apps-manager": assign("apps-manager") };
   let home = assigned.home;
   let cadre = assigned.cadre;
   const apps = [...installedApps, ...parents.filter(app => !attempted.has(app.key) && app.source !== SYSTEM_SOURCE && app.source !== "binette:bundled")].flatMap(entries).filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre"));
@@ -330,6 +341,105 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       else keys.add(key);
     }
     return { keys, denied };
+  };
+  // アプリ管理（manager）の写しと操作
+  const repoStates = new Map<string, string>();
+  const managerDetails = new Map<string, ManagerDetails>();
+  const svgUrl = (svg: string | undefined) => svg === undefined ? "" : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  const managerSnapshot = async (): Promise<ManagerSnapshot> => {
+    const registrations = await lists.list();
+    const result = new Map<string, ManagerApp>();
+    const blank = (key: string): ManagerApp => ({
+      key, list: "", name: key, icon: "", description: "", version: "", present: false, installed: "", removed: false, listed: false,
+      removable: false, state: "none", error: "", files: 0, bytes: 0, auto: lists.autoUpdates(key),
+    });
+    for (const registration of registrations) for (const entry of lists.cached(registration.url)?.apps ?? []) {
+      const key = appId(registration.url, entry.id);
+      result.set(key, { ...blank(key), list: registration.url, name: entry.name ?? entry.id, icon: entry.icon ?? "", description: entry.description ?? "", version: entry.version, listed: true });
+    }
+    for (const app of await options.store.list()) {
+      const builtIn = app.source.startsWith("binette:");
+      const previous = result.get(app.key) ?? { ...blank(app.key), list: builtIn ? "" : app.source };
+      result.set(app.key, { ...previous, name: app.manifest.name, icon: svgUrl(app.icon) || previous.icon, present: true, installed: app.listVersion ?? app.manifest.version ?? "", removable: !builtIn });
+    }
+    for (const removed of await options.store.listRemoved()) {
+      const previous = result.get(removed.key) ?? { ...blank(removed.key), list: removed.source };
+      result.set(removed.key, { ...previous, name: removed.name, icon: previous.icon || svgUrl(removed.icon), removed: true, removable: true });
+    }
+    const updates = lists.updates().map(update => update.key);
+    for (const app of result.values()) {
+      const state = lists.state(app.key);
+      if (state) Object.assign(app, { state: state.phase, files: state.files, bytes: state.bytes, error: state.error ?? "" });
+      else if (app.present) app.state = updates.includes(app.key) ? "update" : "installed";
+    }
+    const auto = lists.autoUpdate();
+    const hostOf = (url: string) => { try { return new URL(url).host; } catch { return url; } };
+    const registered = new Set(registrations.map(registration => registration.url));
+    return {
+      repos: [
+        ...registrations.map(registration => ({
+          url: registration.url, name: lists.cached(registration.url)?.name ?? registration.url, host: hostOf(registration.url),
+          removable: registration.boot === undefined, state: repoStates.get(registration.url) ?? "",
+        })),
+        // 追加の途中と、追加に失敗したリストも出す。失敗したものは削除で消える
+        ...[...repoStates].filter(([url]) => !registered.has(url)).map(([url, state]) => ({ url, name: url, host: hostOf(url), removable: true, state })),
+      ],
+      apps: [...result.values()].sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+      updates,
+      auto: { all: auto.all ?? false, lists: { ...auto.lists }, apps: { ...auto.apps } },
+      details: Object.fromEntries(managerDetails),
+    };
+  };
+  let managerSyncing: ReturnType<typeof setTimeout> | undefined;
+  const syncManager = () => {
+    if (managerSyncing !== undefined || stopped) return;
+    managerSyncing = setTimeout(() => {
+      managerSyncing = undefined;
+      const targets = [...sessions].filter(session => apiOf(session.installed).keys.has("manager"));
+      if (!targets.length || stopped) return;
+      void managerSnapshot().then(snapshot => { for (const session of targets) session.mounted?.syncManager?.(snapshot); }).catch(report);
+    }, 0);
+  };
+  const unsubscribeLists = lists.subscribe(syncManager);
+  const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+  const managerAction = (action: string, [a, b, flag]: (string | boolean)[]) => {
+    const text = String(a ?? ""), other = String(b ?? ""), on = flag === true;
+    const target = () => { const parsed = parseAppId(text, { allowHttp: true }); if (!parsed.list) throw new Error("提供リストのアプリではありません。"); return { list: parsed.list, id: parsed.id }; };
+    // 失敗は各アプリ・各リストの状態に出すので、ここでは報告しない
+    const quiet = (work: Promise<unknown>) => { void work.catch(() => {}).finally(syncManager); };
+    try {
+      switch (action) {
+        case "addRepo":
+          repoStates.set(text, "loading");
+          quiet(lists.add(text).then(() => { repoStates.delete(text); }, error => { repoStates.set(text, `error: ${message(error)}`); throw error; }));
+          break;
+        case "removeRepo": repoStates.delete(text); quiet(lists.remove(text)); break;
+        case "checkUpdates": quiet(text ? lists.check(text) : scheduler.runNow("os/catalogs")); break;
+        case "install": { const { list, id } = target(); quiet(lists.install(list, id)); break; }
+        case "uninstall": quiet(lists.uninstall(text, on)); break;
+        case "cancel": lists.cancel(text); break;
+        case "apply": quiet(lists.apply(text)); break;
+        case "details": {
+          const { list, id } = target();
+          const empty: ManagerDetails = { loading: true, error: "", permissions: [], added: [], roles: [], integrity: false, listName: "" };
+          managerDetails.set(text, empty);
+          quiet(lists.details(list, id).then(found => {
+            managerDetails.set(text, {
+              loading: false, error: "", listName: found.listName, roles: [...found.manifest.roles ?? []],
+              permissions: Object.entries(found.manifest.permissions ?? {}).map(([name, value]) => [name, value.reason]),
+              added: found.update?.added ?? [], integrity: Object.keys(found.entry.integrity ?? {}).length > 0,
+            });
+          }, error => { managerDetails.set(text, { ...empty, loading: false, error: message(error) }); }));
+          break;
+        }
+        case "setAutoUpdate": {
+          if (text !== "all" && text !== "list" && text !== "app") return;
+          quiet(lists.setAutoUpdate(text, other, on));
+          break;
+        }
+      }
+    } catch (error) { report(error); }
+    syncManager();
   };
   /** 設定アプリの起動時に渡す OS の写し */
   const muted = new Map<string, boolean>();
@@ -496,6 +606,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   }
   async function show(installed: InstalledApp, atHome: boolean, clearStatus = true): Promise<void> {
     if (stopped || changingApps) return;
+    // 更新の適用中のアプリは起動させない
+    if (lists.applying(installed.parentKey ?? installed.key)) return;
     if (active?.installed.key === installed.key && !active.mounted) return;
     clearTimeout(restartTimer);
     const current = ++generation;
@@ -541,6 +653,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const launches = api.keys.has("os") ? (await options.store.system.listLaunches()).reverse().map(record => ({
         time: record.time, name: available.get(record.app)?.manifest.name ?? record.app,
       })) : [];
+      const manager = api.keys.has("manager") ? await managerSnapshot() : undefined;
       if (!sessions.has(started) || stopped) return;
       // アプリごとのデータの読み込みに失敗したら、storage だけ載せない
       // 前の起動で積んだ書き込みを待ってから読む（古いスナップショットを渡さない）
@@ -582,6 +695,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           shares: api.keys.has("shares"),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
+          ...(manager ? { manager } : {}),
           ...(storage ? { storage } : {}),
         },
         onOpen(i: number) {
@@ -589,6 +703,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           void show(apps[i]!, false);
         },
         onShare(operation, args) { return shareRequest(installed, operation, args); },
+        onManager(action, args) { if (api.keys.has("manager")) managerAction(action, args); },
         onPigeonSend(letter) { routePigeon(installed, letter); },
         onPigeonDone(id) { donePigeon(installed, id); },
         onNotificationMuted(i, value) {
@@ -824,7 +939,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     for (const app of await options.store.list()) if (app.source !== SYSTEM_SOURCE && app.source !== "binette:bundled") for (const entry of entries(app)) available.set(entry.key, entry);
     // bootAppStore は埋め込みを隠すので、今回の配布物を戻す。
     for (const app of installedApps) if (!available.has(app.key)) for (const entry of entries(app)) available.set(entry.key, entry);
-    for (const role of ["home", "settings", "cadre"]) assigned[role] = assign(role);
+    for (const role of ["home", "settings", "cadre", "apps-manager"]) assigned[role] = assign(role);
     home = assigned.home;
     cadre = assigned.cadre;
     apps.splice(0, apps.length, ...[...available.values()].filter(app => app.listed !== false && !app.manifest.roles?.includes("home") && !app.manifest.roles?.includes("cadre")));
@@ -852,7 +967,13 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const scheduler = options.scheduler ?? await createScheduler({ store: options.store.system, report });
   const unregisterCatalogs = scheduler.register({ id: "os/catalogs", owner: "os", label: "カタログの更新確認", rule: { every: 30 * 60 }, run: () => lists.check() });
   // 呼び出し元の UI の起動完了を待ち、接続失敗も通常のエラーとして届ける。
-  const firstCheck = setTimeout(() => { if (!stopped) scheduler.start(); }, 0);
+  // 更新の確認はスケジューラに任せ、起動時はアプリ管理に出す中身だけを取る（更新は入れない）
+  const firstCheck = setTimeout(() => {
+    if (stopped) return;
+    scheduler.start();
+    void lists.list().then(registrations => Promise.all(registrations.map(registration =>
+      lists.cached(registration.url) ? undefined : lists.fetch(registration.url).catch(() => {})))).finally(syncManager);
+  }, 0);
   return {
     lists,
     scheduler,
@@ -888,6 +1009,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       stopped = true;
       unsubscribeUpdate?.();
       clearTimeout(firstCheck);
+      unsubscribeLists();
+      clearTimeout(managerSyncing);
       unregisterCatalogs();
       if (ownScheduler) scheduler.stop();
       lists.stop();

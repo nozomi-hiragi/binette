@@ -169,7 +169,7 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 export async function createScheduler(options: SchedulerOptions): Promise<Scheduler> {
   const now = options.now ?? Date.now;
   const maxWait = options.maxWait ?? 60_000;
-  const saved = new Map(Object.entries(await options.store.getSchedules()));
+  const saved = new Map(Object.entries(await options.store.getSchedules?.() ?? {}));
   const jobs = new Map<string, ScheduleJob>();
   const running = new Set<string>();
   const listeners = new Set<() => void>();
@@ -182,7 +182,7 @@ export async function createScheduler(options: SchedulerOptions): Promise<Schedu
   const notify = () => { for (const listener of [...listeners]) { try { listener(); } catch (error) { options.report?.(error); } } };
   const persist = () => {
     const copy = structuredClone(Object.fromEntries(saved));
-    writing = writing.then(() => options.store.putSchedules(copy)).catch(error => options.report?.(error));
+    writing = writing.then(() => options.store.putSchedules?.(copy)).catch(error => options.report?.(error));
     return writing;
   };
   const nextOf = (record: SavedSchedule) =>

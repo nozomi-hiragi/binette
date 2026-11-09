@@ -118,8 +118,8 @@ interface SystemStore {
   recordLaunch(record: LaunchRecord, limit?: number): Promise<void>;
   getSettings(): Promise<Partial<SystemSettings> | undefined>;
   putSettings(settings: Partial<SystemSettings>): Promise<void>;
-  getSchedules(): Promise<Record<string, SavedSchedule>>; // スケジューラの予定（/data/system/schedules.json）
-  putSchedules(schedules: Record<string, SavedSchedule>): Promise<void>;
+  getSchedules?(): Promise<Record<string, SavedSchedule>>; // スケジューラの予定。省いた実装では保存しない（/data/system/schedules.json）
+  putSchedules?(schedules: Record<string, SavedSchedule>): Promise<void>;
 }
 ```
 

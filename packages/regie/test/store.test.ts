@@ -268,3 +268,27 @@ Deno.test("単一アプリと保存済み owner の検索は名簿全体を列�
   assertEquals((await store.system.getSettings())?.roles, { home: "unknown value" });
   assertEquals(ownerLookups, 0);
 });
+
+Deno.test("本体だけを消すとデータと印が残り、入れ直すと引き継ぐ。データごと消すと全部消える", async () => {
+  const store = createMemoryAppStore();
+  const memo = { ...app("https://list.test/", "memo"), listVersion: "1.0" };
+  await store.put(memo, new Map([["app.json", new Uint8Array([1])]]));
+  await store.data.write(memo.key, "note", "こんにちは");
+  await store.system.putPermissions(memo.key, ["notify"]);
+  await store.uninstall(memo.key, false);
+  assertEquals(await store.get(memo.key), undefined);
+  assertEquals((await store.list()).length, 0);
+  const [removed] = await store.listRemoved();
+  assertEquals({ ...removed, removedAt: 0 }, { key: memo.key, source: memo.source, name: "アプリ", version: "1.0", icon: "<svg/>", removedAt: 0 });
+  assertEquals(await store.data.read(memo.key), new Map([["note", "こんにちは"]]));
+  await store.put(memo);
+  assertEquals(await store.get(memo.key), memo);
+  assertEquals(await store.listRemoved(), []);
+  assertEquals((await store.data.read(memo.key)).get("note"), "こんにちは");
+  await store.uninstall(memo.key, false);
+  await store.uninstall(memo.key, true);
+  assertEquals(await store.listRemoved(), []);
+  assertEquals(await store.system.getPermissions(memo.key), []);
+  await store.put(memo);
+  assertEquals(await store.data.read(memo.key), new Map());
+});

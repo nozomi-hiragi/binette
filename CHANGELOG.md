@@ -2,9 +2,21 @@
 
 ## v0.2.0（未リリース）
 
-- 破壊的変更: 独自の `SystemStore` 実装に `getSchedules`・`putSchedules`（予定の保存先）が必要になる。`BinetteSystem` に `scheduler` が加わる
+- 破壊的変更: `BinetteSystem` に `scheduler` が加わる。`SystemStore` に任意の `getSchedules`・`putSchedules`（予定の保存先）を足す。省いた実装では予定を保存しない
 - Régie にスケジューラ（`createScheduler`、[docs/spec/scheduler.md](docs/spec/scheduler.md)）を追加する。予定の形（`every`・`at`・`daily`・`weekly`・`monthly`）を検査し、前回の実行のあとで最初に来る時刻を過ぎた予定を 1 つずつ実行する。閉じていた間に何回分過ぎても 1 回だけ実行し、`every` の下限は OS 60 秒・アプリ 900 秒。予定は `/data/system/schedules.json` に保存し、保存した形は登録の初期値より優先する
 - OS の更新確認（`os/update`、30 分）・カタログの更新確認（`os/catalogs`、30 分）・ストレージの片付け（`os/gc`、1 日）を `setInterval` からスケジューラの予定に移す。`createProviderLists` は自分のタイマーを持たなくなる。起動のたびの確認はやめ、前回＋間隔を過ぎていたときだけ起動時に実行する。初めて登録したときは間隔が過ぎるまで実行しない
+
+- Binette の既定の提供リストを足す。`deno task pages` がブランチごとに `apps/<ブランチ>/`（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）へ HTML と `apps.json` を書き出し、そのブランチの OS の `system/boot.json` の `lists` に載せる。`source` は commit 入りの raw.githubusercontent.com の URL、`version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`、`integrity` の `"/"` はビルドで求める。`build:system` は環境変数 `BINETTE_LISTS`（カンマ区切りの https の URL）を `lists` に書く
+- 破壊的変更: デザイナーとドキュメントアプリを同梱から外し、`bundled/designer`・`bundled/docs` を `catalog/designer`・`catalog/docs` に移す。ID は `designer`・`docs` から、提供リストの URL ＋ `#designer`・`#docs` になる。「アプリ」から入れる
+- アプリ管理の画面を足す。Cadre のサブアプリ `cadre.apps`（「アプリ」、役割 `apps-manager`）に、探す・入っている・リストの 3 つのタブと詳細を持たせる。入れる・更新・適用・中止・削除（本体だけ・データごと）、更新の確認、自動更新のトグル（アプリごと・リストごと・全体）、提供リストの追加と削除を扱う。カタログのアイコンは、画面に URL の画像を描けないため、今は名前の頭文字で代える
+- Scene の枠が、インストールと権限が増える更新の前に権限を確かめるダイアログを出す（`SystemUi.confirmInstall`）。アプリ名・出どころ・権限と理由を出し、更新では増える権限を先に強調する。確認は 1 つずつ出し、Esc はやめるとみなす
+- Cadre は、起動し直したときに開いているアプリがあれば、ホームを開かずに前面をそのままにする。アプリを入れると Cadre が起動し直すため、アプリ管理からホームに戻されていた
+- アプリ管理の写しに、追加の途中と追加に失敗した提供リストも出す（状態 `loading`・`error: 理由`）。削除で消える
+- 辞書のキー `manager`（Réplique の `AppManagerApi`）を足す。役割 `apps-manager` の、入手元が `binette:system` のアプリにだけ届く（設定と同じく割り当ては固定）。提供リストの一覧・追加・削除、カタログと入っているアプリ（本体なし・データありを含む）の一覧、状態・進捗、詳細（権限と理由、増える権限、役割、`integrity` の有無）、インストール・削除・中止・適用、更新の確認、自動更新の設定を扱う。状態が変わると OS が写しを送り直し、アプリの `build()` をやり直させる。`SystemUi` に任意の `confirmInstall` を足す（権限の確認）
+
+- Régie にアプリ管理の TS API を足す（[docs/spec/app-manager.md](docs/spec/app-manager.md)）。`system.lists` に `uninstall(key, withData)`・`details`・`check(url?)`・`updates`・`apply`・`cancel`・`state`・`autoUpdate`・`setAutoUpdate`・`autoUpdates`・`applying`・`exited`・`subscribe`・`cached` を足す。取得とビルドは並列（既定 2 本）、保存は 1 つずつ。自動更新はアプリごとの既定がオン、リストごと・全体のオンで上書きする。権限が増える更新と動いているアプリの更新は自動では入れず、準備だけをして、終了時または `apply` で入れる。`ProviderListsOptions` に `confirm`（権限の確認）・`running`・`concurrency` を足す。更新の適用中のアプリは起動しない
+- 破壊的変更: `AppStore` に `uninstall(key, withData)` と `listRemoved()` が必要になる。本体だけを消すとデータと「本体なし」の印（`/build/removed.json`）を残し、入れ直すと引き継ぐ。`SystemStore` に任意の `getAutoUpdate`・`putAutoUpdate` を足す
+- `@binette/core` の `parseAppList` が、提供リストの各アプリの任意の `name`・`icon`（JSON の URL を基準に解決）・`description` を読む
 
 - 仕様: スケジューラ（定期実行）を追加する（[docs/spec/scheduler.md](docs/spec/scheduler.md)、未実装）。OS の更新確認・カタログの更新確認・ストレージの片付けとアプリの予定を Régie にまとめ、設定アプリで一覧して変える。アプリは `schedule` 権限で自分の予定を登録し、画面なしの起動で `onSchedule(slot, api)` を受ける
 

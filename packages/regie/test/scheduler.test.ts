@@ -140,7 +140,7 @@ Deno.test("システムは os/catalogs を登録し、stop で外す。保存先
     const [info] = system.scheduler.list();
     assertEquals([info.id, info.owner, info.label, info.rule], ["os/catalogs", "os", "カタログの更新確認", { every: 1800 }]);
     await system.scheduler.runNow("os/catalogs");
-    assertEquals((await store.system.getSchedules())["os/catalogs"].last?.result, "ok");
+    assertEquals((await store.system.getSchedules!())["os/catalogs"].last?.result, "ok");
   } finally { system.stop(); }
   assertEquals(system.scheduler.list(), []);
 });

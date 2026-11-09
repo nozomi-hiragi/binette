@@ -25,6 +25,13 @@
       "roles": [
         "settings"
       ]
+    },
+    "apps": {
+      "name": "アプリ",
+      "icon": "apps.svg",
+      "roles": [
+        "apps-manager"
+      ]
     }
   },
   "permissions": {

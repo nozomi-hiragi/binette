@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -34,6 +34,7 @@ export interface ProcessOptions {
   grants?: {
     apps?: { id: string; name: string; icon?: string }[];
     os?: LaunchOptions["os"];
+    manager?: LaunchOptions["manager"];
     storage?: LaunchOptions["storage"];
     cadre?: LaunchOptions["cadre"];
     pigeon?: LaunchOptions["pigeon"];
@@ -46,6 +47,7 @@ export interface ProcessOptions {
   onAssign?: LaunchOptions["onAssign"];
   onUpdate?: LaunchOptions["onUpdate"];
   onCheckUpdate?: LaunchOptions["onCheckUpdate"];
+  onManager?: LaunchOptions["onManager"];
   onOpenRecovery?: LaunchOptions["onOpenRecovery"];
   onStorage?: LaunchOptions["onStorage"];
   onCadreOpen?: LaunchOptions["onCadreOpen"];
@@ -83,6 +85,7 @@ export interface Process {
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncManager?(snapshot: ManagerSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
@@ -154,6 +157,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     declarative: options.declarative,
     last,
     os: options.grants?.os,
+    manager: options.grants?.manager,
+    onManager: options.onManager,
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
     pigeon: options.grants?.pigeon,
@@ -357,6 +362,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     },
     syncPigeon(snapshot) { running?.syncPigeon?.(snapshot); },
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
+    syncManager(snapshot) { running?.syncManager?.(snapshot); },
     syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,

@@ -43,8 +43,25 @@ export interface AppStore {
   list(): Promise<InstalledApp[]>;
   get(key: string): Promise<InstalledApp | undefined>;
   put(app: InstalledApp, files?: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  /**
+   * 提供リストから入れたアプリを消す。`withData` が false なら本体（ビルド結果とソース）だけを消し、
+   * データと「本体なし」の印を残す（入れ直すとデータを引き継ぐ）。true ならデータと OS の記録も消す
+   */
+  uninstall(key: string, withData: boolean): Promise<void>;
+  /** 本体を消してデータだけが残っているアプリ */
+  listRemoved(): Promise<RemovedApp[]>;
   /** Change the provider URL while keeping app owners and saved records stable. */
   moveSource(from: string, to: string, lists?: ProviderListRegistration[]): Promise<void>;
+}
+
+/** 本体を消してデータだけが残っているアプリの印 */
+export interface RemovedApp {
+  key: string;
+  source: string;
+  name: string;
+  version: string;
+  icon?: string;
+  removedAt: number;
 }
 
 /** アプリごとのデータ。名前は 1 つの部品で、中身は文字列。アプリの ID は `system` を使えない（OS の記録と同じ場所のため） */
@@ -102,10 +119,13 @@ export interface SystemStore {
   getSettings(): Promise<Partial<SystemSettings> | undefined>;
   /** 全体を置き換える。省いた項目は ShellOptions または既定値に戻る */
   putSettings(settings: Partial<SystemSettings>): Promise<void>;
-  /** 予定の ID から保存した予定への写し。無ければ空 */
-  getSchedules(): Promise<Record<string, SavedSchedule>>;
+  /** 自動更新の設定（キーは提供リストの URL と完全な ID）。省いた実装では保存しない */
+  getAutoUpdate?(): Promise<AutoUpdateRecord | undefined>;
+  putAutoUpdate?(settings: AutoUpdateRecord): Promise<void>;
+  /** 予定の ID から保存した予定への写し。無ければ空。省いた実装では保存しない */
+  getSchedules?(): Promise<Record<string, SavedSchedule>>;
   /** 全体を置き換える */
-  putSchedules(schedules: Record<string, SavedSchedule>): Promise<void>;
+  putSchedules?(schedules: Record<string, SavedSchedule>): Promise<void>;
 }
 
 /** スケジューラが保存する予定（[scheduler.md](../../../docs/spec/scheduler.md#予定)） */
@@ -118,6 +138,9 @@ export interface SavedSchedule {
   registered: number;
   last?: ScheduleRun;
 }
+
+/** 自動更新の設定の保存形 */
+export interface AutoUpdateRecord { all?: boolean; lists?: Record<string, boolean>; apps?: Record<string, boolean> }
 
 const historySize = (limit: number) => {
   if (!Number.isInteger(limit) || limit < 0) throw new Error("履歴の最大行数は 0 以上の整数にしてください。");
@@ -152,6 +175,7 @@ const listsPath = "/data/system/lists.json";
 const permissionsPath = (key: string) => `/data/system/permissions/${encodeURIComponent(key)}.json`;
 const settingsPath = "/data/system/settings.json";
 const schedulesPath = "/data/system/schedules.json";
+const autoUpdatePath = "/data/system/auto-update.json";
 const dataDirectory = (id: string) => {
   if (id === "system") throw new Error("system はアプリの ID に使えません。");
   return `/data/${encodeAppPathSegment(id)}`;
@@ -262,6 +286,8 @@ export function createAppStore(tree: FileTree): AppStore {
         const { home, ...rest } = settings;
         return typeof home === "string" ? { ...rest, roles: { home, ...rest.roles } } : rest;
       },
+      getAutoUpdate: async () => decode<AutoUpdateRecord>(await tree.read(autoUpdatePath)),
+      putAutoUpdate: settings => tree.write(autoUpdatePath, encode(settings)),
       async putSettings(settings) {
         validateSystemSettings(settings);
         const copy = structuredClone(settings);
@@ -365,6 +391,41 @@ export function createAppStore(tree: FileTree): AppStore {
       // 登録・アプリ・データ・OS の記録の付け替えと元の削除を同じトランザクションで行う。
       await tree.writeFiles(files, [...remove]);
     },
+    async uninstall(key, withData) {
+      if (storage) {
+        const entry = await storage.findApp(key);
+        if (!entry) throw new Error(`アプリが入っていません: ${key}`);
+        const owner = storage.forOwner(entry.owner);
+        if (withData) {
+          const records = [await systemAppPath(key, "permissions"), await systemAppPath(key, "last")];
+          await storage.removeApp(key, true);
+          for (const path of records) await tree.delete(path);
+          return;
+        }
+        const app = await readOwnedApp(key, entry.owner);
+        if (!app) return;
+        const stub: RemovedApp = { key, source: app.source, name: app.manifest.name, version: app.listVersion ?? app.manifest.version ?? "", removedAt: Date.now() };
+        if (app.icon !== undefined) stub.icon = app.icon;
+        const remove = [...await owner.list("/build"), ...await owner.list("/source")];
+        await owner.writeFiles(new Map([["/build/removed.json", encode(stub)]]), remove);
+        return;
+      }
+      const directory = `/apps/${encodeAppPathSegment(key)}`;
+      const paths = await tree.list(directory);
+      if (withData) paths.push(...await tree.list(dataDirectory(key)), permissionsPath(key), lastPath(key));
+      await tree.writeFiles(new Map(), paths);
+    },
+    async listRemoved() {
+      if (!storage) return [];
+      const result: RemovedApp[] = [];
+      for (const entry of await storage.listApps()) {
+        if (await readOwnedApp(entry.id, entry.owner)) continue;
+        const [stub] = await storage.forOwner(entry.owner).readFiles(["/build/removed.json"]);
+        const removed = decode<RemovedApp>(stub);
+        if (removed?.key === entry.id) result.push(removed);
+      }
+      return result.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+    },
     async put(app, files) {
       if (storage) {
         const owner = storage.forOwner(await storage.appOwner(app.parentKey ?? app.key, app.source, app.manifest.name));
@@ -377,6 +438,8 @@ export function createAppStore(tree: FileTree): AppStore {
         if (app.css !== undefined) output.set("/build/entry.css", encoder.encode(app.css));
         const remove = files ? (await owner.list("/source")).filter(path => !output.has(path)) : [];
         if (app.css === undefined) remove.push("/build/entry.css");
+        // 入れ直したら「本体なし」の印を消す。
+        if ((await owner.list("/build")).includes("/build/removed.json")) remove.push("/build/removed.json");
         await owner.writeFiles(output, remove);
       } else await tree.writeFiles(installedAppFiles(app));
     },
@@ -395,6 +458,8 @@ export function createAppStore(tree: FileTree): AppStore {
     list: () => serial(() => store.list()),
     get: key => serial(() => store.get(key)),
     put: (app, files) => { const copy = structuredClone(app); const source = files && structuredClone(files); return serial(() => store.put(copy, source)); },
+    uninstall: (key, withData) => serial(() => store.uninstall(key, withData)),
+    listRemoved: () => serial(() => store.listRemoved()),
     moveSource: (from, to, lists) => { const copy = structuredClone(lists); return serial(() => store.moveSource(from, to, copy)); },
     data: {
       read: id => serial(() => store.data.read(id)),
@@ -414,13 +479,15 @@ export function createAppStore(tree: FileTree): AppStore {
         return serial(() => store.system.recordLaunch(copy, limit));
       },
       getSettings: () => serial(() => store.system.getSettings()),
+      getAutoUpdate: () => serial(() => store.system.getAutoUpdate!()),
+      putAutoUpdate: settings => { const copy = structuredClone(settings); return serial(() => store.system.putAutoUpdate!(copy)); },
       putSettings: settings => {
         validateSystemSettings(settings);
         const copy = structuredClone(settings);
         return serial(() => store.system.putSettings(copy));
       },
-      getSchedules: () => serial(() => store.system.getSchedules()),
-      putSchedules: schedules => { const copy = structuredClone(schedules); return serial(() => store.system.putSchedules(copy)); },
+      getSchedules: () => serial(async () => await store.system.getSchedules?.() ?? {}),
+      putSchedules: schedules => { const copy = structuredClone(schedules); return serial(async () => { await store.system.putSchedules?.(copy); }); },
     },
   };
 }

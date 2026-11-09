@@ -3,7 +3,7 @@
 [仕様の目次](README.md)
 
 > [!NOTE]
-> 2026-11-09 にのぞみが決めた構成です（この節の中身はすべて決定）。未実装です。提供リストと ID の決まりは [app-id.md](app-id.md) にあります。
+> 2026-11-09 にのぞみが決めた構成です（この節の中身はすべて決定）。Régie の TS API（`system.lists`）、カタログの表示用の欄、アプリに渡す `manager`（Réplique の `AppManagerApi`）、画面 `cadre.apps`、OS の権限のダイアログ、既定の提供リスト（`deno task pages` が作る。アプリは `catalog/`）は実装済みです。画面のカタログのアイコンは、Décor が URL の画像を描かないため、今は名前の頭文字で代えています。提供リストと ID の決まりは [app-id.md](app-id.md) にあります。
 
 提供リスト（操作の名前では repo）の登録、アプリのインストール・更新・削除、アプリのデータの管理を受け持つ、アプリ管理の仕様です。
 
@@ -116,7 +116,7 @@ Cadre のサブアプリとして `apps/cadre/app.json` の `sub` に宣言し�
 - ブランチごとに GitHub Pages に置く（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）。そのブランチの `system/boot.json` の `lists` に書く
 - OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため（API ドキュメントの `api/<ブランチ>/` と同じ）
 - ページ（HTML と `apps.json`）だけを、Docs の workflow で生成する。アプリのコードは写さない
-- `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/bundled/designer/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
+- `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/catalog/designer/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
 - `version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`。`integrity` の `"/"` は CI が Régie の CLI で計算する
 - 載せるのは designer とドキュメントアプリ（`docs`）。Filer は役割 `files` の既定なので同梱のまま
 
