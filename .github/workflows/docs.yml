@@ -1,4 +1,6 @@
-# main と v で始まるブランチの API ドキュメントを TypeDoc で作り、GitHub Pages にまとめて出す。
+# main と v で始まるブランチを GitHub Pages にまとめて出す。
+# pages タスクのあるブランチは動く OS を <ブランチ>/ に、API ドキュメントを api/<ブランチ>/ に出す（OS の Service Worker の範囲の外）。
+# それ以外のブランチは API ドキュメントを <ブランチ>/ に出す。
 # どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
 name: Docs
 
@@ -24,9 +26,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # main がまだ v0.1（npm と TypeDoc）なので、その API ドキュメントを作るのに Node が要る。
+      # v0.2 を main に入れたら、この setup-node と下の typedoc.json の分岐は消す
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.7
       - name: Build docs for each branch
         run: |
           mkdir -p "$RUNNER_TEMP/site"
@@ -39,6 +46,28 @@ jobs:
               label="$branch"
               [ "$branch" = main ] && label="main（現行）"
               links="$links<li><a href=\"./$branch/\">$label</a></li>"
+            elif [ -f "$dir/deno.json" ]; then
+              (
+                cd "$dir"
+                if grep -q '"pages":' deno.json; then
+                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/api/$branch" deno task pages
+                elif [ -f _config.ts ]; then
+                  BINETTE_DOCS_OUT="$RUNNER_TEMP/site/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
+                else
+                  entries=(packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
+                  [ ! -f packages/decor/src/index.ts ] || entries+=(packages/decor/src/index.ts)
+                  [ ! -f packages/regie/src/build.ts ] || entries+=(packages/regie/src/build.ts)
+                  [ ! -f packages/regie/src/cli.ts ] || entries+=(packages/regie/src/cli.ts)
+                  deno doc --html --name=Binette --output="$RUNNER_TEMP/site/$branch" "${entries[@]}"
+                fi
+              )
+              label="$branch"
+              [ "$branch" = main ] && label="main（現行）"
+              if grep -q '"pages":' "$dir/deno.json" 2>/dev/null; then
+                links="$links<li><a href=\"./$branch/\">$label（Binette を開く）</a> · <a href=\"./api/$branch/\">API</a></li>"
+              else
+                links="$links<li><a href=\"./$branch/\">$label（API ドキュメント）</a></li>"
+              fi
             fi
           done
           cat > "$RUNNER_TEMP/site/index.html" <<HTML
@@ -47,7 +76,7 @@ jobs:
           <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>Binette API ドキュメント</title>
+          <title>Binette</title>
           <style>
           :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
           body { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.6; }
@@ -56,8 +85,8 @@ jobs:
           </style>
           </head>
           <body>
-          <h1>Binette API ドキュメント</h1>
-          <p>ブランチごとのドキュメントです。</p>
+          <h1>Binette</h1>
+          <p>ブランチごとの Binette と API ドキュメントです。v0.2 からは、仕様書は Binette の中の「ドキュメント」アプリで読めます。</p>
           <ul>$links</ul>
           <p><a href="https://github.com/nozomi-hiragi/binette">GitHub</a></p>
           </body>
