@@ -18,6 +18,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | [storage.md](storage.md) | ストレージ。中身は OPFS、メタデータは IndexedDB、`プロバイダー/アプリ` のフォルダにハッシュ名で平置き（決定 2026-11-03、未実装） |
 | [pigeon.md](pigeon.md) | Pigeon（伝書鳩）。OS が仲立ちする手紙。宛先がユーザーなら通知、アプリなら受信欄（決定 2026-11-03、実装済み。宛先を種類で選ぶ機能は今後） |
 | [file-sharing.md](file-sharing.md) | アプリ間のファイル共有。共有フォルダ、招待と承認、Filer とピッカー（決定 2026-11-03、未実装） |
+| [scheduler.md](scheduler.md) | スケジューラ（定期実行）。OS とアプリの予定を Régie にまとめ、設定アプリで一覧して変える（決定 2026-11-09、未実装） |
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
 | [core.md](core.md) | `@binette/core`。パッケージの共通物（形式の型と検査、ライフサイクルの番号、DOM 操作の型） |
 | [lifecycle.md](lifecycle.md) | ページ・アプリ・プロセス・画面のライフサイクル。ライブモードとインストール済み、Service Worker の位置づけ、`App` クラス |
