@@ -31,7 +31,7 @@ interface FileTree {
 - `readFiles` は複数ファイルを同じ時点の状態から読む。`write`・`writeFiles`・`delete`・`update` は `/system` を変更できない。`writeFiles` は複数ファイルの書き込みと省略可能な削除をまとめて原子的に行う。`replaceSystem` は `/system/…` のファイルの集合を丸ごと入れ替える。`update` は 1 ファイルの読み書きを原子的に行い、起動履歴の同時更新に使う
 - これはカーネル用の API であり、それ自体はアプリごとの権限を検査しない。`replaceSystem` はカーネルの更新処理だけに渡す
 
-保存層の `StorageBackend` は `forOwner(owner)` で所有者を選び、メタデータの参照・復元・移動や `gc()` を扱います。`appOwner` はプロバイダーとアプリの番号を名簿から解決し、`removeApp` は名簿と表からアプリを外します。即時削除を指定しなければ不要な内容は GC が消します。メモリ版と差し替え可能な `ContentStore` はテストにも使います。起動時と 1 日ごとに GC を実行します。
+保存層の `StorageBackend` は `forOwner(owner)` で所有者を選び、メタデータの参照・復元・移動や `gc()` を扱います。`appOwner` はプロバイダーとアプリの番号を名簿から解決し、`removeApp` は名簿と表からアプリを外します。即時削除を指定しなければ不要な内容は GC が消します。メモリ版と差し替え可能な `ContentStore` はテストにも使います。GC はスケジューラの OS の予定 `os/gc`（初期値 1 日）で実行します。
 
 ## AppStore（実装済み）
 
@@ -118,6 +118,8 @@ interface SystemStore {
   recordLaunch(record: LaunchRecord, limit?: number): Promise<void>;
   getSettings(): Promise<Partial<SystemSettings> | undefined>;
   putSettings(settings: Partial<SystemSettings>): Promise<void>;
+  getSchedules?(): Promise<Record<string, SavedSchedule>>; // スケジューラの予定。省いた実装では保存しない（/data/system/schedules.json）
+  putSchedules?(schedules: Record<string, SavedSchedule>): Promise<void>;
 }
 ```
 

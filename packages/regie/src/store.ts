@@ -1,6 +1,7 @@
 import { createMemoryStorage, type ShareStorage, type StorageBackend } from "./storage.ts";
 import { createMemoryPigeonStore, createIndexedDbPigeonStore, type PigeonStore } from "./pigeon.ts";
 import { appId } from "./app-key.ts";
+import type { ScheduleRule, ScheduleRun } from "./scheduler.ts";
 export { appId } from "./app-key.ts";
 import { normalizeAppIdentifier, parseAppId, type AppManifest } from "@binette/core";
 import { appFilePaths, decodeAppPathSegment, encodeAppPathSegment } from "./app-files.ts";
@@ -121,6 +122,21 @@ export interface SystemStore {
   /** 自動更新の設定（キーは提供リストの URL と完全な ID）。省いた実装では保存しない */
   getAutoUpdate?(): Promise<AutoUpdateRecord | undefined>;
   putAutoUpdate?(settings: AutoUpdateRecord): Promise<void>;
+  /** 予定の ID から保存した予定への写し。無ければ空。省いた実装では保存しない */
+  getSchedules?(): Promise<Record<string, SavedSchedule>>;
+  /** 全体を置き換える */
+  putSchedules?(schedules: Record<string, SavedSchedule>): Promise<void>;
+}
+
+/** スケジューラが保存する予定（[scheduler.md](../../../docs/spec/scheduler.md#予定)） */
+export interface SavedSchedule {
+  owner: string;
+  label?: string;
+  rule: ScheduleRule;
+  enabled: boolean;
+  /** 登録した時刻（Unix epoch ミリ秒） */
+  registered: number;
+  last?: ScheduleRun;
 }
 
 /** 自動更新の設定の保存形 */
@@ -158,6 +174,7 @@ const launchesPath = "/data/system/launches.json";
 const listsPath = "/data/system/lists.json";
 const permissionsPath = (key: string) => `/data/system/permissions/${encodeURIComponent(key)}.json`;
 const settingsPath = "/data/system/settings.json";
+const schedulesPath = "/data/system/schedules.json";
 const autoUpdatePath = "/data/system/auto-update.json";
 const dataDirectory = (id: string) => {
   if (id === "system") throw new Error("system はアプリの ID に使えません。");
@@ -277,6 +294,8 @@ export function createAppStore(tree: FileTree): AppStore {
         if (copy.roles) copy.roles = Object.fromEntries(await Promise.all(Object.entries(copy.roles).map(async ([role, key]) => [role, await stableKey(key)])));
         return tree.write(settingsPath, encode(copy));
       },
+      getSchedules: async () => decode<Record<string, SavedSchedule>>(await tree.read(schedulesPath)) ?? {},
+      putSchedules: schedules => tree.write(schedulesPath, encode(schedules)),
     },
     data: {
       async read(id) {
@@ -467,6 +486,8 @@ export function createAppStore(tree: FileTree): AppStore {
         const copy = structuredClone(settings);
         return serial(() => store.system.putSettings(copy));
       },
+      getSchedules: () => serial(async () => await store.system.getSchedules?.() ?? {}),
+      putSchedules: schedules => { const copy = structuredClone(schedules); return serial(async () => { await store.system.putSchedules?.(copy); }); },
     },
   };
 }

@@ -1,5 +1,5 @@
 /// <reference path="./env.d.ts" />
-import { createAppStore, createIndexedDbFileTree, createSystemDistribution } from "@binette/regie";
+import { createAppStore, createIndexedDbFileTree, createScheduler, createSystemDistribution } from "@binette/regie";
 import { mountShell } from "@binette/scene";
 import { bootAppStore, loadBootApps } from "./boot.ts";
 import { browserKernels, createUpdater, kernelIdentity } from "./update.ts";
@@ -9,10 +9,12 @@ const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
 const tree = createIndexedDbFileTree();
 const distribution = createSystemDistribution(tree, { manifestUrl: new URL("./manifest.json", document.baseURI), origin: location.origin });
-const collectStorage = () => { void tree.storage?.gc().catch(error => console.error(error)); };
-collectStorage();
-const storageTimer = setInterval(collectStorage, 24 * 60 * 60_000);
-import.meta.hot?.dispose(() => clearInterval(storageTimer));
+const store = bootAppStore(createAppStore(tree));
+// 定期実行はすべてスケジューラに載せる（docs/spec/scheduler.md）
+const scheduler = await createScheduler({ store: store.system, report: error => console.error(error) });
+scheduler.register({ id: "os/gc", owner: "os", label: "ストレージの片付け", rule: { every: 24 * 60 * 60 }, run: async () => { await tree.storage?.gc(); } });
+scheduler.start();
+import.meta.hot?.dispose(() => scheduler.stop());
 
 if (new URL(location.href).searchParams.has("recovery")) {
   showRecovery(container, distribution);
@@ -57,14 +59,14 @@ try {
     lists,
     browserBuild: { distribution, workerUrl: import.meta.env.PROD ? new URL("./build-worker.js", document.baseURI) : undefined },
     update: { ...updater, openRecovery() { location.assign("?recovery"); } },
-    store: bootAppStore(createAppStore(tree)),
+    store,
+    scheduler,
     onError(error) { console.error(error); if (booting) errors.push(error); },
   });
   booting = false;
   if (errors.length) { shell.stop(); throw errors[0]; }
-  void updater.check();
-  const timer = setInterval(() => { void updater.check(); }, 30 * 60_000);
-  import.meta.hot?.dispose(() => { clearInterval(timer); shell.stop(); });
+  const unregisterUpdate = scheduler.register({ id: "os/update", owner: "os", label: "OS の更新確認", rule: { every: 30 * 60 }, run: () => updater.check() });
+  import.meta.hot?.dispose(() => { unregisterUpdate(); shell.stop(); });
 } catch (error) {
   console.error(error);
   showRecovery(container, distribution, error);

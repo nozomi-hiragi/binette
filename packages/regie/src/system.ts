@@ -1,5 +1,6 @@
 import { createProviderLists, type InstallConfirmation, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
 import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
+import { createScheduler, type Scheduler } from "./scheduler.ts";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
@@ -32,6 +33,8 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
     subscribe?(listener: () => void): () => void;
   };
   store: AppStore;
+  /** 定期実行の置き場所。省くとシステムが作り、stop で止める。システムはここに `os/catalogs` を登録する */
+  scheduler?: Scheduler;
   ui: SystemUi;
   homeRetryWindow?: number;
   stackSize?: number;
@@ -62,6 +65,7 @@ export interface SystemView {
 /** 起動したシステム */
 export interface BinetteSystem {
   readonly lists: ProviderLists;
+  readonly scheduler: Scheduler;
   openHome(): Promise<void>;
   open(key: string): Promise<void>;
   close(id: number): Promise<void>;
@@ -410,7 +414,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           quiet(lists.add(text).then(() => { repoStates.delete(text); }, error => { repoStates.set(text, `error: ${message(error)}`); throw error; }));
           break;
         case "removeRepo": repoStates.delete(text); quiet(lists.remove(text)); break;
-        case "checkUpdates": quiet(lists.check(text || undefined)); break;
+        case "checkUpdates": quiet(text ? lists.check(text) : scheduler.runNow("os/catalogs")); break;
         case "install": { const { list, id } = target(); quiet(lists.install(list, id)); break; }
         case "uninstall": quiet(lists.uninstall(text, on)); break;
         case "cancel": lists.cancel(text); break;
@@ -959,10 +963,20 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     renderBar();
     await openHome();
   }
+  const ownScheduler = !options.scheduler;
+  const scheduler = options.scheduler ?? await createScheduler({ store: options.store.system, report });
+  const unregisterCatalogs = scheduler.register({ id: "os/catalogs", owner: "os", label: "カタログの更新確認", rule: { every: 30 * 60 }, run: () => lists.check() });
   // 呼び出し元の UI の起動完了を待ち、接続失敗も通常のエラーとして届ける。
-  const firstCheck = setTimeout(() => { if (!stopped) void lists.check().catch(report); }, 0);
+  // 更新の確認はスケジューラに任せ、起動時はアプリ管理に出す中身だけを取る（更新は入れない）
+  const firstCheck = setTimeout(() => {
+    if (stopped) return;
+    scheduler.start();
+    void lists.list().then(registrations => Promise.all(registrations.map(registration =>
+      lists.cached(registration.url) ? undefined : lists.fetch(registration.url).catch(() => {})))).finally(syncManager);
+  }, 0);
   return {
     lists,
+    scheduler,
     openHome,
     async open(key) {
       const app = apps.find(app => app.key === key);
@@ -997,6 +1011,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       clearTimeout(firstCheck);
       unsubscribeLists();
       clearTimeout(managerSyncing);
+      unregisterCatalogs();
+      if (ownScheduler) scheduler.stop();
       lists.stop();
       generation++;
       clearTimeout(restartTimer);

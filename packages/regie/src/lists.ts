@@ -117,7 +117,7 @@ export interface ProviderListsOptions {
   concurrency?: number;
 }
 
-/** リスト操作を直列化し、起動時と 30 分ごとに更新する。stop は進行中の取得・ビルドも中止する */
+/** リスト操作を直列化する。定期の確認はスケジューラの `os/catalogs` が `check` を呼ぶ。stop は進行中の取得・ビルドも中止する */
 export async function createProviderLists(options: ProviderListsOptions): Promise<ProviderLists> {
   const { store } = options;
   const controller = new AbortController();
@@ -521,12 +521,10 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     },
     subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     stop() {
-      clearInterval(timer);
       controller.abort();
       for (const job of jobs.values()) job.abort();
       for (const resolve of slots.splice(0)) resolve();
     },
   };
-  const timer = setInterval(() => { void check().catch(error => { if (!controller.signal.aborted) options.report?.(error); }); }, 30 * 60_000);
   return api;
 }

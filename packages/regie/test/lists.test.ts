@@ -1,8 +1,8 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Window } from "happy-dom";
 import { computeIntegrity } from "@binette/core";
-import { createAppStore, createMemoryFileTree, createProviderLists, startSystem } from "../src/index.ts";
-import type { InstalledApp, ProviderListsOptions } from "../src/index.ts";
+import { createAppStore, createMemoryFileTree, createProviderLists, createScheduler, startSystem } from "../src/index.ts";
+import type { AppStore, InstalledApp, ProviderListsOptions } from "../src/index.ts";
 import { buildCompiler } from "../../../scripts/build-system.ts";
 
 const encoder = new TextEncoder();
@@ -24,6 +24,11 @@ function compilerBytes() {
 const entry = (version = "list-version", integrity?: Record<string, string>) => ({ id: "memo", source: sourceUrl, version, ...(integrity ? { integrity } : {}) });
 const html = (apps = [entry()]) => `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "提供者", apps })}</script>`;
 const moved = (url: string) => `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "移転", movedTo: url })}</script>`;
+/** 前回の確認から 30 分を過ぎた os/catalogs を保存し、起動時に確認させる */
+const overdueCatalogs = (store: AppStore) => store.system.putSchedules!({
+  "os/catalogs": { owner: "os", rule: { every: 1800 }, enabled: true, registered: Date.now() - 31 * 60_000 },
+});
+
 async function fixture(extra: Partial<ProviderListsOptions> = {}, browser = false) {
   const tree = createMemoryFileTree();
   const store = createAppStore(tree);
@@ -247,6 +252,7 @@ Deno.test("startSystem は保存済みアプリを一覧に含め、起動時の
   try {
     await f.store.put({ ...fakeApp(), listVersion: "old" });
     await f.lists.add(listUrl);
+    await overdueCatalogs(f.store);
     const system = await startSystem({ apps: [], store: f.store, browserBuild: f.options.browserBuild, providerLists: { fetch: f.options.fetch, parseHtml: f.options.parseHtml }, ui: { present() { return { remove() {} }; }, update(view) { views.push(view.apps.map(app => app.key)); }, report() {} } });
     try {
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -276,33 +282,27 @@ Deno.test("http のインストール・保存後の再読込・移転はデバ�
   } finally { await f.stop(); }
 });
 
-Deno.test("30 分の自動確認で版が変われば更新し、stop 後は確認しない", async () => {
+Deno.test("スケジューラの os/catalogs を実行すると版が変わったアプリを更新し、リスト自身はタイマーを持たない", async () => {
   const original = globalThis.setInterval;
-  let tick: (() => void) | undefined;
-  let interval: ReturnType<typeof setInterval> | undefined;
-  globalThis.setInterval = ((callback: TimerHandler, delay?: number) => {
-    assertEquals(delay, 30 * 60_000);
-    tick = callback as () => void;
-    return interval = original(() => {}, delay);
-  }) as unknown as typeof setInterval;
+  globalThis.setInterval = (() => { throw new Error("setInterval を使わない"); }) as unknown as typeof setInterval;
   let f: Awaited<ReturnType<typeof fixture>>;
   try { f = await fixture({}, true); } finally { globalThis.setInterval = original; }
+  const scheduler = await createScheduler({ store: f.store.system });
   try {
     await f.lists.add(listUrl); await f.lists.install(listUrl, "memo");
+    scheduler.register({ id: "os/catalogs", owner: "os", rule: { every: 1800 }, run: () => f.lists.check() });
     f.responses.set(listUrl, html([entry("new-version")]));
-    tick!(); await f.lists.list();
+    await scheduler.runNow("os/catalogs");
     assertEquals((await f.store.get(listUrl + "#memo"))?.listVersion, "new-version");
-    f.lists.stop(); const requests = f.requests.length;
-    tick!(); await Promise.resolve(); await Promise.resolve();
-    assertEquals(f.requests.length, requests);
-    assert(interval !== undefined);
-  } finally { await f.stop(); }
+    assertEquals(scheduler.list()[0].last?.result, "ok");
+  } finally { scheduler.stop(); await f.stop(); }
 });
 
 Deno.test("起動時に提供リストを取得できなくても、保存済みアプリと OS の起動を続ける", async () => {
   const f = await fixture();
   try {
     await f.store.put(fakeApp()); await f.lists.add(listUrl); f.responses.delete(listUrl);
+    await overdueCatalogs(f.store);
     const reports: unknown[] = []; let booting = true;
     const system = await startSystem({ apps: [], store: f.store, providerLists: { fetch: f.options.fetch, parseHtml: f.options.parseHtml }, ui: { present() { return { remove() {} }; }, update() {}, report(error) { reports.push({ error: String(error), booting }); } } });
     booting = false;
@@ -398,6 +398,7 @@ Deno.test("保存済みの boot 移転先でホームを開き、保留中の初
     f.responses.set(storedUrl, html());
     await f.lists.add(storedUrl); await f.lists.install(storedUrl, "memo");
     await f.store.system.putLists([{ url: storedUrl, boot: listUrl }]);
+    await overdueCatalogs(f.store);
     f.responses.set(next, html([entry("updated")]));
     const shown: { key: string; version: string | undefined }[] = [];
     const reports: unknown[] = [];
