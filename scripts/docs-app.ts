@@ -16,7 +16,7 @@ export interface Page {
   /** Path from docs/ without ".md"; README and index become their folder ("" or "spec/"). */
   id: string;
   title: string;
-  /** Blocks joined by BLOCK; see bundled/docs/src/main.ts for the layout. */
+  /** Blocks joined by BLOCK; see catalog/docs/src/main.ts for the layout. */
   body: string;
 }
 
@@ -257,7 +257,7 @@ export function render(pages: Page[]): string {
   ].join("\n");
 }
 
-export const OUTPUT = new URL("../bundled/docs/src/content.ts", import.meta.url);
+export const OUTPUT = new URL("../catalog/docs/src/content.ts", import.meta.url);
 export const DOCS = new URL("../docs/", import.meta.url);
 
 if (import.meta.main) {
