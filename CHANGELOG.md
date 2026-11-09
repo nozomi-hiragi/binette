@@ -2,6 +2,8 @@
 
 ## v0.2.0（未リリース）
 
+- Binette の既定の提供リストを足す。`deno task pages` がブランチごとに `apps/<ブランチ>/`（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）へ HTML と `apps.json` を書き出し、そのブランチの OS の `system/boot.json` の `lists` に載せる。`source` は commit 入りの raw.githubusercontent.com の URL、`version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`、`integrity` の `"/"` はビルドで求める。`build:system` は環境変数 `BINETTE_LISTS`（カンマ区切りの https の URL）を `lists` に書く
+- 破壊的変更: デザイナーとドキュメントアプリを同梱から外し、`bundled/designer`・`bundled/docs` を `catalog/designer`・`catalog/docs` に移す。ID は `designer`・`docs` から、提供リストの URL ＋ `#designer`・`#docs` になる。「アプリ」から入れる
 - アプリ管理の画面を足す。Cadre のサブアプリ `cadre.apps`（「アプリ」、役割 `apps-manager`）に、探す・入っている・リストの 3 つのタブと詳細を持たせる。入れる・更新・適用・中止・削除（本体だけ・データごと）、更新の確認、自動更新のトグル（アプリごと・リストごと・全体）、提供リストの追加と削除を扱う。カタログのアイコンは、画面に URL の画像を描けないため、今は名前の頭文字で代える
 - Scene の枠が、インストールと権限が増える更新の前に権限を確かめるダイアログを出す（`SystemUi.confirmInstall`）。アプリ名・出どころ・権限と理由を出し、更新では増える権限を先に強調する。確認は 1 つずつ出し、Esc はやめるとみなす
 - Cadre は、起動し直したときに開いているアプリがあれば、ホームを開かずに前面をそのままにする。アプリを入れると Cadre が起動し直すため、アプリ管理からホームに戻されていた

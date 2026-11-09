@@ -131,6 +131,20 @@ async function cleanPrebuilt(root: string): Promise<void> {
   }
 }
 
+/**
+ * boot.json の既定の提供リスト。BINETTE_LISTS にカンマ区切りの https の URL で渡す（GitHub Pages ではブランチの提供リスト）。
+ * 渡さなければ空
+ */
+export function bootLists(value = Deno.env.get("BINETTE_LISTS") ?? ""): string[] {
+  const lists = value.split(",").map(url => url.trim()).filter(url => url.length > 0);
+  for (const url of lists) {
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { throw new Error(`BINETTE_LISTS の URL が正しくありません: ${url}`); }
+    if (parsed.protocol !== "https:") throw new Error(`BINETTE_LISTS は https の URL で指定してください: ${url}`);
+  }
+  return lists;
+}
+
 /** 全アプリのビルドが成功してから、Vite に渡す無視済みの配布物を入れ替える */
 export async function buildApps(root: string): Promise<void> {
   const staging = await Deno.makeTempDir({ prefix: "binette-system-" });
@@ -148,7 +162,7 @@ export async function buildApps(root: string): Promise<void> {
     roles.settings = `${cadre.id}.settings`;
     try { roles.files = JSON.parse(await Deno.readTextFile(resolve(system, "bundled/filer/app.json"))).id; }
     catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
-    await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: [] }));
+    await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: bootLists() }));
     await buildCompiler(resolve(system, "tools/asc.js"));
     await Deno.mkdir(resolve(system, "libraries"));
     await Deno.copyFile(replique, resolve(system, "libraries/replique.ts"));

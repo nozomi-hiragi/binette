@@ -32,7 +32,7 @@
 | `apps/cadre` の `sub.settings`（`cadre.settings`） | 設定 | `roles: ["settings"]`。ホームの選択、更新、デバッグ値、履歴 | [settings.md](settings.md) |
 | `apps/cadre` の `sub.apps`（`cadre.apps`） | アプリ | `roles: ["apps-manager"]`。提供リストとアプリの管理 | [app-manager.md](../app-manager.md) |
 
-通常の同梱アプリとしてデザイナーを `bundled/designer/` に置く構成です。[Filer](filer.md) は `bundled/filer/` に置くファイル管理アプリです。ドキュメントアプリは `bundled/docs/`（ID `docs`）に置き、この `docs/` の仕様書を読めるようにします。アプリ管理ができたら、デザイナーとドキュメントアプリは既定の提供リストに移します（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。デザイナーはルートの Deno workspace と `deno task check` の入口にも含めます。通常の同梱アプリなので、システムアプリの権限は持ちません。
+[Filer](filer.md) は `bundled/filer/` に置く同梱のファイル管理アプリです。デザイナー（`catalog/designer/`、ID `designer`）とドキュメントアプリ（`catalog/docs/`、ID `docs`。この `docs/` の仕様書を読む）は、同梱せず既定の提供リストに載せます（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。`catalog/` のアプリもルートの Deno workspace と `deno task check` の入口に含めます。提供リストのアプリなので、システムアプリの権限は持ちません。
 ## 未決のこと
 
 - システムアプリに、ふつうのアプリより強い権限を持たせるか。今は、ホームと Cadre が `apps` を、Cadre が `cadre` を、設定アプリが `os` を受け取る（役割の割り当てで判断する）。ユーザーに許可を聞く権限の仕組みそのものが未決
