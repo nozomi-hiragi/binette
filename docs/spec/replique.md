@@ -159,6 +159,7 @@ export class Api {
 | `apps` | `AppsApi` | ホーム（と Cadre） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
 | `scheduler` | `SchedulerApi` | 設定アプリ | OS とすべてのアプリの予定の一覧、形の変更、止める・再開、今すぐ実行（[scheduler.md](scheduler.md)） |
+| `schedule` | `ScheduleApi` | `permissions` に `schedule` を書いたアプリ | 自分の予定の登録・変更・削除・今すぐ実行と読み取り（[scheduler.md](scheduler.md#アプリの予定)） |
 | `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
 | `shares` | `SharesApi` | すべてのアプリ | 共有の作成・一覧・承認・退出とファイル操作（[file-sharing.md](file-sharing.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
@@ -193,6 +194,16 @@ class Home extends App {
 - `enabled(i)`・`running(i)`・`next(i)`・`lastTime(i)`（端末の時刻帯で `YYYY-MM-DD HH:MM`、無ければ空）・`lastResult(i)`（`ok`・`error: …`・空）
 - `update(id, rule)`・`setEnabled(id, on)`・`runNow(id)` は OS に頼むだけで、すぐ戻ります。予定が変わると OS が写しを送り直し、画面を描き直します。形の検査に落ちた変更は OS のエラー表示に出ます
 - 番号の範囲外は例外です
+
+### ScheduleApi
+
+`app.json` の `permissions` に `schedule` を書いたアプリに届きます。自分の予定だけを、枠番号（0 から。今は枠 0 だけ）で扱います（実装済み）。
+
+- `register(slot, rule, label = "")` は、その枠が空いているときだけ登録して true を返します。すでにあるときは何もせず false です。起動のたびに呼んでも、ユーザーが設定で変えた値は消えません
+- `update(slot, rule)` はその枠に予定があるときだけ形を変えます。`remove(slot)` は消し、`runNow(slot)` は止めていても今すぐ実行します。どれも予定が無ければ false です
+- 形は JSON の文字列（`{"every":1800}`・`{"daily":"07:30"}` など、[予定の形](scheduler.md#予定の形)）で、`every` は 900 秒以上です。正しくない形と枠の外の番号は、何もせず false を返します
+- `count()`（枠の数）・`exists(slot)`・`rule(slot)`・`label(slot)`・`enabled(slot)`・`lastTime(slot)`（Unix epoch ミリ秒の f64、まだなら 0）・`lastResult(slot)`（`ok`・`error: …`・空）。Worker の写しから同期的に返し、予定が変わると OS が写しを送り直して画面を描き直します
+- 予定の時刻が来ると `App.onSchedule(slot, api)` が呼ばれます。インスタンスが無ければ画面なしで起こされ、`onCreate` は呼ばれず、`build()` もしません（[画面なしの起動](lifecycle.md#画面なしの起動決定-2026-11-09)）。上限は 30 秒です
 
 ### PigeonApi
 

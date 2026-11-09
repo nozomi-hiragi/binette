@@ -2,6 +2,9 @@
 
 ## v0.2.0（未リリース）
 
+- アプリの予定を実装する（[docs/spec/scheduler.md](docs/spec/scheduler.md#アプリの予定)）。辞書のキー `schedule`（Réplique の `ScheduleApi`）は、`app.json` の `permissions` に `schedule` を書いたアプリに届く。枠 0 だけに `register`（空いているときだけ）・`update`・`remove`・`runNow` と、形・止めているか・前回の時刻と結果の読み取りを持つ。`every` は 900 秒以上で、正しくない形と枠の外の番号は false を返す。予定の ID は `<完全なアプリ ID>/<枠番号>`、ラベルが無ければ設定に「スケジュール{枠番号+1}」と出す
+- 予定の時刻が来ると、インスタンスがあれば（どの状態でも）`App.onSchedule(slot, api)` を届け、無ければ画面なしで起こして呼ぶ（`onCreate` は呼ばない、返ったら Worker を止める、スタックと履歴には数えない）。上限は 30 秒で、過ぎたらアプリを終了して結果を `error: 時間切れ` にする。画面なしの実行中にユーザーが開くと、終わってから開く。アプリを消すとその予定も消す
+- 破壊的変更: `RegieApp` に `callWithin(timeout, name, ...args)`、`Process` に `schedule(slot, timeout)`、`Scheduler` に `saved()`・`remove(id)` が加わる。AS のビルドが `__bina_schedule` を export する
 - Régie の `SystemDistribution.install` と `prepare` に任意の `options.onProgress({ loaded, total, files, totalFiles })` を追加する。保存済みファイルの即時算入、本文の逐次読み込みによる進捗通知、目録の大きさを超える取得の中断を扱う
 
 - 辞書のキー `scheduler`（Réplique の `SchedulerApi`）を足す。設定アプリ（`binette:system` の役割 settings）にだけ届き、OS とアプリの予定の一覧、形の変更、止める・再開、今すぐ実行を扱う。設定アプリに「定期実行」の節を足し、間隔の予定は − ＋ で変えられる

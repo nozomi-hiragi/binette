@@ -65,7 +65,7 @@ async function build(code = source, home = false) {
   const stderr = asc.createMemoryStream();
   const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
     readFile(name: string) {
-      if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle, __bina_pigeon, __bina_cadre_sync } from "jsr:@binette/replique";';
+      if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle, __bina_pigeon, __bina_cadre_sync, __bina_schedule } from "jsr:@binette/replique";';
       if (name === "node_modules/jsr:@binette/replique.ts") return replique;
       if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
       if (name === "node_modules/jsr:@binette/decor/parts.ts") return decorParts;
@@ -892,4 +892,76 @@ Deno.test("scheduler は binette:system の設定アプリにだけ届き、操�
       }
     } finally { system.stop(); }
   }
+});
+
+const scheduleApp = await build((source + `
+import { ScheduleApi, StorageApi } from "jsr:@binette/replique";
+const scheduleApi = new Api().get<ScheduleApi>("schedule");
+class Mail extends App {
+  onSchedule(slot: i32, api: Api): void {
+    api.get<StorageApi>("storage")!.write("ran", slot.toString());
+    document.getElementById("ran").textContent = "slot" + slot.toString();
+  }
+}
+export function hasSchedule(): void { document.getElementById("schedule").textContent = (scheduleApi != null).toString(); }
+export function registerTwice(): void {
+  const s = scheduleApi!;
+  const first = s.register(0, '{"every":900}', "新着の確認");
+  const again = s.register(0, '{"every":1800}');
+  const outside = s.register(1, '{"every":900}');
+  const tooShort = s.update(0, '{"every":60}');
+  document.getElementById("register").textContent = first.toString() + ":" + again.toString() + ":" + outside.toString() + ":" + tooShort.toString() + ":" + s.rule(0);
+}
+export function runNow(): void { scheduleApi!.runNow(0); }
+export function removeIt(): void { document.getElementById("remove").textContent = scheduleApi!.remove(0).toString() + ":" + scheduleApi!.exists(0).toString(); }
+`).replace("const test = new TestApp();\nlaunch(test);", "const test = new Mail();\nlaunch(test);").replace("class TestApp extends App", "class TestBase extends App").replace("class Mail extends App", "class Mail extends TestBase"));
+
+Deno.test("schedule は permissions に schedule を書いたアプリに届き、枠 0 にだけ登録できる", async () => {
+  for (const declared of [true, false]) {
+    const element = output(); const store = createMemoryAppStore();
+    const manifest = { ...scheduleApp.manifest, id: "mail", ...(declared ? { permissions: { schedule: { reason: "新着の確認" } } } : {}) };
+    const system = await mountSystem(element, { apps: [homeApp, { source: "binette:bundled", prebuilt: { ...scheduleApp, manifest } }], store, createWorker });
+    const key = appId("binette:bundled", "mail");
+    try {
+      await system.open(key);
+      const process = element.active.process;
+      await process.app.call("hasSchedule");
+      assertEquals(element.active.text.get("schedule"), String(declared));
+      if (!declared) continue;
+      await process.app.call("registerTwice");
+      assertEquals(element.active.text.get("register"), `true:false:false:false:{"every":900}`);
+      await waitForAsync(async () => (await store.system.getSchedules!())[`${key}/0`]?.label === "新着の確認");
+      const info = system.scheduler.list().find(info => info.id === `${key}/0`);
+      assertEquals([info?.owner, JSON.stringify(info?.rule)], [key, `{"every":900}`]);
+      // 開いているインスタンスには、そのまま onSchedule を届ける
+      await process.app.call("runNow");
+      await waitFor(() => element.active.text.get("ran") === "slot0");
+      await waitForAsync(async () => (await store.system.getSchedules!())[`${key}/0`]?.last?.result === "ok");
+      await process.app.call("removeIt");
+      assertEquals(element.active.text.get("remove"), "true:false");
+      await waitForAsync(async () => (await store.system.getSchedules!())[`${key}/0`] === undefined);
+    } finally { system.stop(); }
+  }
+});
+
+Deno.test("インスタンスが無ければ画面なしで起こして onSchedule を呼び、履歴に数えない。消えたアプリの予定は消す", async () => {
+  const element = output(); const store = createMemoryAppStore();
+  const key = appId("binette:bundled", "mail");
+  await store.system.putSchedules!({
+    [`${key}/0`]: { owner: key, rule: { every: 900 }, enabled: true, registered: Date.now() },
+    "https://example.com/list/#gone/0": { owner: "https://example.com/list/#gone", rule: { every: 900 }, enabled: true, registered: Date.now() },
+  });
+  const manifest = { ...scheduleApp.manifest, id: "mail", permissions: { schedule: { reason: "新着の確認" } } };
+  const system = await mountSystem(element, { apps: [homeApp, { source: "binette:bundled", prebuilt: { ...scheduleApp, manifest } }], store, createWorker });
+  try {
+    await waitForAsync(async () => Object.keys(await store.system.getSchedules!()).sort().join() === `${key}/0,os/catalogs`);
+    const entry = system.scheduler.list().find(info => info.id === `${key}/0`);
+    assertEquals(entry?.label, undefined);
+    const launches = (await store.system.listLaunches()).length;
+    await system.scheduler.runNow(`${key}/0`);
+    await waitForAsync(async () => (await store.data.read(key)).get("ran") === "0");
+    assertEquals((await store.system.getSchedules!())[`${key}/0`]?.last?.result, "ok");
+    assertEquals((await store.system.listLaunches()).length, launches);
+    assert(!element.view.instances.some(instance => instance.key === key));
+  } finally { system.stop(); }
 });

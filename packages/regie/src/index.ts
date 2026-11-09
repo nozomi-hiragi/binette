@@ -5,7 +5,7 @@
  */
 export type { WorkerScope } from "./worker.ts";
 export { serveApp } from "./worker.ts";
-export type { ApiDenial, LaunchOptions, ManagerApp, ManagerDetails, ManagerSnapshot, OsSnapshot, SchedulerEntry, SchedulerSnapshot, RegieApp, RegieWorker } from "./launch.ts";
+export type { ApiDenial, LaunchOptions, ManagerApp, ManagerDetails, ManagerSnapshot, OsSnapshot, ScheduleSlot, ScheduleSnapshot, SchedulerEntry, SchedulerSnapshot, RegieApp, RegieWorker } from "./launch.ts";
 export { API_KEYS, launchApp } from "./launch.ts";
 export type { AppDataStore, AppStore, IndexedDbAppStoreOptions, InstalledApp, LifecycleRecord, LaunchRecord, SystemSettings, SystemStore } from "./store.ts";
 export { createAppStore, createIndexedDbAppStore, createMemoryAppStore, DEFAULT_SYSTEM_SETTINGS, appId, validateSystemSettings } from "./store.ts";
