@@ -613,7 +613,7 @@ Deno.test("os.set の範囲外と知らない名前は false になり、SystemS
     "main.ts": `import { Api, App, Last, OsApi, document, launch } from "jsr:@binette/replique";
 class Settings extends App {
   onCreate(_last: Last, api: Api): void {
-    const os = api.get<OsApi>("os")!;
+    const os = OsApi.from(api)!;
     assert(!os.set("unknown", 1)); assert(!os.set("home", 1)); assert(!os.set("stackSize", 0));
     assert(!os.set("historyLimit", -1)); assert(!os.set("stopDelay", -1)); assert(!os.set("homeRetryWindow", -1));
     assert(!os.set("callTimeout", 999)); assert(!os.set("destroyTimeout", 999));

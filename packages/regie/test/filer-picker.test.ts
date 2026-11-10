@@ -13,7 +13,7 @@ const requesterFiles: Record<string, string> = {
 let pigeon = new PigeonApi(); let shares = new SharesApi(); let storage = new StorageApi(); let pending: i32 = 0;
 export function pick(): void { pigeon.send("filer", "pick", "", "", true); }
 class Requester extends App {
-  override onCreate(_last: Last, api: Api): void { pigeon = api.get<PigeonApi>("pigeon")!; shares = api.get<SharesApi>("shares")!; storage = api.get<StorageApi>("storage")!; }
+  override onCreate(_last: Last, api: Api): void { pigeon = PigeonApi.from(api)!; shares = SharesApi.from(api)!; storage = StorageApi.from(api)!; }
   override onPigeon(): void {
     for (let i = 0; i < pigeon.count(); i++) if (pigeon.kind(i) == "pick.reply") {
       const attached = pigeon.shares(i); storage.write("attachment", attached);

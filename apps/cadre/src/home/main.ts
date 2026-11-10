@@ -12,7 +12,7 @@ function openApp(index: i32): void {
 }
 
 export class Home extends App {
-  override onCreate(_last: Last, api: Api): void { appsApi = api.get<AppsApi>("apps"); }
+  override onCreate(_last: Last, api: Api): void { appsApi = AppsApi.from(api); }
 
   override build(): View {
     const api = appsApi;

@@ -1,4 +1,6 @@
-// deno-lint-ignore-file no-namespace
+// deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
+import { Api, Why } from "jsr:@binette/replique/app";
+
 namespace hostStorage {
   // @ts-ignore: decorator
   @external("binette", "storage.has")
@@ -20,8 +22,13 @@ namespace hostStorage {
   export declare function name(i: i32): string;
 }
 
-/** `api.get<StorageApi>("storage")`。アプリごとのデータ（`/data/<id>/`）。名前は 1 つの部品で、中身は文字列。すべてのアプリに届く */
+/** `StorageApi.from(api)`。アプリごとのデータ（`/data/<id>/`）。名前は 1 つの部品で、中身は文字列。すべてのアプリに届く */
 export class StorageApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): StorageApi | null {
+    return api.why("storage") == Why.Granted ? new StorageApi() : null;
+  }
+
   has(name: string): bool { return hostStorage.has(name); }
   /** 無ければ null */
   read(name: string): string | null { return hostStorage.read(name); }

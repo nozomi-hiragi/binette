@@ -17,7 +17,7 @@ const example = new Example();
 launch(example);
 ```
 
-Element は textContent・className、appendChild・remove・addEventListener を持ちます。同じ id は同じ Element を返し、無い id は何もしません。getter は最後に書いた値（まだなら空文字列）です。Event.currentTarget はリスナーを付けた Element です。`onCreate` の第 2 引数 `api` は、そのアプリに届く API の辞書です。`api.get<AppsApi>("apps")`（ホーム）、`api.get<OsApi>("os")`（設定アプリ）、`api.get<StorageApi>("storage")`（すべてのアプリ）のように型とキーで取り出し、届いていなければ null です。`api.why(key)` は理由（NotGranted か NotAssigned）を返します。
+Element は textContent・className、appendChild・remove・addEventListener を持ちます。同じ id は同じ Element を返し、無い id は何もしません。getter は最後に書いた値（まだなら空文字列）です。Event.currentTarget はリスナーを付けた Element です。`onCreate` の第 2 引数 `api` は、そのアプリに届く API の辞書です。`AppsApi.from(api)`（ホーム）、`OsApi.from(api)`（設定アプリ）、`StorageApi.from(api)`（すべてのアプリ）のように各クラスの `from(api)` で取り出し、届いていなければ null です。`api.why(key)` は理由（NotGranted か NotAssigned）を返します。
 
 `api.sub()` は起動したサブアプリの識別子（例 `home`）を返し、親として開いたときは空文字列を返します。`new Api().sub()` としてトップレベルの初期化からも使えます。
 

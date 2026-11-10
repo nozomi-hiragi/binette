@@ -37,7 +37,7 @@ let log = "";
 function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
 class TestApp extends App {
   onCreate(last: Last, api: Api): void {
-    appsApi = api.get<AppsApi>("apps");
+    appsApi = AppsApi.from(api);
     record("create:" + last.state.toString());
     document.getElementById("page").textContent = this.page;
     document.getElementById("click").addEventListener("click", () => record("click"));

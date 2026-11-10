@@ -20,7 +20,7 @@
 OS が仲立ちする手紙です。似た仕組みは Android の Intent です。
 
 ```ts
-const pigeon = api.get<PigeonApi>("pigeon");
+const pigeon = PigeonApi.from(api);
 pigeon.send("user", "chat.message", "題", "本文");        // 通知
 pigeon.send("<アプリの ID>", "open", "", json);            // 受信欄へ
 override onPigeon(): void { /* 受信欄が増えた */ }

@@ -309,7 +309,7 @@ function hostOf(url: string): string {
 }
 
 export class Apps extends App {
-  override onCreate(_last: Last, api: Api): void { manager = api.get<AppManagerApi>("manager"); }
+  override onCreate(_last: Last, api: Api): void { manager = AppManagerApi.from(api); }
 
   override build(): View {
     const m = manager;

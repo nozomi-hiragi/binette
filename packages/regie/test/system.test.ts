@@ -44,7 +44,7 @@ let log = "";
 function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
 class TestApp extends App {
   onCreate(last: Last, api: Api): void {
-    appsApi = api.get<AppsApi>("apps");
+    appsApi = AppsApi.from(api);
     record("create:" + last.state.toString());
     document.getElementById("page").textContent = this.page;
     document.getElementById("click").addEventListener("click", () => record("click"));
@@ -455,7 +455,7 @@ Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭
 
 const permissionApp = await build(source + `
 import { OsApi } from "jsr:@binette/replique";
-const osApi = new Api().get<OsApi>("os");
+const osApi = OsApi.from(new Api());
 export function hasOs(): void { document.getElementById("os").textContent = (osApi != null).toString(); }
 export function writeSetting(): void { osApi!.set("historyLimit", 7); }
 export function selectHome(): void { osApi!.assign("home", 0); }
@@ -537,7 +537,7 @@ Deno.test("役割の割り当ては、設定、ブートの既定、system の�
 
 const storageApp = await build(source + `
 import { StorageApi } from "jsr:@binette/replique";
-const storageApi = new Api().get<StorageApi>("storage");
+const storageApi = StorageApi.from(new Api());
 export function save(): void { storageApi!.write("メモ", "保存した"); storageApi!.write("消す", "x"); storageApi!.remove("消す"); }
 export function load(): void { const value = storageApi!.read("メモ"); document.getElementById("memo").textContent = value == null ? "なし" : value; }
 `);
@@ -587,7 +587,7 @@ Deno.test("保存待ちの書き込みがあるうちに開き直しても、書
 
 const updateApp = await build(source + `
 import { OsApi } from "jsr:@binette/replique";
-const updateOs = new Api().get<OsApi>("os");
+const updateOs = OsApi.from(new Api());
 export function update(): void { updateOs!.update(); document.getElementById("available").textContent = updateOs!.updateAvailable().toString(); }
 `);
 
@@ -647,7 +647,7 @@ launch(new Cadre());`);
 Deno.test("サブは独立した Worker と履歴を持ち、完全 ID の保存領域と権限を親と共有する", async () => {
   const code = source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.getElementById("sub").textContent = api.sub(); document.getElementById("why").textContent = api.why("fs").toString();') + `
 import { StorageApi } from "jsr:@binette/replique";
-const storage = new Api().get<StorageApi>("storage");
+const storage = StorageApi.from(new Api());
 export function saveShared(): void { storage!.write("shared", "共通"); }
 export function readShared(): void { const value = storage!.read("shared"); document.getElementById("shared").textContent = value == null ? "なし" : value; }
 `;
@@ -708,7 +708,7 @@ Deno.test("Pigeon は停止中と動作中に届け、urgent 起動と通知返�
   const senderId = "https://example.test/pigeon/#sender";
   const sending = await build(`import { Api, App, PigeonApi, document, launch } from "jsr:@binette/replique";
 let pigeon: PigeonApi | null = null;
-class Sender extends App { onCreate(last: Last, api: Api): void { pigeon = api.get<PigeonApi>("pigeon"); } }
+class Sender extends App { onCreate(last: Last, api: Api): void { pigeon = PigeonApi.from(api); } }
 import { Last } from "jsr:@binette/replique";
 export function sendMail(): void { pigeon!.send("${target}", "open", "題", "本文"); }
 export function urgentMail(): void { pigeon!.send("${target}", "urgent", "", "至急", true); }
@@ -717,20 +717,20 @@ launch(new Sender());`);
   const receiving = await build(`import { Api, App, PigeonApi, Last, document, launch } from "jsr:@binette/replique";
 let pigeon: PigeonApi | null = null;
 function inspect(): void { document.getElementById("count").textContent = pigeon!.count().toString(); if (pigeon!.count()) { document.getElementById("from").textContent = pigeon!.from(0); document.getElementById("kind").textContent = pigeon!.kind(0); document.getElementById("body").textContent = pigeon!.body(0); } }
-class Receiver extends App { onCreate(last: Last, api: Api): void { pigeon = api.get<PigeonApi>("pigeon"); inspect(); } onPigeon(): void { inspect(); } }
+class Receiver extends App { onCreate(last: Last, api: Api): void { pigeon = PigeonApi.from(api); inspect(); } onPigeon(): void { inspect(); } }
 export function acknowledge(): void { pigeon!.done(0); inspect(); }
 launch(new Receiver());`);
   const cadre = await build(`import { Api, App, Last, CadreApi, StorageApi, launch } from "jsr:@binette/replique";
 let storage: StorageApi | null = null;
 let api: CadreApi | null = null;
-class Frame extends App { onCreate(last: Last, dictionary: Api): void { api = dictionary.get<CadreApi>("cadre"); storage = dictionary.get<StorageApi>("storage"); } }
+class Frame extends App { onCreate(last: Last, dictionary: Api): void { api = CadreApi.from(dictionary); storage = StorageApi.from(dictionary); } }
 export function inspectNotifications(): void { storage!.write("notifications", api!.notificationCount().toString()); }
 export function reply(): void { api!.notificationReply(api!.notificationId(0), "reply", "返事"); }
 export function replyButton(): void { api!.notificationReply(api!.notificationId(0), "ack", "無視する値"); }
 launch(new Frame());`);
   const settings = await build(`import { Api, App, Last, OsApi, launch } from "jsr:@binette/replique";
 let api: OsApi | null = null;
-class Settings extends App { onCreate(last: Last, dictionary: Api): void { api = dictionary.get<OsApi>("os"); } }
+class Settings extends App { onCreate(last: Last, dictionary: Api): void { api = OsApi.from(dictionary); } }
 export function muteSender(): void { for (let i = 0; i < api!.notificationCount(); i++) if (api!.notificationId(i) == "${senderId}") api!.setNotificationMuted(i, true); }
 launch(new Settings());`);
   const store = createMemoryAppStore(); const element = output();
@@ -831,7 +831,7 @@ launch(new Page());`);
 
 const managerApp = await build(source + `
 import { AppManagerApi } from "jsr:@binette/replique";
-const managerApi = new Api().get<AppManagerApi>("manager");
+const managerApi = AppManagerApi.from(new Api());
 export function hasManager(): void { document.getElementById("manager").textContent = (managerApi != null).toString(); }
 export function repos(): void { document.getElementById("repos").textContent = managerApi!.repoCount().toString() + ":" + managerApi!.installedCount().toString(); }
 export function autoAll(): void { managerApi!.setAutoUpdateAll(true); }
@@ -861,7 +861,7 @@ Deno.test("manager は binette:system の apps-manager にだけ届き、操作�
 
 const schedulerApp = await build(source + `
 import { SchedulerApi } from "jsr:@binette/replique";
-const schedulerApi = new Api().get<SchedulerApi>("scheduler");
+const schedulerApi = SchedulerApi.from(new Api());
 export function hasScheduler(): void { document.getElementById("scheduler").textContent = (schedulerApi != null).toString(); }
 export function list(): void {
   const s = schedulerApi!;
@@ -897,10 +897,10 @@ Deno.test("scheduler は binette:system の設定アプリにだけ届き、操�
 
 const scheduleApp = await build((source + `
 import { ScheduleApi, StorageApi } from "jsr:@binette/replique";
-const scheduleApi = new Api().get<ScheduleApi>("schedule");
+const scheduleApi = ScheduleApi.from(new Api());
 class Mail extends App {
   onSchedule(slot: i32, api: Api): void {
-    api.get<StorageApi>("storage")!.write("ran", slot.toString());
+    StorageApi.from(api)!.write("ran", slot.toString());
     document.getElementById("ran").textContent = "slot" + slot.toString();
   }
 }

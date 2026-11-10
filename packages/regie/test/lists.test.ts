@@ -327,7 +327,7 @@ Deno.test("稼働中のホームを移転する前に保存を終え、新 ID �
     f.responses.set(sourceUrl + "src/main.ts", `import { Api, App, DestroyReason, Last, StorageApi, launch } from "jsr:@binette/replique";
 class Home extends App {
   storage: StorageApi | null = null;
-  onCreate(last: Last, api: Api): void { this.storage = api.get<StorageApi>("storage"); }
+  onCreate(last: Last, api: Api): void { this.storage = StorageApi.from(api); }
   onDestroy(reason: DestroyReason): void { this.storage!.write("終了時", "保存済み"); }
 }
 launch(new Home());`);

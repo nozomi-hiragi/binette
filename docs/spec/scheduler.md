@@ -116,7 +116,7 @@ system.scheduler.subscribe(listener); // 予定が変わったら知らせる
 役割 `settings` に割り当てられたアプリにだけ届きます。一覧は番号で数え、操作は `id` で指します（実行や保存の途中で一覧が変わっても、別の予定を操作しないため）。
 
 ```ts
-const s = api.get<SchedulerApi>("scheduler");
+const s = SchedulerApi.from(api);
 s.count(); s.id(i); s.owner(i); s.label(i); s.rule(i); s.enabled(i);
 s.next(i); s.lastTime(i); s.lastResult(i);
 s.update(id, rule); s.setEnabled(id, on); s.runNow(id);
@@ -127,7 +127,7 @@ s.update(id, rule); s.setEnabled(id, on); s.runNow(id);
 `permissions` に `schedule` を書いたアプリに届きます。自分の予定だけを扱えます。
 
 ```ts
-const s = api.get<ScheduleApi>("schedule");
+const s = ScheduleApi.from(api);
 s.register(0, '{"every":1800}', "新着の確認"); // 登録。ラベルは任意
 s.update(0, '{"daily":"07:30"}');             // 変更
 s.remove(0);

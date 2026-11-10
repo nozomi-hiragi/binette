@@ -2,7 +2,19 @@
 
 ## v0.2.0（未リリース）
 
-- Réplique をホストの機能ごとの AS ファイルへ分割し、`jsr:@binette/replique/<機能名>` を公開する。既存の入口と `Api.get<T>`、アプリの書き方は維持する
+- 破壊的変更: Réplique の `Api.get<T>(key)` を廃止し、各機能の `XxxApi.from(api)` で取得する。キーと権限・役割の条件、届いていないときに null を返す動作は維持する。各機能の呼び出しは次のように変更する
+  - `api.get<AppsApi>("apps")` → `AppsApi.from(api)`
+  - `api.get<OsApi>("os")` → `OsApi.from(api)`
+  - `api.get<StorageApi>("storage")` → `StorageApi.from(api)`
+  - `api.get<SharesApi>("shares")` → `SharesApi.from(api)`
+  - `api.get<PigeonApi>("pigeon")` → `PigeonApi.from(api)`
+  - `api.get<FsApi>("fs")` → `FsApi.from(api)`
+  - `api.get<CadreApi>("cadre")` → `CadreApi.from(api)`
+  - `api.get<AppManagerApi>("manager")` → `AppManagerApi.from(api)`
+  - `api.get<SchedulerApi>("scheduler")` → `SchedulerApi.from(api)`
+  - `api.get<ScheduleApi>("schedule")` → `ScheduleApi.from(api)`
+
+- Réplique をホストの機能ごとの AS ファイルへ分割し、`jsr:@binette/replique/<機能名>` を公開する。既存の入口は維持する
 - 破壊的変更: CLI の `--replique` は AS の単一ファイルからソースフォルダの指定へ変わる。OS の配布先は `/system/libraries/replique.ts` から `/system/libraries/replique/`（`index.ts`・各機能の `.ts`・`index.json`）へ変わる
 
 - アプリ管理の画面にカタログのアイコンを出す。Régie の `ProviderLists` に `icon(url)` を足し（破壊的変更: 実装には `icon` が要る）、提供リストのアイコンを https で 1 回だけ取って、SVG と PNG・JPEG・GIF・WebP（64 KiB まで）を data URL にする。取れたら購読者に知らせ、写しの `icon` に入れる。届くまでと取れないときは名前の頭文字

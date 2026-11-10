@@ -1,4 +1,6 @@
-// deno-lint-ignore-file no-namespace
+// deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
+import { Api, Why } from "jsr:@binette/replique/app";
+
 namespace hostManager {
   // @ts-ignore: decorator
   @external("binette", "manager.text")
@@ -12,11 +14,16 @@ namespace hostManager {
 }
 
 /**
- * `api.get<AppManagerApi>("manager")`。提供リスト（repo）の登録、アプリのインストール・更新・削除、自動更新。
+ * `AppManagerApi.from(api)`。提供リスト（repo）の登録、アプリのインストール・更新・削除、自動更新。
  * 役割 apps-manager に割り当てたアプリにだけ届く。アプリは完全な ID で指す。
  * 操作はすぐ戻り、状態が変わると OS が `build()` をやり直させる。
  */
 export class AppManagerApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): AppManagerApi | null {
+    return api.why("manager") == Why.Granted ? new AppManagerApi() : null;
+  }
+
   repoCount(): i32 { return <i32>hostManager.number("repoCount", "", 0); }
   repoUrl(i: i32): string { return hostManager.text("repoUrl", "", i); }
   repoName(i: i32): string { return hostManager.text("repoName", "", i); }

@@ -174,7 +174,7 @@ function contents(): View {
 
 class Docs extends App {
   override onCreate(_last: Last, api: Api): void {
-    storage = api.get<StorageApi>("storage");
+    storage = StorageApi.from(api);
     const saved = storage !== null ? storage!.read("page") : null;
     open(ids[0]);
     if (saved !== null) open(saved);

@@ -89,7 +89,7 @@ const API_KEYS = ["apps", "os", "storage", "fs", "cadre"] as const;
 - `onDom` は `dom` が届くたびに呼びます。`ready` より前（トップレベルの初期化）に届いたものも呼びます
 - `onExit` は起動後にアプリが終了したときだけ呼びます。`stop()` や `signal` では呼びません
 - `onError` は終了しない `fail` が届くたびに呼びます。`failed`（起動の失敗）では呼ばず、`launchApp` の reject だけで知らせます
-- `apps`・`os`・`storage` は、API の辞書（[Réplique](../replique.md#api-の辞書実装済み形は案)）のキーに載せる起動時の入力です。渡す条件はシステム（[system.md](system.md#権限)）が確かめます。省略したキーは辞書に載らず、アプリの `api.get` は null を返します。辞書を通さずにその import を直接呼ぶと、例外でアプリを終了します。`denied` は載せなかったキーの理由（`api.why` が返す）で、書かれていないキーは NotGranted です。`fs` はキーだけあり、今は誰にも載りません
+- `apps`・`os`・`storage` は、API の辞書（[Réplique](../replique.md#api-の辞書実装済み形は案)）のキーに載せる起動時の入力です。渡す条件はシステム（[system.md](system.md#権限)）が確かめます。省略したキーは辞書に載らず、アプリの `XxxApi.from(api)` は null を返します。辞書を通さずにその import を直接呼ぶと、例外でアプリを終了します。`denied` は載せなかったキーの理由（`api.why` が返す）で、書かれていないキーは NotGranted です。`fs` はキーだけあり、今は誰にも載りません
 - onSet・onStorage・onUpdate はメッセージが来たときに通知します。onAssign は呼び出しの完了後に通知します。プロセスはさらに状態の通知と起動の完了を待って知らせ、システムが役割の割り当てを変更します。API と範囲は [Réplique](../replique.md#api-の辞書実装済み形は案) を参照してください
 
 ### RegieWorker

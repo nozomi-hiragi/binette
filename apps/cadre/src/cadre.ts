@@ -76,7 +76,7 @@ function initial(name: string): string {
 
 export class CadreApp extends App {
   override onCreate(_last: Last, api: Api): void {
-    cadreApi = api.get<CadreApi>("cadre");
+    cadreApi = CadreApi.from(api);
     const cadre = cadreApi;
     // 起動し直したときに開いているアプリがあれば、前面をそのままにする（アプリを入れたあとなど）
     if (cadre != null && cadre.count() == 0) {

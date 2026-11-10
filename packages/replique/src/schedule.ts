@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace
-import { Api, application, created } from "jsr:@binette/replique/app";
+import { Api, Why, application, created } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
 namespace hostSchedule {
@@ -15,12 +15,17 @@ namespace hostSchedule {
 }
 
 /**
- * `api.get<ScheduleApi>("schedule")`。自分の予定（定期実行）。app.json の permissions に `schedule` を書いたアプリにだけ届く。
+ * `ScheduleApi.from(api)`。自分の予定（定期実行）。app.json の permissions に `schedule` を書いたアプリにだけ届く。
  * 予定は枠番号（0 から）で指す。今の枠は 0 だけで、枠の外の番号には何もせず false を返す。
  * 予定の形は JSON の文字列（例 `{"every":1800}`、`{"daily":"07:30"}`）。`every` は 900 秒以上。
  * 予定の時刻が来ると、OS が `App.onSchedule(slot, api)` を呼ぶ。
  */
 export class ScheduleApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): ScheduleApi | null {
+    return api.why("schedule") == Why.Granted ? new ScheduleApi() : null;
+  }
+
   /** 枠の数 */
   count(): i32 { return <i32>hostSchedule.number("count", 0); }
   /** その枠が空いているときだけ登録する。すでにあるか、形が正しくなければ何もせず false。起動のたびに呼んでも、ユーザーが変えた値は消えない */
