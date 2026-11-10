@@ -3,7 +3,7 @@
 [仕様の目次](README.md)
 
 > [!NOTE]
-> 2026-11-09 にのぞみが決めた構成です（この節の中身はすべて決定）。Régie の TS API（`system.lists`）、カタログの表示用の欄、アプリに渡す `manager`（Réplique の `AppManagerApi`）、画面 `cadre.apps`、OS の権限のダイアログ、既定の提供リスト（`deno task pages` が作る。アプリは `catalog/`）は実装済みです。画面のカタログのアイコンは、Décor が URL の画像を描かないため、今は名前の頭文字で代えています。提供リストと ID の決まりは [app-id.md](app-id.md) にあります。
+> 2026-11-09 にのぞみが決めた構成です（この節の中身はすべて決定）。Régie の TS API（`system.lists`）、カタログの表示用の欄、アプリに渡す `manager`（Réplique の `AppManagerApi`）、画面 `cadre.apps`、OS の権限のダイアログ、既定の提供リスト（`deno task pages` が作る。アプリは `catalog/`）は実装済みです。カタログのアイコンは、OS（Régie の `system.lists.icon(url)`）が提供リストの取得と同じ決まり（https、制限時間）で 1 回だけ取り、SVG と PNG・JPEG・GIF・WebP（64 KiB まで）を data URL にして写しの `icon` に入れます。届くまでと取れないときは名前の頭文字で代えます。提供リストと ID の決まりは [app-id.md](app-id.md) にあります。
 
 提供リスト（操作の名前では repo）の登録、アプリのインストール・更新・削除、アプリのデータの管理を受け持つ、アプリ管理の仕様です。
 

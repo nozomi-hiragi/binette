@@ -48,10 +48,11 @@ Deno.test("よくある部品は意味の合う要素・role・aria になり、
     assertEquals((tile as HTMLElement).style.getPropertyValue("--bina-ui-gap"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
     assert((tile as HTMLElement).style.getPropertyValue("--bina-ui-padding").includes("space-sm"));
 
-    // 描き直しで値を変え、外部の URL と SVG の画像は描かない
-    root.render(column([progress(1), image("https://example.com/a.png"), image("data:image/svg+xml;base64,PHN2Zz4=")]));
+    // 描き直しで値を変え、外部の URL と base64 の SVG は描かない。URL エンコードした SVG は描く
+    const svg = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>')}`;
+    root.render(column([progress(1), image("https://example.com/a.png"), image("data:image/svg+xml;base64,PHN2Zz4="), image(svg), image(`${svg}"><x`)]));
     assertEquals(host.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow"), "100");
-    assertEquals([...host.querySelectorAll("img")].map(node => node.hasAttribute("src")), [false, false]);
+    assertEquals([...host.querySelectorAll("img")].map(node => node.getAttribute("src")), [null, null, svg, null]);
   } finally { root.unmount(); await window.happyDOM.close(); }
 });
 

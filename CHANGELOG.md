@@ -2,6 +2,10 @@
 
 ## v0.2.0（未リリース）
 
+- アプリ管理の画面にカタログのアイコンを出す。Régie の `ProviderLists` に `icon(url)` を足し（破壊的変更: 実装には `icon` が要る）、提供リストのアイコンを https で 1 回だけ取って、SVG と PNG・JPEG・GIF・WebP（64 KiB まで）を data URL にする。取れたら購読者に知らせ、写しの `icon` に入れる。届くまでと取れないときは名前の頭文字
+- Décor の `image(src)` が、`data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG も描く。base64 の SVG と外部 URL は今までどおり描かない
+- アプリ管理を使うアプリの起動の途中に写しが変わると、起動後に届かなかった不具合を直す
+
 - アプリの予定を実装する（[docs/spec/scheduler.md](docs/spec/scheduler.md#アプリの予定)）。辞書のキー `schedule`（Réplique の `ScheduleApi`）は、`app.json` の `permissions` に `schedule` を書いたアプリに届く。枠 0 だけに `register`（空いているときだけ）・`update`・`remove`・`runNow` と、形・止めているか・前回の時刻と結果の読み取りを持つ。`every` は 900 秒以上で、正しくない形と枠の外の番号は false を返す。予定の ID は `<完全なアプリ ID>/<枠番号>`、ラベルが無ければ設定に「スケジュール{枠番号+1}」と出す
 - 予定の時刻が来ると、インスタンスがあれば（どの状態でも）`App.onSchedule(slot, api)` を届け、無ければ画面なしで起こして呼ぶ（`onCreate` は呼ばない、返ったら Worker を止める、スタックと履歴には数えない）。上限は 30 秒で、過ぎたらアプリを終了して結果を `error: 時間切れ` にする。画面なしの実行中にユーザーが開くと、終わってから開く。アプリを消すとその予定も消す
 - 破壊的変更: `RegieApp` に `callWithin(timeout, name, ...args)`、`Process` に `schedule(slot, timeout)`、`Scheduler` に `saved()`・`remove(id)` が加わる。AS のビルドが `__bina_schedule` を export する

@@ -49,6 +49,8 @@ const inputPadding = `var(--bina-ui-input-default-padding, ${componentLength("in
 const choiceKinds = ["picker", "segmented", "tabs"];
 /** Scene の document 方式の sanitize と同じく、画像は base64 のラスターの data URL だけを描く */
 const rasterDataUrl = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i;
+/** encodeURIComponent した SVG。img で描くのでスクリプトは動かない */
+const svgDataUrl = /^data:image\/svg\+xml;charset=utf-8,[a-z0-9\-_.!~*'()%]+$/i;
 /** align の名前ごとの縦と横の位置 */
 const alignParts: Record<string, [string, string]> = {
   topStart: ["start", "start"], top: ["start", "center"], topEnd: ["start", "end"],
@@ -561,7 +563,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         }
         if (kind === "image") {
           // 外部 URL やほかの形式は読み込まない。代替テキストは label
-          setAttribute(node, "src", rasterDataUrl.test(op.text) ? op.text : null);
+          setAttribute(node, "src", rasterDataUrl.test(op.text) || svgDataUrl.test(op.text) ? op.text : null);
           setAttribute(node, "alt", op.label ?? "");
         }
         for (const property of entry.theme) node.style.removeProperty(property);

@@ -2,6 +2,7 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Window } from "happy-dom";
 import { computeIntegrity } from "@binette/core";
 import { createAppStore, createMemoryFileTree, createProviderLists, createScheduler, startSystem } from "../src/index.ts";
+import { iconDataUrl, MAX_ICON_BYTES } from "../src/lists.ts";
 import type { AppStore, InstalledApp, ProviderListsOptions } from "../src/index.ts";
 import { buildCompiler } from "../../../scripts/build-system.ts";
 
@@ -531,4 +532,38 @@ Deno.test("中止は取得をやめて保存せず、削除は本体だけかデ
     assertEquals(await f.store.listRemoved(), []);
     await assertRejects(() => lists.uninstall("cadre", true));
   } finally { lists.stop(); await f.stop(); }
+});
+
+Deno.test("アイコンは SVG とラスターだけを data URL にし、ほかと大きすぎるものは空にする", () => {
+  const svg = '<?xml version="1.0"?>\n<!-- icon -->\n<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>';
+  assertEquals(iconDataUrl(encoder.encode(svg)), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  assertEquals(iconDataUrl(png), `data:image/png;base64,${btoa(String.fromCharCode(...png))}`);
+  assert(iconDataUrl(encoder.encode("GIF89a...")).startsWith("data:image/gif;base64,"));
+  assert(iconDataUrl(encoder.encode("RIFF\0\0\0\0WEBPVP8 ")).startsWith("data:image/webp;base64,"));
+  for (const text of ["<html><svg/></html>", "<svgx/>", "", "無し"]) assertEquals(iconDataUrl(encoder.encode(text)), "");
+  assertEquals(iconDataUrl(new Uint8Array([0xff, 0xfe, 0x00])), "");
+  assertEquals(iconDataUrl(encoder.encode(`<svg>${" ".repeat(MAX_ICON_BYTES)}</svg>`)), "");
+});
+
+Deno.test("提供リストのアイコンは 1 回だけ取り、取れたら知らせる。https でなければ使わない", async () => {
+  const f = await fixture();
+  try {
+    let notified = 0;
+    f.lists.subscribe(() => notified++);
+    f.responses.set("https://sources.test/icon.svg", "<svg/>");
+    f.responses.set("http://sources.test/icon.svg", "<svg/>");
+    assertEquals(f.lists.icon("https://sources.test/icon.svg"), "");
+    assertEquals(f.lists.icon("https://sources.test/icon.svg"), "");
+    assertEquals(f.lists.icon("https://sources.test/missing.svg"), "");
+    assertEquals(f.lists.icon("http://sources.test/icon.svg"), "");
+    const deadline = performance.now() + 5000;
+    while (f.lists.icon("https://sources.test/icon.svg") === "" && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+    assertEquals(f.lists.icon("https://sources.test/icon.svg"), "data:image/svg+xml;charset=utf-8,%3Csvg%2F%3E");
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assertEquals(f.lists.icon("https://sources.test/missing.svg"), "");
+    assertEquals(f.lists.icon("http://sources.test/icon.svg"), "");
+    assertEquals(f.requests.filter(url => url.endsWith("icon.svg")).length, 2);
+    assertEquals(notified, 1);
+  } finally { await f.stop(); }
 });
