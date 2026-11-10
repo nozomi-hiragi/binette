@@ -26,7 +26,7 @@
 }
 ```
 
-- 役割 `settings` を名乗り、かつ割り当てられたアプリ（入手元が `binette:system`）だけに、辞書の [`os`](../replique.md#osapi) が届く。名乗っただけの外部のアプリには届かず、`api.get<OsApi>("os")` は null になる（設定アプリは null のとき「設定を使えません」と出す）。辞書を通さずに呼ぶとアプリを終了する
+- 役割 `settings` を名乗り、かつ割り当てられたアプリ（入手元が `binette:system`）だけに、辞書の [`os`](../replique.md#osapi) が届く。名乗っただけの外部のアプリには届かず、`OsApi.from(api)` は null になる（設定アプリは null のとき「設定を使えません」と出す）。辞書を通さずに呼ぶとアプリを終了する
 - ホームの一覧にふつうのアプリとして並び、開くと OS のホームバーが下に出る（[home.md](home.md#os-の枠との分担)）
 - `Settings extends App` は `onCreate(last, api)` で `OsApi` を取り、`build()` で更新・ホーム・Cadre・デバッグ値の操作、履歴を宣言的 UI の部品として作る。ボタンの `arg(i)` で操作対象を渡す（案）
 - 親の入口で `api.sub()` の `settings` を見て [Settings](../../../apps/cadre/src/settings/main.ts) を起動する。「詳しく」の操作で説明を表示する

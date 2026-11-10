@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import verbatim-module-syntax
 import { View, UiCallback } from "jsr:@binette/decor/as";
-import { application, jsonString } from "jsr:@binette/replique/app";
+import { application, jsonString, setRebuild } from "jsr:@binette/replique/app";
 export { View, column, row, text, button, buttonOf, input, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
   spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/decor/as";
 
@@ -91,3 +91,5 @@ export function __bina_ui_value(build: i32, handler: i32, value: f64): void {
   else return;
   rebuild();
 }
+
+setRebuild(rebuild);

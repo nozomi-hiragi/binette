@@ -1,4 +1,6 @@
-// deno-lint-ignore-file no-namespace
+// deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
+import { Api, Why } from "jsr:@binette/replique/app";
+
 namespace hostScheduler {
   // @ts-ignore: decorator
   @external("binette", "scheduler.text")
@@ -12,10 +14,15 @@ namespace hostScheduler {
 }
 
 /**
- * `api.get<SchedulerApi>("scheduler")`。OS とすべてのアプリの予定（定期実行）の一覧と操作。設定アプリにだけ届く。
+ * `SchedulerApi.from(api)`。OS とすべてのアプリの予定（定期実行）の一覧と操作。設定アプリにだけ届く。
  * 一覧は番号で数え、操作は予定の ID で指す。予定が変わると OS が `build()` をやり直させる。
  */
 export class SchedulerApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): SchedulerApi | null {
+    return api.why("scheduler") == Why.Granted ? new SchedulerApi() : null;
+  }
+
   count(): i32 { return <i32>hostScheduler.number("count", 0); }
   id(i: i32): string { return hostScheduler.text("id", i); }
   /** `os` か完全なアプリ ID */

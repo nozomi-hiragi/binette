@@ -1,4 +1,6 @@
-// deno-lint-ignore-file no-namespace
+// deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
+import { Api, Why } from "jsr:@binette/replique/app";
+
 namespace hostOs {
   // @ts-ignore: decorator
   @external("binette", "os.notificationCount")
@@ -69,8 +71,13 @@ namespace hostOs {
   export declare function update(): void;
 }
 
-/** `api.get<OsApi>("os")`。OS の設定、役割の割り当て、起動の履歴、更新。設定アプリ（役割 settings）に届く */
+/** `OsApi.from(api)`。OS の設定、役割の割り当て、起動の履歴、更新。設定アプリ（役割 settings）に届く */
 export class OsApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): OsApi | null {
+    return api.why("os") == Why.Granted ? new OsApi() : null;
+  }
+
   /** Per-app notification settings, indexed by the notificationCount list. */
   notificationCount(): i32 { return hostOs.notificationCount(); }
   notificationName(i: i32): string { return hostOs.notificationName(i); }

@@ -6,19 +6,21 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 
 ## 機能ごとの構成（決定）
 
-Réplique はホストの `@external("binette", "<機能名>.…")` に対応する単位で、`packages/replique/src/<機能名>.ts` に分けます。`index.ts` は既存の公開名を再 export する入口です。アプリの書き方、`Api.get<T>(key)`、WASM の `__bina_*` の呼び出し口は変えません。
+Réplique はホストの `@external("binette", "<機能名>.…")` に対応する単位で、`packages/replique/src/<機能名>.ts` に分けます。`index.ts` は既存の公開名を再 export する入口です。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
 
 | 機能名 | 内容 |
 | --- | --- |
-| `app` | `App`・`launch`・状態とライフサイクル、`Api`・`Why`、共有の状態と文字列処理 |
+| `app` | `App`・`launch`・状態とライフサイクル、`Api`・`Why`、共有の状態と文字列処理、再描画用の関数参照 |
 | `dom` | `Element`・`Event`・`document` と DOM イベント |
-| `ui` | `View`・`column` などの Décor の部品、宣言的 UI の描画とイベント |
+| `ui` | `View`・`column` などの Décor の部品、宣言的 UI の描画・イベント処理と `ui.*` の外部呼び出し |
 | `storage`・`pigeon`・`shares` | アプリの保存領域、手紙、共有 |
 | `os`・`apps`・`manager` | OS 設定、アプリ一覧、アプリ管理 |
 | `scheduler`・`schedule` | 予定の管理、自分の予定 |
 | `cadre`・`fs` | Cadre の操作、ファイル API の予約 |
 
-機能間の参照には `jsr:@binette/replique/<機能名>` を使います。すべての機能をパッケージの exports に載せ、既存の `jsr:@binette/replique` と `jsr:@binette/replique/ui` も引き続き使えます。`Api.get<T>` は各機能の API クラスを引き続き知っています。機能ごとの版分けや辞書の廃止は行いません。
+機能間の参照には `jsr:@binette/replique/<機能名>` を使います。すべての機能をパッケージの exports に載せ、既存の `jsr:@binette/replique` と `jsr:@binette/replique/ui` も引き続き使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。機能ごとの版分けや辞書の廃止は行いません。
+
+`app.ts` は Décor の `View` だけを import し、Réplique のほかの機能には依存しません。`ui.ts` がトップレベルで描画関数を `app.ts` の `setRebuild` に登録し、ライフサイクルからの `rebuild` はその関数参照を呼びます。未登録なら何もしません。クロージャを使わず、機能間の import に循環を作らない構造です。集約入口の `index.ts` だけを import するアプリでも描画関数が登録されます。
 
 OS は `/system/libraries/replique/` に `index.ts` と各機能の `.ts`、機能名の JSON 配列 `index.json` を置きます。配列に `index` 自体は含めません。すべてを配布目録のハッシュ対象にし、ブラウザのビルドは検証済みの目録と各ファイルを読みます。旧 `/system/libraries/replique.ts` は配布しません。
 
@@ -108,7 +110,7 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 | `Event.type: string`（readonly） | イベントの種類 |
 | `Event.currentTarget: Element`（readonly） | リスナーを付けた Element |
 | `Api.sub(): string` | 起動したサブアプリの識別子。親なら空文字列 |
-| `Api.get<T>(key: string): T \| null` / `Api.why(key: string): Why` | API の辞書。[下](#api-の辞書実装済み形は案)に書く |
+| `Api.why(key: string): Why` | API の辞書。[下](#api-の辞書実装済み形は案)に書く |
 | `__bina_event(listener: i32): void` | リスナー番号で Event を作って呼ぶ。Régie のビルドが入口からの再 export を差し込む |
 | `__bina_listener_count(): i32` / `__bina_element_count(): i32` | テスト用に保持中のリスナー数・id の要素数を返す |
 
@@ -158,14 +160,16 @@ Element の中身は i32 の handle です。id とリスナーは Map で保持
 
 ## API の辞書（実装済み、形は案）
 
-[役割と API](roles.md) の辞書です。OS が `onCreate(last, api)` の第 2 引数で渡します。AS には動的な型がないので、`api.get<T>(key)` の型引数 `T` とキーが合う既知のクラスを返します。届いていない、キーを知らない、型引数が合わないときは null です。
+[役割と API](roles.md) の辞書です。OS が `onCreate(last, api)` の第 2 引数で渡します。各機能の `XxxApi.from(api)` が対応するキーについて `api.why(key) == Why.Granted` を確かめ、届いていればそのクラスの新しいインスタンスを、届いていなければ null を返します。キーは各クラスが持ち、呼び出し側で型引数とキーを組み合わせる必要はありません。
 
 ```ts
 export enum Why { Granted, NotGranted, NotAssigned }
 export class Api {
   sub(): string;
-  get<T>(key: string): T | null;
   why(key: string): Why;
+}
+export class AppsApi {
+  static from(api: Api): AppsApi | null;
 }
 ```
 
@@ -178,17 +182,18 @@ export class Api {
 | `cadre` | `CadreApi` | Cadre | 起動中の一覧、切り替え、閉じる、ホーム、戻る、インストール案内。通知の表示と応答（[apps/cadre.md](apps/cadre.md)） |
 | `apps` | `AppsApi` | ホーム（と Cadre） | `count()`・`name(i)`・`id(i)`・`open(i)`・`icon(img, i)`。ホームに渡すアプリの一覧と起動 |
 | `os` | `OsApi` | 設定アプリ | `get(name)`・`set(name, value)`、役割と起動履歴、ソフトウェア更新の確認・状態・適用 |
+| `manager` | `AppManagerApi` | アプリ管理 | 提供リスト・インストール・更新・削除（[app-manager.md](app-manager.md)） |
 | `scheduler` | `SchedulerApi` | 設定アプリ | OS とすべてのアプリの予定の一覧、形の変更、止める・再開、今すぐ実行（[scheduler.md](scheduler.md)） |
 | `schedule` | `ScheduleApi` | `permissions` に `schedule` を書いたアプリ | 自分の予定の登録・変更・削除・今すぐ実行と読み取り（[scheduler.md](scheduler.md#アプリの予定)） |
 | `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
 | `shares` | `SharesApi` | すべてのアプリ | 共有の作成・一覧・承認・退出とファイル操作（[file-sharing.md](file-sharing.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
-| `fs` | `FsApi` | 誰にも届かない（案） | 空のクラス。範囲の決め方が未決なので、キーだけ用意している |
+| `fs` | `FsApi` | 誰にも届かない（案） | `from(api)` だけを持つ。範囲の決め方が未決なので、キーだけ用意している |
 
 ```ts
 class Home extends App {
   onCreate(_last: Last, api: Api): void {
-    const apps = api.get<AppsApi>("apps");
+    const apps = AppsApi.from(api);
     if (apps == null) { /* api.why("apps") で NotAssigned などを見る */ }
   }
 }
@@ -227,11 +232,11 @@ class Home extends App {
 
 ### PigeonApi
 
-`api.get<PigeonApi>("pigeon")` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
+`PigeonApi.from(api)` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
 
 ### SharesApi
 
-`api.get<SharesApi>("shares")` で取得します。`create(name)`・`list()`・`join(id)`・`leave(id)`・`read(id, path)`・`write(id, path, value)`・`remove(id, path)`・`files(id, prefix)` は要求番号を返します。保存が終わると `onShare()` が呼ばれ、`result(番号)` で結果を一度だけ取得できます。未完了なら null、完了時は `{ "ok": true, "value": ... }` または `{ "ok": false, "error": "..." }` の JSON です。`create` は共有の行、`list` は招待中・参加済みの共有の行の配列、`files` はパスの配列、`read` は文字列または不存在を表す null を返します。変更操作の値は null です。各操作時に参加状態とアクセス権を再確認します。`read`・`write` は UTF-8 の文字列を扱い、任意のバイト列には `readBase64`・`writeBase64` を使います。
+`SharesApi.from(api)` で取得します。`create(name)`・`list()`・`join(id)`・`leave(id)`・`read(id, path)`・`write(id, path, value)`・`remove(id, path)`・`files(id, prefix)` は要求番号を返します。保存が終わると `onShare()` が呼ばれ、`result(番号)` で結果を一度だけ取得できます。未完了なら null、完了時は `{ "ok": true, "value": ... }` または `{ "ok": false, "error": "..." }` の JSON です。`create` は共有の行、`list` は招待中・参加済みの共有の行の配列、`files` はパスの配列、`read` は文字列または不存在を表す null を返します。変更操作の値は null です。各操作時に参加状態とアクセス権を再確認します。`read`・`write` は UTF-8 の文字列を扱い、任意のバイト列には `readBase64`・`writeBase64` を使います。
 
 `PigeonApi.send` の第 7 引数に `[{"id":"共有 ID","access":"read"}]` の JSON を渡すと手紙に共有を添付できます。受信欄では `shares(i)` で添付の JSON を読みます。ユーザー宛ての通知には添付できません。招待されたアプリが `join` する前に共有が無くなった場合、結果はエラーです。
 

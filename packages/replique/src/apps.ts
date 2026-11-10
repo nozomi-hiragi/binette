@@ -1,4 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
+import { Api, Why } from "jsr:@binette/replique/app";
 import { Element } from "jsr:@binette/replique/dom";
 
 // @ts-ignore: decorator
@@ -21,8 +22,13 @@ namespace hostApps {
   export declare function open(i: i32): void;
 }
 
-/** `api.get<AppsApi>("apps")`。アプリの一覧と起動。ホーム（と Cadre）の役割を割り当てられたアプリに届く */
+/** `AppsApi.from(api)`。アプリの一覧と起動。ホーム（と Cadre）の役割を割り当てられたアプリに届く */
 export class AppsApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): AppsApi | null {
+    return api.why("apps") == Why.Granted ? new AppsApi() : null;
+  }
+
   /** img に OS のアプリアイコンを入れる */
   icon(img: Element, i: i32): void { iconImport(img.handle, i); }
   count(): i32 { return hostApps.count(); }

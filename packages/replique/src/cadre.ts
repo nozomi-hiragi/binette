@@ -1,4 +1,5 @@
-// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace
+// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
+import { Api, Why } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
 namespace hostCadreNotifications {
@@ -43,8 +44,13 @@ namespace hostCadreNotifications {
   export declare function notificationReply(id: i32, actionId: string, body: string): void;
 }
 
-/** `api.get<CadreApi>("cadre")`。Cadre の役割に割り当てられたアプリにだけ届く */
+/** `CadreApi.from(api)`。Cadre の役割に割り当てられたアプリにだけ届く */
 export class CadreApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): CadreApi | null {
+    return api.why("cadre") == Why.Granted ? new CadreApi() : null;
+  }
+
   /** User notifications. Pass notificationId to operations rather than the list index. */
   notificationCount(): i32 { return hostCadreNotifications.notificationCount(); }
   notificationId(i: i32): i32 { return hostCadreNotifications.notificationId(i); }

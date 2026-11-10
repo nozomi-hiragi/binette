@@ -14,8 +14,8 @@ class Page extends App {
   build(): View { return text(received.toString()); }
 }
 launch(new Page());
-export function access(): bool { return new Api().get<PigeonApi>("pigeon") !== null; }
-export function wrongType(): bool { return new Api().get<StorageApi>("pigeon") === null; }
+export function access(): bool { return PigeonApi.from(new Api()) !== null; }
+export function storageAccess(): bool { return StorageApi.from(new Api()) !== null; }
 export function send(): bool { return new PigeonApi().send("user", "chat.message", "題", "本文"); }
 export function sendActions(): bool { return new PigeonApi().send("app", "open", "", "{}", true, "[]"); }
 export function read(): string {
@@ -44,7 +44,7 @@ export function done(): void { new PigeonApi().done(2); }`,
   for (const entry of WebAssembly.Module.imports(module)) {
     if (entry.module === "binette") binette[entry.name] = () => { throw new Error(`予期しない import: ${entry.name}`); };
   }
-  binette["api.why"] = (key: number) => { assertEquals(read(key), "pigeon"); return allowed ? 0 : 1; };
+  binette["api.why"] = (key: number) => { const name = read(key); assertEquals(["pigeon", "storage"].includes(name), true); return name == "pigeon" && allowed ? 0 : 1; };
   binette["pigeon.send"] = (...args: number[]) => { sent.push([...args.slice(0, 4).map(read), args[4], read(args[5]!)]); return 1; };
   binette["pigeon.count"] = () => 3;
   for (const field of ["from", "to", "kind", "title", "body", "actions"]) {
@@ -57,7 +57,7 @@ export function done(): void { new PigeonApi().done(2); }`,
   const call = (name: string): number => (instance.exports[name] as CallableFunction)() as number;
   call("_start");
   assertEquals(call("access"), 1);
-  assertEquals(call("wrongType"), 1);
+  assertEquals(call("storageAccess"), 0);
   allowed = false;
   assertEquals(call("access"), 0);
   assertEquals(call("send"), 1);

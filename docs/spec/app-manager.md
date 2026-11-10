@@ -37,7 +37,7 @@
 ## 操作
 
 ```ts
-const manager = api.get<AppManagerApi>("manager"); // 取れなければ null
+const manager = AppManagerApi.from(api); // 取れなければ null
 ```
 
 | 種類 | 操作 |

@@ -270,7 +270,7 @@ function rows(): View {
   return column(views).gap(space.xs).list().fill().grow().scroll();
 }
 class Filer extends App {
-  override onCreate(_last: Last, api: Api): void { shares = api.get<SharesApi>("shares")!; storage = api.get<StorageApi>("storage")!; pigeon = api.get<PigeonApi>("pigeon")!; inbox(); refresh(); }
+  override onCreate(_last: Last, api: Api): void { shares = SharesApi.from(api)!; storage = StorageApi.from(api)!; pigeon = PigeonApi.from(api)!; inbox(); refresh(); }
   override onPigeon(): void { inbox(); }
   override onShare(): void { completed(); }
   override build(): View {

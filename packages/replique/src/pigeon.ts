@@ -1,5 +1,5 @@
-// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace
-import { application } from "jsr:@binette/replique/app";
+// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
+import { Api, Why, application } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
 namespace hostPigeon {
@@ -38,8 +38,13 @@ namespace hostPigeon {
   export declare function done(i: i32): void;
 }
 
-/** `api.get<PigeonApi>("pigeon")`: OS-authenticated letters and the app inbox. Available to all apps. */
+/** `PigeonApi.from(api)`: OS-authenticated letters and the app inbox. Available to all apps. */
 export class PigeonApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): PigeonApi | null {
+    return api.why("pigeon") == Why.Granted ? new PigeonApi() : null;
+  }
+
   /** Sending to the user requires notify permission. actions is a JSON array of buttons or inputs. Returns false when rejected. */
   send(to: string, kind: string, title: string, body: string, urgent: bool = false, actions: string = "[]", shares: string = "[]"): bool {
     return hostPigeon.send(to, kind, title, body, urgent, actions, shares);

@@ -114,7 +114,7 @@ Deno.test("init を送れなければ Worker を止めて reject する", async 
 const homeSource = `
 import { document, Api, AppsApi } from "./replique";
 const api = new Api();
-function apps(): AppsApi { return api.get<AppsApi>("apps")!; }
+function apps(): AppsApi { return AppsApi.from(api)!; }
 export function openApp(i: i32): void { apps().open(i); }
 export function count(): void { document.getElementById("count").textContent = apps().count().toString(); }
 export function name(i: i32): void { document.getElementById("name").textContent = apps().name(i); }
@@ -193,12 +193,11 @@ function text(value: string): void { document.getElementById("value").textConten
 function name(why: Why): string { return why == Why.Granted ? "Granted" : why == Why.NotGranted ? "NotGranted" : "NotAssigned"; }
 export function report(): void {
   text([
-    name(api.why("apps")), api.get<AppsApi>("apps") != null ? "apps" : "-",
-    name(api.why("os")), api.get<OsApi>("os") != null ? "os" : "-",
-    name(api.why("storage")), api.get<StorageApi>("storage") != null ? "storage" : "-",
-    name(api.why("fs")), api.get<FsApi>("fs") != null ? "fs" : "-",
-    name(api.why("unknown")), api.get<AppsApi>("unknown") != null ? "unknown" : "-",
-    api.get<OsApi>("apps") != null ? "mismatch" : "-",
+    name(api.why("apps")), AppsApi.from(api) != null ? "apps" : "-",
+    name(api.why("os")), OsApi.from(api) != null ? "os" : "-",
+    name(api.why("storage")), StorageApi.from(api) != null ? "storage" : "-",
+    name(api.why("fs")), FsApi.from(api) != null ? "fs" : "-",
+    name(api.why("unknown")),
   ].join(","));
 }
 `;
@@ -209,10 +208,10 @@ Deno.test("辞書は届いたキーだけを取り出し、取れないキーの
   const onDom = (ops: DomOp[]) => { for (const op of ops) if (op.op === "text") texts.push(op.value); };
   const empty = await launchApp(wasm, { createWorker, onDom, denied: { apps: "NotAssigned", os: "NotAssigned", fs: "NotGranted" } });
   try { await empty.call("report"); } finally { empty.stop(); }
-  assertEquals(texts.splice(0), ["NotAssigned,-,NotAssigned,-,NotGranted,-,NotGranted,-,NotAssigned,-,-"]);
+  assertEquals(texts.splice(0), ["NotAssigned,-,NotAssigned,-,NotGranted,-,NotGranted,-,NotAssigned"]);
   const home = await launchApp(wasm, { createWorker, onDom, apps: [], storage: new Map(), denied: { os: "NotAssigned", fs: "NotGranted" } });
   try { await home.call("report"); } finally { home.stop(); }
-  assertEquals(texts.splice(0), ["Granted,apps,NotAssigned,-,Granted,storage,NotGranted,-,NotAssigned,-,-"]);
+  assertEquals(texts.splice(0), ["Granted,apps,NotAssigned,-,Granted,storage,NotGranted,-,NotAssigned"]);
 });
 
 Deno.test("空の apps は count が 0 で、範囲外の番号は終了する", async () => {
@@ -416,11 +415,11 @@ export function finish(): void { app.finish(); document.getElementById("page").t
 });
 
 Deno.test("launch のインスタンスは GC 後も上書きしたメソッドで OS の Last と辞書を受け取る", async () => {
-  const code = `import { Api, App, Last, State, StorageApi, document, launch, __bina_lifecycle } from "./replique";
+  const code = `import { Api, App, Last, State, StorageApi, AppsApi, document, launch, __bina_lifecycle } from "./replique";
 class TestApp extends App {
   onCreate(last: Last, api: Api): void {
     assert(last.state == State.Stop && !last.done);
-    assert(api.get<StorageApi>("storage") != null && api.get<StorageApi>("apps") == null);
+    assert(StorageApi.from(api) != null && AppsApi.from(api) == null);
     document.getElementById("log").textContent = "届いた";
   }
 }
@@ -437,7 +436,7 @@ export { __bina_lifecycle };`;
 
 const osSource = `import { document, Api, OsApi } from "./replique";
 const api = new Api();
-function os(): OsApi { return api.get<OsApi>("os")!; }
+function os(): OsApi { return OsApi.from(api)!; }
 function text(value: string): void { document.getElementById("value").textContent = value; }
 export function get(): void { text(os().get("stackSize").toString()); }
 export function set(value: i32): void { text(os().set("stackSize", value).toString() + ":" + os().get("stackSize").toString()); }
@@ -511,7 +510,7 @@ Deno.test("os の候補と履歴の番号が範囲外ならアプリを終了す
 
 const storageSource = `import { document, Api, StorageApi } from "./replique";
 const api = new Api();
-function storage(): StorageApi { return api.get<StorageApi>("storage")!; }
+function storage(): StorageApi { return StorageApi.from(api)!; }
 function text(value: string): void { document.getElementById("value").textContent = value; }
 export function read(): void { const value = storage().read("メモ"); text(value == null ? "null" : value); }
 export function write(): void { text(storage().write("メモ", "中身🏠").toString()); }
@@ -634,7 +633,7 @@ export function consumed(): void { text(2, new SharesApi().result(id) === null ?
 
 const managerSource = `import { document, Api, AppManagerApi } from "./replique";
 const api = new Api();
-function m(): AppManagerApi { return api.get<AppManagerApi>("manager")!; }
+function m(): AppManagerApi { return AppManagerApi.from(api)!; }
 function text(value: string): void { document.getElementById("value").textContent = value; }
 export function summary(): void {
   const x = m();
@@ -681,7 +680,7 @@ Deno.test("manager の写しを読み、操作を OS に渡す。届いていな
 
 const schedulerSource = `import { document, Api, SchedulerApi } from "./replique";
 const api = new Api();
-function s(): SchedulerApi { return api.get<SchedulerApi>("scheduler")!; }
+function s(): SchedulerApi { return SchedulerApi.from(api)!; }
 export function summary(): void {
   const x = s();
   const parts: string[] = [x.count().toString()];

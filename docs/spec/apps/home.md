@@ -8,7 +8,7 @@
 
 - 親の `app.json` の `sub.home` に `"roles": ["home"]` を書く（[app.md](../app.md#appjson)）
 - OS は、役割 `home` に割り当てたアプリをホームとして開く。割り当ては設定、ブートの既定、入手元が `binette:system` の最初のものの順で選ぶ。無ければ、画面と `onError` にエラーを出す（[regie/system.md](../regie/system.md#役割の割り当て実装済み形は案)）
-- 割り当てられたホームだけが、入っているアプリの一覧と起動の API（辞書の `apps`）を受け取る。ほかのアプリの `api.get<AppsApi>("apps")` は null になり、辞書を通さずに呼ぶとアプリを終了する（[replique.md](../replique.md#api-の辞書実装済み形は案)）
+- 割り当てられたホームだけが、入っているアプリの一覧と起動の API（辞書の `apps`）を受け取る。ほかのアプリの `AppsApi.from(api)` は null になり、辞書を通さずに呼ぶとアプリを終了する（[replique.md](../replique.md#api-の辞書実装済み形は案)）
 
 `apps/cadre/app.json` のサブアプリとして宣言します（親のほかの欄は省略）。
 

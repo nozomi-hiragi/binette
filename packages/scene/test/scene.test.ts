@@ -61,7 +61,7 @@ Deno.test("document の同じ id は同じ Element で、クリックの current
 
 Deno.test("作成・追加・削除、文字と class の読み書き、アイコンを反映する", async () => {
   const source = `import { Api, AppsApi, document, Element, Event } from "jsr:@binette/replique";
-const apps = new Api().get<AppsApi>("apps")!;
+const apps = AppsApi.from(new Api())!;
 const tiles = document.getElementById("tiles");
 const button = document.createElement("BUTTON");
 const indices = new Map<Element, i32>();

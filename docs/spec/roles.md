@@ -5,7 +5,7 @@
 Cadre（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
 
 > [!NOTE]
-> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`api.get<T>`、`api.why`）・`apps`・`os`・`storage`・`pigeon`・`shares` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。Cadre の常駐起動・`CadreApi`・`appArea()` も実装済みです。通知は Pigeon を通して届けます。役割名 `cadre` は決定です。ほかのキーや関数の形は案です。
+> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`XxxApi.from(api)`、`api.why`）・`apps`・`os`・`storage`・`pigeon`・`shares` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。Cadre の常駐起動・`CadreApi`・`appArea()` も実装済みです。通知は Pigeon を通して届けます。役割名 `cadre` は決定です。ほかのキーや関数の形は案です。
 
 ## 方針（決定 2026-11-01）
 
@@ -27,7 +27,7 @@ Cadre（ホームバーなど）、ホーム、設定などの OS の部品を�
 // 実装済みの例（ホーム）
 class Home extends App {
   override onCreate(last: Last, api: Api): void {
-    const apps = api.get<AppsApi>("apps"); // 取れなければ null
+    const apps = AppsApi.from(api); // 取れなければ null
     if (apps == null) {
       // api.why("apps") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
     }
@@ -37,7 +37,7 @@ class Home extends App {
 // 実装済み（形は案、Cadre）
 class Bar extends App {
   override onCreate(last: Last, api: Api): void {
-    const cadre = api.get<CadreApi>("cadre"); // 取れなければ null
+    const cadre = CadreApi.from(api); // 取れなければ null
     if (cadre == null) {
       // api.why("cadre") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
     }
@@ -46,7 +46,7 @@ class Bar extends App {
 ```
 
 - 辞書は `onCreate(last, api)` の引数で渡す（決定）。アプリは `launch(new X())` で自分で `new` するので、コンストラクタには OS から渡せないため
-- AS には動的な型がないので、`api.get<T>(key)` のように型を指定して取り出し、合わなければ null にする（決定）
+- 各機能の `XxxApi.from(api)` で取り出し、対応するキーが届いていなければ null にする（決定）
 - `app.json` の欄は `roles`（文字列の配列）にした（実装済み、名前は案）。旧名の `role`（文字列 1 つ）は読み替えず、エラーにして書き直してもらう（案。まだ公開していない形のため）
 - 古い `onCreate(last)` の上書きは、AS がオーバーロードを認めないためコンパイルエラーになる。`api: Api` を足して移行する（決定）。互換の形は用意しない
 
@@ -64,7 +64,7 @@ class Bar extends App {
 
 ## 許可されていない呼び出し（実装済み）
 
-辞書は「使えるかを調べる入口」です。載っていないキーを `api.get` しても、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を直接呼んだときは、今までどおり例外でアプリを終了します（[regie/run.md](regie/run.md#辞書を通さない呼び出し実装済み)）。強制は import 側が続けて受け持つので、辞書を迂回しても権限は増えません。
+辞書は「使えるかを調べる入口」です。載っていないキーに対応する `XxxApi.from(api)` を呼んでも、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を直接呼んだときは、今までどおり例外でアプリを終了します（[regie/run.md](regie/run.md#辞書を通さない呼び出し実装済み)）。強制は import 側が続けて受け持つので、辞書を迂回しても権限は増えません。
 
 ## Cadre（決定 2026-11-01）
 

@@ -1,5 +1,5 @@
-// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace
-import { application } from "jsr:@binette/replique/app";
+// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
+import { Api, Why, application } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
 namespace hostShares {
@@ -32,6 +32,11 @@ function shareArguments(values: string[]): string {
 
 /** Sharing operations return a request ID. Read result in onShare and inspect JSON ok/value/error. */
 export class SharesApi {
+  /** 届いていれば API を、届いていなければ null を返す */
+  static from(api: Api): SharesApi | null {
+    return api.why("shares") == Why.Granted ? new SharesApi() : null;
+  }
+
   request(operation: string, args: string = "[]"): i32 { return hostShares.request(operation, args); }
   /** Returns null while pending. Each completed result can be consumed once. */
   result(id: i32): string | null { return hostShares.result(id); }

@@ -1,15 +1,5 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import verbatim-module-syntax
-import { AppsApi } from "jsr:@binette/replique/apps";
-import { OsApi } from "jsr:@binette/replique/os";
-import { StorageApi } from "jsr:@binette/replique/storage";
-import { SharesApi } from "jsr:@binette/replique/shares";
-import { PigeonApi } from "jsr:@binette/replique/pigeon";
-import { FsApi } from "jsr:@binette/replique/fs";
-import { CadreApi } from "jsr:@binette/replique/cadre";
-import { AppManagerApi } from "jsr:@binette/replique/manager";
-import { SchedulerApi } from "jsr:@binette/replique/scheduler";
-import { ScheduleApi } from "jsr:@binette/replique/schedule";
-import { View, rebuild } from "jsr:@binette/replique/ui";
+import { View } from "jsr:@binette/decor/as";
 
 // @ts-ignore: decorator
 @external("binette", "api.why")
@@ -24,26 +14,11 @@ export enum Why { Granted, NotGranted, NotAssigned }
 
 /**
  * API dictionary supplied by the OS to onCreate, accessed by key.
- * Returns a known class matching both key and type: AppsApi, OsApi, StorageApi, FsApi, CadreApi, PigeonApi, AppManagerApi, SchedulerApi, or ScheduleApi.
+ * Each feature retrieves its API through its static from(api) method.
  */
 export class Api {
   /** 起動したサブアプリの識別子。親として開いたときは空文字列 */
   sub(): string { return subImport(); }
-  /** 届いていれば API を、キーが無いか型引数が合わないか、届いていなければ null を返す */
-  get<T>(key: string): T | null {
-    if (whyImport(key) != Why.Granted) return null;
-    if (key == "apps" && idof<T>() == idof<AppsApi>()) return changetype<T>(new AppsApi());
-    if (key == "os" && idof<T>() == idof<OsApi>()) return changetype<T>(new OsApi());
-    if (key == "storage" && idof<T>() == idof<StorageApi>()) return changetype<T>(new StorageApi());
-    if (key == "shares" && idof<T>() == idof<SharesApi>()) return changetype<T>(new SharesApi());
-    if (key == "pigeon" && idof<T>() == idof<PigeonApi>()) return changetype<T>(new PigeonApi());
-    if (key == "fs" && idof<T>() == idof<FsApi>()) return changetype<T>(new FsApi());
-    if (key == "cadre" && idof<T>() == idof<CadreApi>()) return changetype<T>(new CadreApi());
-    if (key == "manager" && idof<T>() == idof<AppManagerApi>()) return changetype<T>(new AppManagerApi());
-    if (key == "scheduler" && idof<T>() == idof<SchedulerApi>()) return changetype<T>(new SchedulerApi());
-    if (key == "schedule" && idof<T>() == idof<ScheduleApi>()) return changetype<T>(new ScheduleApi());
-    return null;
-  }
   /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
   why(key: string): Why { return whyImport(key); }
 }
@@ -137,4 +112,15 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void {
     case State.Destroy: app.onDestroy(new DestroyReason(a, b)); break;
   }
   rebuild();
+}
+
+let rebuildHook: (() => void) | null = null;
+
+export function setRebuild(callback: () => void): void {
+  rebuildHook = callback;
+}
+
+export function rebuild(): void {
+  const callback = rebuildHook;
+  if (callback !== null) callback();
 }

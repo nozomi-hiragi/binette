@@ -135,8 +135,8 @@ function scheduleView(s: SchedulerApi, i: i32): View {
 
 export class Settings extends App {
   override onCreate(_last: Last, api: Api): void {
-    osApi = api.get<OsApi>("os");
-    schedulerApi = api.get<SchedulerApi>("scheduler");
+    osApi = OsApi.from(api);
+    schedulerApi = SchedulerApi.from(api);
   }
 
   override build(): View {
