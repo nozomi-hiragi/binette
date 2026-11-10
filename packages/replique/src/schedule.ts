@@ -2,15 +2,18 @@
 import { Api, Why, application, created } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostSchedule {
   // @ts-ignore: decorator
-  @external("binette", "schedule.text")
+  @external("binette:schedule@0.1", "text")
   export declare function text(query: string, slot: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "schedule.number")
+  @external("binette:schedule@0.1", "number")
   export declare function number(query: string, slot: i32): f64;
   // @ts-ignore: decorator
-  @external("binette", "schedule.do")
+  @external("binette:schedule@0.1", "do")
   export declare function act(action: string, slot: i32, rule: string, label: string): bool;
 }
 

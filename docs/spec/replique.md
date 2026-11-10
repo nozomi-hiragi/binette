@@ -6,7 +6,7 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 
 ## 機能ごとの構成（決定）
 
-Réplique はホストの `@external("binette", "<機能名>.…")` に対応する単位で、`packages/replique/src/<機能名>.ts` に分けます。`index.ts` は既存の公開名を再 export する入口です。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
+Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` に対応する単位で、`packages/replique/src/<機能名>.ts` に分けます。`index.ts` は既存の公開名を再 export する入口です。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
 
 | 機能名 | 内容 |
 | --- | --- |
@@ -18,7 +18,7 @@ Réplique はホストの `@external("binette", "<機能名>.…")` に対応す
 | `scheduler`・`schedule` | 予定の管理、自分の予定 |
 | `cadre`・`fs` | Cadre の操作、ファイル API の予約 |
 
-機能間の参照には `jsr:@binette/replique/<機能名>` を使います。すべての機能をパッケージの exports に載せ、既存の `jsr:@binette/replique` と `jsr:@binette/replique/ui` も引き続き使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。機能ごとの版分けや辞書の廃止は行いません。
+機能間の参照には `jsr:@binette/replique/<機能名>` を使います。すべての機能をパッケージの exports に載せ、既存の `jsr:@binette/replique` と `jsr:@binette/replique/ui` も引き続き使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。ホスト ABI の版は機能ごとに管理します。辞書と権限・役割の判定は維持します。
 
 `app.ts` は Décor の `View` だけを import し、Réplique のほかの機能には依存しません。`ui.ts` がトップレベルで描画関数を `app.ts` の `setRebuild` に登録し、ライフサイクルからの `rebuild` はその関数参照を呼びます。未登録なら何もしません。クロージャを使わず、機能間の import に循環を作らない構造です。集約入口の `index.ts` だけを import するアプリでも描画関数が登録されます。
 
@@ -126,9 +126,34 @@ Element の中身は i32 の handle です。id とリスナーは Map で保持
 
 `() => {}` もリスナー引数に書けます。asc 0.28.20 では引数なしの名前付き関数を直接渡すと型エラーになるため、`() => showDetails()` と包みます。無名関数から this やローカル変数は参照できず、グローバルのインスタンスを通します。
 
-### WASM import（案・実装済み）
+### WASM import（決定・実装済み）
 
-モジュールは `binette` です。文字列は AS のポインタ、番号は i32 です。
+module 名は 0.x では `binette:<機能名>@0.<minor>`、1 以降では `binette:<機能名>@<major>`、関数名は機能名を除いた名前です。例は `binette:dom@0.1` / `text` です。文字列は AS のポインタ、番号は i32 です。`api.why`・`api.sub` は `app.ts` の機能なので `binette:app@0.1` / `why`・`sub` になります。以下の表の `dom.text` などは説明用の機能名＋関数名で、WASM の関数名に `dom.` は含めません。
+
+ABI の版は JSR パッケージや OS の版と独立です。既存の呼び出しを壊す変更で版を変え、追加のみでは変更しません。OS は旧版と新版の実装を別の module として並存させられます。module 名が完全に一致するものだけを受け入れ、別の minor 版へ自動的に読み替えません。現在の提供 module と関数数は次のとおりです。
+
+| module | 関数数 |
+| --- | ---: |
+| `binette:app@0.1` | 7 |
+| `binette:dom@0.1` | 8 |
+| `binette:ui@0.1` | 1 |
+| `binette:apps@0.1` | 5 |
+| `binette:os@0.1` | 22 |
+| `binette:storage@0.1` | 6 |
+| `binette:pigeon@0.1` | 11 |
+| `binette:shares@0.1` | 2 |
+| `binette:cadre@0.1` | 28 |
+| `binette:manager@0.1` | 3 |
+| `binette:scheduler@0.1` | 3 |
+| `binette:schedule@0.1` | 3 |
+
+`env.abort` は AssemblyScript の中断通知用に別途提供します。`fs` も `ABI_VERSION` を一度宣言して検査しますが、外部呼び出しがまだないため module を提供しません。
+
+各 SDK 機能は `ABI_VERSION = "0.1"` を一箇所で宣言します。asc の `@external` は定数参照や連結式を受け取らず文字列リテラルを要求するため、各宣言には完全な module 名を書き、宣言した版との一致をテストで検査します。Régie の `src/abi.ts` の提供一覧は Worker の import object の型と検査で共有し、SDK の全外部宣言と関数名・module 名の一致、および実際の WASM のリンクをテストします。
+
+起動時は WASM をコンパイルして `WebAssembly.Module.imports` を読み、instantiate と `_start` より前に検査します。未対応 module は `この OS では動きません（storage 0.9）` のように機能と版を表示して拒みます。複数なら表示名で並べ替え、`この OS では動きません（storage 0.9、ui 0.2）` とします。形式外の module 名はそのまま表示し、旧 `binette` なら `この OS では動きません（binette）` です。提供 module 内の未知関数や関数以外の import は `この OS では動きません（storage 0.1 の read2）` のように名前も表示します。未対応 ABI は `BinetteError` の専用コード `unsupported_abi` で識別します。起動では Worker の `failed` メッセージにコードを載せ、`launchApp` が `BinetteError` を復元して、既存の起動失敗通知を通じて Scene のエラー表示へ届けます。起動時も余分な接頭辞は付けず、この文言をそのまま表示します。インストールの reject と報告でも同じコードと文言を保ちます。提供リストからのインストール・更新、起動時に登録するソース／ビルド済みアプリ、`buildStoredApp` も保存前に同じ検査を行います。検査は import の対応だけを判断し、呼び出し時の権限・役割判定と OS call の実装は変えません。
+
+旧 `binette` module は非対応です。保存済みの旧 WASM を自動で書き換えたり、ABI の変更だけで自動再ビルドしたりはしません。復旧は [ビルドと旧アプリの復旧](regie/build.md#旧-abi-のアプリの復旧) を参照してください。
 
 | 名前 | 引数 |
 | --- | --- |
@@ -201,7 +226,7 @@ class Home extends App {
 
 ### OsApi
 
-設定アプリ（役割 settings に割り当てられたアプリ）だけに届きます。`binette` モジュールの同名の WASM import に対応します。
+設定アプリ（役割 settings に割り当てられたアプリ）だけに届きます。`binette:os@0.1` module の同名の WASM import に対応します。
 
 - get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
@@ -248,7 +273,7 @@ class Home extends App {
 - `read` は無ければ null です。`write` は名前が空か 256 文字を超えるとき false を返して保存しません。無い名前の `remove` は何もしません
 - 容量の上限と、ほかのタブや窓との同時書き込みの扱いは未決です。アプリの ID `system` は従来の API 契約に合わせて使えません
 
-`@external("binette", "dom.text")` と `// @ts-ignore: decorator` で import を宣言します。型検査は Deno と asc の両方で行います。AS235（クラスや名前空間自体は WASM の export にならない）は想定した警告です。
+`@external("binette:dom@0.1", "text")` と `// @ts-ignore: decorator` で import を宣言します。型検査は Deno と asc の両方で行います。AS235（クラスや名前空間自体は WASM の export にならない）は想定した警告です。
 
 ## まだしていないこと
 

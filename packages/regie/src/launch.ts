@@ -1,4 +1,4 @@
-import type { DomOp } from "@binette/core";
+import { BinetteError, type DomOp } from "@binette/core";
 import type { LifecycleRecord, SystemSettings } from "./store.ts";
 
 /** A letter whose sender is supplied by the OS. */
@@ -319,7 +319,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string; operation?: string; args?: string[] };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string; operation?: string; args?: string[] };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -378,7 +378,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           break;
         }
         case "failed": {
-          const error = new Error(data.message);
+          const error = data.code === "unsupported_abi" || data.code === "invalid_format"
+            ? new BinetteError(data.code, data.message ?? "") : new Error(data.message);
           exit(error);
           break;
         }

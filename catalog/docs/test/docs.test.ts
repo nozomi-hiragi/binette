@@ -1,3 +1,4 @@
+import { mockImports } from "../../../packages/replique/test/imports.ts";
 import { readRepliqueLibraries } from "../../../packages/regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "../../../packages/regie/src/build.ts";
@@ -24,13 +25,13 @@ async function start(saved?: string) {
   const storage = new Map<string, string>();
   if (saved !== undefined) storage.set("page", saved);
   const host: Record<string, CallableFunction> = {};
-  for (const entry of WebAssembly.Module.imports(module)) if (entry.module === "binette") host[entry.name] = () => 0;
-  host["api.why"] = () => 0;
-  host["storage.has"] = (key: number) => storage.has(read(key));
-  host["storage.read"] = (key: number) => { const value = storage.get(read(key)); return value === undefined ? 0 : write(value); };
-  host["storage.write"] = (key: number, value: number) => { storage.set(read(key), read(value)); return 1; };
-  host["ui.render"] = (ptr: number) => { frame = JSON.parse(read(ptr)); };
-  const instance = new WebAssembly.Instance(module, { binette: host, env: { abort: () => { throw new Error("AS abort"); } } });
+  for (const entry of WebAssembly.Module.imports(module)) if (entry.module.startsWith("binette:")) host[`${entry.module}/${entry.name}`] = () => 0;
+  host["binette:app@0.1/why"] = () => 0;
+  host["binette:storage@0.1/has"] = (key: number) => storage.has(read(key));
+  host["binette:storage@0.1/read"] = (key: number) => { const value = storage.get(read(key)); return value === undefined ? 0 : write(value); };
+  host["binette:storage@0.1/write"] = (key: number, value: number) => { storage.set(read(key), read(value)); return 1; };
+  host["binette:ui@0.1/render"] = (ptr: number) => { frame = JSON.parse(read(ptr)); };
+  const instance = new WebAssembly.Instance(module, { ...mockImports(host), env: { abort: () => { throw new Error("AS abort"); } } });
   const call = (name: string, ...args: number[]) => (instance.exports[name] as CallableFunction)(...args);
   call("_start"); call("__bina_lifecycle", 1, 0, 0);
   const flatten = (node: Node): Node[] => [node, ...node.children.flatMap(flatten)];

@@ -1,36 +1,39 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace
 import { rebuild } from "jsr:@binette/replique/ui";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 // @ts-ignore: decorator
-@external("binette", "dom.byId")
+@external("binette:dom@0.1", "byId")
 declare function byId(handle: i32, id: string): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.create")
+@external("binette:dom@0.1", "create")
 declare function create(handle: i32, tag: string): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.text")
+@external("binette:dom@0.1", "text")
 declare function domText(handle: i32, value: string): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.class")
+@external("binette:dom@0.1", "class")
 declare function className(handle: i32, value: string): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.append")
+@external("binette:dom@0.1", "append")
 declare function append(parent: i32, child: i32): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.remove")
+@external("binette:dom@0.1", "remove")
 declare function remove(handle: i32): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.listen")
+@external("binette:dom@0.1", "listen")
 declare function listen(handle: i32, type: string, listener: i32): void;
 
 // @ts-ignore: decorator
-@external("binette", "dom.unlisten")
+@external("binette:dom@0.1", "unlisten")
 declare function unlisten(handle: i32, type: string, listener: i32): void;
 
 let nextHandle: i32 = 1;

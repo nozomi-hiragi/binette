@@ -1,73 +1,76 @@
 // deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
 import { Api, Why } from "jsr:@binette/replique/app";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostOs {
   // @ts-ignore: decorator
-  @external("binette", "os.notificationCount")
+  @external("binette:os@0.1", "notificationCount")
   export declare function notificationCount(): i32;
   // @ts-ignore: decorator
-  @external("binette", "os.notificationName")
+  @external("binette:os@0.1", "notificationName")
   export declare function notificationName(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.notificationId")
+  @external("binette:os@0.1", "notificationId")
   export declare function notificationId(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.notificationMuted")
+  @external("binette:os@0.1", "notificationMuted")
   export declare function notificationMuted(i: i32): bool;
   // @ts-ignore: decorator
-  @external("binette", "os.setNotificationMuted")
+  @external("binette:os@0.1", "setNotificationMuted")
   export declare function setNotificationMuted(i: i32, muted: bool): void;
 
   // @ts-ignore: decorator
-  @external("binette", "os.get")
+  @external("binette:os@0.1", "get")
   export declare function get(name: string): i32;
   // @ts-ignore: decorator
-  @external("binette", "os.set")
+  @external("binette:os@0.1", "set")
   export declare function set(name: string, value: i32): bool;
   // @ts-ignore: decorator
-  @external("binette", "os.role")
+  @external("binette:os@0.1", "role")
   export declare function role(role: string): string;
   // @ts-ignore: decorator
-  @external("binette", "os.candidateCount")
+  @external("binette:os@0.1", "candidateCount")
   export declare function candidateCount(role: string): i32;
   // @ts-ignore: decorator
-  @external("binette", "os.candidateName")
+  @external("binette:os@0.1", "candidateName")
   export declare function candidateName(role: string, i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.candidateId")
+  @external("binette:os@0.1", "candidateId")
   export declare function candidateId(role: string, i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.assign")
+  @external("binette:os@0.1", "assign")
   export declare function assign(role: string, i: i32): void;
   // @ts-ignore: decorator
-  @external("binette", "os.launchCount")
+  @external("binette:os@0.1", "launchCount")
   export declare function launchCount(): i32;
   // @ts-ignore: decorator
-  @external("binette", "os.launchTime")
+  @external("binette:os@0.1", "launchTime")
   export declare function launchTime(i: i32): f64;
   // @ts-ignore: decorator
-  @external("binette", "os.launchName")
+  @external("binette:os@0.1", "launchName")
   export declare function launchName(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "os.updatePhase")
+  @external("binette:os@0.1", "updatePhase")
   export declare function updatePhase(): string;
   // @ts-ignore: decorator
-  @external("binette", "os.updateCurrent")
+  @external("binette:os@0.1", "updateCurrent")
   export declare function updateCurrent(): string;
   // @ts-ignore: decorator
-  @external("binette", "os.updateNext")
+  @external("binette:os@0.1", "updateNext")
   export declare function updateNext(): string;
   // @ts-ignore: decorator
-  @external("binette", "os.openRecovery")
+  @external("binette:os@0.1", "openRecovery")
   export declare function openRecovery(): void;
   // @ts-ignore: decorator
-  @external("binette", "os.checkUpdate")
+  @external("binette:os@0.1", "checkUpdate")
   export declare function checkUpdate(): void;
   // @ts-ignore: decorator
-  @external("binette", "os.updateAvailable")
+  @external("binette:os@0.1", "updateAvailable")
   export declare function updateAvailable(): bool;
   // @ts-ignore: decorator
-  @external("binette", "os.update")
+  @external("binette:os@0.1", "update")
   export declare function update(): void;
 }
 

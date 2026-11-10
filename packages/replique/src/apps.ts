@@ -2,23 +2,26 @@
 import { Api, Why } from "jsr:@binette/replique/app";
 import { Element } from "jsr:@binette/replique/dom";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 // @ts-ignore: decorator
-@external("binette", "apps.icon")
+@external("binette:apps@0.1", "icon")
 declare function iconImport(handle: i32, app: i32): void;
 
 // OS の呼び出しの入口。アプリは直接使わず、辞書 `Api` から取ったクラスを通す
 namespace hostApps {
   // @ts-ignore: decorator
-  @external("binette", "apps.count")
+  @external("binette:apps@0.1", "count")
   export declare function count(): i32;
   // @ts-ignore: decorator
-  @external("binette", "apps.name")
+  @external("binette:apps@0.1", "name")
   export declare function name(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "apps.id")
+  @external("binette:apps@0.1", "id")
   export declare function id(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "apps.open")
+  @external("binette:apps@0.1", "open")
   export declare function open(i: i32): void;
 }
 

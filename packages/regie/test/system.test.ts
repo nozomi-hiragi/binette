@@ -1,3 +1,4 @@
+import { BinetteError } from "@binette/core";
 import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { parseAppManifest, State, type DomOp } from "@binette/core";
@@ -966,3 +967,30 @@ Deno.test("インスタンスが無ければ画面なしで起こして onSchedu
     assert(!element.view.instances.some(instance => instance.key === key));
   } finally { system.stop(); }
 });
+
+for (const input of ["prebuilt", "source"] as const) {
+  Deno.test(`startSystem の ${input} 登録は未対応 ABI を保存せず既存の成果物を残す`, async () => {
+    const store = createMemoryAppStore();
+    const origin = "https://example.test/apps/";
+    const previous = { ...await build(), key: appId(origin, "test"), source: origin, icon: undefined, installedAt: 1 };
+    await store.put(previous);
+    const legacy = "binette";
+    const code = `@external("${legacy}", "dom.text") declare function text(handle: i32, value: string): void; export function run(): void { text(1, "古い"); }`;
+    const bad = await build(code);
+    bad.manifest.version = "next";
+    const app = input === "prebuilt" ? { source: origin, prebuilt: bad } : {
+      source: origin,
+      read: (path: string) => Promise.resolve(path === "app.json" ? JSON.stringify(bad.manifest) : path === "main.ts" ? code : ""),
+    };
+    const element = output();
+    const system = await startSystem({ ui: element.ui, store, libraries, createWorker,
+      apps: [{ source: "binette:system", prebuilt: await build(source, true) }, app] });
+    try {
+      assertEquals(element.errors.length, 1);
+      assert(element.errors[0] instanceof BinetteError);
+      assertEquals(element.errors[0].code, "unsupported_abi");
+      assertEquals(element.errors[0].message, "この OS では動きません（binette）");
+      assertEquals(await store.get(previous.key), previous);
+    } finally { system.stop(); }
+  });
+}

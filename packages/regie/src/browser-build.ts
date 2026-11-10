@@ -1,3 +1,4 @@
+import { validateAppAbi } from "./abi.ts";
 import type { BuiltApp, BuildOptions } from "./build.ts";
 import type { SystemDistribution } from "./distribution.ts";
 import type { FileTree } from "./fs.ts";
@@ -116,6 +117,7 @@ export async function buildStoredApp(
     return Promise.resolve(decoder.decode(bytes));
   };
   const built = await buildAppInWorker(read, { ...options, distribution });
+  await validateAppAbi(built.wasm);
   if (built.manifest.id !== id) throw new Error("app.json の ID と保存先の ID が一致しません。");
   const icon = iconPath(built.manifest.icon);
   const subIcons: Record<string, string> = {};

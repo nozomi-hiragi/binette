@@ -1,3 +1,4 @@
+import { mockImports } from "./imports.ts";
 import { assertEquals } from "@std/assert";
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { buildApp } from "../../regie/src/build.ts";
@@ -19,18 +20,18 @@ launch(new Page());`,
   const frames: { build: number; root: { kind: string; children: { kind: string; text: string; handler: number }[] } }[] = [];
   const binette: Record<string, (...args: number[]) => number | void> = {};
   for (const entry of WebAssembly.Module.imports(module)) {
-    if (entry.module === "binette") binette[entry.name] = () => { throw new Error(`予期しない import: ${entry.name}`); };
+    if (entry.module.startsWith("binette:")) binette[`${entry.module}/${entry.name}`] = () => { throw new Error(`予期しない import: ${entry.name}`); };
   }
-  binette["app.lastPage"] = () => (instance.exports.__new as CallableFunction)(0, 2) as number;
-  binette["app.lastKind"] = () => 0;
-  binette["app.lastCause"] = () => 0;
-  binette["ui.render"] = (ptr: number) => {
+  binette["binette:app@0.1/lastPage"] = () => (instance.exports.__new as CallableFunction)(0, 2) as number;
+  binette["binette:app@0.1/lastKind"] = () => 0;
+  binette["binette:app@0.1/lastCause"] = () => 0;
+  binette["binette:ui@0.1/render"] = (ptr: number) => {
     const memory = instance.exports.memory as WebAssembly.Memory;
     const length = new DataView(memory.buffer).getUint32(ptr - 4, true);
     frames.push(JSON.parse(new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, ptr, length))));
   };
   const instance = new WebAssembly.Instance(module, {
-    binette,
+    ...mockImports(binette),
     env: { abort() { throw new Error("AS が終了しました。"); } },
   });
   const call = (name: string, ...args: number[]) => (instance.exports[name] as CallableFunction)(...args);
@@ -82,17 +83,17 @@ Deno.test("Feature imports retain class identity with the aggregate SDK and feat
   const module = new WebAssembly.Module(new Uint8Array(built.wasm));
   const binette: Record<string, (...args: number[]) => number> = {};
   for (const entry of WebAssembly.Module.imports(module)) {
-    if (entry.module === "binette") binette[entry.name] = () => 0;
+    if (entry.module.startsWith("binette:")) binette[`${entry.module}/${entry.name}`] = () => 0;
   }
   let reason = 0;
   const keys: string[] = [];
-  binette["api.why"] = (ptr: number) => {
+  binette["binette:app@0.1/why"] = (ptr: number) => {
     const memory = instance.exports.memory as WebAssembly.Memory;
     const length = new DataView(memory.buffer).getUint32(ptr - 4, true);
     keys.push(new TextDecoder("utf-16le").decode(new Uint8Array(memory.buffer, ptr, length)));
     return reason;
   };
-  const instance = new WebAssembly.Instance(module, { binette, env: { abort() { throw new Error("Unexpected AS abort"); } } });
+  const instance = new WebAssembly.Instance(module, { ...mockImports(binette), env: { abort() { throw new Error("Unexpected AS abort"); } } });
   (instance.exports._start as CallableFunction)();
   assertEquals((instance.exports.verify as CallableFunction)(), 1);
   assertEquals(keys.splice(0), Object.keys(classes));

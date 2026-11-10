@@ -1,5 +1,6 @@
+import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
 import { createUiDiffer } from "@binette/decor";
-import type { DomOp } from "@binette/core";
+import { BinetteError, type DomOp } from "@binette/core";
 import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
 
@@ -261,9 +262,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   };
 
   const imports = {
-    binette: {
-      "schedule.do": (action: number, slot: number, value: number, label: number) => scheduleDo(readString(action), slot, readString(value), readString(label)) ? 1 : 0,
-      "schedule.text": (query: number, slot: number) => {
+    [HOST_ABI.schedule.module]: {
+      "do": (action: number, slot: number, value: number, label: number) => scheduleDo(readString(action), slot, readString(value), readString(label)) ? 1 : 0,
+      "text": (query: number, slot: number) => {
         const name = readString(query);
         const found = ownSlot(slot);
         if (name === "rule") return writeString(found?.rule ?? "");
@@ -271,7 +272,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         if (name === "lastResult") return writeString(found?.lastResult ?? "");
         throw new Error(`知らない schedule の問い合わせです: ${name}`);
       },
-      "schedule.number": (query: number, slot: number) => {
+      "number": (query: number, slot: number) => {
         const name = readString(query);
         const found = ownSlot(slot);
         if (name === "count") return ownSchedules().slots.length;
@@ -280,23 +281,29 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         if (name === "lastTime") return found?.lastTime ?? 0;
         throw new Error(`知らない schedule の問い合わせです: ${name}`);
       },
-      "scheduler.text": (query: number, i: number) => writeString(schedulerText(readString(query), i)),
-      "scheduler.number": (query: number, i: number) => schedulerNumber(readString(query), i),
-      "scheduler.do": (action: number, id: number, value: number, flag: number) => {
+    },
+    [HOST_ABI.scheduler.module]: {
+      "text": (query: number, i: number) => writeString(schedulerText(readString(query), i)),
+      "number": (query: number, i: number) => schedulerNumber(readString(query), i),
+      "do": (action: number, id: number, value: number, flag: number) => {
         schedulerState();
         const name = readString(action);
         if (!schedulerActions.includes(name)) throw new Error(`知らない scheduler の操作です: ${name}`);
         scope.postMessage({ type: "scheduler.do", action: name, schedulerArgs: [readString(id), readString(value), !!flag] });
       },
-      "manager.text": (query: number, key: number, i: number) => writeString(managerText(readString(query), readString(key), i)),
-      "manager.number": (query: number, key: number, i: number) => managerNumber(readString(query), readString(key), i),
-      "manager.do": (action: number, a: number, b: number, flag: number) => {
+    },
+    [HOST_ABI.manager.module]: {
+      "text": (query: number, key: number, i: number) => writeString(managerText(readString(query), readString(key), i)),
+      "number": (query: number, key: number, i: number) => managerNumber(readString(query), readString(key), i),
+      "do": (action: number, a: number, b: number, flag: number) => {
         managerState();
         const name = readString(action);
         if (!managerActions.includes(name)) throw new Error(`知らない manager の操作です: ${name}`);
         scope.postMessage({ type: "manager.do", action: name, managerArgs: [readString(a), readString(b), !!flag] });
       },
-      "shares.request": (operation: number, args: number) => {
+    },
+    [HOST_ABI.shares.module]: {
+      "request": (operation: number, args: number) => {
         if (!shares) throw new Error("共有 API は許可されていません。");
         const values: unknown = JSON.parse(readString(args));
         if (!Array.isArray(values) || values.some(value => typeof value !== "string")) throw new Error("共有の引数が不正です。");
@@ -305,9 +312,11 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "shares.request", id, operation: readString(operation), args: values });
         return id;
       },
-      "shares.result": (id: number) => { const result = shareResults.get(id); if (result === undefined) return 0; shareResults.delete(id); return writeString(result); },
-      "pigeon.shares": (i: number) => writeString(JSON.stringify(letterAt(i).shares ?? [])),
-      "pigeon.send": (to: number, kind: number, title: number, body: number, urgent: number, actions: number, attachments: number) => {
+      "result": (id: number) => { const result = shareResults.get(id); if (result === undefined) return 0; shareResults.delete(id); return writeString(result); },
+    },
+    [HOST_ABI.pigeon.module]: {
+      "shares": (i: number) => writeString(JSON.stringify(letterAt(i).shares ?? [])),
+      "send": (to: number, kind: number, title: number, body: number, urgent: number, actions: number, attachments: number) => {
         const state = inbox();
         const target = readString(to);
         if (target === "user" && !state.notify) return false;
@@ -322,40 +331,29 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "pigeon.send", letter: { to: target, kind: readString(kind), title: readString(title), body: readString(body), urgent: !!urgent, actions: buttons, ...(attached.length ? { shares: attached } : {}) } });
         return true;
       },
-      "pigeon.count": () => inbox().letters.length,
-      "pigeon.done": (i: number) => { const letter = letterAt(i); acknowledgedLetters.add(letter.id); inbox().letters.splice(i, 1); scope.postMessage({ type: "pigeon.done", i: letter.id }); },
-      "pigeon.urgent": (i: number) => !!letterAt(i).urgent,
-      "pigeon.actions": (i: number) => writeString(JSON.stringify(letterAt(i).actions ?? [])),
-      "pigeon.from": (i: number) => writeString(letterAt(i).from),
-      "pigeon.to": (i: number) => writeString(letterAt(i).to),
-      "pigeon.kind": (i: number) => writeString(letterAt(i).kind),
-      "pigeon.title": (i: number) => writeString(letterAt(i).title),
-      "pigeon.body": (i: number) => writeString(letterAt(i).body),
-      "os.notificationCount": () => system().notifications?.length ?? 0,
-      "os.notificationName": (i: number) => writeString(notificationSetting(i).name),
-      "os.notificationId": (i: number) => writeString(notificationSetting(i).id),
-      "os.notificationMuted": (i: number) => notificationSetting(i).muted,
-      "os.setNotificationMuted": (i: number, muted: number) => { notificationSetting(i).muted = !!muted; scope.postMessage({ type: "os.notificationMuted", i, muted: !!muted }); },
-      "cadre.notificationCount": () => cadreState().notifications?.length ?? 0,
-      "cadre.notificationId": (i: number) => notificationAt(i).id,
-      "cadre.notificationActionCount": (i: number) => notificationAt(i).actions?.length ?? 0,
-      "cadre.notificationActionInput": (i: number, a: number) => !!actionAt(i,a).input,
-      "cadre.notificationActionPlaceholder": (i: number, a: number) => writeString(actionAt(i,a).placeholder ?? ""),
-      "cadre.notificationOpen": (i: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationOpen", i }); },
-      "cadre.notificationDismiss": (i: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationDismiss", i }); },
-      "cadre.notificationReply": (i: number, action: number, body: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationReply", i, action: readString(action), body: readString(body) }); },
-      "cadre.notificationFrom": (i: number) => writeString(notificationAt(i).from),
-      "cadre.notificationTitle": (i: number) => writeString(notificationAt(i).title),
-      "cadre.notificationBody": (i: number) => writeString(notificationAt(i).body),
-      "cadre.notificationActionId": (i: number, a: number) => writeString(actionAt(i,a).id),
-      "cadre.notificationActionLabel": (i: number, a: number) => writeString(actionAt(i,a).label),
-      "os.get": (ptr: number) => {
+      "count": () => inbox().letters.length,
+      "done": (i: number) => { const letter = letterAt(i); acknowledgedLetters.add(letter.id); inbox().letters.splice(i, 1); scope.postMessage({ type: "pigeon.done", i: letter.id }); },
+      "urgent": (i: number) => !!letterAt(i).urgent,
+      "actions": (i: number) => writeString(JSON.stringify(letterAt(i).actions ?? [])),
+      "from": (i: number) => writeString(letterAt(i).from),
+      "to": (i: number) => writeString(letterAt(i).to),
+      "kind": (i: number) => writeString(letterAt(i).kind),
+      "title": (i: number) => writeString(letterAt(i).title),
+      "body": (i: number) => writeString(letterAt(i).body),
+    },
+    [HOST_ABI.os.module]: {
+      "notificationCount": () => system().notifications?.length ?? 0,
+      "notificationName": (i: number) => writeString(notificationSetting(i).name),
+      "notificationId": (i: number) => writeString(notificationSetting(i).id),
+      "notificationMuted": (i: number) => notificationSetting(i).muted,
+      "setNotificationMuted": (i: number, muted: number) => { notificationSetting(i).muted = !!muted; scope.postMessage({ type: "os.notificationMuted", i, muted: !!muted }); },
+      "get": (ptr: number) => {
         const settings = system().settings;
         const name = readString(ptr);
         if (!settingName(name)) throw new Error("知らない設定です。");
         return settings[name];
       },
-      "os.set": (ptr: number, value: number) => {
+      "set": (ptr: number, value: number) => {
         const settings = system().settings;
         const name = readString(ptr);
         if (!settingName(name) || !Number.isInteger(value) || value < 0 ||
@@ -365,38 +363,109 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "os.set", name, value });
         return true;
       },
-      "os.role": (role: number) => {
+      "role": (role: number) => {
         const roles = system().roles;
         const name = readString(role);
         return writeString(Object.hasOwn(roles, name) ? roles[name]! : "");
       },
-      "os.candidateCount": (role: number) => candidates(readString(role)).length,
-      "os.candidateName": (role: number, i: number) => writeString(candidateAt(readString(role), i).name),
-      "os.candidateId": (role: number, i: number) => writeString(candidateAt(readString(role), i).id),
-      "os.assign": (role: number, i: number) => {
+      "candidateCount": (role: number) => candidates(readString(role)).length,
+      "candidateName": (role: number, i: number) => writeString(candidateAt(readString(role), i).name),
+      "candidateId": (role: number, i: number) => writeString(candidateAt(readString(role), i).id),
+      "assign": (role: number, i: number) => {
         const name = readString(role);
         system().roles[name] = candidateAt(name, i).id;
         scope.postMessage({ type: "os.assign", role: name, i });
       },
-      "os.updatePhase": () => writeString(system().updateState?.phase ?? "idle"),
-      "os.updateCurrent": () => writeString(system().updateState?.current ?? ""),
-      "os.updateNext": () => writeString(system().updateState?.next ?? ""),
-      "os.openRecovery": () => { system(); scope.postMessage({ type: "os.openRecovery" }); },
-      "os.checkUpdate": () => { system(); scope.postMessage({ type: "os.checkUpdate" }); },
-      "os.updateAvailable": () => system().updateAvailable,
-      "os.update": () => {
+      "updatePhase": () => writeString(system().updateState?.phase ?? "idle"),
+      "updateCurrent": () => writeString(system().updateState?.current ?? ""),
+      "updateNext": () => writeString(system().updateState?.next ?? ""),
+      "openRecovery": () => { system(); scope.postMessage({ type: "os.openRecovery" }); },
+      "checkUpdate": () => { system(); scope.postMessage({ type: "os.checkUpdate" }); },
+      "updateAvailable": () => system().updateAvailable,
+      "update": () => {
         system();
         scope.postMessage({ type: "os.update" });
       },
-      "os.launchCount": () => system().launches.length,
-      "os.launchTime": (i: number) => launchAt(i).time,
-      "os.launchName": (i: number) => writeString(launchAt(i).name),
-      "storage.has": (name: number) => files().has(readString(name)),
-      "storage.read": (name: number) => {
+      "launchCount": () => system().launches.length,
+      "launchTime": (i: number) => launchAt(i).time,
+      "launchName": (i: number) => writeString(launchAt(i).name),
+    },
+    [HOST_ABI.cadre.module]: {
+      "notificationCount": () => cadreState().notifications?.length ?? 0,
+      "notificationId": (i: number) => notificationAt(i).id,
+      "notificationActionCount": (i: number) => notificationAt(i).actions?.length ?? 0,
+      "notificationActionInput": (i: number, a: number) => !!actionAt(i,a).input,
+      "notificationActionPlaceholder": (i: number, a: number) => writeString(actionAt(i,a).placeholder ?? ""),
+      "notificationOpen": (i: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationOpen", i }); },
+      "notificationDismiss": (i: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationDismiss", i }); },
+      "notificationReply": (i: number, action: number, body: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationReply", i, action: readString(action), body: readString(body) }); },
+      "notificationFrom": (i: number) => writeString(notificationAt(i).from),
+      "notificationTitle": (i: number) => writeString(notificationAt(i).title),
+      "notificationBody": (i: number) => writeString(notificationAt(i).body),
+      "notificationActionId": (i: number, a: number) => writeString(actionAt(i,a).id),
+      "notificationActionLabel": (i: number, a: number) => writeString(actionAt(i,a).label),
+      "count": () => cadreState().instances.length,
+      "name": (i: number) => {
+        const instances = cadreState().instances;
+        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
+        return writeString(instances[i]!.name);
+      },
+      "appIndex": (i: number) => {
+        const instances = cadreState().instances;
+        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
+        return instances[i]!.appIndex;
+      },
+      "isFront": (i: number) => {
+        const instances = cadreState().instances;
+        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
+        return instances[i]!.front ? 1 : 0;
+      },
+      "isHome": () => cadreState().homeFront ? 1 : 0,
+      "hasIcon": (i: number) => {
+        const instances = cadreState().instances;
+        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
+        return instances[i]!.hasIcon ? 1 : 0;
+      },
+      "open": (i: number) => {
+        const instances = cadreState().instances;
+        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
+        scope.postMessage({ type: "cadre.open", i: instances[i]!.id });
+      },
+      "close": (i: number) => {
+        const instances = cadreState().instances;
+        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
+        scope.postMessage({ type: "cadre.close", i: instances[i]!.id });
+      },
+      "openHome": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.home" });
+      },
+      "back": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.back" });
+      },
+      "openSettings": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.settings" });
+      },
+      "isInstalled": () => cadreState().installed ? 1 : 0,
+      "installBusy": () => cadreState().installBusy ? 1 : 0,
+      "install": () => {
+        cadreState();
+        scope.postMessage({ type: "cadre.install" });
+      },
+      "notify": (ptr: number) => {
+        cadreState();
+        scope.postMessage({ type: "cadre.notify", text: readString(ptr) });
+      },
+    },
+    [HOST_ABI.storage.module]: {
+      "has": (name: number) => files().has(readString(name)),
+      "read": (name: number) => {
         const value = files().get(readString(name));
         return value === undefined ? 0 : writeString(value);
       },
-      "storage.write": (name: number, value: number) => {
+      "write": (name: number, value: number) => {
         const key = readString(name);
         // 名前は 1 つの部品で、長すぎる名前と空の名前は受けない
         if (!key || key.length > 256) return false;
@@ -405,109 +474,63 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "storage.write", name: key, value: text });
         return true;
       },
-      "storage.remove": (name: number) => {
+      "remove": (name: number) => {
         const key = readString(name);
         if (files().delete(key)) scope.postMessage({ type: "storage.write", name: key, value: null });
       },
-      "storage.count": () => files().size,
-      "storage.name": (i: number) => {
+      "count": () => files().size,
+      "name": (i: number) => {
         const names = [...files().keys()].sort();
         if (!Number.isInteger(i) || i < 0 || i >= names.length) throw new Error("データの番号が範囲外です。");
         return writeString(names[i]!);
       },
+    },
+    [HOST_ABI.app.module]: {
       // 辞書の中身。0 は届いている、1 は NotGranted、2 は NotAssigned。知らないキーはどの役割にもないので NotAssigned
-      "api.sub": () => writeString(sub),
-      "api.why": (key: number) => {
+      "sub": () => writeString(sub),
+      "why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;
         if (!(API_KEYS as readonly string[]).includes(name)) return 2;
         return denied[name] === "NotAssigned" ? 2 : 1;
       },
-      "app.page": () => writeString(page),
-      "app.lastPage": () => writeString(last.page),
-      "app.lastKind": () => last.reason.kind,
-      "app.lastCause": () => last.reason.cause,
-      "app.finish": () => scope.postMessage({ type: "finish" }),
-      "ui.render": (ptr: number) => renderUi(readString(ptr)),
-      "dom.byId": (handle: number, id: number) => ops.push({ op: "byId", handle, id: readString(id) }),
-      "dom.create": (handle: number, tag: number) => ops.push({ op: "create", handle, tag: readString(tag) }),
-      "dom.text": (handle: number, value: number) => ops.push({ op: "text", handle, value: readString(value) }),
-      "dom.class": (handle: number, value: number) => ops.push({ op: "class", handle, value: readString(value) }),
-      "dom.append": (parent: number, child: number) => ops.push({ op: "append", parent, child }),
-      "dom.remove": (handle: number) => ops.push({ op: "remove", handle }),
-      "dom.listen": (handle: number, type: number, listener: number) => ops.push({ op: "listen", handle, type: readString(type), listener }),
-      "dom.unlisten": (handle: number, type: number, listener: number) => ops.push({ op: "unlisten", handle, type: readString(type), listener }),
-      "apps.icon": (handle: number, app: number) => { appAt(app); ops.push({ op: "icon", handle, app }); },
-      "apps.count": () => homeApps().length,
-      "apps.name": (i: number) => writeString(appAt(i).name),
-      "apps.id": (i: number) => writeString(appAt(i).id),
-      "apps.open": (i: number) => {
+      "page": () => writeString(page),
+      "lastPage": () => writeString(last.page),
+      "lastKind": () => last.reason.kind,
+      "lastCause": () => last.reason.cause,
+      "finish": () => scope.postMessage({ type: "finish" }),
+    },
+    [HOST_ABI.ui.module]: {
+      "render": (ptr: number) => renderUi(readString(ptr)),
+    },
+    [HOST_ABI.dom.module]: {
+      "byId": (handle: number, id: number) => ops.push({ op: "byId", handle, id: readString(id) }),
+      "create": (handle: number, tag: number) => ops.push({ op: "create", handle, tag: readString(tag) }),
+      "text": (handle: number, value: number) => ops.push({ op: "text", handle, value: readString(value) }),
+      "class": (handle: number, value: number) => ops.push({ op: "class", handle, value: readString(value) }),
+      "append": (parent: number, child: number) => ops.push({ op: "append", parent, child }),
+      "remove": (handle: number) => ops.push({ op: "remove", handle }),
+      "listen": (handle: number, type: number, listener: number) => ops.push({ op: "listen", handle, type: readString(type), listener }),
+      "unlisten": (handle: number, type: number, listener: number) => ops.push({ op: "unlisten", handle, type: readString(type), listener }),
+    },
+    [HOST_ABI.apps.module]: {
+      "icon": (handle: number, app: number) => { appAt(app); ops.push({ op: "icon", handle, app }); },
+      "count": () => homeApps().length,
+      "name": (i: number) => writeString(appAt(i).name),
+      "id": (i: number) => writeString(appAt(i).id),
+      "open": (i: number) => {
         appAt(i);
         scope.postMessage({ type: "apps.open", i });
       },
-      "cadre.count": () => cadreState().instances.length,
-      "cadre.name": (i: number) => {
-        const instances = cadreState().instances;
-        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        return writeString(instances[i]!.name);
-      },
-      "cadre.appIndex": (i: number) => {
-        const instances = cadreState().instances;
-        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        return instances[i]!.appIndex;
-      },
-      "cadre.isFront": (i: number) => {
-        const instances = cadreState().instances;
-        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        return instances[i]!.front ? 1 : 0;
-      },
-      "cadre.isHome": () => cadreState().homeFront ? 1 : 0,
-      "cadre.hasIcon": (i: number) => {
-        const instances = cadreState().instances;
-        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        return instances[i]!.hasIcon ? 1 : 0;
-      },
-      "cadre.open": (i: number) => {
-        const instances = cadreState().instances;
-        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        scope.postMessage({ type: "cadre.open", i: instances[i]!.id });
-      },
-      "cadre.close": (i: number) => {
-        const instances = cadreState().instances;
-        if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
-        scope.postMessage({ type: "cadre.close", i: instances[i]!.id });
-      },
-      "cadre.openHome": () => {
-        cadreState();
-        scope.postMessage({ type: "cadre.home" });
-      },
-      "cadre.back": () => {
-        cadreState();
-        scope.postMessage({ type: "cadre.back" });
-      },
-      "cadre.openSettings": () => {
-        cadreState();
-        scope.postMessage({ type: "cadre.settings" });
-      },
-      "cadre.isInstalled": () => cadreState().installed ? 1 : 0,
-      "cadre.installBusy": () => cadreState().installBusy ? 1 : 0,
-      "cadre.install": () => {
-        cadreState();
-        scope.postMessage({ type: "cadre.install" });
-      },
-      "cadre.notify": (ptr: number) => {
-        cadreState();
-        scope.postMessage({ type: "cadre.notify", text: readString(ptr) });
-      },
     },
-    env: {
+    [HOST_ABI.env.module]: {
       abort: (message: number, fileName: number, line: number, column: number) => {
         const text = message ? readString(message) : "abort";
         const file = fileName ? readString(fileName) : "";
         throw new Error(`アプリが中断しました: ${text}${file ? ` (${file}:${line}:${column})` : ""}`);
       },
     },
-  };
+  } satisfies HostImports;
 
   const messageOf = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
@@ -537,8 +560,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         declarative = data.declarative ?? false;
         last = data.last ?? last;
         ops = [];
-        const result = await WebAssembly.instantiate(data.wasm!, imports);
-        instance = result.instance;
+        const module = await validateAppAbi(data.wasm!);
+        instance = await WebAssembly.instantiate(module, imports);
         // トップレベルの初期化は instance を代入してから走らせる。初期化中の dom.* が文字列を読めるように
         const init = instance.exports._start;
         if (typeof init === "function") init();
@@ -547,7 +570,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "ready", exports: names });
       } catch (error) {
         ops = [];
-        scope.postMessage({ type: "failed", message: `アプリを起動できません: ${messageOf(error)}` });
+        const message = error instanceof BinetteError && error.code === "unsupported_abi"
+          ? error.message : `アプリを起動できません: ${messageOf(error)}`;
+        scope.postMessage({ type: "failed", message, ...(error instanceof BinetteError ? { code: error.code } : {}) });
       }
     } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync" || data.type === "scheduler.sync" || data.type === "schedule.sync") {
       if (data.type === "manager.sync") manager = data.manager;

@@ -2,6 +2,11 @@
 
 ## v0.2.0（未リリース）
 
+- 破壊的変更: Réplique の WASM import を `binette` / `dom.text` などから、機能ごとの `binette:dom@0.1` / `text` などへ変更する。`binette` / `storage.read` → `binette:storage@0.1` / `read`。`api.why`・`api.sub` は `binette:app@0.1` / `why`・`sub`。旧 `binette` は非対応で、既存のアプリは対応する SDK で再ビルドが必要
+- ABI の版は 0.x では `0.minor`、1 以降では `major` を使う。既存の呼び出しを壊す変更で版を変え、追加のみでは変更しない
+- SDK の各機能（外部呼び出しのない `fs` を含む）に ABI の版を宣言し、全 external と OS の提供一覧・実際のリンクの一致をテストする。OS の一覧は Worker と起動・インストール時の検査で共有する。未対応 module・関数は実行・保存前に `BinetteError`（`code: "unsupported_abi"`）にし、Worker を越えてコードと日本語のメッセージを保持して、既存の経路で Scene に表示する。OS call の実装、権限と役割の条件は維持する
+- [旧アプリの復旧方法](docs/spec/regie/build.md#旧-abi-のアプリの復旧)を明記する。システム・同梱アプリは配布時に再ビルドし、提供リストのアプリは更新またはデータを残して入れ直す。保存ソースには `buildStoredApp` があるが、ABI 変更だけを契機とする自動再ビルドは行わない
+
 - 破壊的変更: Réplique の `Api.get<T>(key)` を廃止し、各機能の `XxxApi.from(api)` で取得する。キーと権限・役割の条件、届いていないときに null を返す動作は維持する。各機能の呼び出しは次のように変更する
   - `api.get<AppsApi>("apps")` → `AppsApi.from(api)`
   - `api.get<OsApi>("os")` → `OsApi.from(api)`

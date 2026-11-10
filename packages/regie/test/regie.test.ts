@@ -7,7 +7,7 @@ import { launchApp, type ManagerSnapshot, type OsSnapshot, type SchedulerSnapsho
 const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
 
 const source = `
-@external("binette", "dom.text")
+@external("binette:dom@0.1", "text")
 declare function text(handle: i32, value: string): void;
 export function hello(): void { text(1, "値"); }
 export function boom(): void { throw new Error("こわれた"); }
@@ -71,7 +71,7 @@ Deno.test("WASM でないものは起動できない", async () => {
 Deno.test("トップレベルの初期化で呼んだ dom.text も届く", async () => {
   const texts: DomOp[][] = [];
   const code = `
-@external("binette", "dom.text")
+@external("binette:dom@0.1", "text")
 declare function text(handle: i32, value: string): void;
 text(1, "済み");
 export function hello(): void {}
@@ -124,11 +124,11 @@ export function icon(i: i32): void { apps().icon(document.createElement("img"), 
 
 /** 辞書を通さずに OS の呼び出しを直接使うアプリ */
 const directSource = `
-@external("binette", "apps.count")
+@external("binette:apps@0.1", "count")
 declare function count(): i32;
-@external("binette", "os.get")
+@external("binette:os@0.1", "get")
 declare function osGet(name: string): i32;
-@external("binette", "storage.count")
+@external("binette:storage@0.1", "count")
 declare function storageCount(): i32;
 export function apps(): void { count(); }
 export function os(): void { osGet("stackSize"); }
@@ -390,7 +390,7 @@ Deno.test("_start の無限ループは ready 前の時間切れとして reject
 
 Deno.test("call は可変長引数をそのまま WASM に渡す", async () => {
   const values: DomOp[][] = [];
-  const code = `@external("binette", "dom.text") declare function text(handle: i32, value: string): void;
+  const code = `@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
 export function args(a: i32, b: i32, c: i32): void { text(a, b.toString() + ":" + c.toString()); }`;
   const app = await launchApp(await build(code), { createWorker, onDom: ops => values.push(ops) });
   try { await app.call("args", 7, 8, 9); assertEquals(values, [[{ op: "text", handle: 7, value: "8:9" }]]); }
@@ -575,11 +575,11 @@ Deno.test("Cadre の同期は完了を返し、時間切れにならない", asy
 
 Deno.test("Pigeon は同期受信欄を読み、安定した ID で消して通知権限を守る", async () => {
   const wasm = await build(`
-@external("binette", "pigeon.count") declare function count(): i32;
-@external("binette", "pigeon.body") declare function body(i: i32): string;
-@external("binette", "pigeon.done") declare function done(i: i32): void;
-@external("binette", "pigeon.send") declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string): bool;
-@external("binette", "dom.text") declare function text(i: i32, value: string): void;
+@external("binette:pigeon@0.1", "count") declare function count(): i32;
+@external("binette:pigeon@0.1", "body") declare function body(i: i32): string;
+@external("binette:pigeon@0.1", "done") declare function done(i: i32): void;
+@external("binette:pigeon@0.1", "send") declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string): bool;
+@external("binette:dom@0.1", "text") declare function text(i: i32, value: string): void;
 export function inspect(): void { text(1, count().toString() + body(0)); done(0); text(2, count().toString()); }
 export function deliver(): void { text(3, send("user", "message", "題", "本文", false, "[]").toString()); send("target", "open", "", "data", true, "[]"); }
 export function __bina_pigeon(): void { text(4, count().toString()); }
@@ -608,7 +608,7 @@ export function readCount(): void { text(5, count().toString()); }
 Deno.test("共有の非同期結果は完了通知から一度だけ読め、失敗も JSON で届く", async () => {
   const code = `
 import { SharesApi } from "./replique";
-@external("binette", "dom.text") declare function text(handle: i32, value: string): void;
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
 let id = 0;
 export function request(): void { id = new SharesApi().create("資料"); }
 export function __bina_share(): void { const result = new SharesApi().result(id); if (result !== null) text(1, result); }

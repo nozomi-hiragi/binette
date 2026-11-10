@@ -1,24 +1,27 @@
 // deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
 import { Api, Why } from "jsr:@binette/replique/app";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostStorage {
   // @ts-ignore: decorator
-  @external("binette", "storage.has")
+  @external("binette:storage@0.1", "has")
   export declare function has(name: string): bool;
   // @ts-ignore: decorator
-  @external("binette", "storage.read")
+  @external("binette:storage@0.1", "read")
   export declare function read(name: string): string | null;
   // @ts-ignore: decorator
-  @external("binette", "storage.write")
+  @external("binette:storage@0.1", "write")
   export declare function write(name: string, value: string): bool;
   // @ts-ignore: decorator
-  @external("binette", "storage.remove")
+  @external("binette:storage@0.1", "remove")
   export declare function remove(name: string): void;
   // @ts-ignore: decorator
-  @external("binette", "storage.count")
+  @external("binette:storage@0.1", "count")
   export declare function count(): i32;
   // @ts-ignore: decorator
-  @external("binette", "storage.name")
+  @external("binette:storage@0.1", "name")
   export declare function name(i: i32): string;
 }
 

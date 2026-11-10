@@ -8,7 +8,7 @@
 
 ```
 メインスレッド（launchApp）              Worker（serveApp）
-  ── init { wasm, page, apps?, os? } ─────────────→  WebAssembly.instantiate
+  ── init { wasm, page, apps?, os? } ─────────────→  compile → import 検査 → instantiate
                                         _start があれば呼ぶ（トップレベルの初期化）
   ←──────────── dom { ops } ─  （初期化中の操作）
   ←──────────── ready { exports } ────  export された関数名を返す
@@ -199,7 +199,7 @@ Worker → メインスレッド:
 
 ### import
 
-Régie が WASM に渡すのは `binette` の [Réplique の import](../replique.md#wasm-import案実装済み) と `env.abort(message, fileName, line, column)` です（案・実装済み）。abort の文字列は AS のポインタで、0 なら無しです。ほかの import はリンクに失敗します。
+Régie が WASM に渡すのは `binette:<機能名>@0.1` の [Réplique の import](../replique.md#wasm-import決定実装済み) と `env.abort(message, fileName, line, column)` です（案・実装済み）。abort の文字列は AS のポインタで、0 なら無しです。起動時は `abi.ts` の提供一覧で instantiate より前に検査し、未対応 module（旧 `binette` を含む）は名前を含む日本語のエラーで拒みます。未提供の関数も拒み、既存の `failed` → `launchApp` の reject → Scene のエラー表示へ届けます。
 
 ページの識別子は init で受け取り、`app.page` から返します。Last 用の `app.lastPage`・`app.lastKind`・`app.lastCause` は init の last から返します。省略時は空文字列・0・0 です。文字列は既存の `__new` で確保して返します。
 

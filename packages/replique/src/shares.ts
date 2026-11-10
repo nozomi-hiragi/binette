@@ -2,12 +2,15 @@
 import { Api, Why, application } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostShares {
   // @ts-ignore: decorator
-  @external("binette", "shares.request")
+  @external("binette:shares@0.1", "request")
   export declare function request(operation: string, args: string): i32;
   // @ts-ignore: decorator
-  @external("binette", "shares.result")
+  @external("binette:shares@0.1", "result")
   export declare function result(id: i32): string | null;
 }
 

@@ -1,3 +1,4 @@
+import { BinetteError } from "@binette/core";
 import { repliqueFiles } from "./replique.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Window } from "happy-dom";
@@ -566,5 +567,23 @@ Deno.test("提供リストのアイコンは 1 回だけ取り、取れたら知
     assertEquals(f.lists.icon("http://sources.test/icon.svg"), "");
     assertEquals(f.requests.filter(url => url.endsWith("icon.svg")).length, 2);
     assertEquals(notified, 1);
+  } finally { await f.stop(); }
+});
+
+Deno.test("未対応 ABI のインストールは保存前に失敗し、既存アプリとデータを保つ", async () => {
+  const f = await fixture({}, true);
+  try {
+    await f.lists.add(listUrl);
+    const previous = await f.lists.install(listUrl, "memo");
+    await f.store.data.write(previous.key, "記録", "残す");
+    for (const [module, label] of [["binette", "binette"], ["binette:dom@0.2", "dom 0.2"], ["binette:unknown@0.1", "unknown 0.1"]]) {
+      f.responses.set(sourceUrl + "src/main.ts", `@external("${module}", "text") declare function host(): void; export function call(): void { host(); }`);
+      const error = await assertRejects(() => f.lists.install(listUrl, "memo"), BinetteError);
+      assertEquals(error.message, `この OS では動きません（${label}）`);
+      assertEquals(error.code, "unsupported_abi");
+      assertEquals(await f.store.get(previous.key), previous);
+      assertEquals((await f.store.data.read(previous.key)).get("記録"), "残す");
+      assertEquals(f.lists.state(previous.key)?.phase, "failed");
+    }
   } finally { await f.stop(); }
 });
