@@ -12,9 +12,10 @@ const sourceUrl = "https://sources.test/memo/";
 const sources: Record<string, string> = {
   "app.json": JSON.stringify({ id: "memo", name: "メモ", version: "1.0.0", entry: { as: "src/main.ts" }, permissions: { notify: { reason: "締め切りを知らせるため" } } }),
   "src/main.ts": "export function answer(): i32 { return 42; }",
+  "icon.svg": '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>',
 };
 const listHtml = `<script type="application/json" id="binette-apps">${JSON.stringify({
-  name: "テストの提供者", apps: [{ id: "memo", source: sourceUrl, version: "1.0.0", description: "短いメモ" }],
+  name: "テストの提供者", apps: [{ id: "memo", source: sourceUrl, version: "1.0.0", description: "短いメモ", icon: `${sourceUrl}icon.svg` }],
 })}</script>`;
 
 function createWorker(): RegieWorker {
@@ -95,6 +96,9 @@ Deno.test("Cadre のアプリ画面は提供リストのアプリを出し、OS 
     const find = key(element, "apps-find")!;
     assert(find.textContent!.includes("テストの提供者"));
     assert(find.textContent!.includes("短いメモ"));
+    // カタログのアイコンは OS が取って data URL にし、届いたら頭文字の代わりに出す
+    await waitFor(() => key(element, "apps-icon") !== null, "カタログのアイコンが出ません");
+    assertEquals(key(element, "apps-icon")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sources["icon.svg"])}`);
     find.querySelector<HTMLButtonElement>("[data-bina-key^=find-app-]")!.click();
     await waitFor(() => key(element, "detail-permissions") !== null, "詳細が届きません");
     assert(key(element, "detail-permissions")!.textContent!.includes("締め切りを知らせるため"));

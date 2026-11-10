@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, AppManagerApi, Last } from "jsr:@binette/replique";
-import { View, badge, button, buttonOf, chip, column, input, row, show, spinner, tabs, text } from "jsr:@binette/replique/ui";
+import { View, badge, button, buttonOf, chip, column, image, input, row, show, spinner, tabs, text } from "jsr:@binette/replique/ui";
 
 // 辞書から取った API と画面の状態。ボタンのコールバックは関数なので、グローバルで持つ
 let manager: AppManagerApi | null = null;
@@ -103,10 +103,12 @@ function stateLabel(m: AppManagerApi, id: string): string {
   return "入れる";
 }
 
-/** 名前の頭文字。カタログのアイコンは URL で、画面には data URL の画像しか描けないため */
-function initial(m: AppManagerApi, id: string): View {
+/** アイコン（OS が data URL にしたもの）。まだ届いていない・無いときは名前の頭文字 */
+function initial(m: AppManagerApi, id: string, size: i32 = 32): View {
+  const icon = m.icon(id);
+  if (icon.length > 0) return image(icon).width(size).height(size).key("apps-icon");
   const name = nameOf(m, id).trim();
-  return text(name.length > 0 ? String.fromCodePoint(name.codePointAt(0)).toUpperCase() : "?").bold().key("apps-initial");
+  return text(name.length > 0 ? String.fromCodePoint(name.codePointAt(0)).toUpperCase() : "?").bold().width(size).key("apps-initial");
 }
 
 function appRow(m: AppManagerApi, id: string, tilePrefix: string): View {
@@ -273,7 +275,7 @@ function details(m: AppManagerApi, id: string): View {
   return column([
     row([button("戻る", closeDetail).variant("ghost").key("detail-back")]),
     row([
-      initial(m, id),
+      initial(m, id, 48),
       column([
         text(nameOf(m, id)).heading(1),
         show(source.length > 0, text(source).small().tone("muted")),

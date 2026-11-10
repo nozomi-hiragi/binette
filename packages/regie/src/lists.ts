@@ -90,6 +90,11 @@ export interface ProviderLists {
   applying(key: string): boolean;
   /** アプリが終了したことを知らせる。準備済みの自動更新があれば入れる */
   exited(key: string): void;
+  /**
+   * 提供リストのアイコン（URL）を data URL にしたもの。まだ取っていなければ取りに行き、取れたら subscribe で知らせる。
+   * 取れない・画像でない・大きすぎるときは ""
+   */
+  icon(url: string): string;
   /** 状態が変わったら呼ぶ */
   subscribe(listener: () => void): () => void;
   stop(): void;
@@ -172,6 +177,15 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     }
   };
   const decoder = new TextDecoder("utf-8", { fatal: true });
+  // アイコンは URL ごとに 1 回だけ取る。失敗も "" として覚える
+  const icons = new Map<string, string>();
+  const loadIcon = async (url: string) => {
+    let data = "";
+    try { data = iconDataUrl((await get(url)).bytes); } catch { /* 頭文字で代える */ }
+    if (controller.signal.aborted) return;
+    icons.set(url, data);
+    if (data) notify();
+  };
   const readList = async (url: string) => {
     url = await normalize(url);
     const page = await get(url);
@@ -519,6 +533,13 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
       if (!ready || ready.added.length || !autoUpdates(key)) return;
       void api.apply(key).catch(error => { if (!controller.signal.aborted) options.report?.(error); });
     },
+    icon: url => {
+      const known = icons.get(url);
+      if (known !== undefined) return known;
+      icons.set(url, "");
+      void loadIcon(url);
+      return "";
+    },
     subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     stop() {
       controller.abort();
@@ -527,4 +548,30 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     },
   };
   return api;
+}
+
+/** アイコンの上限。これより大きいものは出さない */
+export const MAX_ICON_BYTES = 64 * 1024;
+
+/** アイコンのファイルを、画面の画像に使える data URL にする。SVG と PNG・JPEG・GIF・WebP だけ。それ以外は "" */
+export function iconDataUrl(bytes: Uint8Array): string {
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_ICON_BYTES) return "";
+  const starts = (...prefix: number[]) => prefix.every((byte, index) => bytes[index] === byte);
+  const ascii = (offset: number, text: string) => [...text].every((char, index) => bytes[offset + index] === char.charCodeAt(0));
+  const type = starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) ? "png"
+    : starts(0xff, 0xd8, 0xff) ? "jpeg"
+    : ascii(0, "GIF87a") || ascii(0, "GIF89a") ? "gif"
+    : ascii(0, "RIFF") && ascii(8, "WEBP") ? "webp"
+    : undefined;
+  if (type) {
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    return `data:image/${type};base64,${btoa(binary)}`;
+  }
+  let text: string;
+  try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "").trim(); } catch { return ""; }
+  // 先頭の XML 宣言・コメント・DOCTYPE のあとに <svg が来るものだけを SVG とみなす。img で描くのでスクリプトは動かない
+  const body = text.replace(/^(?:<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|\s+)*/i, "");
+  if (!/^<svg[\s/>]/i.test(body)) return "";
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`;
 }

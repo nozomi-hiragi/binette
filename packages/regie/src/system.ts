@@ -369,7 +369,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     });
     for (const registration of registrations) for (const entry of lists.cached(registration.url)?.apps ?? []) {
       const key = appId(registration.url, entry.id);
-      result.set(key, { ...blank(key), list: registration.url, name: entry.name ?? entry.id, icon: entry.icon ?? "", description: entry.description ?? "", version: entry.version, listed: true });
+      result.set(key, { ...blank(key), list: registration.url, name: entry.name ?? entry.id, icon: entry.icon ? lists.icon(entry.icon) : "", description: entry.description ?? "", version: entry.version, listed: true });
     }
     for (const app of await options.store.list()) {
       const builtIn = app.source.startsWith("binette:");
@@ -914,6 +914,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await saving;
       const latestPigeon = await pigeonSnapshot(installed);
       if (JSON.stringify(latestPigeon) !== JSON.stringify(pigeon)) mounted.syncPigeon?.(latestPigeon);
+      // 起動の途中に変わったアプリ管理の写し（届いたアイコンなど）は、mounted が無いので届いていない
+      if (api.keys.has("manager")) syncManager();
       if (api.keys.has("os") && JSON.stringify(updateAtStart) !== JSON.stringify(options.update?.snapshot?.())) mounted.syncOs?.(osSnapshot(launches));
       mounted.setStopDelay(settings.stopDelay);
       started.startedAt = performance.now();
@@ -1071,6 +1073,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await saving;
       const latestPigeon = await pigeonSnapshot(selectedCadre);
       if (JSON.stringify(latestPigeon) !== JSON.stringify(pigeon)) mounted.syncPigeon?.(latestPigeon);
+      if (api.keys.has("manager")) syncManager();
       mounted.setStopDelay(settings.stopDelay);
       session.startedAt = performance.now();
       mounted.setFrozen(frozen);
