@@ -17,7 +17,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # 作り直さない削除（PR のブランチ）は別の組にする。同じ組だと、何もしない実行が動いている作り直しを取り消してしまう
+  group: ${{ github.event_name == 'delete' && github.event.ref != 'main' && !startsWith(github.event.ref, 'v') && format('pages-skip-{0}', github.run_id) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
