@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../../packages/regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "../../../packages/regie/src/build.ts";
 
@@ -6,7 +7,7 @@ type Node = { kind: string; text: string; label: string; handler: number; childr
 async function start(saved?: string) {
   const root = new URL("../", import.meta.url);
   const built = await buildApp(path => Deno.readTextFile(new URL(path, root)), { libraries: {
-    "jsr:@binette/replique": await Deno.readTextFile(new URL("../../../packages/replique/src/index.ts", import.meta.url)),
+    ...await readRepliqueLibraries(new URL("../../../packages/replique/src/", import.meta.url)),
   } });
   const module = new WebAssembly.Module(new Uint8Array(built.wasm));
   let frame!: { build: number; root: Node };

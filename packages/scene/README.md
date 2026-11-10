@@ -47,7 +47,7 @@ deno task start
 `deno task build:system` は `apps/` の直下で `app.json` を持つフォルダを見つけ、`.binapp/system/<フォルダ名>.binapp` を生成します。`bundled/` のアプリも `.binapp/bundled/<フォルダ名>.binapp` に生成します。フォルダを足すだけでそれぞれのアプリが増え、空の `bundled/` でもビルドできます。生成物はコミットしません。任意のアプリは次で書き出せます。
 
 ```sh
-deno run -A packages/regie/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス>
+deno run -A packages/regie/src/cli.ts build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS ソースフォルダ>
 ```
 
 Binette の入口はリポジトリ直下の `index.html` と `src/main.ts` です。`deno task build` は `dist/` に、サブパスでも動く静的ファイルを書き出します。保存は IndexedDB を使います。

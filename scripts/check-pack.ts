@@ -80,7 +80,7 @@ try {
 import { BINETTE_VERSION, BinetteError, State, DestroyKind, DestroyCause, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
 import { startSystem, createMemoryAppStore, type SystemUi, type SystemView, startProcess, type Process, type ProcessOptions, launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
 import { buildApp, loadCompiler, type BuildOptions, type BuiltApp, type Compiler, type CompilerStream } from "@binette/regie/build";
-import { writePrebuiltApp } from "@binette/regie/cli";
+import { readRepliqueLibraries, writePrebuiltApp } from "@binette/regie/cli";
 import { parsePrebuiltApp, stringifyPrebuiltApp, type PrebuiltApp } from "@binette/regie";
 import { mountApp, type MountedApp } from "@binette/scene";
 import * as scene from "@binette/scene";
@@ -112,9 +112,9 @@ const files: Record<string, string> = {
   "src/index.html": '<p id="count">0</p>',
   "src/main.ts": 'import { Api, App, Last, Why, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last, api: Api): void { assert(api.why("unknown") == Why.NotAssigned); document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
 };
-const replique = await Deno.readTextFile(new URL("../packages/replique/src/index.ts", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../packages/replique/src/", import.meta.url));
 const decorAs = await Deno.readTextFile(new URL("../packages/decor/src/as.ts", import.meta.url));
-const built = await buildApp(async (path) => files[path]!, { libraries: { "jsr:@binette/replique": replique, "jsr:@binette/decor/as": decorAs } });
+const built = await buildApp(async (path) => files[path]!, { libraries: { ...libraries, "jsr:@binette/decor/as": decorAs } });
 assertEquals(built.manifest.id, "example-counter");
 // AS の新しい入口と Réplique の互換入口を、公開物だけで解決する。
 const uiFiles: Record<string, string> = {
@@ -122,7 +122,7 @@ const uiFiles: Record<string, string> = {
   "src/main.ts": 'import { App, launch } from "jsr:@binette/replique"; import { View, column } from "jsr:@binette/decor/as"; import { text } from "jsr:@binette/replique/ui"; class Ui extends App { build(): View { return column([text("公開物")]); } } launch(new Ui());',
 };
 await buildApp(async (path) => uiFiles[path]!, {
-  libraries: { "jsr:@binette/replique": replique, "jsr:@binette/decor/as": decorAs },
+  libraries: { ...libraries, "jsr:@binette/decor/as": decorAs },
 });
 const prebuilt: PrebuiltApp = parsePrebuiltApp(stringifyPrebuiltApp(built));
 assertEquals(prebuilt, built);

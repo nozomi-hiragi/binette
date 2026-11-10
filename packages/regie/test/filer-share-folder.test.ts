@@ -1,11 +1,11 @@
+import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { Window } from "happy-dom";
 import { createMemoryAppStore, serveApp, startSystem, type Process, type RegieWorker, type SystemUi } from "../src/index.ts";
 import { buildApp } from "../src/build.ts";
 import { mountApp } from "../../scene/src/mount.ts";
 
-const library = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
-const libraries = { "jsr:@binette/replique": library };
+const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
 const filerRoot = new URL("../../../bundled/filer/", import.meta.url);
 function worker(): RegieWorker {
   const { port1, port2 } = new MessageChannel(); port1.start(); port2.start(); serveApp(port1 as never);

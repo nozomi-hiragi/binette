@@ -1,9 +1,10 @@
+import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals, assertStrictEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, startProcess } from "../src/index.ts";
 import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
 import { buildApp } from "../src/build.ts";
 
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため

@@ -1,3 +1,5 @@
+import { repliqueFiles } from "../../regie/test/replique.ts";
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
@@ -6,7 +8,7 @@ import { mountSystem, systemView } from "./system-helper.ts";
 import { buildCompiler } from "../../../scripts/build-system.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
 const listUrl = "https://provider.test/apps/";
 const sourceUrl = "https://sources.test/memo/";
 const sources: Record<string, string> = {
@@ -69,6 +71,7 @@ Deno.test("Cadre のアプリ画面は提供リストのアプリを出し、OS 
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
   const store = createMemoryAppStore();
+  const replique = await repliqueFiles();
   const errors: unknown[] = [];
   const shell = await mountSystem(element, {
     apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
@@ -83,7 +86,7 @@ Deno.test("Cadre のアプリ画面は提供リストのアプリを出し、OS 
       parseHtml: html => new window.DOMParser().parseFromString(html, "text/html") as unknown as Document,
     },
     browserBuild: {
-      distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? compiler : new TextEncoder().encode(libraries["jsr:@binette/replique"])) },
+      distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? compiler : replique.get(path)) },
       workerUrl: new URL("../../regie/test/fixtures/browser-build-worker.ts", import.meta.url),
     },
   });

@@ -1,3 +1,4 @@
+import { repliqueFiles } from "./replique.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { buildAppInWorker, buildStoredApp, createAppStore, createMemoryFileTree, createSystemDistribution, launchApp, startSystem, SYSTEM_MANIFEST_PATH } from "../src/index.ts";
 import type { FileTree, SystemManifest, RegieWorker } from "../src/index.ts";
@@ -32,7 +33,7 @@ async function fixture(compiler?: Uint8Array) {
   const tree = createMemoryFileTree();
   const files = new Map([
     ["/system/tools/asc.js", compiler ?? await compilerBytes()],
-    ["/system/libraries/replique.ts", await Deno.readFile(new URL("../../replique/src/index.ts", import.meta.url))],
+    ...await repliqueFiles(),
   ]);
   const filesManifest: SystemManifest = { version: "test", files: [] };
   for (const [path, data] of files) {
@@ -88,7 +89,7 @@ Deno.test("startSystem の read 経路も browserBuild の Worker でビルド�
 });
 
 Deno.test("asc と Réplique の欠損・改ざん・目録外は Worker の生成前に拒否する", async () => {
-  for (const path of ["/system/tools/asc.js", "/system/libraries/replique.ts"]) {
+  for (const path of ["/system/tools/asc.js", "/system/libraries/replique/index.json", "/system/libraries/replique/index.ts", "/system/libraries/replique/ui.ts", "/system/libraries/replique/app.ts"]) {
     for (const alteration of ["missing", "hash", "size", "unlisted"]) {
       const { tree, files, distribution } = await fixture();
       if (alteration === "missing") files.delete(path);
@@ -107,6 +108,17 @@ Deno.test("asc と Réplique の欠損・改ざん・目録外は Worker の生�
       assertEquals(created, false);
       assertEquals(await (await owned(tree)).read("/build/app.wasm"), undefined);
     }
+  }
+});
+
+Deno.test("Invalid SDK feature inventories fail before creating a Worker", async () => {
+  for (const inventory of [{}, ["../app"], ["app.ts"], ["index"], ["app", "app"], [1]]) {
+    let created = false;
+    await assertRejects(() => buildAppInWorker(path => Promise.resolve(sources[path]!), {
+      distribution: { readSystem: path => Promise.resolve(encoder.encode(path.endsWith("index.json") ? JSON.stringify(inventory) : "unused")) },
+      createWorker() { created = true; throw new Error("Unexpected Worker creation"); },
+    }), Error, "Invalid Réplique feature index");
+    assertEquals(created, false);
   }
 });
 

@@ -3,7 +3,19 @@
   "version": "0.1.0",
   "exports": {
     ".": "./src/index.ts",
-    "./ui": "./src/ui.ts"
+    "./app": "./src/app.ts",
+    "./dom": "./src/dom.ts",
+    "./ui": "./src/ui.ts",
+    "./storage": "./src/storage.ts",
+    "./pigeon": "./src/pigeon.ts",
+    "./shares": "./src/shares.ts",
+    "./os": "./src/os.ts",
+    "./apps": "./src/apps.ts",
+    "./manager": "./src/manager.ts",
+    "./scheduler": "./src/scheduler.ts",
+    "./schedule": "./src/schedule.ts",
+    "./cadre": "./src/cadre.ts",
+    "./fs": "./src/fs.ts"
   },
   "tasks": {
     "check": "deno run -A scripts/check.ts"

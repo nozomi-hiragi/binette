@@ -1,0 +1,32 @@
+// deno-lint-ignore-file no-import-prefix no-unversioned-import no-namespace verbatim-module-syntax
+import { Element } from "jsr:@binette/replique/dom";
+
+// @ts-ignore: decorator
+@external("binette", "apps.icon")
+declare function iconImport(handle: i32, app: i32): void;
+
+// OS の呼び出しの入口。アプリは直接使わず、辞書 `Api` から取ったクラスを通す
+namespace hostApps {
+  // @ts-ignore: decorator
+  @external("binette", "apps.count")
+  export declare function count(): i32;
+  // @ts-ignore: decorator
+  @external("binette", "apps.name")
+  export declare function name(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "apps.id")
+  export declare function id(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette", "apps.open")
+  export declare function open(i: i32): void;
+}
+
+/** `api.get<AppsApi>("apps")`。アプリの一覧と起動。ホーム（と Cadre）の役割を割り当てられたアプリに届く */
+export class AppsApi {
+  /** img に OS のアプリアイコンを入れる */
+  icon(img: Element, i: i32): void { iconImport(img.handle, i); }
+  count(): i32 { return hostApps.count(); }
+  name(i: i32): string { return hostApps.name(i); }
+  id(i: i32): string { return hostApps.id(i); }
+  open(i: i32): void { hostApps.open(i); }
+}

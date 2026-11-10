@@ -1,3 +1,4 @@
+import { repliqueFiles } from "./replique.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Window } from "happy-dom";
 import { computeIntegrity } from "@binette/core";
@@ -51,8 +52,8 @@ async function fixture(extra: Partial<ProviderListsOptions> = {}, browser = fals
   };
   if (browser) {
     const bytes = await compilerBytes();
-    const replique = await Deno.readFile(new URL("../../replique/src/index.ts", import.meta.url));
-    options.browserBuild = { distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? bytes : replique) }, workerUrl: new URL("./fixtures/browser-build-worker.ts", import.meta.url) };
+    const replique = await repliqueFiles();
+    options.browserBuild = { distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? bytes : replique.get(path)) }, workerUrl: new URL("./fixtures/browser-build-worker.ts", import.meta.url) };
   }
   const lists = await createProviderLists(options);
   return { tree, store, lists, responses, requests, errors, options, async stop() { lists.stop(); await window.happyDOM.close(); } };
@@ -160,7 +161,7 @@ Deno.test("CLI の / とフォルダキーは install の取得ファイルと�
     const run = async (keys: string[] = []) => {
       const output = await new Deno.Command(Deno.execPath(), {
         args: ["run", "-A", new URL("../src/cli.ts", import.meta.url).pathname, "integrity", dir, ...keys,
-          "--replique", new URL("../../replique/src/index.ts", import.meta.url).pathname], stdout: "piped", stderr: "piped",
+          "--replique", new URL("../../replique/src/", import.meta.url).pathname], stdout: "piped", stderr: "piped",
       }).output();
       assert(output.success, new TextDecoder().decode(output.stderr));
       return JSON.parse(new TextDecoder().decode(output.stdout)) as Record<string, string>;

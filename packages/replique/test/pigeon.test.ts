@@ -1,8 +1,9 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assertEquals } from "@std/assert";
 import { buildApp } from "../../regie/src/build.ts";
 
 Deno.test("PigeonApi は手紙の ABI と onPigeon 後の再描画をつなぐ", async () => {
-  const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../src/index.ts", import.meta.url)) };
+  const libraries = { ...await readRepliqueLibraries(new URL("../src/", import.meta.url)) };
   const files: Record<string, string> = {
     "app.json": JSON.stringify({ id: "pigeon-test", name: "手紙", entry: { as: "main.ts" } }),
     "main.ts": `import { Api, App, PigeonApi, StorageApi, View, text, launch } from "jsr:@binette/replique";

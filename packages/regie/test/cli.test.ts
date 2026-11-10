@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { hashFile } from "@binette/core";
-import { collectAppFiles, computeAppIntegrity } from "../src/cli.ts";
+import { collectAppFiles, computeAppIntegrity, readRepliqueLibraries } from "../src/cli.ts";
 
 async function withApp(run: (dir: string) => Promise<void>): Promise<void> {
   const dir = await Deno.makeTempDir({ prefix: "binette-integrity-" });
@@ -53,4 +53,20 @@ Deno.test("integrity: コマンドが JSON を出す", async () => {
     assertEquals(bad.success, false);
     assertEquals(new TextDecoder().decode(bad.stderr).startsWith("ハッシュを求められません。"), true);
   });
+});
+
+Deno.test("--replique reads all direct AS files and rejects a file or a directory without index.ts", async () => {
+  const directory = await Deno.makeTempDir({ prefix: "binette-replique-" });
+  try {
+    await Deno.writeTextFile(join(directory, "index.ts"), "export {};\n");
+    await Deno.writeTextFile(join(directory, "extra.ts"), "export const extra = 1;\n");
+    await Deno.writeTextFile(join(directory, "README.md"), "ignored");
+    await Deno.mkdir(join(directory, "nested"));
+    await Deno.writeTextFile(join(directory, "nested/hidden.ts"), "ignored");
+    assertEquals(await readRepliqueLibraries(directory), {
+      "jsr:@binette/replique": "export {};\n", "jsr:@binette/replique/extra": "export const extra = 1;\n",
+    });
+    await assertRejects(() => readRepliqueLibraries(join(directory, "index.ts")), Error, "source directory, not a file");
+    await assertRejects(() => readRepliqueLibraries(join(directory, "nested")), Error, "must contain index.ts");
+  } finally { await Deno.remove(directory, { recursive: true }); }
 });

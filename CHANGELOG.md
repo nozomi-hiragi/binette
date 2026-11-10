@@ -2,6 +2,9 @@
 
 ## v0.2.0（未リリース）
 
+- Réplique をホストの機能ごとの AS ファイルへ分割し、`jsr:@binette/replique/<機能名>` を公開する。既存の入口と `Api.get<T>`、アプリの書き方は維持する
+- 破壊的変更: CLI の `--replique` は AS の単一ファイルからソースフォルダの指定へ変わる。OS の配布先は `/system/libraries/replique.ts` から `/system/libraries/replique/`（`index.ts`・各機能の `.ts`・`index.json`）へ変わる
+
 - アプリ管理の画面にカタログのアイコンを出す。Régie の `ProviderLists` に `icon(url)` を足し（破壊的変更: 実装には `icon` が要る）、提供リストのアイコンを https で 1 回だけ取って、SVG と PNG・JPEG・GIF・WebP（64 KiB まで）を data URL にする。取れたら購読者に知らせ、写しの `icon` に入れる。届くまでと取れないときは名前の頭文字
 - Décor の `image(src)` が、`data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG も描く。base64 の SVG と外部 URL は今までどおり描かない
 - アプリ管理を使うアプリの起動の途中に写しが変わると、起動後に届かなかった不具合を直す

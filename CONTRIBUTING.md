@@ -34,6 +34,13 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 設定は Cadre のサブアプリ `cadre.settings`（`apps/cadre`）が持ちます（決定）。今はホームの選択、新しい版への更新、デバッグ値、起動の履歴で、ほかの項目は未決です。ホームも Cadre のサブアプリ `cadre.home`（`app.json` の `sub.home.roles: ["home"]`）です。ホーム・設定は親と同じ AS の入口と CSS を使い、`api.sub()` で入口を選びます。役割は名乗るだけでは効かず、`system/boot.json` の既定と設定で割り当てたアプリにだけ、その役割の API が `onCreate(last, api)` の辞書で届きます（[docs/spec/roles.md](docs/spec/roles.md)）。Régie が常駐のシステムアプリ `apps/cadre`（`"roles": ["cadre"]`）を最初に起動し、Cadre が `CadreApi.openHome()` でホームを開きます。Cadre は AS の Décor でホームバーと `appArea()` を描き、Scene はその領域にアプリを配置します。Cadre はスタックに数えず、落ち続けたときだけ Scene が表示領域とホームボタンの最低限の大枠を出します。
 
+Réplique の AS ソースは `/system/libraries/replique/` に機能ごとに配布します。CLI の `--replique` は単一ファイルではなく、直下に `index.ts` と各機能の `.ts` を持つソースフォルダを受け取ります。
+
+```sh
+deno run -A packages/regie/src/cli.ts build catalog/designer --out .binapp/designer.binapp --replique packages/replique/src
+deno run -A packages/regie/src/cli.ts integrity catalog/designer --replique packages/replique/src
+```
+
 ## バージョンの決め方
 
 パッケージのバージョン `X.Y.Z` は仕様書の版と揃えます。

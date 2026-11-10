@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
@@ -6,7 +7,7 @@ import { mountSystem as mountShell, operate, systemView } from "./system-helper.
 import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
 
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;

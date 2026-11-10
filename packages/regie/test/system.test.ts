@@ -1,10 +1,11 @@
+import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { parseAppManifest, State, type DomOp } from "@binette/core";
 import { createMemoryAppStore, appId, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
 import asc from "assemblyscript/asc";
 import { loadCompiler, type Compiler } from "../src/build.ts";
 
-const replique = await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
 const decorAs = await Deno.readTextFile(new URL("../../decor/src/as.ts", import.meta.url));
 const decorParts = await Deno.readTextFile(new URL("../../decor/src/parts.ts", import.meta.url));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -66,7 +67,7 @@ async function build(code = source, home = false) {
   const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
     readFile(name: string) {
       if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle, __bina_pigeon, __bina_cadre_sync, __bina_schedule } from "jsr:@binette/replique";';
-      if (name === "node_modules/jsr:@binette/replique.ts") return replique;
+      if (name.startsWith("node_modules/jsr:@binette/replique")) return libraries[name.slice("node_modules/".length, -3)] ?? null;
       if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
       if (name === "node_modules/jsr:@binette/decor/parts.ts") return decorParts;
       return null;
@@ -339,7 +340,7 @@ Deno.test("read は同じ版を再ビルドせず、版が変われば保存し�
     cadre = await startSystem({ ui: element.ui, apps: [homeApp, { ...app, async read(path) {
       if (path === "app.json") return JSON.stringify({ ...JSON.parse(await app.read(path)), version: "0.2.0" });
       return path === "main.ts" ? source : "";
-    } }], store, compiler, libraries: { "jsr:@binette/replique": replique } });
+    } }], store, compiler, libraries });
     assertEquals(builds, 1); assertEquals((await store.get(fixtures[0]!.key))!.manifest.version, "0.2.0");
   } finally { cadre.stop(); }
 });
@@ -352,7 +353,7 @@ Deno.test("startSystem の compiler と libraries を read のアプリのビル
   const manifest = { ...fixtures[0]!.manifest, version: "0.2.0" };
   const files: Record<string, string> = { "app.json": JSON.stringify(manifest), "index.html": "<p>更新</p>", "main.ts": source };
   const cadre = await startSystem({ ui: element.ui, store, apps: [homeApp, { source: fixtures[0]!.source, read: path => Promise.resolve(files[path]!) }],
-    compiler, libraries: { "jsr:@binette/replique": replique } });
+    compiler, libraries });
   try {
     assertEquals(element.errors, []); assertEquals(builds, 1);
     const saved = await store.get(fixtures[0]!.key);

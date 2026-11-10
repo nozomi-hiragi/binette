@@ -1,8 +1,27 @@
 import { buildApp, type BuildOptions } from "./build.ts";
 import { stringifyPrebuiltApp } from "./prebuilt.ts";
 import { type AppFile, computeIntegrity, parseAppManifest } from "@binette/core";
-import { dirname, resolve } from "@std/path";
+import { dirname, fromFileUrl, resolve, toFileUrl } from "@std/path";
 import { appPath, iconPath } from "./paths.ts";
+
+/** Load every AssemblyScript feature from the SDK source directory. */
+export async function readRepliqueLibraries(directory: string | URL): Promise<Record<string, string>> {
+  if (!(await Deno.stat(directory)).isDirectory) {
+    throw new Error("--replique requires the Réplique AS source directory, not a file.");
+  }
+  const root = toFileUrl(resolve(directory instanceof URL ? fromFileUrl(directory) : directory) + "/");
+  const names: string[] = [];
+  for await (const entry of Deno.readDir(root)) {
+    if (entry.isFile && entry.name.endsWith(".ts")) names.push(entry.name);
+  }
+  if (!names.includes("index.ts")) throw new Error("The Réplique AS source directory must contain index.ts.");
+  const libraries: Record<string, string> = {};
+  for (const name of names.sort()) {
+    const specifier = name === "index.ts" ? "jsr:@binette/replique" : `jsr:@binette/replique/${name.slice(0, -3)}`;
+    libraries[specifier] = await Deno.readTextFile(new URL(name, root));
+  }
+  return libraries;
+}
 
 /** アプリをビルドし、.binapp に書き出す */
 export async function writePrebuiltApp(dir: string, out: string, replique: string): Promise<string> {
@@ -12,7 +31,7 @@ export async function writePrebuiltApp(dir: string, out: string, replique: strin
   const manifest = parseAppManifest(text);
   const icon = iconPath(manifest.icon);
   const built = await buildApp((path) => path === "app.json" ? Promise.resolve(text) : read(path), {
-    libraries: { "jsr:@binette/replique": await Deno.readTextFile(replique) },
+    libraries: await readRepliqueLibraries(replique),
   });
   const subIcons: Record<string, string> = {};
   for (const [id, sub] of Object.entries(manifest.sub ?? {})) {
@@ -47,7 +66,7 @@ export async function collectAppFiles(dir: string): Promise<AppFile[]> {
 
 /** install と同じビルドとアイコンの読み込みで、取得したファイルだけを集める。 */
 async function collectBuildFiles(dir: string, keys: string[], options: BuildOptions): Promise<AppFile[]> {
-  if (options.libraries?.["jsr:@binette/replique"] === undefined) throw new Error("/ とフォルダキーのハッシュには --replique <Réplique の AS のパス> を指定してください。");
+  if (options.libraries?.["jsr:@binette/replique"] === undefined) throw new Error("/ とフォルダキーのハッシュには --replique <Réplique の AS ソースフォルダ> を指定してください。");
   const root = resolve(dir);
   const files = new Map<string, Uint8Array>();
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -99,7 +118,7 @@ if (import.meta.main) {
     if (Deno.args[0] === "build") {
       const [, dir, outFlag, out, repliqueFlag, replique] = Deno.args;
       if (Deno.args.length !== 6 || outFlag !== "--out" || repliqueFlag !== "--replique") {
-        throw new Error("build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS のパス> を指定してください。");
+        throw new Error("build <アプリのフォルダ> --out <ファイル> --replique <Réplique の AS ソースフォルダ> を指定してください。");
       }
       console.log(await writePrebuiltApp(dir!, out!, replique!));
     } else if (Deno.args[0] === "integrity") {
@@ -108,11 +127,11 @@ if (import.meta.main) {
       const options: BuildOptions = {};
       if (flag !== -1) {
         const path = keys[flag + 1];
-        if (path === undefined) throw new Error("--replique の後に Réplique の AS のパスを指定してください。");
-        options.libraries = { "jsr:@binette/replique": await Deno.readTextFile(path) };
+        if (path === undefined) throw new Error("--replique の後に Réplique の AS ソースフォルダを指定してください。");
+        options.libraries = await readRepliqueLibraries(path);
         keys.splice(flag, 2);
       }
-      if (dir === undefined) throw new Error("integrity <アプリのフォルダ> [キー...] [--replique <Réplique の AS のパス>] を指定してください。");
+      if (dir === undefined) throw new Error("integrity <アプリのフォルダ> [キー...] [--replique <Réplique の AS ソースフォルダ>] を指定してください。");
       console.log(JSON.stringify(await computeAppIntegrity(dir, keys, options), null, 2));
     } else throw new Error("build か integrity を指定してください。");
   } catch (error) {
