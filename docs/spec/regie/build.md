@@ -2,13 +2,22 @@
 
 [Régie の目次](README.md)
 
-アプリの AS を WASM にし、インストールできる形にする部分です。どのコードを動かしてよいかの検証もここに足していきます（今は検証をしていません。[下](#検証案)）。ビルドはカーネルの仕事とします（のぞみ 2026-10-28）。実装は `packages/regie/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` にあります。
+アプリの AS を WASM にし、インストールできる形にする部分です。どのコードを動かしてよいかの検証もここに足していきます（現在は保存前に ABI の import を検査します。[下](#検証案)）。ビルドはカーネルの仕事とします（のぞみ 2026-10-28）。実装は `packages/regie/src/build.ts`・`prebuilt.ts`・`paths.ts`・`cli.ts` にあります。
 
 ## ブラウザでのビルド（案）
 
 `buildAppInWorker` は目録で検証した `/system/tools/asc.js` と `/system/libraries/replique/index.json` と同フォルダの `index.ts`・各機能の `.ts` を受け取り、独立した module Worker で `buildApp` を実行します。検証した asc のバイトから Worker 内で Blob URL を作って読み、URL を再取得しません。Décor の AS ソースは既存の `buildApp` が渡します。呼び出し側はソースを読む関数と `SystemDistribution` を渡し、Worker の URL・時間切れ・中止などを指定できます。`libraries` で Réplique を含むライブラリを指定できます。
 
-`buildStoredApp` は `/apps/<id>/` のソースを読み、ID と `app.json` が一致することを確かめてから `/apps/<id>/build/app.wasm` と `index.html`、AppStore の記録をまとめて保存します。既存の `startSystem` のソースを読む経路にも、`browserBuild` を指定すると Worker を使えます。この `read` 経路は従来どおりソースを自動保存しないため、ファイルの木に置く操作は呼び出し側が行います。現在の起動側は `browserBuild` を渡していません。システムアプリのビルド済み WASM はこの経路を通しません。パス、API、インストール時にソースをどのように取得するかは案です。
+`buildStoredApp` はアプリ所有領域の `/source`、無ければ `/apps/<id>/` のソースを読みます。ID と `app.json` の一致、および ABI の対応を確かめてから、所有領域の `/build/app.wasm`・`index.html`・AppStore の記録をまとめて保存します。`storage` のない FileTree では `/apps/<id>/build/` と起動記録を保存します。既存の `startSystem` のソースを読む経路にも、`browserBuild` を指定すると Worker を使えます。この `read` 経路は従来どおりソースを自動保存しないため、ファイルの木に置く操作は呼び出し側が行います。現在の起動側は `browserBuild` を渡していません。システムアプリのビルド済み WASM はこの経路を通しません。パス、API、インストール時にソースをどのように取得するかは案です。
+
+## 旧 ABI のアプリの復旧
+
+- システム・同梱アプリは `deno task build:system` が現在の SDK で毎回ビルドします。`deno task build`・`deno task start` もこれを実行します。OS を更新して読み込み直すと、`startSystem` が配布されたビルド済みアプリを毎回入れ直すため、アプリの版が同じでも新しい WASM に置き換わります。
+- 提供リストのアプリはアプリ管理で「本体だけ消す」で削除してから入れ直すと、現在の OS が配る SDK でビルドし、同じ ID のデータを引き継ぎます。提供者が新版を出した場合は通常の更新でも再ビルドされます。`ProviderLists.install` 自体は同じ版でも再ビルドできますが、UI に専用の再ビルド操作はありません。
+- 保存ソースがあるアプリは TS API の `buildStoredApp` を呼べます。アプリ所有領域の `/source` を優先し、無ければ `/apps/<id>/` を読み、検証済みの現在の SDK と asc を使ってビルドします。ABI の検査に通ってからソースと成果物を保存し、`/data` は保ちます。これは開発用 API で、画面の操作ではありません。
+- `startSystem` のソース入力は、未インストールか `manifest.version` が変わったときにビルドします。ABI が変わっただけでは再ビルドしません。JSR の SDK を使うソースなら再ビルドで新しい ABI になりますが、旧 module 名を `@external` に直書きしたソースは宣言の修正も必要です。
+
+ABI の検査は提供リストの準備時、`startSystem` が新しい成果物を保存する前、`buildStoredApp` の保存前に行います。未対応の成果物で既存のアプリ・ソース・データを上書きしません。`AppStore.put` は保存層なので検査せず、別の保存実装を使う場合もインストール側と起動側で検査します。自動再ビルドや旧 ABI の互換提供はありません。
 
 ## loadCompiler
 

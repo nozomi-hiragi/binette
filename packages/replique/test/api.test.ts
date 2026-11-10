@@ -1,3 +1,4 @@
+import { mockImports } from "./imports.ts";
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assertEquals } from "@std/assert";
 import { buildApp } from "../../regie/src/build.ts";
@@ -35,14 +36,14 @@ for (const sub of ["", "home", "%E8%A8%AD%E5%AE%9A"]) {
     };
     const binette: Record<string, () => number | void> = {};
     for (const entry of WebAssembly.Module.imports(module)) {
-      if (entry.module === "binette") binette[entry.name] = () => { throw new Error(`予期しない import: ${entry.name}`); };
+      if (entry.module.startsWith("binette:")) binette[`${entry.module}/${entry.name}`] = () => { throw new Error(`予期しない import: ${entry.name}`); };
     }
-    binette["api.sub"] = () => writeString(sub);
-    binette["app.lastPage"] = () => writeString("");
-    binette["app.lastKind"] = () => 0;
-    binette["app.lastCause"] = () => 0;
+    binette["binette:app@0.1/sub"] = () => writeString(sub);
+    binette["binette:app@0.1/lastPage"] = () => writeString("");
+    binette["binette:app@0.1/lastKind"] = () => 0;
+    binette["binette:app@0.1/lastCause"] = () => 0;
     const instance = new WebAssembly.Instance(module, {
-      binette,
+      ...mockImports(binette),
       env: { abort: () => { throw new Error("AS が終了しました。"); } },
     });
     const call = (name: string, ...args: number[]): number => (instance.exports[name] as CallableFunction)(...args) as number;

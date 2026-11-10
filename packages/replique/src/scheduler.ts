@@ -1,15 +1,18 @@
 // deno-lint-ignore-file no-namespace no-import-prefix no-unversioned-import verbatim-module-syntax
 import { Api, Why } from "jsr:@binette/replique/app";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostScheduler {
   // @ts-ignore: decorator
-  @external("binette", "scheduler.text")
+  @external("binette:scheduler@0.1", "text")
   export declare function text(query: string, i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "scheduler.number")
+  @external("binette:scheduler@0.1", "number")
   export declare function number(query: string, i: i32): f64;
   // @ts-ignore: decorator
-  @external("binette", "scheduler.do")
+  @external("binette:scheduler@0.1", "do")
   export declare function act(action: string, id: string, value: string, flag: bool): void;
 }
 

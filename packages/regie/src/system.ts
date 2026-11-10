@@ -1,3 +1,4 @@
+import { validateAppAbi } from "./abi.ts";
 import { createProviderLists, type InstallConfirmation, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
 import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
@@ -207,6 +208,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         // ビルドが要らないので毎回入れ直す。版を上げ忘れた OS の更新でも古いものを残さない。入れた日時は最初のものを保つ
         const { html, css, icon, wasm } = app.prebuilt;
         installed = { key, source: app.source, manifest, icon, html, ...(css === undefined ? {} : { css }), wasm, installedAt: installed?.installedAt ?? Date.now() };
+        await validateAppAbi(installed.wasm);
         await options.store.put(installed);
       } else if (!installed || installed.manifest.version !== manifest.version) {
         const path = iconPath(manifest.icon);
@@ -217,6 +219,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           : await (await import("./build.ts")).buildApp(read, options);
         const icon = path === undefined ? undefined : await app.read(path);
         installed = { key, source: app.source, manifest: built.manifest, icon, html: built.html, ...(built.css === undefined ? {} : { css: built.css }), wasm: built.wasm, installedAt: Date.now() };
+        await validateAppAbi(installed.wasm);
         await options.store.put(installed);
       }
       // サブアプリのアイコンも親の配布物から読み、親と同じ記録に保存する。

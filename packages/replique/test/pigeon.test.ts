@@ -1,3 +1,4 @@
+import { mockImports } from "./imports.ts";
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assertEquals } from "@std/assert";
 import { buildApp } from "../../regie/src/build.ts";
@@ -42,18 +43,18 @@ export function done(): void { new PigeonApi().done(2); }`,
   let completed = -1;
   const binette: Record<string, CallableFunction> = {};
   for (const entry of WebAssembly.Module.imports(module)) {
-    if (entry.module === "binette") binette[entry.name] = () => { throw new Error(`予期しない import: ${entry.name}`); };
+    if (entry.module.startsWith("binette:")) binette[`${entry.module}/${entry.name}`] = () => { throw new Error(`予期しない import: ${entry.name}`); };
   }
-  binette["api.why"] = (key: number) => { const name = read(key); assertEquals(["pigeon", "storage"].includes(name), true); return name == "pigeon" && allowed ? 0 : 1; };
-  binette["pigeon.send"] = (...args: number[]) => { sent.push([...args.slice(0, 4).map(read), args[4], read(args[5]!)]); return 1; };
-  binette["pigeon.count"] = () => 3;
+  binette["binette:app@0.1/why"] = (key: number) => { const name = read(key); assertEquals(["pigeon", "storage"].includes(name), true); return name == "pigeon" && allowed ? 0 : 1; };
+  binette["binette:pigeon@0.1/send"] = (...args: number[]) => { sent.push([...args.slice(0, 4).map(read), args[4], read(args[5]!)]); return 1; };
+  binette["binette:pigeon@0.1/count"] = () => 3;
   for (const field of ["from", "to", "kind", "title", "body", "actions"]) {
-    binette[`pigeon.${field}`] = (i: number) => { assertEquals(i, 2); return write(field); };
+    binette[`binette:pigeon@0.1/${field}`] = (i: number) => { assertEquals(i, 2); return write(field); };
   }
-  binette["pigeon.urgent"] = (i: number) => { assertEquals(i, 2); return 1; };
-  binette["pigeon.done"] = (i: number) => { completed = i; };
-  binette["ui.render"] = (value: number) => { rendered.push(JSON.parse(read(value)).root.text); };
-  const instance = new WebAssembly.Instance(module, { binette, env: { abort: () => { throw new Error("AS が終了しました。"); } } });
+  binette["binette:pigeon@0.1/urgent"] = (i: number) => { assertEquals(i, 2); return 1; };
+  binette["binette:pigeon@0.1/done"] = (i: number) => { completed = i; };
+  binette["binette:ui@0.1/render"] = (value: number) => { rendered.push(JSON.parse(read(value)).root.text); };
+  const instance = new WebAssembly.Instance(module, { ...mockImports(binette), env: { abort: () => { throw new Error("AS が終了しました。"); } } });
   const call = (name: string): number => (instance.exports[name] as CallableFunction)() as number;
   call("_start");
   assertEquals(call("access"), 1);

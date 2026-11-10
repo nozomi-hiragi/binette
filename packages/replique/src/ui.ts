@@ -4,8 +4,11 @@ import { application, jsonString, setRebuild } from "jsr:@binette/replique/app";
 export { View, column, row, text, button, buttonOf, input, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
   spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/decor/as";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 // @ts-ignore: decorator
-@external("binette", "ui.render")
+@external("binette:ui@0.1", "render")
 declare function renderUi(value: string): void;
 
 class UiHandler {

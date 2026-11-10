@@ -1,12 +1,15 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import verbatim-module-syntax
 import { View } from "jsr:@binette/decor/as";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 // @ts-ignore: decorator
-@external("binette", "api.why")
+@external("binette:app@0.1", "why")
 declare function whyImport(key: string): i32;
 
 // @ts-ignore: decorator
-@external("binette", "api.sub")
+@external("binette:app@0.1", "sub")
 declare function subImport(): string;
 
 /** 辞書に載らなかった理由。Granted は、載っている */
@@ -39,19 +42,19 @@ export class Last {
 }
 
 // @ts-ignore: decorator
-@external("binette", "app.page")
+@external("binette:app@0.1", "page")
 declare function pageImport(): string;
 // @ts-ignore: decorator
-@external("binette", "app.lastPage")
+@external("binette:app@0.1", "lastPage")
 declare function lastPageImport(): string;
 // @ts-ignore: decorator
-@external("binette", "app.lastKind")
+@external("binette:app@0.1", "lastKind")
 declare function lastKindImport(): DestroyKind;
 // @ts-ignore: decorator
-@external("binette", "app.lastCause")
+@external("binette:app@0.1", "lastCause")
 declare function lastCauseImport(): DestroyCause;
 // @ts-ignore: decorator
-@external("binette", "app.finish")
+@external("binette:app@0.1", "finish")
 declare function finishImport(): void;
 
 export function jsonString(value: string): string {

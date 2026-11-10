@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | `AppManifest`・`AppEntry`・`AppPermission` | 型 | `app.json` の中身 |
 | `parseAppManifest` | 関数 | `app.json` を読んで検査する |
-| `BinetteError` | クラス | 形式の誤り |
+| `BinetteError` | クラス | 形式の誤り、未対応 ABI |
 | `State`・`DestroyKind`・`DestroyCause` | enum | ライフサイクルの番号（案・実装済み） |
 | `DomOp` | 型 | アプリの DOM 操作（案・実装済み） |
 | `Binette` ほか（下の「v0.1 の `.bina`」） | 型 | v0.1 の `.bina` の中身 |
@@ -70,13 +70,13 @@ function parseAppManifest(text: string, options?: { strictId?: boolean }): AppMa
 
 ```ts
 class BinetteError extends Error {
-  readonly code: "invalid_format";
-  constructor(code: "invalid_format", message: string);
+  readonly code: "invalid_format" | "unsupported_abi";
+  constructor(code: "invalid_format" | "unsupported_abi", message: string);
   // name は "BinetteError"
 }
 ```
 
-- 形式の誤りはすべて `code: "invalid_format"` です。`message` は日本語で、利用者に見せてよい文です
+- 形式の誤りはすべて `code: "invalid_format"` です。未対応の ABI module・関数は `code: "unsupported_abi"` です。`message` は日本語で、利用者に見せてよい文です
 - `app.json` と `.bina` の両方で使います
 
 ## ライフサイクルの番号（案）

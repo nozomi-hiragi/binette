@@ -105,6 +105,7 @@ const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION,
 assertEquals(binette.redirect, "/home");
 assertThrows(() => parseBinette("{"), BinetteError);
 assertThrows(() => parseAppManifest("{"), BinetteError);
+assertEquals(new BinetteError("unsupported_abi", "この OS では動きません（storage 0.9）").code, "unsupported_abi");
 
 // 公開物のファイルだけで、AS をビルドして Worker 相当（MessageChannel）で動かす
 const files: Record<string, string> = {

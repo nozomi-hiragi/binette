@@ -2,39 +2,42 @@
 import { Api, Why, application } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostPigeon {
   // @ts-ignore: decorator
-  @external("binette", "pigeon.send")
+  @external("binette:pigeon@0.1", "send")
   export declare function send(to: string, kind: string, title: string, body: string, urgent: bool, actions: string, shares: string): bool;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.count")
+  @external("binette:pigeon@0.1", "count")
   export declare function count(): i32;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.shares")
+  @external("binette:pigeon@0.1", "shares")
   export declare function shares(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.from")
+  @external("binette:pigeon@0.1", "from")
   export declare function from(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.to")
+  @external("binette:pigeon@0.1", "to")
   export declare function to(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.kind")
+  @external("binette:pigeon@0.1", "kind")
   export declare function kind(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.title")
+  @external("binette:pigeon@0.1", "title")
   export declare function title(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.body")
+  @external("binette:pigeon@0.1", "body")
   export declare function body(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.urgent")
+  @external("binette:pigeon@0.1", "urgent")
   export declare function urgent(i: i32): bool;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.actions")
+  @external("binette:pigeon@0.1", "actions")
   export declare function actions(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "pigeon.done")
+  @external("binette:pigeon@0.1", "done")
   export declare function done(i: i32): void;
 }
 

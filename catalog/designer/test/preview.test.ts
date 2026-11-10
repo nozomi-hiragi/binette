@@ -48,7 +48,7 @@ async function start() {
   const imports: WebAssembly.Imports = {};
   for (const entry of WebAssembly.Module.imports(module)) {
     imports[entry.module] ??= {};
-    imports[entry.module][entry.name] = entry.name === "ui.render"
+    imports[entry.module][entry.name] = entry.module === "binette:ui@0.1" && entry.name === "render"
       ? (pointer: number) => { frame = JSON.parse(string(pointer)); }
       : () => { throw new Error("予期しない呼び出し: " + entry.module + "." + entry.name); };
   }

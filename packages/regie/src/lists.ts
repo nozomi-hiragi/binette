@@ -1,3 +1,4 @@
+import { validateAppAbi } from "./abi.ts";
 import { type AppList, type AppListDocument, type AppManifest, findAppList, normalizeAppIdentifier, normalizeAppListUrl, parseAppId, parseAppList, parseAppManifest, verifyIntegrity } from "@binette/core";
 import { buildAppInWorker, type BrowserBuildOptions } from "./browser-build.ts";
 import { appPath, iconPath } from "./paths.ts";
@@ -300,6 +301,7 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     progress.phase = "building";
     setState(key, { ...progress });
     const built = await buildAppInWorker(read, { ...options.browserBuild, signal: AbortSignal.any([controller.signal, signal]) });
+    await validateAppAbi(built.wasm);
     const path = iconPath(manifest.icon);
     const icon = path === undefined ? undefined : await read(path);
     const subIcons: Record<string, string> = {};

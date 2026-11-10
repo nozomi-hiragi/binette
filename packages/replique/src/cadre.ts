@@ -2,45 +2,48 @@
 import { Api, Why } from "jsr:@binette/replique/app";
 import { rebuild } from "jsr:@binette/replique/ui";
 
+/** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
+export const ABI_VERSION = "0.1";
+
 namespace hostCadreNotifications {
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationCount")
+  @external("binette:cadre@0.1", "notificationCount")
   export declare function notificationCount(): i32;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationId")
+  @external("binette:cadre@0.1", "notificationId")
   export declare function notificationId(i: i32): i32;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationFrom")
+  @external("binette:cadre@0.1", "notificationFrom")
   export declare function notificationFrom(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationTitle")
+  @external("binette:cadre@0.1", "notificationTitle")
   export declare function notificationTitle(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationBody")
+  @external("binette:cadre@0.1", "notificationBody")
   export declare function notificationBody(i: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationActionCount")
+  @external("binette:cadre@0.1", "notificationActionCount")
   export declare function notificationActionCount(i: i32): i32;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationActionId")
+  @external("binette:cadre@0.1", "notificationActionId")
   export declare function notificationActionId(i: i32, action: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationActionLabel")
+  @external("binette:cadre@0.1", "notificationActionLabel")
   export declare function notificationActionLabel(i: i32, action: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationActionPlaceholder")
+  @external("binette:cadre@0.1", "notificationActionPlaceholder")
   export declare function notificationActionPlaceholder(i: i32, action: i32): string;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationActionInput")
+  @external("binette:cadre@0.1", "notificationActionInput")
   export declare function notificationActionInput(i: i32, action: i32): bool;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationOpen")
+  @external("binette:cadre@0.1", "notificationOpen")
   export declare function notificationOpen(id: i32): void;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationDismiss")
+  @external("binette:cadre@0.1", "notificationDismiss")
   export declare function notificationDismiss(id: i32): void;
   // @ts-ignore: decorator
-  @external("binette", "cadre.notificationReply")
+  @external("binette:cadre@0.1", "notificationReply")
   export declare function notificationReply(id: i32, actionId: string, body: string): void;
 }
 
@@ -103,49 +106,49 @@ export class CadreApi {
 }
 
 // @ts-ignore: decorator
-@external("binette", "cadre.count")
+@external("binette:cadre@0.1", "count")
 declare function cadreCountImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.name")
+@external("binette:cadre@0.1", "name")
 declare function cadreNameImport(i: i32): string;
 // @ts-ignore: decorator
-@external("binette", "cadre.isFront")
+@external("binette:cadre@0.1", "isFront")
 declare function cadreIsFrontImport(i: i32): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.isHome")
+@external("binette:cadre@0.1", "isHome")
 declare function cadreIsHomeImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.hasIcon")
+@external("binette:cadre@0.1", "hasIcon")
 declare function cadreHasIconImport(i: i32): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.appIndex")
+@external("binette:cadre@0.1", "appIndex")
 declare function cadreAppIndexImport(i: i32): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.isInstalled")
+@external("binette:cadre@0.1", "isInstalled")
 declare function cadreIsInstalledImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.installBusy")
+@external("binette:cadre@0.1", "installBusy")
 declare function cadreInstallBusyImport(): i32;
 // @ts-ignore: decorator
-@external("binette", "cadre.install")
+@external("binette:cadre@0.1", "install")
 declare function cadreInstallImport(): void;
 // @ts-ignore: decorator
-@external("binette", "cadre.open")
+@external("binette:cadre@0.1", "open")
 declare function cadreOpenImport(i: i32): void;
 // @ts-ignore: decorator
-@external("binette", "cadre.close")
+@external("binette:cadre@0.1", "close")
 declare function cadreCloseImport(i: i32): void;
 // @ts-ignore: decorator
-@external("binette", "cadre.openHome")
+@external("binette:cadre@0.1", "openHome")
 declare function cadreOpenHomeImport(): void;
 // @ts-ignore: decorator
-@external("binette", "cadre.back")
+@external("binette:cadre@0.1", "back")
 declare function cadreBackImport(): void;
 // @ts-ignore: decorator
-@external("binette", "cadre.openSettings")
+@external("binette:cadre@0.1", "openSettings")
 declare function cadreOpenSettingsImport(): void;
 // @ts-ignore: decorator
-@external("binette", "cadre.notify")
+@external("binette:cadre@0.1", "notify")
 declare function cadreNotifyImport(text: string): void;
 
 /** OS が Cadre の状態（起動中の一覧や前面）の更新を知らせる */

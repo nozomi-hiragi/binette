@@ -1,3 +1,4 @@
+import { BinetteError } from "@binette/core";
 import { repliqueFiles } from "./replique.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { buildAppInWorker, buildStoredApp, createAppStore, createMemoryFileTree, createSystemDistribution, launchApp, startSystem, SYSTEM_MANIFEST_PATH } from "../src/index.ts";
@@ -202,4 +203,24 @@ Deno.test("storage のない FileTree は従来の成果物と起動記録を一
   await assertRejects(() => buildStoredApp(failing, distribution, manifest.id, "https://example.test/local/", { workerUrl }), Error, "保存失敗");
   assertEquals(await createAppStore(legacy).get(installed.key), installed);
   assertEquals(await legacy.read("/apps/source-app/build/app.wasm"), installed.wasm);
+});
+
+Deno.test("保存ソースの再ビルドも未対応 ABI を保存せず、対応 SDK で復旧できる", async () => {
+  const { tree, distribution } = await fixture();
+  const sourceUrl = "https://example.test/local/";
+  const previous = await buildStoredApp(tree, distribution, manifest.id, sourceUrl, { workerUrl });
+  const store = createAppStore(tree);
+  await store.data.write(previous.key, "記録", "残す");
+  const entry = await tree.storage!.findApp(previous.key);
+  const owner = tree.storage!.forOwner(entry!.owner);
+  const legacy = "binette";
+  await owner.write("/source/src/main.ts", encoder.encode(`@external("${legacy}", "dom.text") declare function text(handle: i32, value: string): void; export function hello(): void { text(1, "古い"); }`));
+  const error = await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, sourceUrl, { workerUrl }), BinetteError);
+  assertEquals(error.message, "この OS では動きません（binette）");
+  assertEquals(error.code, "unsupported_abi");
+  assertEquals(await store.get(previous.key), previous);
+  await owner.write("/source/src/main.ts", encoder.encode(source));
+  const restored = await buildStoredApp(tree, distribution, manifest.id, sourceUrl, { workerUrl });
+  assert(WebAssembly.Module.imports(await WebAssembly.compile(new Uint8Array(restored.wasm))).some(entry => entry.module === "binette:dom@0.1"));
+  assertEquals((await store.data.read(previous.key)).get("記録"), "残す");
 });
