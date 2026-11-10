@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../../packages/regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import asc from "assemblyscript/asc";
 
@@ -24,9 +25,8 @@ interface PreviewNode {
 async function start() {
   const sources: Record<string, string> = {
     "main.ts": await Deno.readTextFile(new URL("../src/main.ts", import.meta.url)) + '\nexport { __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value } from "jsr:@binette/replique";',
+    ...Object.fromEntries(Object.entries(await readRepliqueLibraries(new URL("../../../packages/replique/src/", import.meta.url))).map(([key, value]) => [`node_modules/${key}.ts`, value])),
     "model.ts": await Deno.readTextFile(new URL("../src/model.ts", import.meta.url)),
-    "node_modules/jsr:@binette/replique.ts": await Deno.readTextFile(new URL("../../../packages/replique/src/index.ts", import.meta.url)),
-    "node_modules/jsr:@binette/replique/ui.ts": await Deno.readTextFile(new URL("../../../packages/replique/src/ui.ts", import.meta.url)),
     "node_modules/jsr:@binette/decor/as.ts": await Deno.readTextFile(new URL("../../../packages/decor/src/as.ts", import.meta.url)),
     "node_modules/jsr:@binette/decor/parts.ts": await Deno.readTextFile(new URL("../../../packages/decor/src/parts.ts", import.meta.url)),
   };

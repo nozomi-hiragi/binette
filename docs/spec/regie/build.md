@@ -6,7 +6,7 @@
 
 ## ブラウザでのビルド（案）
 
-`buildAppInWorker` は目録で検証した `/system/tools/asc.js` と `/system/libraries/replique.ts` を受け取り、独立した module Worker で `buildApp` を実行します。検証した asc のバイトから Worker 内で Blob URL を作って読み、URL を再取得しません。Décor の AS ソースは既存の `buildApp` が渡します。呼び出し側はソースを読む関数と `SystemDistribution` を渡し、Worker の URL・時間切れ・中止などを指定できます。`libraries` で Réplique を含むライブラリを指定できます。
+`buildAppInWorker` は目録で検証した `/system/tools/asc.js` と `/system/libraries/replique/index.json` と同フォルダの `index.ts`・各機能の `.ts` を受け取り、独立した module Worker で `buildApp` を実行します。検証した asc のバイトから Worker 内で Blob URL を作って読み、URL を再取得しません。Décor の AS ソースは既存の `buildApp` が渡します。呼び出し側はソースを読む関数と `SystemDistribution` を渡し、Worker の URL・時間切れ・中止などを指定できます。`libraries` で Réplique を含むライブラリを指定できます。
 
 `buildStoredApp` は `/apps/<id>/` のソースを読み、ID と `app.json` が一致することを確かめてから `/apps/<id>/build/app.wasm` と `index.html`、AppStore の記録をまとめて保存します。既存の `startSystem` のソースを読む経路にも、`browserBuild` を指定すると Worker を使えます。この `read` 経路は従来どおりソースを自動保存しないため、ファイルの木に置く操作は呼び出し側が行います。現在の起動側は `browserBuild` を渡していません。システムアプリのビルド済み WASM はこの経路を通しません。パス、API、インストール時にソースをどのように取得するかは案です。
 
@@ -108,7 +108,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Régie 
 - サブパス（`jsr:@binette/replique/glue` など）も、指定子をそのままキーにして引けます
 - AS のファイルどうしの相対 import（`import { x } from "./util"`）は `read` で読むので使えます
 - `libraries` に無い指定子は解決できず、ビルドの誤りになります
-- Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/index.ts` の中身を渡します。将来は、`app.json` の `binette` の版に合う Réplique を Régie が JSR から取って差し込む（案。[app.md](../app.md#インストール案)）
+- Réplique はまだ公開していないので、今は呼ぶ側がワークスペースの `packages/replique/src/` のすべての `.ts` を指定子ごとの辞書として渡します。将来は、`app.json` の `binette` の版に合う Réplique を Régie が JSR から取って差し込む（案。[app.md](../app.md#インストール案)）
 
 ## 書き出し（実装済み）
 
@@ -128,7 +128,7 @@ asc はファイルを `readFile(name, baseDir)` で読みに来ます。Régie 
 公開する `PrebuiltApp` は `{ manifest: AppManifest; html: string; css?: string; icon?: string; subIcons?: Record<string, string>; wasm: Uint8Array }` です。`stringifyPrebuiltApp(app): string` は JSON を作り、`parsePrebuiltApp(text): PrebuiltApp` は形式名・版・欄の型・base64 を確かめて戻します。manifest は core の `parseAppManifest` と同じ検査を通します。誤りは日本語の `Error` です。HTML や WASM の安全性の検証はしません。
 
 ```sh
-deno run -A packages/regie/src/cli.ts build apps/cadre --out .binapp/system/cadre.binapp --replique packages/replique/src/index.ts
+deno run -A packages/regie/src/cli.ts build apps/cadre --out .binapp/system/cadre.binapp --replique packages/replique/src
 ```
 
 CLI は `packages/regie/src/cli.ts`（入口 `@binette/regie/cli`）にあります。CLI は `buildApp` を呼び、親とサブアプリの SVG も読んで書き出します。アイコンのパスはインストールと共通の `iconPath` で確かめます。親フォルダは作成し、出力先があれば上書きします。成功時は絶対パスを標準出力に出します。誤りは標準エラーに `.binapp を書き出せません。<理由>` と出し、終了コード 1 で終わります。従来の引数 1 つによる生成モード、writeBindings、--bindings、gen:bindings は廃止しました（案・実装済み）。
@@ -149,4 +149,4 @@ asc は大きいので、ビルドは `@binette/regie/build` という別の入�
 
 ## 宣言的 UI（案）
 
-`entry.html` を省いたアプリは [宣言的 UI](../ui.md) を使います。`libraries` の `jsr:@binette/replique` があれば、`jsr:@binette/replique/ui` を省略しても自動的に解決します。明示した場合はそのソースを使います。
+`entry.html` を省いたアプリは [宣言的 UI](../ui.md) を使います。`libraries` には `jsr:@binette/replique` と各機能の指定子を渡します。`jsr:@binette/replique/ui` も実際の `ui.ts` を使い、ビルド側で再 export のソースを補いません。

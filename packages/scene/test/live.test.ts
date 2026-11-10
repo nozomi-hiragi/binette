@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "@binette/regie/build";
 import { createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
@@ -5,7 +6,7 @@ import { Window } from "happy-dom";
 import { isInstalled, mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
 const cadreApp = { source: "binette:system", prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)), { libraries }) };
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();

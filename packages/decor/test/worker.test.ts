@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import type { DomOp } from "@binette/core";
 import { Window } from "happy-dom";
@@ -6,7 +7,7 @@ import { createUiDom } from "../src/index.ts";
 import { type RegieWorker, startProcess } from "../../regie/src/index.ts";
 import { buildApp } from "../../regie/src/build.ts";
 
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;

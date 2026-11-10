@@ -1,3 +1,4 @@
+import { repliqueFiles } from "../packages/regie/test/replique.ts";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { resolve } from "@std/path";
 import { Window } from "happy-dom";
@@ -35,7 +36,7 @@ Deno.test("既定の提供リストは catalog/ のアプリを commit の raw �
   let compiler: Uint8Array;
   try { await buildCompiler(`${directory}/asc.js`); compiler = await Deno.readFile(`${directory}/asc.js`); }
   finally { await Deno.remove(directory, { recursive: true }); }
-  const replique = await Deno.readFile(resolve(root, "packages/replique/src/index.ts"));
+  const replique = await repliqueFiles();
   const window = new Window();
   const raw = `https://raw.githubusercontent.com/nozomi-hiragi/binette/${commit}/`;
   const lists = await createProviderLists({
@@ -53,7 +54,7 @@ Deno.test("既定の提供リストは catalog/ のアプリを commit の raw �
     },
     parseHtml: text => new window.DOMParser().parseFromString(text, "text/html") as unknown as Document,
     browserBuild: {
-      distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? compiler : replique) },
+      distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? compiler : replique.get(path)) },
       workerUrl: new URL("../packages/regie/test/fixtures/browser-build-worker.ts", import.meta.url),
     },
     report(error) { throw error; },

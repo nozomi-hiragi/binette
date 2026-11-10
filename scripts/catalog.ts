@@ -3,7 +3,7 @@
 // commit, because raw caches branch URLs for minutes and the integrity would not match right after a push.
 // See docs/spec/app-manager.md (Binette の既定の提供リスト).
 import { resolve } from "@std/path";
-import { computeAppIntegrity } from "../packages/regie/src/cli.ts";
+import { computeAppIntegrity, readRepliqueLibraries } from "../packages/regie/src/cli.ts";
 
 export const REPOSITORY = "nozomi-hiragi/binette";
 /** Where GitHub Pages serves the catalog of a branch. Outside the OS service worker scope (/binette/<branch>/). */
@@ -26,7 +26,7 @@ const escape = (text: string) => text.replace(/[&<>"']/g, char => `&#${char.char
 /** Reads every folder in `catalog/` with an app.json and describes it for the list. */
 export async function catalogEntries(root: string, commit: string): Promise<CatalogEntry[]> {
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error(`commit は 40 桁のハッシュで指定してください: ${commit}`);
-  const replique = await Deno.readTextFile(resolve(root, "packages/replique/src/index.ts"));
+  const libraries = await readRepliqueLibraries(resolve(root, "packages/replique/src"));
   const folders: string[] = [];
   for await (const entry of Deno.readDir(resolve(root, "catalog"))) if (entry.isDirectory) folders.push(entry.name);
   folders.sort();
@@ -45,7 +45,7 @@ export async function catalogEntries(root: string, commit: string): Promise<Cata
       ...(manifest.name ? { name: manifest.name } : {}),
       ...(manifest.icon ? { icon: new URL(manifest.icon, source).href } : {}),
       ...(manifest.description ? { description: manifest.description } : {}),
-      integrity: await computeAppIntegrity(dir, [], { libraries: { "jsr:@binette/replique": replique } }),
+      integrity: await computeAppIntegrity(dir, [], { libraries }),
     });
   }
   return entries;

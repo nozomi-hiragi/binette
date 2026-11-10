@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../packages/regie/src/cli.ts";
 import { resolve } from "@std/path";
 import { copy } from "@std/fs";
 import { buildApp } from "../packages/regie/src/build.ts";
@@ -47,7 +48,7 @@ export async function buildFolder(root: string, out: string, replique: string, l
     try {
       const source = resolve(root, name);
       const read = (path: string) => Deno.readTextFile(resolve(source, path));
-      const built = await buildApp(read, { libraries: { "jsr:@binette/replique": await Deno.readTextFile(replique) } });
+      const built = await buildApp(read, { libraries: await readRepliqueLibraries(replique) });
       const icon = iconPath(built.manifest.icon);
       // サブのアイコンも固定名にし、親のアイコンや実行物と衝突させない。
       const subFiles: { path: string; source: string }[] = [];
@@ -150,7 +151,7 @@ export async function buildApps(root: string): Promise<void> {
   const staging = await Deno.makeTempDir({ prefix: "binette-system-" });
   try {
     const system = resolve(staging, "system");
-    const replique = resolve(root, "packages/replique/src/index.ts");
+    const replique = resolve(root, "packages/replique/src");
     for (const [source, output, label] of [["apps", "apps", "システムアプリ"], ["bundled", "bundled", "同梱アプリ"]] as const) {
       const names = await buildFolder(resolve(root, source), resolve(system, output), replique, label);
       for (const name of names) console.log(`system/${output}/${name}`);
@@ -164,8 +165,16 @@ export async function buildApps(root: string): Promise<void> {
     catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
     await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: bootLists() }));
     await buildCompiler(resolve(system, "tools/asc.js"));
-    await Deno.mkdir(resolve(system, "libraries"));
-    await Deno.copyFile(replique, resolve(system, "libraries/replique.ts"));
+    const libraries = await readRepliqueLibraries(replique);
+    const libraryRoot = resolve(system, "libraries/replique");
+    await Deno.mkdir(libraryRoot, { recursive: true });
+    const features: string[] = [];
+    for (const [specifier, source] of Object.entries(libraries)) {
+      const name = specifier === "jsr:@binette/replique" ? "index" : specifier.slice("jsr:@binette/replique/".length);
+      await Deno.writeTextFile(resolve(libraryRoot, `${name}.ts`), source);
+      if (name !== "index") features.push(name);
+    }
+    await Deno.writeFile(resolve(libraryRoot, "index.json"), encode(features));
     const manifest = await systemManifest(system);
     const { version } = JSON.parse(await Deno.readTextFile(resolve(root, "packages/regie/deno.json")));
     if (typeof version !== "string" || !version) throw new Error("Régie のパッケージの版がありません。");

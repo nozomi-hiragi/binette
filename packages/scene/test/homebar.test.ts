@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "@binette/regie/build";
 import { createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
@@ -5,7 +6,7 @@ import { Window } from "happy-dom";
 import { mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
 const apps = await Promise.all(["cadre"].map(async name => {
   const read = (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root));
   const built = await buildApp(read, { libraries });

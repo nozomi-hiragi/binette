@@ -1,7 +1,8 @@
+import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { buildApp } from "../src/build.ts";
 
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
   "index.html": "<p></p>",

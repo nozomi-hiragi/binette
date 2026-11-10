@@ -1,10 +1,11 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
 import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
 
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("../../replique/src/index.ts", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
   "index.html": '<p id="count">0</p><button id="button">+1</button>',

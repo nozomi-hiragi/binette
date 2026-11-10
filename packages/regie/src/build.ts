@@ -79,10 +79,6 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const [html, source, css] = await Promise.all([htmlPath === undefined ? Promise.resolve("") : read(htmlPath), read(entry), cssPath === undefined ? Promise.resolve(undefined) : read(cssPath)]);
   const asc = options.compiler ?? await loadCompiler();
   const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, "jsr:@binette/decor/parts": decorParts, ...options.libraries };
-  if (libraries["jsr:@binette/replique"] !== undefined && libraries["jsr:@binette/replique/ui"] === undefined) {
-    libraries["jsr:@binette/replique/ui"] = 'export { View, column, row, text, button, buttonOf, input, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme, ' +
-      'spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/replique";';
-  }
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
   let wasm: Uint8Array | undefined;

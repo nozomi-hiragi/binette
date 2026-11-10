@@ -4,6 +4,26 @@
 
 Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ AssemblyScript のライブラリです。WASM の import と、要素・リスナー・最後に書いた値の管理を持ちます。
 
+## 機能ごとの構成（決定）
+
+Réplique はホストの `@external("binette", "<機能名>.…")` に対応する単位で、`packages/replique/src/<機能名>.ts` に分けます。`index.ts` は既存の公開名を再 export する入口です。アプリの書き方、`Api.get<T>(key)`、WASM の `__bina_*` の呼び出し口は変えません。
+
+| 機能名 | 内容 |
+| --- | --- |
+| `app` | `App`・`launch`・状態とライフサイクル、`Api`・`Why`、共有の状態と文字列処理 |
+| `dom` | `Element`・`Event`・`document` と DOM イベント |
+| `ui` | `View`・`column` などの Décor の部品、宣言的 UI の描画とイベント |
+| `storage`・`pigeon`・`shares` | アプリの保存領域、手紙、共有 |
+| `os`・`apps`・`manager` | OS 設定、アプリ一覧、アプリ管理 |
+| `scheduler`・`schedule` | 予定の管理、自分の予定 |
+| `cadre`・`fs` | Cadre の操作、ファイル API の予約 |
+
+機能間の参照には `jsr:@binette/replique/<機能名>` を使います。すべての機能をパッケージの exports に載せ、既存の `jsr:@binette/replique` と `jsr:@binette/replique/ui` も引き続き使えます。`Api.get<T>` は各機能の API クラスを引き続き知っています。機能ごとの版分けや辞書の廃止は行いません。
+
+OS は `/system/libraries/replique/` に `index.ts` と各機能の `.ts`、機能名の JSON 配列 `index.json` を置きます。配列に `index` 自体は含めません。すべてを配布目録のハッシュ対象にし、ブラウザのビルドは検証済みの目録と各ファイルを読みます。旧 `/system/libraries/replique.ts` は配布しません。
+
+CLI の `--replique` には `packages/replique/src` のようにソースフォルダを渡します。直下のすべての `.ts` を読み、`index.ts` を `jsr:@binette/replique`、ほかを `jsr:@binette/replique/<機能名>` としてビルドへ渡します。単一ファイルの指定はエラーです。
+
 ## 画面を操作する方針（決定 2026-10-27）
 
 - HTML（スクリプトは書かない）＋ AS → WASM、Worker で動かす形を保つ

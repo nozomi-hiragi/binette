@@ -1,10 +1,11 @@
+import { readRepliqueLibraries } from "../../../packages/regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "../../../packages/regie/src/build.ts";
 
 Deno.test("Filer は読み込みの名前衝突と共有 ON の処理を OS の応答につなぐ", async () => {
   const root = new URL("../", import.meta.url);
   const built = await buildApp(path => Deno.readTextFile(new URL(path, root)), { libraries: {
-    "jsr:@binette/replique": await Deno.readTextFile(new URL("../../../packages/replique/src/index.ts", import.meta.url)),
+    ...await readRepliqueLibraries(new URL("../../../packages/replique/src/", import.meta.url)),
   } });
   const module = new WebAssembly.Module(new Uint8Array(built.wasm));
   type Node = { kind: string; text: string; label: string; handler: number; children: Node[] };

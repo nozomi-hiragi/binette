@@ -32,8 +32,13 @@ export async function buildAppInWorker(read: (path: string) => Promise<string>, 
   };
   // URL を渡して再取得させず、検査済みのバイトをそのまま Worker に渡す。
   const compiler = (await required("/system/tools/asc.js")).slice();
-  if (libraries["jsr:@binette/replique"] === undefined) {
-    libraries["jsr:@binette/replique"] = decoder.decode(await required("/system/libraries/replique.ts"));
+  const features: unknown = JSON.parse(decoder.decode(await required("/system/libraries/replique/index.json")));
+  if (!Array.isArray(features) || features.some(name => typeof name !== "string" || !/^[a-z][a-z0-9-]*$/.test(name) || name === "index") || new Set(features).size !== features.length) {
+    throw new Error("Invalid Réplique feature index.");
+  }
+  for (const name of ["index", ...features]) {
+    const specifier = name === "index" ? "jsr:@binette/replique" : `jsr:@binette/replique/${name}`;
+    if (libraries[specifier] === undefined) libraries[specifier] = decoder.decode(await required(`/system/libraries/replique/${name}.ts`));
   }
   aborted();
   const worker: RegieWorker = options.createWorker?.() ?? (options.workerUrl === undefined

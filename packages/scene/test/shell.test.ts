@@ -1,3 +1,4 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { createProviderLists, createMemoryAppStore, createScheduler, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
 import { Window } from "happy-dom";
@@ -7,7 +8,7 @@ import { mountSystem as mountShell, operate, systemView } from "./system-helper.
 import { buildApp } from "@binette/regie/build";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { "jsr:@binette/replique": await Deno.readTextFile(new URL("packages/replique/src/index.ts", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
 // 各画面の既存のライフサイクル試験では、Cadre 内のクラスを単独の入口として使う。
 function screenRead(screen: "home" | "settings", id: string, name: string) {
   return async (path: string): Promise<string> => {
