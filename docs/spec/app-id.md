@@ -77,7 +77,8 @@ ID は、アプリをどう入れたかで分けます。
       "id": "memo",
       "source": "https://raw.githubusercontent.com/nozomi-hiragi/memo/0123abcd/",
       "version": "1.2.0+0123abcd",
-      "integrity": { "/": "sha256-…" }
+      "integrity": { "/": "sha256-…" },
+      "requires": { "app": "0.1", "storage": "0.1", "ui": "0.1" }
     }
   ]
 }
@@ -90,9 +91,14 @@ ID は、アプリをどう入れたかで分けます。
 | `apps[].id` | 必須 | 識別子。アプリの `app.json` の `id` と一致しなければインストールで止める |
 | `apps[].source` | 必須 | アプリ本体（`app.json` を置いたフォルダ）の URL。リストとは別の場所でよい |
 | `apps[].version` | 必須 | 版の文字列 |
+| `apps[].requires` | 任意 | 必要なホスト ABI。機能名から版への辞書（例 `{ "storage": "0.1" }`）。キーは `[a-z][a-z0-9-]*`、値は `0.N` または 1 以上の `N` の文字列。配列・null・範囲指定・パッチ版は不可。未知の機能も形式が合えば読み、OS との照合で非対応とする |
 | `apps[].integrity` | 任意 | 改ざん検出のハッシュの辞書（[下](#ハッシュ)） |
 | `apps[].name`・`icon`・`description` | 任意 | 表示用（[app-manager.md](app-manager.md#カタログの表示用の欄)） |
 | `movedTo` | 任意 | 引っ越し先のリストの URL（[下](#引っ越し)）。これがあるリストは `apps` を読まない |
+
+- `requires` は省略でき、空の辞書も有効。未記載の従来アプリは今までどおり取得・ビルド後に WASM を検査する
+- カタログ生成では実際にビルドした WASM の `binette:<機能>@<版>` import から作り、`env` を除き、機能名順で書く。ソースの import 文や SDK の公開機能一覧から推測しない。同じ機能の複数版や形式外の module は生成を止める
+- OS は自分の `HOST_ABI` の module と完全一致で照合する。非対応ならアプリのファイルを取る前に `unsupported_abi` で止める。`requires` は事前の案内であり、ビルド後と起動前の WASM 検査も続ける
 
 ### 更新
 

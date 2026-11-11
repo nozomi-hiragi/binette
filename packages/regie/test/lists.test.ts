@@ -1,4 +1,4 @@
-import { BinetteError } from "@binette/core";
+import { type AppListEntry, BinetteError } from "@binette/core";
 import { repliqueFiles } from "./replique.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Window } from "happy-dom";
@@ -25,7 +25,7 @@ function compilerBytes() {
   })();
 }
 const entry = (version = "list-version", integrity?: Record<string, string>) => ({ id: "memo", source: sourceUrl, version, ...(integrity ? { integrity } : {}) });
-const html = (apps = [entry()]) => `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "提供者", apps })}</script>`;
+const html = (apps: AppListEntry[] = [entry()]) => `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "提供者", apps })}</script>`;
 const moved = (url: string) => `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "移転", movedTo: url })}</script>`;
 /** 前回の確認から 30 分を過ぎた os/catalogs を保存し、起動時に確認させる */
 const overdueCatalogs = (store: AppStore) => store.system.putSchedules!({
@@ -585,5 +585,36 @@ Deno.test("未対応 ABI のインストールは保存前に失敗し、既存�
       assertEquals((await f.store.data.read(previous.key)).get("記録"), "残す");
       assertEquals(f.lists.state(previous.key)?.phase, "failed");
     }
+  } finally { await f.stop(); }
+});
+
+Deno.test("未対応の requires はアプリの取得前に止め、キャッシュ済みならリストも取り直さない", async () => {
+  const f = await fixture();
+  try {
+    f.responses.set(listUrl, html([{ ...entry(), requires: { storage: "0.3" } }]));
+    await f.lists.add(listUrl);
+    f.requests.length = 0;
+    const error = await assertRejects(() => f.lists.install(listUrl, "memo"), BinetteError, "この OS では使えません（storage 0.3）");
+    assertEquals(error.code, "unsupported_abi");
+    assertEquals(f.requests, []);
+    assertEquals(f.lists.state(`${listUrl}#memo`)?.phase, "failed");
+    assertEquals(await f.store.list(), []);
+  } finally { await f.stop(); }
+});
+
+Deno.test("取得した最新リストの requires も検査し、本体の取得・自動更新を止める", async () => {
+  const f = await fixture({}, true);
+  try {
+    await f.lists.add(listUrl);
+    await f.lists.install(listUrl, "memo");
+    f.responses.set(listUrl, html([{ ...entry("next"), requires: { future: "1" } }]));
+    f.requests.length = 0;
+    const error = await assertRejects(() => f.lists.install(listUrl, "memo"), BinetteError);
+    assertEquals(error.code, "unsupported_abi");
+    assertEquals(f.requests, [listUrl]);
+    f.requests.length = 0;
+    await f.lists.check();
+    assertEquals(f.requests, [listUrl]);
+    assertEquals((await f.store.get(`${listUrl}#memo`))?.listVersion, "list-version");
   } finally { await f.stop(); }
 });

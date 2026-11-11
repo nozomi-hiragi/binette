@@ -1,6 +1,6 @@
-import { validateAppAbi } from "./abi.ts";
+import { appCompatibility, validateAppAbi, validateAppRequirements } from "./abi.ts";
 import { createProviderLists, type InstallConfirmation, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
-import { normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
+import { BinetteError, normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
 import { launchApp } from "./launch.ts";
 import type { BuildOptions } from "./build.ts";
@@ -372,12 +372,15 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     });
     for (const registration of registrations) for (const entry of lists.cached(registration.url)?.apps ?? []) {
       const key = appId(registration.url, entry.id);
-      result.set(key, { ...blank(key), list: registration.url, name: entry.name ?? entry.id, icon: entry.icon ? lists.icon(entry.icon) : "", description: entry.description ?? "", version: entry.version, listed: true });
+      result.set(key, { ...blank(key), list: registration.url, name: entry.name ?? entry.id, icon: entry.icon ? lists.icon(entry.icon) : "", description: entry.description ?? "", version: entry.version, listed: true, compatibilityError: appCompatibility(entry.requires) });
     }
     for (const app of await options.store.list()) {
       const builtIn = app.source.startsWith("binette:");
       const previous = result.get(app.key) ?? { ...blank(app.key), list: builtIn ? "" : app.source };
-      result.set(app.key, { ...previous, name: app.manifest.name, icon: svgUrl(app.icon) || previous.icon, present: true, installed: app.listVersion ?? app.manifest.version ?? "", removable: !builtIn });
+      let installedError = "";
+      try { await validateAppAbi(app.wasm); }
+      catch (error) { if (error instanceof BinetteError && error.code === "unsupported_abi") installedError = "この OS では動きません。入れ直してください"; }
+      result.set(app.key, { ...previous, installedError, name: app.manifest.name, icon: svgUrl(app.icon) || previous.icon, present: true, installed: app.listVersion ?? app.manifest.version ?? "", removable: !builtIn });
     }
     for (const removed of await options.store.listRemoved()) {
       const previous = result.get(removed.key) ?? { ...blank(removed.key), list: removed.source };
@@ -586,6 +589,15 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         case "removeRepo": repoStates.delete(text); quiet(lists.remove(text)); break;
         case "checkUpdates": quiet(text ? lists.check(text) : scheduler.runNow("os/catalogs")); break;
         case "install": { const { list, id } = target(); quiet(lists.install(list, id)); break; }
+        case "reinstall": {
+          const { list, id } = target();
+          quiet((async () => {
+            validateAppRequirements(lists.cached(list)?.apps.find(entry => entry.id === id)?.requires);
+            await lists.uninstall(text, false);
+            await lists.install(list, id);
+          })());
+          break;
+        }
         case "uninstall": quiet(lists.uninstall(text, on)); break;
         case "cancel": lists.cancel(text); break;
         case "apply": quiet(lists.apply(text)); break;

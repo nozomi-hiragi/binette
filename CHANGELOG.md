@@ -2,6 +2,10 @@
 
 ## v0.2.0（未リリース）
 
+- 提供リストに任意の `requires`（機能名 → ABI の版）を足し、既定カタログは同じビルドの WASM imports から自動生成する。現在の `HOST_ABI` に合わないアプリは本体の取得前に `unsupported_abi` で止め、アプリ管理に理由を出してインストール・更新を無効にする。未記載の従来アプリとビルド後の ABI 検査は維持する
+- アプリ管理に `compatible`・`compatibilityError`・`installedError`・`reinstall` を足す。保存済み WASM の ABI 不一致には「この OS では動きません。入れ直してください」と表示し、既存の本体だけ削除・再インストールの経路でデータを引き継ぐ。ABI 名・OS call・権限判定は変えない
+- 「探す」のカードが汎用ボタンの青背景・白文字になり、白い状態 pill の文字が読めなかった不具合を直す。アプリ行を ghost ボタンにし、行の配置と文字色・状態の色を指定する
+
 - Réplique の 13 機能を `packages/replique/<機能>/src/index.ts` の独立パッケージ `@binette/replique-<機能>`（初期版 `0.1.0`）にし、機能間・アプリの import を `jsr:@binette/replique-<機能>@^0.1` に変更する。集約入口 `@binette/replique` の公開名、既存の ABI 名・OS call・権限判定は維持する
 - SDK の exact・`^`・`~` 要求を提供版に照合し、範囲外・未知の機能・不正な形式をコンパイル前に `unsupported_sdk` で拒む。複数の範囲指定と集約入口は同じ実体へ解決する。ブラウザ Worker も専用コードと文言を保つ
 - `--replique` は `packages/replique` のパッケージルートを読む。配布目録 `index.json` は機能名から完全なパッケージ版への辞書に変更する。公開物検査に全機能を含め、パッケージ版・ABI 宣言・HOST_ABI の一致を検証する

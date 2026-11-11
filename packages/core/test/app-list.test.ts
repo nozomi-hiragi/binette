@@ -93,3 +93,15 @@ Deno.test("表示用の name・icon・description を読み、icon は JSON の 
   fails(() => parseAppList(JSON.stringify({ name: "n", apps: [{ id: "a", source: "a/", version: "1", name: 1 }] }), page), "apps[0] の name は文字列で指定してください。");
   fails(() => parseAppList(JSON.stringify({ name: "n", apps: [{ id: "a", source: "a/", version: "1", icon: "" }] }), page), "apps[0] の icon は URL の文字列で指定してください。");
 });
+
+Deno.test("requires は任意の機能名と ABI 版の辞書で、未知の機能も読み取る", () => {
+  const parse = (extra: object) => parseAppList(JSON.stringify({ name: "提供者", apps: [{ id: "memo", source: "https://app.test/", version: "1", ...extra }] }), "https://list.test/").apps[0];
+  assertEquals(parse({}).requires, undefined);
+  assertEquals(parse({ requires: {} }).requires, {});
+  assertEquals(parse({ requires: { app: "0.1", "future-feature": "12" } }).requires, { app: "0.1", "future-feature": "12" });
+  for (const requires of [null, [], "0.1", { app: 1 }, { app: "0" }, { app: "1.2" }, { app: "0.1.0" }, { app: "^0.1" }, { app: "0.1\n" }, { "App": "0.1" }, { "app\n": "0.1" }, { "": "0.1" }, { "binette:app": "0.1" }]) {
+    assertThrows(() => parse({ requires }), Error, "requires");
+  }
+  const requires = JSON.parse('{"__proto__":"0.1"}');
+  assertThrows(() => parse({ requires }), Error, "requires");
+});

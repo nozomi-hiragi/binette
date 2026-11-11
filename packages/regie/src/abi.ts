@@ -45,3 +45,31 @@ export async function validateAppAbi(wasm: Uint8Array | ArrayBuffer): Promise<We
   if (invalid.length) throw new BinetteError("unsupported_abi", `この OS では動きません（${invalid.map(entry => `${moduleLabel(entry.module)} の ${entry.name}`).sort().join("、")}）。アプリの管理から入れ直すと直ります`);
   return module;
 }
+
+/** ビルドした WASM から必要な機能と版を求める。SDK の import や宣言だけでは要求に含めない */
+export async function appRequirements(wasm: Uint8Array): Promise<Record<string, string>> {
+  const module = await WebAssembly.compile(new Uint8Array(wasm));
+  const requirements = new Map<string, string>();
+  for (const entry of WebAssembly.Module.imports(module)) {
+    if (entry.module === "env") continue;
+    const abi = parseAbiModule(entry.module);
+    if (!abi) throw new Error(`requires に表せない WASM import です: ${entry.module}`);
+    const previous = requirements.get(abi.feature);
+    if (previous !== undefined && previous !== abi.version) throw new Error(`同じ機能に複数の ABI の版があります: ${abi.feature}`);
+    requirements.set(abi.feature, abi.version);
+  }
+  return Object.fromEntries([...requirements].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** カタログの要求を現在の OS と照合する。未記載は従来どおりビルド後に検査する */
+export function appCompatibility(requires?: Record<string, string>): string {
+  const supported = new Set<string>(Object.values(HOST_ABI).map(abi => abi.module));
+  const missing = Object.entries(requires ?? {}).filter(([feature, version]) => !supported.has(`binette:${feature}@${version}`));
+  return missing.length ? `この OS では使えません（${missing.map(([feature, version]) => `${feature} ${version}`).sort().join("、")}）` : "";
+}
+
+/** アプリのファイルを取る前にも、最新のカタログの要求を検査する */
+export function validateAppRequirements(requires?: Record<string, string>): void {
+  const reason = appCompatibility(requires);
+  if (reason) throw new BinetteError("unsupported_abi", reason);
+}

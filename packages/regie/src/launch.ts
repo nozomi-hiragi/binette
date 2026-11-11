@@ -53,6 +53,10 @@ export interface ManagerApp {
   version: string;
   /** 入っている（本体がある） */
   present: boolean;
+  /** カタログが要求する ABI の不一致。空または省略なら事前の制限なし */
+  compatibilityError?: string;
+  /** 保存済み WASM の ABI 不一致。データを残した入れ直しを案内する */
+  installedError?: string;
   /** 入っている版。版が無ければ空 */
   installed: string;
   removed: boolean;

@@ -1,3 +1,5 @@
+import { buildApp } from "../../regie/src/build.ts";
+import { validateAppAbi } from "../../regie/src/abi.ts";
 import { repliqueFiles } from "../../regie/test/replique.ts";
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
@@ -99,6 +101,11 @@ Deno.test("Cadre のアプリ画面は提供リストのアプリを出し、OS 
     const find = key(element, "apps-find")!;
     assert(find.textContent!.includes("テストの提供者"));
     assert(find.textContent!.includes("短いメモ"));
+    const browseRow = find.querySelector<HTMLButtonElement>("[data-bina-key^=find-app-]")!;
+    assert(browseRow.classList.contains("bina-ui-variant-ghost"));
+    const generic = '.bina-shell-content button:not(:where([class*="bina-ui-variant-"], .bina-ui-toggle, .bina-ui-selected, .bina-ui-option, .bina-ui-menuItem, .bina-ui-surface-field > *))';
+    assert(!browseRow.matches(generic), "汎用の青いボタンの規則に当たっています");
+    assert(key(browseRow, "apps-state")!.classList.contains("bina-ui-tone-muted"));
     // カタログのアイコンは OS が取って data URL にし、届いたら頭文字の代わりに出す
     await waitFor(() => key(element, "apps-icon") !== null, "カタログのアイコンが出ません");
     assertEquals(key(element, "apps-icon")!.getAttribute("src"), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sources["icon.svg"])}`);
@@ -125,6 +132,95 @@ Deno.test("Cadre のアプリ画面は提供リストのアプリを出し、OS 
     key(element, "detail-remove-app")!.click();
     await waitFor(() => (key(element, "apps-detail")?.textContent ?? "").includes("データだけ"), "本体だけを消したあとにデータだけと出ません");
     assertEquals((await store.listRemoved()).map(app => app.key), [`${listUrl}#memo`]);
+    assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("未対応の提供アプリは入れられず、保存 WASM の ABI 不一致はデータを残して入れ直せる", async () => {
+  const directory = await Deno.makeTempDir({ prefix: "binette-apps-abi-test-" });
+  let compiler: Uint8Array;
+  try { await buildCompiler(`${directory}/asc.js`); compiler = await Deno.readFile(`${directory}/asc.js`); }
+  finally { await Deno.remove(directory, { recursive: true }); }
+  const window = new Window();
+  const element = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(element as never);
+  const store = createMemoryAppStore();
+  const appKey = `${listUrl}#memo`;
+  const broken = await buildApp(path => Promise.resolve(path === "app.json" ? sources[path] : '@external("binette", "storage.read") declare function old(): void; export function call(): void { old(); }'), { libraries });
+  await store.put({ ...broken, icon: undefined, key: appKey, source: listUrl, listVersion: "1.0.0", installedAt: 1 });
+  await store.data.write(appKey, "note", "消さない記録");
+  const removals: boolean[] = [];
+  const uninstall = store.uninstall.bind(store);
+  store.uninstall = async (id, withData) => { removals.push(withData); await uninstall(id, withData); };
+  const replique = await repliqueFiles();
+  const requests: string[] = [];
+  const errors: unknown[] = [];
+  const shell = await mountSystem(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home", settings: "cadre.settings", "apps-manager": "cadre.apps" },
+    lists: [listUrl], store, libraries, createWorker, onError: error => errors.push(error), installed: true,
+    providerLists: {
+      fetch: input => {
+        const url = String(input); requests.push(url);
+        const html = `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "テストの提供者", apps: [
+          { id: "future", name: "未来のアプリ", source: "https://future.test/", version: "1", requires: { storage: "0.3" } },
+          { id: "memo", name: "メモ", source: sourceUrl, version: "1.0.0", requires: {} },
+          { id: "unavailable", name: "取得できないアプリ", source: "https://unavailable.test/", version: "1", requires: {} },
+        ] })}</script>`;
+        const text = url === listUrl ? html : url.startsWith(sourceUrl) ? sources[url.slice(sourceUrl.length)] : undefined;
+        return Promise.resolve(new Response(text ?? "無し", { status: text === undefined ? 404 : 200 }));
+      },
+      parseHtml: html => new window.DOMParser().parseFromString(html, "text/html") as unknown as Document,
+    },
+    browserBuild: {
+      distribution: { readSystem: path => Promise.resolve(path.endsWith("asc.js") ? compiler : replique.get(path)) },
+      workerUrl: new URL("../../regie/test/fixtures/browser-build-worker.ts", import.meta.url),
+    },
+  });
+  try {
+    await waitFor(() => element.querySelector("[data-bina-key=home-grid]") !== null);
+    [...element.querySelectorAll<HTMLButtonElement>("[data-bina-key^=home-tile-]")].find(tile => tile.textContent === "アプリ")!.click();
+    await waitFor(() => (key(element, "apps-find")?.textContent ?? "").includes("この OS では使えません（storage 0.3）"));
+    const find = key(element, "apps-find")!;
+    [...find.querySelectorAll<HTMLButtonElement>("[data-bina-key^=find-app-]")].find(tile => tile.textContent!.includes("未来のアプリ"))!.click();
+    await waitFor(() => key(element, "detail-install") !== null);
+    assertEquals((key(element, "detail-install") as HTMLButtonElement).disabled, true);
+    assertEquals(key(element, "detail-compatibility")!.textContent, "この OS では使えません（storage 0.3）");
+    await waitFor(() => key(element, "detail-info")?.hidden === true);
+    assertEquals(key(element, "detail-error"), null);
+    assertEquals(key(element, "detail-permissions"), null);
+    const detailText = key(element, "apps-detail")!.textContent!;
+    assertEquals(detailText.split("この OS では使えません（storage 0.3）").length - 1, 1);
+    assert(!detailText.includes("詳細を取れませんでした"));
+    key(element, "detail-install")!.click();
+    assert(!requests.some(url => url.startsWith("https://future.test/")));
+    key(element, "detail-back")!.click();
+    await waitFor(() => key(element, "apps-find") !== null);
+    [...key(element, "apps-find")!.querySelectorAll<HTMLButtonElement>("[data-bina-key^=find-app-]")].find(tile => tile.textContent!.includes("取得できないアプリ"))!.click();
+    await waitFor(() => key(element, "detail-error") !== null);
+    assert(key(element, "detail-error")!.textContent!.includes("詳細を取れませんでした:"));
+    assert(key(element, "detail-error")!.textContent!.includes("(404)"));
+    assertEquals(key(element, "detail-info")!.hidden, false);
+    assertEquals(key(element, "detail-compatibility")!.hidden, true);
+    key(element, "detail-back")!.click();
+    await waitFor(() => key(element, "apps-tabs") !== null);
+    [...key(element, "apps-tabs")!.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent!.startsWith("入っている"))!.click();
+    await waitFor(() => (key(element, "apps-installed")?.textContent ?? "").includes("この OS では動きません。入れ直してください"));
+    [...key(element, "apps-installed")!.querySelectorAll<HTMLButtonElement>("[data-bina-key^=installed-]")].find(tile => tile.textContent!.includes("メモ"))!.click();
+    await waitFor(() => key(element, "detail-reinstall") !== null);
+    assertEquals(key(element, "detail-broken")!.textContent, "この OS では動きません。入れ直してください");
+    key(element, "detail-reinstall")!.click();
+    const dialog = () => element.querySelector<HTMLDialogElement>(".bina-shell-confirm");
+    await waitFor(() => dialog()?.open === true);
+    assertEquals(removals, [false]);
+    assertEquals((await store.data.read(appKey)).get("note"), "消さない記録");
+    [...dialog()!.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "許可して入れる")!.click();
+    await waitFor(() => key(element, "detail-remove") !== null && key(element, "detail-reinstall") === null);
+    const repaired = await store.get(appKey);
+    assert(repaired);
+    await validateAppAbi(repaired.wasm);
+    assertEquals((await store.data.read(appKey)).get("note"), "消さない記録");
+    assertEquals(key(element, "detail-broken")!.hidden, true);
     assertEquals(errors, []);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });

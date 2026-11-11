@@ -134,6 +134,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       case "installedVersion": return app?.installed ?? "";
       case "state": return app?.state ?? "none";
       case "error": return app?.error ?? "";
+      case "compatibilityError": return app?.compatibilityError ?? "";
+      case "installedError": return app?.installedError ?? "";
       case "detailError": return details(key)?.error ?? "";
       case "detailListName": return details(key)?.listName ?? "";
       case "permissionName": return at(details(key)?.permissions ?? [], i, "権限")[0];
@@ -152,6 +154,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       case "appCount": return catalog(key).length;
       case "installedCount": return installedApps().length;
       case "updateCount": return updateKeys(key).length;
+      case "compatible": return app?.compatibilityError ? 0 : 1;
       case "removed": return app?.removed ? 1 : 0;
       case "removable": return app?.removable ? 1 : 0;
       case "files": return app?.files ?? 0;
@@ -168,7 +171,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     }
     throw new Error(`知らない manager の問い合わせです: ${query}`);
   };
-  const managerActions = ["addRepo", "removeRepo", "checkUpdates", "install", "uninstall", "cancel", "apply", "details", "setAutoUpdate"];
+  const managerActions = ["addRepo", "removeRepo", "checkUpdates", "install", "reinstall", "uninstall", "cancel", "apply", "details", "setAutoUpdate"];
 
   const pad = (value: number) => String(value).padStart(2, "0");
   // 端末の時刻帯で「YYYY-MM-DD HH:MM」。0 は空
