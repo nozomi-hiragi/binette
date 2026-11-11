@@ -7,7 +7,7 @@ import { mountSystem as mountShell, operate, systemView } from "./system-helper.
 import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
 
-const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
@@ -117,22 +117,48 @@ for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
       ? source.replace('() => record("click")', '() => { while (true) {} }')
       : source.replace('record("destroy:" + reason.kind.toString() + ":" + reason.cause.toString());', 'while (true) {}');
     const built = await build(code), home = await build(source, true);
-    const window = new Window(); const element = host(window); const errors: unknown[] = []; let launches = 0;
-    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "https://example.test/apps/", prebuilt: built }], store: createMemoryAppStore(), createWorker() { launches++; return realWorker(); },
+    const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
+    let launches = 0; let destroys = 0;
+    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "https://example.test/apps/", prebuilt: built }], store, createWorker() {
+      launches++;
+      const worker = realWorker();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return {
+        postMessage(message: unknown, transfer?: Transferable[]) {
+          const data = message as { type: string; name?: string; args?: number[] };
+          // 旧 500ms 制限で通常起動が落ちる全体実行時の条件を、負荷に頼らず再現する。
+          if (data.type === "init") timer = setTimeout(() => worker.postMessage(message, transfer), 700);
+          else {
+            if (data.type === "call" && data.name === "__bina_lifecycle" && data.args?.[0] === State.Destroy) destroys++;
+            worker.postMessage(message, transfer);
+          }
+        },
+        addEventListener: worker.addEventListener.bind(worker),
+        terminate() { clearTimeout(timer); worker.terminate(); },
+      };
+    },
       // CI の遅い機械でも、ふつうの呼び出しが打ち切られないだけの余裕を持たせる
-      callTimeout: phase === "destroy" ? 2500 : 500, destroyTimeout: phase === "destroy-regie" ? 2500 : 500, onError: e => errors.push(e) });
+      // callTimeout は module Worker の起動にも効くため、通常は製品の既定値と同じ 5 秒を確保する。
+      // destroy は Process の 500ms、destroy-regie は Régie の 5 秒が先に切れる関係を保つ。
+      callTimeout: phase === "destroy" ? 15000 : 5000, destroyTimeout: phase === "destroy-regie" ? 15000 : 500, onError: e => errors.push(e) });
     try {
       // ホームが描かれて Resume まで進んでから開く
       await waitFor(() => !!element.querySelector(".bina-shell-app:not([hidden])") && logOf(element) === "create:0;start:1;resume;");
       const homeHost = activeHost(element); click(element, "open");
       if (phase !== "init") {
         await waitFor(() => activeHost(element) !== homeHost && logOf(element) === "create:0;start:1;resume;");
-        await sleep(10);
+        // 描画は call の完了より先に届くので、Resume の保存と後続のマウント処理も待つ。
+        await waitForAsync(async () => {
+          const last = await store.system.getLast("https://example.test/apps/#test");
+          return last?.state === State.Resume && last.done;
+        });
+        await sleep(0);
         if (phase === "call") click(element, "click");
         else operate(element, "テスト", "閉じる");
       }
       await waitFor(() => activeHost(element) === homeHost && !!logOf(element)?.endsWith("resume;") && (phase.startsWith("destroy") || errors.length === 1));
       assertEquals(launches, 2);
+      assertEquals(destroys, phase.startsWith("destroy") ? 1 : 0);
       if (phase.startsWith("destroy")) {
         assertEquals(errors, []); assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, true);
       } else {

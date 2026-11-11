@@ -26,3 +26,9 @@ Element は textContent・className、appendChild・remove・addEventListener �
 ルートの deno task check で Deno と asc の両方の型検査をします。仕様は [Réplique](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/replique.md) を見てください。
 
 App は 6 つの状態の通知を必要な分だけ上書きします。launch は一回だけ呼びます。this.page は今のページの識別子、this.finish() は自分を閉じる呼び出しです。
+
+機能ごとのパッケージは `packages/replique/<機能>` にあり、`jsr:@binette/replique-<機能>@^0.1` で参照します。集約入口の公開名も維持します。CLI の `--replique` には `packages/replique` を渡します。
+
+旧 `jsr:@binette/replique/<機能>` も全 13 機能の互換入口として維持し、機能パッケージから再 export します。Régie は旧入口を提供中の同じ実体へ解決するため、新入口と混在しても状態は共有します。
+
+`jsr:@binette/replique-ui` など、機能指定子の版を省略することもできます。Régie は提供中の版へ解決し、版付きの指定子や旧入口と同じクラス・状態を使います。

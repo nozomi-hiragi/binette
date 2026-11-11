@@ -1,6 +1,7 @@
 import decorParts from "@binette/decor/parts" with { type: "text" };
 import decorAs from "@binette/decor/as" with { type: "text" };
 import { parseAppManifest, type AppManifest } from "@binette/core";
+import { repliqueVersions, resolveSdkSpecifier, sourceImports } from "./sdk.ts";
 import { appPath, entryPaths } from "./paths.ts";
 
 /** asc の標準出力・標準エラーの受け皿 */
@@ -77,8 +78,42 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
   const manifest = parseAppManifest(await read("app.json"));
   const { as: entry, html: htmlPath, css: cssPath } = entryPaths(manifest.entry);
   const [html, source, css] = await Promise.all([htmlPath === undefined ? Promise.resolve("") : read(htmlPath), read(entry), cssPath === undefined ? Promise.resolve(undefined) : read(cssPath)]);
-  const asc = options.compiler ?? await loadCompiler();
   const libraries: Record<string, string> = { "jsr:@binette/decor/as": decorAs, "jsr:@binette/decor/parts": decorParts, ...options.libraries };
+  const versions = repliqueVersions(libraries);
+  const sources = new Map<string, string | null>();
+  const visited = new Set<string>();
+  const readSource = async (path: string): Promise<string | null> => {
+    if (!sources.has(path)) {
+      try { sources.set(path, await read(path) ?? null); } catch { sources.set(path, null); }
+    }
+    return sources.get(path)!;
+  };
+  // asc を呼ぶ前に依存するソースをたどる。ハッシュ計算用の read には元のソースだけを渡す。
+  const prepare = async (key: string, contents: string, library: boolean): Promise<void> => {
+    if (visited.has(key)) return;
+    visited.add(key);
+    const imports = sourceImports(contents);
+    let rewritten = "";
+    let offset = 0;
+    for (const imported of imports) {
+      const specifier = resolveSdkSpecifier(imported.specifier, versions);
+      rewritten += contents.slice(offset, imported.start) + (specifier === imported.specifier ? contents.slice(imported.start, imported.end) : JSON.stringify(specifier));
+      offset = imported.end;
+      if (Object.hasOwn(libraries, specifier)) await prepare(specifier, libraries[specifier], true);
+      else if (!library && specifier.startsWith(".")) {
+        const path = appPath(key.slice(0, key.lastIndexOf("/") + 1) + specifier);
+        if (path === null) continue;
+        for (const candidate of path.endsWith(".ts") ? [path] : [`${path}.ts`, `${path}/index.ts`]) {
+          const importedSource = await readSource(candidate);
+          if (importedSource !== null) { await prepare(candidate, importedSource, false); break; }
+        }
+      }
+    }
+    rewritten += contents.slice(offset);
+    if (library) libraries[key] = rewritten; else sources.set(key, rewritten);
+  };
+  await prepare(entry, source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value, __bina_cadre_sync, __bina_pigeon, __bina_share, __bina_schedule } from "jsr:@binette/replique";\n', false);
+  const asc = options.compiler ?? await loadCompiler();
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();
   let wasm: Uint8Array | undefined;
@@ -89,10 +124,9 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
       if (LIBRARY_PREFIXES.some(prefix => name.startsWith(prefix))) return findLibrary(libraries, name);
       const path = appPath(name);
       if (path === null) return null;
-      if (path === entry) return source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value, __bina_cadre_sync, __bina_pigeon, __bina_share, __bina_schedule } from "jsr:@binette/replique";\n';
       if (LIBRARY_PREFIXES.some(prefix => path.startsWith(prefix))) return findLibrary(libraries, path);
       if (!path.endsWith(".ts")) return null;
-      try { return await read(path) ?? null; } catch { return null; }
+      return await readSource(path);
     },
     writeFile: (name, contents) => { if (name === "main.wasm" && typeof contents !== "string") wasm = contents; },
     listFiles: () => [],

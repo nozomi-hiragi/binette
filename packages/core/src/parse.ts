@@ -4,9 +4,9 @@ import type { Binette } from "./types.ts";
 
 /** ビネットの形式が正しくないときのエラー */
 export class BinetteError extends Error {
-  readonly code: "invalid_format" | "unsupported_abi";
+  readonly code: "invalid_format" | "unsupported_abi" | "unsupported_sdk";
 
-  constructor(code: "invalid_format" | "unsupported_abi", message: string) {
+  constructor(code: "invalid_format" | "unsupported_abi" | "unsupported_sdk", message: string) {
     super(message);
     this.code = code;
     this.name = "BinetteError";

@@ -6,7 +6,7 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 
 ## 機能ごとの構成（決定）
 
-Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` に対応する単位で、`packages/replique/src/<機能名>.ts` に分けます。`index.ts` は既存の公開名を再 export する入口です。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
+Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` に対応する単位で、`packages/replique/<機能名>/src/index.ts` の独立した JSR パッケージ `@binette/replique-<機能名>` に分けます。各パッケージは `deno.json`、`README.md`、`LICENSE` を持ち、初期版は `0.1.0` です。集約パッケージ `@binette/replique` の `src/index.ts` は既存の公開名を再 export する入口です。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
 
 | 機能名 | 内容 |
 | --- | --- |
@@ -18,13 +18,19 @@ Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` �
 | `scheduler`・`schedule` | 予定の管理、自分の予定 |
 | `cadre`・`fs` | Cadre の操作、ファイル API の予約 |
 
-機能間の参照には `jsr:@binette/replique/<機能名>` を使います。すべての機能をパッケージの exports に載せ、既存の `jsr:@binette/replique` と `jsr:@binette/replique/ui` も引き続き使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。ホスト ABI の版は機能ごとに管理します。辞書と権限・役割の判定は維持します。
+機能間とアプリからは `jsr:@binette/replique-<機能名>@^0.1` で参照できます。各機能パッケージの exports は `./src/index.ts` だけです。集約入口 `jsr:@binette/replique` も引き続き使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。ホスト ABI の版は機能ごとに管理します。辞書と権限・役割の判定は維持します。
 
-`app.ts` は Décor の `View` だけを import し、Réplique のほかの機能には依存しません。`ui.ts` がトップレベルで描画関数を `app.ts` の `setRebuild` に登録し、ライフサイクルからの `rebuild` はその関数参照を呼びます。未登録なら何もしません。クロージャを使わず、機能間の import に循環を作らない構造です。集約入口の `index.ts` だけを import するアプリでも描画関数が登録されます。
+旧指定子 `jsr:@binette/replique/<機能名>` も全 13 機能の互換入口として維持します。Régie は版指定のない旧入口を提供中の機能パッケージの完全な版へ解決し、新しい指定子・集約入口と同じクラスと状態を使います。未知の機能や不正なサブパスは `unsupported_sdk` です。JSR の集約パッケージにも各旧サブパスを exports として残し、`src/<機能名>.ts` から新パッケージを再 export します。新規コードでは依存する範囲が明確な版付き指定子を推奨します。Designer は原文の import を保持し、integrity `/` の `sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=` を維持します。ハッシュの対象と計算方法は変更しません。
 
-OS は `/system/libraries/replique/` に `index.ts` と各機能の `.ts`、機能名の JSON 配列 `index.json` を置きます。配列に `index` 自体は含めません。すべてを配布目録のハッシュ対象にし、ブラウザのビルドは検証済みの目録と各ファイルを読みます。旧 `/system/libraries/replique.ts` は配布しません。
+`app/src/index.ts` は Décor の `View` だけを import し、Réplique のほかの機能には依存しません。`ui/src/index.ts` がトップレベルで描画関数を `app/src/index.ts` の `setRebuild` に登録し、ライフサイクルからの `rebuild` はその関数参照を呼びます。未登録なら何もしません。クロージャを使わず、機能間の import に循環を作らない構造です。集約入口の `index.ts` だけを import するアプリでも描画関数が登録されます。
 
-CLI の `--replique` には `packages/replique/src` のようにソースフォルダを渡します。直下のすべての `.ts` を読み、`index.ts` を `jsr:@binette/replique`、ほかを `jsr:@binette/replique/<機能名>` としてビルドへ渡します。単一ファイルの指定はエラーです。
+OS は `/system/libraries/replique/` に `index.ts` と各機能の `.ts`、機能名から完全なパッケージ版への JSON 辞書 `index.json`（例: `{"app":"0.1.0","ui":"0.1.0"}`。実際は全 13 機能）を置きます。辞書に `index` 自体は含めません。すべてを配布目録のハッシュ対象にし、ブラウザのビルドは検証済みの目録と各ファイルを読みます。旧 `/system/libraries/replique.ts` は配布しません。
+
+CLI の `--replique` には `packages/replique` のパッケージルートを渡します。集約入口と各機能の `deno.json`・`src/index.ts` を読み、集約入口を `jsr:@binette/replique`、機能を `jsr:@binette/replique-<機能名>@<完全な版>` としてビルドへ渡します。旧ソースフォルダや単一ファイル、パッケージの欠損・設定不正は、指定すべきルートを示すエラーです。
+
+ビルドは静的 import と再 export、および相対 import の依存先をコンパイル前に調べます。`jsr:@binette/replique-ui` のように版を省略した機能指定子も受け入れ、その機能の提供中の完全な版へ解決します。初期版に固定せず、新旧・版付きの指定子とクラスや状態を共有します。未知の機能は版なしでも `unsupported_sdk` です。要求版には完全一致の `0.1.0`、`^0.1`・`^0.1.0`、`~0.1`・`~0.1.0` などを使えます。`^` は最初の 0 でない要素、`~` は minor の範囲で互換な版を認めます（major だけの範囲指定も使用可）。`^0.1` と `~0.1` は `0.1.0` 以上 `0.2.0` 未満です。完全一致では 3 要素が必要です。ワイルドカード・比較演算子・範囲の結合・事前版・ビルドメタデータは非対応です。要求範囲内の提供版を同じ指定子にそろえ、集約入口と混在してもクラスと状態は共有します。
+
+範囲外なら要求版と提供版、未知の機能なら機能名、形式が不正なら指定子と使用可能な形式を表示し、`BinetteError` の `unsupported_sdk` でコンパイル前に拒みます。ブラウザのビルド Worker を越えてもコードを保ちます。SDK の解決はソースを読むための検査であり、WASM の ABI 検査とは別です。各機能のパッケージ版は ABI の版と照合します（0.x は `0.minor`、1 以降は `major`）。
 
 ## 画面を操作する方針（決定 2026-10-27）
 
@@ -38,7 +44,7 @@ CLI の `--replique` には `packages/replique/src` のようにソースフォ�
 
 ## 宣言的 UI（案）
 
-`App.build(): View | null` と `jsr:@binette/replique/ui` の部品で画面を作れます。`filePick(label, handler)` は端末のファイル選択画面を開き、選択した名前と Base64 の内容を JSON 文字列で届けます。詳しくは [宣言的 UI](ui.md) を参照してください。既定の `build()` は `null` です。
+`App.build(): View | null` と `jsr:@binette/replique-ui@^0.1` の部品で画面を作れます。`filePick(label, handler)` は端末のファイル選択画面を開き、選択した名前と Base64 の内容を JSON 文字列で届けます。詳しくは [宣言的 UI](ui.md) を参照してください。既定の `build()` は `null` です。
 
 ## 使い方（実装済み）
 
@@ -128,7 +134,7 @@ Element の中身は i32 の handle です。id とリスナーは Map で保持
 
 ### WASM import（決定・実装済み）
 
-module 名は 0.x では `binette:<機能名>@0.<minor>`、1 以降では `binette:<機能名>@<major>`、関数名は機能名を除いた名前です。例は `binette:dom@0.1` / `text` です。文字列は AS のポインタ、番号は i32 です。`api.why`・`api.sub` は `app.ts` の機能なので `binette:app@0.1` / `why`・`sub` になります。以下の表の `dom.text` などは説明用の機能名＋関数名で、WASM の関数名に `dom.` は含めません。
+module 名は 0.x では `binette:<機能名>@0.<minor>`、1 以降では `binette:<機能名>@<major>`、関数名は機能名を除いた名前です。例は `binette:dom@0.1` / `text` です。文字列は AS のポインタ、番号は i32 です。`api.why`・`api.sub` は `app/src/index.ts` の機能なので `binette:app@0.1` / `why`・`sub` になります。以下の表の `dom.text` などは説明用の機能名＋関数名で、WASM の関数名に `dom.` は含めません。
 
 ABI の版は JSR パッケージや OS の版と独立です。既存の呼び出しを壊す変更で版を変え、追加のみでは変更しません。OS は旧版と新版の実装を別の module として並存させられます。module 名が完全に一致するものだけを受け入れ、別の minor 版へ自動的に読み替えません。現在の提供 module と関数数は次のとおりです。
 
@@ -151,7 +157,7 @@ ABI の版は JSR パッケージや OS の版と独立です。既存の呼び�
 
 各 SDK 機能は `ABI_VERSION = "0.1"` を一箇所で宣言します。asc の `@external` は定数参照や連結式を受け取らず文字列リテラルを要求するため、各宣言には完全な module 名を書き、宣言した版との一致をテストで検査します。Régie の `src/abi.ts` の提供一覧は Worker の import object の型と検査で共有し、SDK の全外部宣言と関数名・module 名の一致、および実際の WASM のリンクをテストします。
 
-起動時は WASM をコンパイルして `WebAssembly.Module.imports` を読み、instantiate と `_start` より前に検査します。未対応 module は `この OS では動きません（storage 0.9）` のように機能と版を表示して拒みます。複数なら表示名で並べ替え、`この OS では動きません（storage 0.9、ui 0.2）` とします。形式外の module 名はそのまま表示し、旧 `binette` なら `この OS では動きません（binette）` です。提供 module 内の未知関数や関数以外の import は `この OS では動きません（storage 0.1 の read2）` のように名前も表示します。未対応 ABI は `BinetteError` の専用コード `unsupported_abi` で識別します。起動では Worker の `failed` メッセージにコードを載せ、`launchApp` が `BinetteError` を復元して、既存の起動失敗通知を通じて Scene のエラー表示へ届けます。起動時も余分な接頭辞は付けず、この文言をそのまま表示します。インストールの reject と報告でも同じコードと文言を保ちます。提供リストからのインストール・更新、起動時に登録するソース／ビルド済みアプリ、`buildStoredApp` も保存前に同じ検査を行います。検査は import の対応だけを判断し、呼び出し時の権限・役割判定と OS call の実装は変えません。
+起動時は WASM をコンパイルして `WebAssembly.Module.imports` を読み、instantiate と `_start` より前に検査します。未対応 module は `この OS では動きません（storage 0.9）。アプリの管理から入れ直すと直ります` のように機能と版を表示して拒みます。複数なら表示名で並べ替え、`この OS では動きません（storage 0.9、ui 0.2）。アプリの管理から入れ直すと直ります` とします。形式外の module 名はそのまま表示し、旧 `binette` なら `この OS では動きません（binette）。アプリの管理から入れ直すと直ります` です。提供 module 内の未知関数や関数以外の import は `この OS では動きません（storage 0.1 の read2）。アプリの管理から入れ直すと直ります` のように名前も表示します。未対応 ABI は `BinetteError` の専用コード `unsupported_abi` で識別します。起動では Worker の `failed` メッセージにコードを載せ、`launchApp` が `BinetteError` を復元して、既存の起動失敗通知を通じて Scene のエラー表示へ届けます。起動時も余分な接頭辞は付けず、この文言をそのまま表示します。インストールの reject と報告でも同じコードと文言を保ちます。提供リストからのインストール・更新、起動時に登録するソース／ビルド済みアプリ、`buildStoredApp` も保存前に同じ検査を行います。検査は import の対応だけを判断し、呼び出し時の権限・役割判定と OS call の実装は変えません。
 
 旧 `binette` module は非対応です。保存済みの旧 WASM を自動で書き換えたり、ABI の変更だけで自動再ビルドしたりはしません。復旧は [ビルドと旧アプリの復旧](regie/build.md#旧-abi-のアプリの復旧) を参照してください。
 

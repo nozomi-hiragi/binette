@@ -105,7 +105,7 @@ const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION,
 assertEquals(binette.redirect, "/home");
 assertThrows(() => parseBinette("{"), BinetteError);
 assertThrows(() => parseAppManifest("{"), BinetteError);
-assertEquals(new BinetteError("unsupported_abi", "この OS では動きません（storage 0.9）").code, "unsupported_abi");
+assertEquals(new BinetteError("unsupported_abi", "この OS では動きません（storage 0.9）。アプリの管理から入れ直すと直ります").code, "unsupported_abi");
 
 // 公開物のファイルだけで、AS をビルドして Worker 相当（MessageChannel）で動かす
 const files: Record<string, string> = {
@@ -113,18 +113,26 @@ const files: Record<string, string> = {
   "src/index.html": '<p id="count">0</p>',
   "src/main.ts": 'import { Api, App, Last, Why, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last, api: Api): void { assert(api.why("unknown") == Why.NotAssigned); document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
 };
-const libraries = await readRepliqueLibraries(new URL("../packages/replique/src/", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../packages/replique/", import.meta.url));
 const decorAs = await Deno.readTextFile(new URL("../packages/decor/src/as.ts", import.meta.url));
 const built = await buildApp(async (path) => files[path]!, { libraries: { ...libraries, "jsr:@binette/decor/as": decorAs } });
 assertEquals(built.manifest.id, "example-counter");
 // AS の新しい入口と Réplique の互換入口を、公開物だけで解決する。
 const uiFiles: Record<string, string> = {
   ...files,
-  "src/main.ts": 'import { App, launch } from "jsr:@binette/replique"; import { View, column } from "jsr:@binette/decor/as"; import { text } from "jsr:@binette/replique/ui"; class Ui extends App { build(): View { return column([text("公開物")]); } } launch(new Ui());',
+  "src/main.ts": 'import { App, launch } from "jsr:@binette/replique"; import { View, column } from "jsr:@binette/decor/as"; import { text } from "jsr:@binette/replique-ui@^0.1"; class Ui extends App { build(): View { return column([text("公開物")]); } } launch(new Ui());',
 };
 await buildApp(async (path) => uiFiles[path]!, {
   libraries: { ...libraries, "jsr:@binette/decor/as": decorAs },
 });
+// 各機能の公開入口を exact・^・~ で読み、配布物の設定とソースだけで解決する。
+const featureSpecifiers = Object.keys(libraries).filter(key => key.startsWith("jsr:@binette/replique-"));
+assertEquals(featureSpecifiers.length, 13);
+for (const range of ["0.1.0", "^0.1", "~0.1.0", "legacy", "unversioned"]) {
+  const imports = featureSpecifiers.map((key, i) => 'import { ABI_VERSION as version' + i + ' } from "' + (range === "legacy" ? "jsr:@binette/replique/" + key.slice("jsr:@binette/replique-".length, key.lastIndexOf("@")) : range === "unversioned" ? key.slice(0, key.lastIndexOf("@")) : key.slice(0, key.lastIndexOf("@") + 1) + range) + '";').join("\\n");
+  const code = imports + '\\nexport function versions(): string { return ' + featureSpecifiers.map((_, i) => 'version' + i).join(' + "," + ') + '; }';
+  await buildApp(async path => path === "src/main.ts" ? code : files[path]!, { libraries });
+}
 const prebuilt: PrebuiltApp = parsePrebuiltApp(stringifyPrebuiltApp(built));
 assertEquals(prebuilt, built);
 const buildOptions: BuildOptions = {};

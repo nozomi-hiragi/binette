@@ -70,13 +70,13 @@ function parseAppManifest(text: string, options?: { strictId?: boolean }): AppMa
 
 ```ts
 class BinetteError extends Error {
-  readonly code: "invalid_format" | "unsupported_abi";
-  constructor(code: "invalid_format" | "unsupported_abi", message: string);
+  readonly code: "invalid_format" | "unsupported_abi" | "unsupported_sdk";
+  constructor(code: "invalid_format" | "unsupported_abi" | "unsupported_sdk", message: string);
   // name は "BinetteError"
 }
 ```
 
-- 形式の誤りはすべて `code: "invalid_format"` です。未対応の ABI module・関数は `code: "unsupported_abi"` です。`message` は日本語で、利用者に見せてよい文です
+- 形式の誤りはすべて `code: "invalid_format"` です。未対応の ABI module・関数は `code: "unsupported_abi"` です。ビルド時の SDK の版範囲外・未知の機能・指定形式の誤りは `code: "unsupported_sdk"` です。`message` は日本語で、利用者に見せてよい文です
 - `app.json` と `.bina` の両方で使います
 
 ## ライフサイクルの番号（案）

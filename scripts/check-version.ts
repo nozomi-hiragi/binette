@@ -9,6 +9,19 @@ export const PUBLISHED: Record<string, string> = {
   "packages/scene": "@binette/scene",
   "packages/coulisses": "@binette/coulisses",
   "packages/replique": "@binette/replique",
+  "packages/replique/app": "@binette/replique-app",
+  "packages/replique/dom": "@binette/replique-dom",
+  "packages/replique/ui": "@binette/replique-ui",
+  "packages/replique/storage": "@binette/replique-storage",
+  "packages/replique/pigeon": "@binette/replique-pigeon",
+  "packages/replique/shares": "@binette/replique-shares",
+  "packages/replique/os": "@binette/replique-os",
+  "packages/replique/apps": "@binette/replique-apps",
+  "packages/replique/manager": "@binette/replique-manager",
+  "packages/replique/scheduler": "@binette/replique-scheduler",
+  "packages/replique/schedule": "@binette/replique-schedule",
+  "packages/replique/cadre": "@binette/replique-cadre",
+  "packages/replique/fs": "@binette/replique-fs",
 };
 export const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
@@ -26,6 +39,7 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
   const errors: string[] = [];
   const names = new Set(Object.values(PUBLISHED));
   const versions = new Set<string>();
+  const packageVersions = new Map<string, string>();
 
   for (const [dir, name] of Object.entries(PUBLISHED)) {
     const file = "deno.json";
@@ -37,7 +51,11 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
     const pkg = readJson(path);
     if (pkg.name !== name) errors.push(`${dir}/${file}: expected name ${name}`);
     if (typeof pkg.version !== "string" || !VERSION.test(pkg.version)) errors.push(`${dir}/${file}: expected a plain X.Y.Z version`);
-    else versions.add(pkg.version);
+    else {
+      packageVersions.set(name, pkg.version);
+      // 機能パッケージは個別の SDK・ABI の版を持つ。リリースタグは集約を含む既存パッケージに照合する。
+      if (!name.startsWith("@binette/replique-")) versions.add(pkg.version);
+    }
   }
 
   const version = versions.size === 1 ? [...versions][0]! : null;
@@ -54,8 +72,8 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
     const pkg = readJson(path);
     const imports = (pkg.imports ?? {}) as Record<string, unknown>;
     for (const [alias, target] of Object.entries(imports)) {
-      if (names.has(alias) && target !== `jsr:${alias}@${version}`) {
-        errors.push(`${dir}/deno.json: import ${alias} is ${String(target)}, expected jsr:${alias}@${version}`);
+      if (names.has(alias) && target !== `jsr:${alias}@${packageVersions.get(alias)}`) {
+        errors.push(`${dir}/deno.json: import ${alias} is ${String(target)}, expected jsr:${alias}@${packageVersions.get(alias)}`);
       }
     }
   }

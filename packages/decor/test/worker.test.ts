@@ -7,7 +7,7 @@ import { createUiDom } from "../src/index.ts";
 import { type RegieWorker, startProcess } from "../../regie/src/index.ts";
 import { buildApp } from "../../regie/src/build.ts";
 
-const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   const deadline = performance.now() + 10000;
@@ -20,7 +20,7 @@ function realWorker(): RegieWorker {
 
 Deno.test("AS の見た目の修飾は Worker を経てクラスと属性になり、状態の変化で付け外しされる", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, button, column, input, row, text } from "jsr:@binette/replique/ui";
+import { View, button, column, input, row, text } from "jsr:@binette/replique-ui@^0.1";
 let on = false;
 function flip(): void { on = !on; }
 function typed(_s: string): void {}
@@ -84,7 +84,7 @@ launch(new Demo());`;
 
 Deno.test("AS のよくある部品は本物の Worker を経て描かれ、値を返す操作がアプリに届いて描き直される", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, row, text, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, spacer, separator, stack, image, listTile, chip, badge } from "jsr:@binette/replique/ui";
+import { View, column, row, text, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, spacer, separator, stack, image, listTile, chip, badge } from "jsr:@binette/replique-ui@^0.1";
 let on = false;
 let size: i32 = 0;
 let volume: f64 = 2;
@@ -176,7 +176,7 @@ Deno.test("AS の吹き出しとメニュー項目は Worker を往復し、選�
   const files: Record<string, string> = {
     "app.json": JSON.stringify({ id: "menu", name: "メニュー", entry: { as: "main.ts" } }),
     "main.ts": `import { App, launch } from "jsr:@binette/replique";
-import { View, button, column, menuItem, text } from "jsr:@binette/replique/ui";
+import { View, button, column, menuItem, text } from "jsr:@binette/replique-ui@^0.1";
 let value: i32 = 0;
 function choose(i: i32): void { value = i; }
 class Demo extends App {
@@ -211,7 +211,7 @@ launch(new Demo());`,
 
 Deno.test("AS の filePick は選択されたファイルの文字列を Worker 経由で受け取る", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, filePick, text } from "jsr:@binette/replique/ui";
+import { View, column, filePick, text } from "jsr:@binette/replique-ui@^0.1";
 let result = "";
 function selected(value: string): void { result = value; }
 class Demo extends App { build(): View { return column([filePick("取り込む", selected), text(result)]); } }

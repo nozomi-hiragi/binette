@@ -162,7 +162,7 @@ Deno.test("CLI の / とフォルダキーは install の取得ファイルと�
     const run = async (keys: string[] = []) => {
       const output = await new Deno.Command(Deno.execPath(), {
         args: ["run", "-A", new URL("../src/cli.ts", import.meta.url).pathname, "integrity", dir, ...keys,
-          "--replique", new URL("../../replique/src/", import.meta.url).pathname], stdout: "piped", stderr: "piped",
+          "--replique", new URL("../../replique/", import.meta.url).pathname], stdout: "piped", stderr: "piped",
       }).output();
       assert(output.success, new TextDecoder().decode(output.stderr));
       return JSON.parse(new TextDecoder().decode(output.stdout)) as Record<string, string>;
@@ -579,7 +579,7 @@ Deno.test("未対応 ABI のインストールは保存前に失敗し、既存�
     for (const [module, label] of [["binette", "binette"], ["binette:dom@0.2", "dom 0.2"], ["binette:unknown@0.1", "unknown 0.1"]]) {
       f.responses.set(sourceUrl + "src/main.ts", `@external("${module}", "text") declare function host(): void; export function call(): void { host(); }`);
       const error = await assertRejects(() => f.lists.install(listUrl, "memo"), BinetteError);
-      assertEquals(error.message, `この OS では動きません（${label}）`);
+      assertEquals(error.message, `この OS では動きません（${label}）。アプリの管理から入れ直すと直ります`);
       assertEquals(error.code, "unsupported_abi");
       assertEquals(await f.store.get(previous.key), previous);
       assertEquals((await f.store.data.read(previous.key)).get("記録"), "残す");

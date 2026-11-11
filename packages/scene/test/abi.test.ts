@@ -7,13 +7,13 @@ import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { createShellUi } from "../src/index.ts";
 
 for (const [imports, expected] of [
-  [[["binette", "dom.text"]], "この OS では動きません（binette）"],
-  [[["binette:storage@0.9", "read"]], "この OS では動きません（storage 0.9）"],
-  [[["binette:storage@0.9", "read"], ["binette:ui@0.2", "render"]], "この OS では動きません（storage 0.9、ui 0.2）"],
-  [[["binette:storage@0.1", "read2"]], "この OS では動きません（storage 0.1 の read2）"],
+  [[["binette", "dom.text"]], "この OS では動きません（binette）。アプリの管理から入れ直すと直ります"],
+  [[["binette:storage@0.9", "read"]], "この OS では動きません（storage 0.9）。アプリの管理から入れ直すと直ります"],
+  [[["binette:storage@0.9", "read"], ["binette:ui@0.2", "render"]], "この OS では動きません（storage 0.9、ui 0.2）。アプリの管理から入れ直すと直ります"],
+  [[["binette:storage@0.1", "read2"]], "この OS では動きません（storage 0.1 の read2）。アプリの管理から入れ直すと直ります"],
 ] as const) {
   Deno.test(`未対応 ABI の終了画面の文言が完全一致する: ${expected}`, async () => {
-    const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
+    const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
     const build = (id: string, source: string, home = false) => buildApp(path => Promise.resolve(path === "app.json"
       ? JSON.stringify({ id, name: id, entry: { as: "main.ts" }, ...(home ? { roles: ["home"] } : {}) }) : source), { libraries });
     const home = await build("home", 'import { App, launch } from "jsr:@binette/replique"; launch(new App());', true);

@@ -113,7 +113,7 @@ Deno.test("asc と Réplique の欠損・改ざん・目録外は Worker の生�
 });
 
 Deno.test("Invalid SDK feature inventories fail before creating a Worker", async () => {
-  for (const inventory of [{}, ["../app"], ["app.ts"], ["index"], ["app", "app"], [1]]) {
+  for (const inventory of [{}, [], ["app"], { app: "0.1.0" }, { app: "^0.1" }, { "../app": "0.1.0" }, { index: "0.1.0" }, { app: 1 }, null]) {
     let created = false;
     await assertRejects(() => buildAppInWorker(path => Promise.resolve(sources[path]!), {
       distribution: { readSystem: path => Promise.resolve(encoder.encode(path.endsWith("index.json") ? JSON.stringify(inventory) : "unused")) },
@@ -216,11 +216,39 @@ Deno.test("保存ソースの再ビルドも未対応 ABI を保存せず、対�
   const legacy = "binette";
   await owner.write("/source/src/main.ts", encoder.encode(`@external("${legacy}", "dom.text") declare function text(handle: i32, value: string): void; export function hello(): void { text(1, "古い"); }`));
   const error = await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, sourceUrl, { workerUrl }), BinetteError);
-  assertEquals(error.message, "この OS では動きません（binette）");
+  assertEquals(error.message, "この OS では動きません（binette）。アプリの管理から入れ直すと直ります");
   assertEquals(error.code, "unsupported_abi");
   assertEquals(await store.get(previous.key), previous);
   await owner.write("/source/src/main.ts", encoder.encode(source));
   const restored = await buildStoredApp(tree, distribution, manifest.id, sourceUrl, { workerUrl });
   assert(WebAssembly.Module.imports(await WebAssembly.compile(new Uint8Array(restored.wasm))).some(entry => entry.module === "binette:dom@0.1"));
   assertEquals((await store.data.read(previous.key)).get("記録"), "残す");
+});
+
+Deno.test("ブラウザ Worker でも exact・^・~ を解決し、unsupported_sdk を保存せず返す", async () => {
+  const { tree, distribution } = await fixture();
+  for (const range of ["0.1.0", "^0.1", "~0.1.0"]) {
+    const code = `import { document } from "jsr:@binette/replique-dom@${range}"; export function hello(): void { document.getElementById("value").textContent = "版範囲"; }`;
+    const built = await buildAppInWorker(path => Promise.resolve(path === "src/main.ts" ? code : sources[path]), { distribution, workerUrl });
+    assert(WebAssembly.validate(new Uint8Array(built.wasm)));
+  }
+  for (const specifier of ["jsr:@binette/replique-ui@^0.2", "jsr:@binette/replique-unknown@^0.1", "jsr:@binette/replique-ui@*"]) {
+    await tree.write("/apps/source-app/src/main.ts", encoder.encode(`export * from "${specifier}";`));
+    const error = await assertRejects(() => buildStoredApp(tree, distribution, manifest.id, "https://example.test/local/", { workerUrl }), BinetteError);
+    assertEquals(error.code, "unsupported_sdk");
+    assertEquals((await createAppStore(tree).list()).length, 0);
+    assertEquals(await (await owned(tree)).read("/build/app.wasm"), undefined);
+  }
+});
+
+Deno.test("ブラウザの検証済み SDK でも版なし・旧指定子・版付きは同じ状態を共有する", async () => {
+  const { distribution } = await fixture();
+  const code = `import { App, launch, application } from "jsr:@binette/replique/app";
+import { App as NewApp, application as newApplication } from "jsr:@binette/replique-app@^0.1";
+import { App as Unversioned, application as current } from "jsr:@binette/replique-app";
+launch(new App());
+export function verify(): void { assert(idof<App>() == idof<NewApp>() && idof<App>() == idof<Unversioned>() && application !== null && application === newApplication && application === current); }`;
+  const built = await buildAppInWorker(path => Promise.resolve(path === "src/main.ts" ? code : sources[path]), { distribution, workerUrl });
+  const app = await launchApp(built.wasm);
+  try { await app.call("verify"); } finally { app.stop(); }
 });

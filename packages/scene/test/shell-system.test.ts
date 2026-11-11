@@ -7,7 +7,7 @@ import { mountShell } from "../src/index.ts";
 import { chooseFromMenu } from "./homebar-helper.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/", root)) };
 const apps = await Promise.all(["cadre"].map(async name => ({
   source: "binette:system",
   prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/${name}/${path}`, root)), { libraries }),

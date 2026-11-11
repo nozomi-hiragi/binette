@@ -8,7 +8,7 @@ import { mountSystem as mountShell, operate, systemView } from "./system-helper.
 import { buildApp } from "@binette/regie/build";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/", root)) };
 // 各画面の既存のライフサイクル試験では、Cadre 内のクラスを単独の入口として使う。
 function screenRead(screen: "home" | "settings", id: string, name: string) {
   return async (path: string): Promise<string> => {

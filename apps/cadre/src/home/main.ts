@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, AppsApi, Last } from "jsr:@binette/replique";
-import { View, appIcon, buttonOf, column, grid, text } from "jsr:@binette/replique/ui";
+import { View, appIcon, buttonOf, column, grid, text } from "jsr:@binette/replique-ui@^0.1";
 
 // 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
 let appsApi: AppsApi | null = null;

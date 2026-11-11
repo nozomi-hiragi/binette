@@ -4,7 +4,7 @@ import type { DomOp } from "@binette/core";
 import { createMemoryAppStore, serveApp, startSystem, type Process, type RegieWorker, type SystemUi } from "../src/index.ts";
 import { buildApp } from "../src/build.ts";
 
-const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
 const filerRoot = new URL("../../../bundled/filer/", import.meta.url);
 const filer = await buildApp(path => Deno.readTextFile(new URL(path, filerRoot)), { libraries });
 const requesterFiles: Record<string, string> = {

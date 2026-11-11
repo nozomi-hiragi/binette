@@ -1,0 +1,18 @@
+{
+  "name": "@binette/replique-scheduler",
+  "version": "0.1.0",
+  "exports": "./src/index.ts",
+  "publish": {
+    "include": [
+      "src",
+      "README.md",
+      "LICENSE"
+    ]
+  },
+  "compilerOptions": {
+    "lib": [],
+    "types": [
+      "npm:assemblyscript@0.28.20/std/assembly/index.d.ts"
+    ]
+  }
+}

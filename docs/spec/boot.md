@@ -49,7 +49,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 | `system/apps/<アプリ>/` | システムアプリ。既定は `cadre/` だけで、ホーム・設定をサブアプリとして含む。`app.json` とビルド済みの `.wasm` |
 | `system/bundled/<アプリ>/` | 同梱アプリ。システムアプリと同じファイル形式（案） |
 | `system/tools/asc.js` | AS のコンパイラ。依存込みの minify した JS で、Worker の中で動かす |
-| `system/libraries/replique/` | ブラウザでのビルドに渡す Réplique の `index.ts`、各機能の `.ts`、機能名の配列 `index.json`（決定） |
+| `system/libraries/replique/` | ブラウザでのビルドに渡す Réplique の `index.ts`、各機能の `.ts`、機能名からパッケージ版への辞書 `index.json`（決定） |
 
 ## ファイルの木（決定 2026-11-01）
 

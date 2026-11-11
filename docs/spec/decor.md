@@ -36,7 +36,7 @@ View は `column(children)`、`row(children)`、`text(value)`、`button(label, h
 
 ### 吹き出しとメニュー（案）
 
-TS と AS のボタンに `.tip("名前")` と `.menu([menuItem("開く", open).arg(i), menuItem("閉じる", close).arg(i)])` を付けられます。`menuItem` のハンドラーと `arg` はボタンと同じです。AS では `jsr:@binette/replique/ui` からも使えます。
+TS と AS のボタンに `.tip("名前")` と `.menu([menuItem("開く", open).arg(i), menuItem("閉じる", close).arg(i)])` を付けられます。`menuItem` のハンドラーと `arg` はボタンと同じです。AS では `jsr:@binette/replique-ui@^0.1` からも使えます。
 
 吹き出しはマウスを載せるかキーボードでフォーカスすると出ます。メニューは右クリック、タッチ・ペンの長押し、メニューキー、Shift+F10 で開きます。矢印キーで項目を巡り、Enter かスペースで選び、Escape・Tab・外側のクリックで閉じます。長押し後のクリックはボタンに届けません。表示と位置決め、操作はメインスレッドの Décor が行います。
 
@@ -97,7 +97,7 @@ column([
 
 ## AS の入口（案）
 
-AS の View と部品は `jsr:@binette/decor/as` に置きます。既存の `jsr:@binette/replique/ui` はそれを再エクスポートする互換の入口で、アプリの import は変えずに使えます。`App.build()` を呼ぶタイミング、イベントのハンドラー番号、入力の版、HTML 方式との切り替えは変えません。Régie のビルドで両方の入口を解決します。
+AS の View と部品は `jsr:@binette/decor/as` に置きます。既存の `jsr:@binette/replique-ui@^0.1` はそれを再エクスポートする互換の入口で、アプリの import は変えずに使えます。`App.build()` を呼ぶタイミング、イベントのハンドラー番号、入力の版、HTML 方式との切り替えは変えません。Régie のビルドで両方の入口を解決します。
 
 ## 公開（案）
 
