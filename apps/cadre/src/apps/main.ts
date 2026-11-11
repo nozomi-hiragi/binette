@@ -255,7 +255,7 @@ function details(m: AppManagerApi, id: string): View {
     if (roles.length > 0) info.push(column([text("役割").bold(), text(roles.join("、"))]).gap(6).key("detail-roles"));
     info.push(column([text("改ざんの検出").bold(), text(m.integrity(id) ? "ハッシュあり" : "ハッシュなし").tone(m.integrity(id) ? "" : "muted")]).gap(6).key("detail-integrity"));
   } else if (failure.length > 0) {
-    info.push(text("詳細を取れませんでした: " + failure).small().tone("danger").key("detail-error"));
+    if (compatible) info.push(text("詳細を取れませんでした: " + failure).small().tone("danger").key("detail-error"));
   } else if (m.list(id).length > 0) {
     info.push(row([spinner(), text("詳細を取っています…").small().tone("muted")]).gap(4).key("detail-loading"));
   }
@@ -306,7 +306,7 @@ function details(m: AppManagerApi, id: string): View {
       button("このアプリを自動更新", toggleApp).toggle(yes(m.autoUpdateApp(id))).key("detail-auto"),
     ]).gap(8).key("detail-auto-row")),
     show(yes(present && listed && m.autoUpdates(id) && !m.autoUpdateApp(id)), text("リストか全体の設定で自動更新しています。").small().tone("muted")),
-    column(info).gap(16).surface("card").key("detail-info"),
+    show(info.length > 0, column(info).gap(16).surface("card").key("detail-info")),
   ]).gap(16).key("apps-detail");
 }
 

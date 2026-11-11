@@ -165,6 +165,7 @@ Deno.test("未対応の提供アプリは入れられず、保存 WASM の ABI �
         const html = `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "テストの提供者", apps: [
           { id: "future", name: "未来のアプリ", source: "https://future.test/", version: "1", requires: { storage: "0.3" } },
           { id: "memo", name: "メモ", source: sourceUrl, version: "1.0.0", requires: {} },
+          { id: "unavailable", name: "取得できないアプリ", source: "https://unavailable.test/", version: "1", requires: {} },
         ] })}</script>`;
         const text = url === listUrl ? html : url.startsWith(sourceUrl) ? sources[url.slice(sourceUrl.length)] : undefined;
         return Promise.resolve(new Response(text ?? "無し", { status: text === undefined ? 404 : 200 }));
@@ -185,10 +186,22 @@ Deno.test("未対応の提供アプリは入れられず、保存 WASM の ABI �
     await waitFor(() => key(element, "detail-install") !== null);
     assertEquals((key(element, "detail-install") as HTMLButtonElement).disabled, true);
     assertEquals(key(element, "detail-compatibility")!.textContent, "この OS では使えません（storage 0.3）");
-    await waitFor(() => key(element, "detail-error") !== null);
+    await waitFor(() => key(element, "detail-info")?.hidden === true);
+    assertEquals(key(element, "detail-error"), null);
     assertEquals(key(element, "detail-permissions"), null);
+    const detailText = key(element, "apps-detail")!.textContent!;
+    assertEquals(detailText.split("この OS では使えません（storage 0.3）").length - 1, 1);
+    assert(!detailText.includes("詳細を取れませんでした"));
     key(element, "detail-install")!.click();
     assert(!requests.some(url => url.startsWith("https://future.test/")));
+    key(element, "detail-back")!.click();
+    await waitFor(() => key(element, "apps-find") !== null);
+    [...key(element, "apps-find")!.querySelectorAll<HTMLButtonElement>("[data-bina-key^=find-app-]")].find(tile => tile.textContent!.includes("取得できないアプリ"))!.click();
+    await waitFor(() => key(element, "detail-error") !== null);
+    assert(key(element, "detail-error")!.textContent!.includes("詳細を取れませんでした:"));
+    assert(key(element, "detail-error")!.textContent!.includes("(404)"));
+    assertEquals(key(element, "detail-info")!.hidden, false);
+    assertEquals(key(element, "detail-compatibility")!.hidden, true);
     key(element, "detail-back")!.click();
     await waitFor(() => key(element, "apps-tabs") !== null);
     [...key(element, "apps-tabs")!.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent!.startsWith("入っている"))!.click();
