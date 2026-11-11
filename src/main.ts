@@ -11,7 +11,8 @@ const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
 // 設定を読む前から、前回の見た目で起動画面を出す
 // サイトのデータを止めているブラウザでは localStorage に触るだけで例外になる
-const storage: Pick<Storage, "getItem" | "setItem"> = (() => { try { return localStorage; } catch { return { getItem: () => null, setItem: () => {} }; } })();
+let storage: Pick<Storage, "getItem" | "setItem"> = { getItem: () => null, setItem: () => {} };
+try { storage = localStorage; } catch { /* 覚えずに続ける */ }
 const remembered = recallAppearance(storage);
 if (remembered) applyAppearance(document.documentElement, remembered);
 const tree = createIndexedDbFileTree();

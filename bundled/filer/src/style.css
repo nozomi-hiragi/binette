@@ -15,6 +15,9 @@
 .bina-ui-filePick { min-height: 34px; padding: 6px 14px; border-color: transparent; border-radius: 9px; background: var(--bina-ui-accent, #3273b9); color: var(--bina-ui-accent-content, #fff); font-size: 14px; font-weight: 500; line-height: 1.3; }
 .bina-ui-filePick:not(:disabled):hover { background: color-mix(in srgb, var(--bina-ui-accent, #3273b9) 86%, #000); }
 [data-bina-key="filer-actions"] > .bina-ui-button { min-height: 34px; padding: 6px 12px; border-radius: 9px; font-size: 14px; }
+/* 名前の入力や確認の行の操作は、折り返さない小さめのボタンにする */
+.bina-ui-row > .bina-ui-button:not(.bina-ui-filePick) { flex: none; min-height: 34px; padding: 6px 14px; border-radius: 9px; font-size: 14px; line-height: 1.3; white-space: nowrap; }
+[data-bina-key="filer-crumb"] > .bina-ui-button { min-width: 34px; padding: 6px 8px; }
 [data-bina-key="filer-title"] { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
 [data-bina-key="filer-places"] > .bina-ui-button { align-self: stretch; justify-content: flex-start; padding: 8px 12px; border-radius: 9px; }
 [data-bina-key="filer-places"] > .bina-ui-button.bina-ui-selected { color: var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9)); font-weight: 600; }
