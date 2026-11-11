@@ -43,6 +43,7 @@ const css = `
 :where(.bina-shell-confirm-reason) { color: var(--bina-shell-muted, #5b6472); }
 :where(.bina-shell-confirm-actions) { display: flex; justify-content: flex-end; gap: var(--bina-shell-gap, 8px); }
 :where(.bina-shell-status) { color: var(--bina-shell-error, #b3261e); margin: var(--bina-shell-padding, 12px); }
+:where(.bina-shell-progress) { color: var(--bina-shell-color, #16181d); }
 `;
 
 export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}): ShellUi {
@@ -77,6 +78,12 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   status.setAttribute("role", "status");
   status.hidden = true;
 
+  const progress = document.createElement("p");
+  progress.className = "bina-shell-status bina-shell-progress";
+  progress.setAttribute("role", "status");
+  progress.textContent = "今の OS 向けに作り直しています";
+  progress.hidden = true;
+
   const appsHost = document.createElement("div");
   appsHost.className = "bina-shell-apps";
   appsHost.hidden = true;
@@ -85,7 +92,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     system?.setInstallState?.(live.installed, live.busy);
   });
   const confirm = mountInstallConfirm(root);
-  root.append(style, cadreHost, fallback, appsHost, status);
+  root.append(style, cadreHost, fallback, appsHost, status, progress);
   element.replaceChildren(root);
 
   let system: BinetteSystem | undefined;
@@ -146,6 +153,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     update(next) {
       if (stopped) return;
       if (next.clearError) status.hidden = true;
+      progress.hidden = !next.rebuilding;
       view = next;
       const front = next.front;
       const useFallback = next.cadreUnavailable === true;

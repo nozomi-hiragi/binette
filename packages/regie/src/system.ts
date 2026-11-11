@@ -62,6 +62,7 @@ export interface SystemView {
   clearError: boolean;
   /** Cadre が落ち続けてフォールバック UI を描くべきか */
   cadreUnavailable?: boolean;
+  rebuilding?: boolean;
 }
 
 /** 起動したシステム */
@@ -159,6 +160,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     return now - homeFailingSince < settings.homeRetryWindow;
   };
   let stopped = false;
+  const rebuildController = new AbortController();
+  const rebuilds = new Map<string, Promise<InstalledApp | undefined>>();
   let changingApps = false;
   type Session = { controller: AbortController; starting?: Promise<Process>; mounted?: Process; view?: { remove(): void }; id: number; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
   let shown = 0;
@@ -275,6 +278,44 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     if (available.has(entry.key)) throw new Error(`アプリの ID が重複しています: ${entry.key}`);
     available.set(entry.key, entry);
   }
+  const readyApp = async (app: InstalledApp): Promise<InstalledApp> => {
+    app = available.get(app.key) ?? app;
+    if (!options.browserBuild) return app;
+    const wasm = app.wasm;
+    try { await validateAppAbi(wasm); return app; }
+    catch (error) {
+      if (!(error instanceof BinetteError) || error.code !== "unsupported_abi") return app;
+      if (app.wasm !== wasm) return await readyApp(app);
+      const browserBuild = options.browserBuild;
+      const key = app.parentKey ?? app.key;
+      let rebuilding = rebuilds.get(key);
+      if (!rebuilding) {
+        const parent = available.get(key)!;
+        rebuilding = (async () => {
+          try {
+            const { rebuildInstalledApp } = await import("./browser-build.ts");
+            const rebuilt = await rebuildInstalledApp(options.store, parent, {
+              libraries: options.libraries, ...browserBuild,
+              signal: AbortSignal.any([rebuildController.signal, ...(browserBuild.signal ? [browserBuild.signal] : [])]),
+            });
+            if (rebuilt && available.get(key) === parent) for (const entry of entries(rebuilt)) {
+              const current = available.get(entry.key);
+              if (current) Object.assign(current, entry);
+            }
+            if (rebuilt) syncManager();
+            return rebuilt;
+          } catch { return undefined; }
+          finally { rebuilds.delete(key); renderBar(); }
+        })();
+        rebuilds.set(key, rebuilding);
+        renderBar();
+      }
+      const rebuilt = await rebuilding;
+      const current = available.get(app.key);
+      if (!rebuilt || !current) throw error;
+      return current;
+    }
+  };
   // 役割の割り当ては 2 段。名乗った（manifest.roles）アプリが候補になり、設定、ブートの既定、入手元が system の順で選ぶ
   const holders = (role: string) => [...available.values()].filter(app => app.manifest.roles?.includes(role));
   const candidates = (role: string) => ASSIGNABLE_ROLES.includes(role) ? holders(role) : [];
@@ -536,6 +577,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     headless.set(app.key, { owner, controller, done });
     let worker: Awaited<ReturnType<typeof launchApp>> | undefined;
     try {
+      app = await readyApp(app);
+      if (stopped || controller.signal.aborted) return;
       const api = apiOf(app);
       const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(owner)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
@@ -741,6 +784,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       apps: [...apps].sort((a, b) => a.manifest.name < b.manifest.name ? -1 : a.manifest.name > b.manifest.name ? 1 : 0).map(app => ({ key: app.key, name: app.manifest.name })),
       clearError,
       cadreUnavailable: cadreUnavailable || !cadre,
+      rebuilding: rebuilds.size > 0,
     });
   }
   function showApps() {
@@ -835,6 +879,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     active = started;
     renderBar(clearStatus);
     try {
+      installed = await readyApp(installed);
+      if (!sessions.has(started) || stopped) return;
+      started.installed = installed;
       const api = apiOf(installed);
       const launches = api.keys.has("os") ? (await options.store.system.listLaunches()).reverse().map(record => ({
         time: record.time, name: available.get(record.app)?.manifest.name ?? record.app,
@@ -975,12 +1022,15 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       renderBar();
       return;
     }
-    const selectedCadre = cadre;
+    let selectedCadre = cadre;
     clearTimeout(cadreRestartTimer);
     if (cadreSession) cutCadre();
     const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedCadre, home: false, finish: false, closing: false, lastShown: ++shown };
     cadreSession = session;
     try {
+      selectedCadre = await readyApp(selectedCadre);
+      if (cadreSession !== session || stopped) return;
+      session.installed = selectedCadre;
       const api = apiOf(selectedCadre);
       const storage = api.keys.has("storage") ? await saving.then(() => options.store.data.read(selectedCadre.parentKey ?? selectedCadre.key)).catch(() => undefined) : undefined;
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
@@ -1204,6 +1254,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     stop() {
       if (stopped) return;
       stopped = true;
+      rebuildController.abort();
       unsubscribeUpdate?.();
       clearTimeout(firstCheck);
       unsubscribeLists();

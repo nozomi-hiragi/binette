@@ -1,4 +1,4 @@
-import { BinetteError } from "@binette/core";
+import { BinetteError, parseAppManifest, verifyIntegrity } from "@binette/core";
 import { parseRepliqueVersions } from "./sdk.ts";
 import { validateAppAbi } from "./abi.ts";
 import type { BuiltApp, BuildOptions } from "./build.ts";
@@ -7,7 +7,7 @@ import type { FileTree } from "./fs.ts";
 import type { RegieWorker } from "./launch.ts";
 import { appPath, iconPath } from "./paths.ts";
 import { encodeAppPathSegment } from "./app-files.ts";
-import { createAppStore, installedAppFiles, appId, type InstalledApp } from "./store.ts";
+import { createAppStore, installedAppFiles, appId, type InstalledApp, type AppStore } from "./store.ts";
 
 /** 検証したコンパイラを独立した Worker で動かす設定。 */
 export interface BrowserBuildOptions extends Pick<BuildOptions, "libraries"> {
@@ -108,6 +108,20 @@ export async function buildStoredApp(
   paths.forEach((path, index) => {
     if (values[index] !== undefined) files.set(path, values[index]);
   });
+  const installed = await buildSourceFiles(files, id, source, { ...options, distribution });
+  if (options.signal?.aborted) throw new Error("ビルドを中止しました。");
+  if (tree.storage) await createAppStore(tree).put(installed, files);
+  else {
+    const output = installedAppFiles(installed);
+    output.set(`${directory}/build/app.wasm`, installed.wasm);
+    output.set(`${directory}/build/index.html`, new TextEncoder().encode(installed.html));
+    await tree.writeFiles(output);
+  }
+  return installed;
+}
+
+async function buildSourceFiles(files: Map<string, Uint8Array>, id: string, source: string, options: BrowserBuildOptions): Promise<InstalledApp> {
+  const key = appId(source, id);
   const read = (name: string): Promise<string> => {
     const path = appPath(name);
     if (!path) throw new Error("アプリのフォルダ内の相対パスにしてください。");
@@ -115,7 +129,7 @@ export async function buildStoredApp(
     if (bytes === undefined) throw new Error(`アプリのファイルがありません: ${name}`);
     return Promise.resolve(decoder.decode(bytes));
   };
-  const built = await buildAppInWorker(read, { ...options, distribution });
+  const built = await buildAppInWorker(read, options);
   await validateAppAbi(built.wasm);
   if (built.manifest.id !== id) throw new Error("app.json の ID と保存先の ID が一致しません。");
   const icon = iconPath(built.manifest.icon);
@@ -129,13 +143,29 @@ export async function buildStoredApp(
     ...(Object.keys(subIcons).length ? { subIcons } : {}),
     icon: icon === undefined ? undefined : await read(icon), installedAt: Date.now(),
   };
+  return installed;
+}
+
+/** Rebuild only an installed owner's saved sources, then atomically replace its output. */
+export async function rebuildInstalledApp(store: AppStore, previous: InstalledApp, options: BrowserBuildOptions): Promise<InstalledApp | undefined> {
+  if (!store.replace) return;
+  const entry = await store.fileStorage.findApp(previous.key);
+  if (!entry) return;
+  const owner = store.fileStorage.forOwner(entry.owner);
+  const paths = await owner.list("/source");
+  if (!paths.includes("/source/app.json")) return;
+  const values = await owner.readFiles(paths);
+  const files = new Map<string, Uint8Array>();
+  paths.forEach((path, index) => {
+    const relative = path.slice("/source/".length);
+    if (appPath(relative) !== relative || values[index] === undefined) throw new Error("保存ソースが正しくありません。");
+    files.set(relative, values[index]);
+  });
+  await verifyIntegrity(previous.sourceIntegrity ?? {}, [...files].map(([path, bytes]) => ({ path, bytes })));
+  const built = await buildSourceFiles(files, previous.manifest.id, previous.source, options);
+  if (JSON.stringify(built.manifest) !== JSON.stringify(parseAppManifest(JSON.stringify(previous.manifest)))) throw new Error("保存ソースとインストール済みの app.json が一致しません。");
+  const installed = { ...previous, ...built, installedAt: previous.installedAt };
   if (options.signal?.aborted) throw new Error("ビルドを中止しました。");
-  if (tree.storage) await createAppStore(tree).put(installed, files);
-  else {
-    const output = installedAppFiles(installed);
-    output.set(`${directory}/build/app.wasm`, built.wasm);
-    output.set(`${directory}/build/index.html`, new TextEncoder().encode(built.html));
-    await tree.writeFiles(output);
-  }
+  if (!await store.replace(previous, installed)) return;
   return installed;
 }

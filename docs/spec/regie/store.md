@@ -53,6 +53,7 @@ interface AppStore {
   list(): Promise<InstalledApp[]>;
   get(key: string): Promise<InstalledApp | undefined>;
   put(app: InstalledApp): Promise<void>;
+  replace?(expected: InstalledApp, app: InstalledApp): Promise<boolean>;
   moveSource(from: string, to: string, lists?: ProviderListRegistration[]): Promise<void>;
 }
 ```
@@ -64,6 +65,7 @@ interface AppStore {
 - `createMemoryAppStore()` はメモリに保存する。再読み込みで消える
 - `createIndexedDbAppStore(options?)` はグローバルの `indexedDB` に保存する。`options.name` で DB 名を指定できる（既定は `binette-apps`）。再読み込み後も使える
 - `createAppStore(tree)` は指定した `FileTree` の保存層を使う。アプリの所有者ごとに `/build/app.wasm`・`/build/record.json` と成果物を置き、同じトランザクションで表を更新する
+- `replace(expected, app)` は起動時の ABI 復旧用の任意の条件付き保存です。現在の記録・WASM が `expected` と同じときだけ、`put` と共通の成果物作成処理で保存し true を返します。比較と書込みは所有領域の `writeFilesIfUnchanged` の同じ排他区間で行い、間に手動の書込み・削除が入った場合は false で何も変えません。消されたアプリを作り直す操作はせず、ソース・データ・権限・役割は保持します。対応しない保存実装や Web Lock が使えない IndexedDB 環境では自動復旧しません。通常の手動の書込みは従来どおり行えます。
 - `list`・`get` はアプリの名簿から所有者と記録を探す
 
 取得したソースとアイコンは所有者の `/source/…`、ビルド結果は `/build/…` に保持します。

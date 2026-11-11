@@ -214,6 +214,12 @@ export interface OwnerStorage {
     files: ReadonlyMap<string, Uint8Array>,
     remove?: readonly string[],
   ): Promise<void>;
+  /** Compare and write within one exclusive storage operation; false leaves every file unchanged. */
+  writeFilesIfUnchanged?(
+    expected: ReadonlyMap<string, Uint8Array | undefined>,
+    files: ReadonlyMap<string, Uint8Array>,
+    remove?: readonly string[],
+  ): Promise<boolean>;
   list(prefix: string): Promise<string[]>;
   delete(path: string): Promise<void>;
   update(
@@ -489,7 +495,7 @@ function backend(
           content,
           now,
         ).forOwner(`shared/${id}`);
-        return await Reflect.apply(Reflect.get(local, operation), local, args);
+        return await Reflect.apply(Reflect.get(local, operation)!, local, args);
       }, !reading);
     },
     filerShareFolderRename(appId, owner, id, label) {
@@ -744,6 +750,20 @@ function backend(
           const deletions = [...remove];
           deletions.forEach(pathCheck);
           return run((s) => put(s, owner, updates, deletions), true);
+        },
+        writeFilesIfUnchanged(expected, files, remove = []) {
+          const conditions = new Map([...expected].map(([path, bytes]) => { pathCheck(path); return [path, bytes?.slice()] as const; }));
+          const updates = validate(files);
+          const deletions = [...remove];
+          deletions.forEach(pathCheck);
+          return run(async (s) => {
+            for (const [path, expected] of conditions) {
+              const current = await read(s, owner, path);
+              if (expected === undefined ? current !== undefined : current === undefined || current.length !== expected.length || current.some((byte, index) => byte !== expected[index])) return false;
+            }
+            await put(s, owner, updates, deletions);
+            return true;
+          }, true);
         },
         list(prefix) {
           pathCheck(prefix);
@@ -1339,6 +1359,8 @@ export function createIndexedDbStorage(
             ? args[0]
             : method === "writeFiles"
             ? [...args[0].keys(), ...(args[1] ?? [])]
+            : method === "writeFilesIfUnchanged"
+            ? [...args[0].keys(), ...args[1].keys(), ...(args[2] ?? [])]
             : method === "move"
             ? args
             : [args[0]];
@@ -1484,7 +1506,7 @@ export function createIndexedDbStorage(
           ).forOwner(owner);
           return new Proxy({} as OwnerStorage, {
             get: (_, operation: string) =>
-              operation === "then"
+              operation === "then" || (operation === "writeFilesIfUnchanged" && !globalThis.navigator?.locks)
                 ? undefined
                 : (...args: Parameters<typeof execute>[1]) => {
                   Reflect.apply(
@@ -1503,6 +1525,11 @@ export function createIndexedDbStorage(
                     if (operation === "writeFiles" && args[1]) {
                       args[1] = [...args[1]];
                     }
+                  }
+                  if (operation === "writeFilesIfUnchanged") {
+                    args[0] = new Map([...args[0]].map(([path, value]: [string, Uint8Array | undefined]) => [path, value?.slice()]));
+                    args[1] = new Map([...args[1]].map(([path, value]: [string, Uint8Array]) => [path, value.slice()]));
+                    if (args[2]) args[2] = [...args[2]];
                   }
                   if (operation === "readFiles") args[0] = [...args[0]];
                   return execute(operation, args, owner);
