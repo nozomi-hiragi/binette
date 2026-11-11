@@ -9,6 +9,9 @@ export const PUBLISHED: Record<string, string> = {
   "packages/scene": "@binette/scene",
   "packages/coulisses": "@binette/coulisses",
   "packages/replique": "@binette/replique",
+};
+// OS 内の機能パッケージは公開対象ではないが、名前と版を検証する。
+export const FEATURES: Record<string, string> = {
   "packages/replique/app": "@binette/replique-app",
   "packages/replique/dom": "@binette/replique-dom",
   "packages/replique/ui": "@binette/replique-ui",
@@ -41,7 +44,7 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
   const versions = new Set<string>();
   const packageVersions = new Map<string, string>();
 
-  for (const [dir, name] of Object.entries(PUBLISHED)) {
+  for (const [dir, name] of Object.entries({ ...PUBLISHED, ...FEATURES })) {
     const file = "deno.json";
     const path = join(root, dir, file);
     if (!existsSync(path)) {
@@ -66,7 +69,7 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
   }
 
   // 各パッケージの内部依存が jsr:@binette/x@version に固定されているか調べる
-  for (const dir of Object.keys(PUBLISHED)) {
+  for (const dir of Object.keys({ ...PUBLISHED, ...FEATURES })) {
     const path = join(root, dir, "deno.json");
     if (!existsSync(path)) continue;
     const pkg = readJson(path);
@@ -79,7 +82,7 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
   }
 
   const license = Deno.readTextFileSync(join(root, "LICENSE"));
-  for (const dir of Object.keys(PUBLISHED)) {
+  for (const dir of Object.keys({ ...PUBLISHED, ...FEATURES })) {
     const path = join(root, dir, "LICENSE");
     if (!existsSync(path)) errors.push(`${dir}/LICENSE: missing`);
     else if (license !== Deno.readTextFileSync(path)) errors.push(`${dir}/LICENSE: differs from root LICENSE`);
