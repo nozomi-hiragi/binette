@@ -292,3 +292,48 @@ Deno.test("本体だけを消すとデータと印が残り、入れ直すと引
   await store.put(memo);
   assertEquals(await store.data.read(memo.key), new Map());
 });
+
+for (const mutation of ["update", "body-delete", "data-delete"]) {
+  Deno.test(`条件付き成果物置換は比較後・保存直前の ${mutation} を上書きしない`, async () => {
+    const tree = createMemoryFileTree();
+    const manual = createAppStore(tree);
+    const original = app("https://source.test/", "race");
+    const next = { ...original, html: "手動更新", wasm: new Uint8Array([9]), listVersion: "manual" };
+    await manual.put(original, new Map([["main.ts", new Uint8Array([7])]]));
+    await manual.data.write(original.key, "note", "保持");
+    let release = () => {}, entered = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const pending = new Promise<void>(resolve => { entered = resolve; });
+    const racing = createAppStore({ ...tree, storage: { ...tree.storage!, forOwner(id) {
+      const owner = tree.storage!.forOwner(id);
+      return { ...owner, async writeFilesIfUnchanged(expected, files, remove) { entered(); await gate; return await owner.writeFilesIfUnchanged!(expected, files, remove); } };
+    } } });
+    const replace = racing.replace!(original, { ...original, html: "遅い再ビルド", wasm: new Uint8Array([8]) });
+    await pending;
+    if (mutation === "update") await manual.put(next);
+    else await manual.uninstall(original.key, mutation === "data-delete");
+    release();
+    assertEquals(await replace, false);
+    assertEquals(await manual.get(original.key), mutation === "update" ? next : undefined);
+    assertEquals((await manual.list()).length, mutation === "update" ? 1 : 0);
+    if (mutation !== "data-delete") assertEquals(await manual.data.read(original.key), new Map([["note", "保持"]]));
+    else assertEquals(await tree.storage!.findApp(original.key), undefined);
+  });
+}
+
+Deno.test("条件付き成果物置換は同じ記録なら保存し、許可・役割・ソースを保つ", async () => {
+  const tree = createMemoryFileTree();
+  const store = createAppStore(tree);
+  const original = app("https://source.test/", "same");
+  const files = new Map([["main.ts", new Uint8Array([7])]]);
+  await store.put(original, files);
+  await store.system.putPermissions(original.key, ["schedule"]);
+  await store.system.putSettings({ roles: { files: original.key } });
+  const next = { ...original, wasm: new Uint8Array([8]), html: "復旧" };
+  assertEquals(await store.replace!(original, next), true);
+  assertEquals(await store.get(original.key), next);
+  const owner = tree.storage!.forOwner((await tree.storage!.findApp(original.key))!.owner);
+  assertEquals(await owner.read("/source/main.ts"), files.get("main.ts"));
+  assertEquals(await store.system.getPermissions(original.key), ["schedule"]);
+  assertEquals((await store.system.getSettings())!.roles, { files: original.key });
+});

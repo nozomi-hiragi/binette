@@ -245,3 +245,18 @@ Deno.test("bundled and system apps share provider zero and reserve the kernel ow
     0,
   ]);
 });
+
+Deno.test("conditional file batches compare all original bytes and leave every output untouched on conflict", async () => {
+  const storage = createMemoryStorage();
+  const owner = storage.forOwner("_0/-0");
+  const before = new Map([["/build/record.json", new Uint8Array([1])], ["/build/app.wasm", new Uint8Array([2])]]);
+  await owner.writeFiles(before);
+  const changed = new Map([["/build/record.json", new Uint8Array([3])], ["/build/app.wasm", new Uint8Array([4])]]);
+  assertEquals(await owner.writeFilesIfUnchanged!(before, changed), true);
+  assertEquals(await owner.writeFilesIfUnchanged!(before, new Map([["/build/extra", new Uint8Array([5])]]), ["/build/app.wasm"]), false);
+  assertEquals(await owner.readFiles([...changed.keys()]), [...changed.values()]);
+  assertEquals(await owner.read("/build/extra"), undefined);
+  await owner.delete("/build/record.json");
+  assertEquals(await owner.writeFilesIfUnchanged!(changed, before), false);
+  assertEquals(await owner.read("/build/record.json"), undefined);
+});

@@ -318,7 +318,7 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     alive();
     cancelled();
     const previous = await store.get(key);
-    const app: InstalledApp = { ...built, key, source: url, icon, subIcons, listVersion: entry.version, installedAt: previous?.installedAt ?? Date.now() };
+    const app: InstalledApp = { ...built, key, source: url, icon, subIcons, listVersion: entry.version, sourceIntegrity: { ...entry.integrity }, installedAt: previous?.installedAt ?? Date.now() };
     return { app, files, previous, progress };
   };
   /** 保存する。動いていれば終了させてから。中止はもう受け付けない */

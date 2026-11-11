@@ -120,6 +120,8 @@ Deno.test("ブラウザ Worker で親とサブのアイコン・import・CSS を
     assert(WebAssembly.validate(new Uint8Array(installed.wasm)));
     assertEquals(installed.key, listUrl + "#memo"); assertEquals(installed.source, listUrl);
     assertEquals(installed.listVersion, "1+meta"); assertEquals(installed.manifest.version, "manifest-version");
+    assertEquals(installed.sourceIntegrity, integrity);
+    assertEquals((await f.store.get(installed.key))?.sourceIntegrity, integrity);
     assertEquals(installed.subIcons, { widget: "<svg/>" }); assertEquals(installed.css, sources["main.css"]);
     assert(f.requests.includes(sourceUrl + "src/value.ts"));
     const requests = f.requests.length;

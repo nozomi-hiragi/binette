@@ -611,3 +611,44 @@ Deno.test("Filer の共有フォルダー名と退出は再接続後も保たれ
     assertEquals(await first.shareFiles(share.id, "author").read("/new/a"), new Uint8Array([8]));
   });
 });
+
+Deno.test("IndexedDB conditional file batches reject changed or deleted originals across connections", async () => {
+  const fixture = databaseFixture(installed);
+  await withDatabase(fixture, async () => {
+    const content = createMemoryContentStore();
+    const first = createIndexedDbStorage({ name: "conditional-batch", content });
+    const second = createIndexedDbStorage({ name: "conditional-batch", content });
+    const id = "https://example.test/apps/#conditional";
+    const ownerId = await first.appOwner(id);
+    const owner = first.forOwner(ownerId), manual = second.forOwner(ownerId);
+    const before = new Map([["/build/record.json", new Uint8Array([1])], ["/build/app.wasm", new Uint8Array([2])]]);
+    const after = new Map([["/build/record.json", new Uint8Array([3])], ["/build/app.wasm", new Uint8Array([4])]]);
+    await owner.writeFiles(before);
+    assertEquals(await owner.writeFilesIfUnchanged!(before, after), true);
+    await manual.write("/build/app.wasm", new Uint8Array([5]));
+    assertEquals(await owner.writeFilesIfUnchanged!(after, before, ["/build/app.wasm"]), false);
+    assertEquals(await manual.read("/build/app.wasm"), new Uint8Array([5]));
+    assertEquals(await manual.read("/build/record.json"), after.get("/build/record.json"));
+    await manual.delete("/build/record.json");
+    assertEquals(await owner.writeFilesIfUnchanged!(after, before), false);
+    assertEquals(await manual.read("/build/record.json"), undefined);
+  });
+});
+
+Deno.test("IndexedDB without Web Locks omits conditional replacement while preserving manual writes", async () => {
+  const fixture = databaseFixture(installed);
+  const descriptor = Object.getOwnPropertyDescriptor(navigator, "locks");
+  Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+  try {
+    await withDatabase(fixture, async () => {
+      const storage = createIndexedDbStorage({ name: "without-locks", content: createMemoryContentStore() });
+      const owner = storage.forOwner("_0/-0");
+      assertEquals(owner.writeFilesIfUnchanged, undefined);
+      await owner.write("/build/record.json", new Uint8Array([7]));
+      assertEquals(await owner.read("/build/record.json"), new Uint8Array([7]));
+    });
+  } finally {
+    if (descriptor) Object.defineProperty(navigator, "locks", descriptor);
+    else Reflect.deleteProperty(navigator, "locks");
+  }
+});

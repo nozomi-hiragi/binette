@@ -1,4 +1,4 @@
-import { BinetteError } from "@binette/core";
+import { BinetteError, type AppManifest } from "@binette/core";
 import { repliqueFiles } from "./replique.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { buildAppInWorker, buildStoredApp, createAppStore, createMemoryFileTree, createSystemDistribution, launchApp, startSystem, SYSTEM_MANIFEST_PATH } from "../src/index.ts";
@@ -251,4 +251,277 @@ export function verify(): void { assert(idof<App>() == idof<NewApp>() && idof<Ap
   const built = await buildAppInWorker(path => Promise.resolve(path === "src/main.ts" ? code : sources[path]), { distribution, workerUrl });
   const app = await launchApp(built.wasm);
   try { await app.call("verify"); } finally { app.stop(); }
+});
+
+const listSource = "https://example.test/local/";
+const oldSource = '@external("binette", "dom.text") declare function text(handle: i32, value: string): void; export function hello(): void { text(1, "古い"); }';
+let oldWasm: Promise<Uint8Array> | undefined;
+async function oldInstalled(extra: Partial<AppManifest> = {}) {
+  const f = await fixture();
+  const store = createAppStore(f.tree);
+  const appManifest = { ...manifest, ...extra };
+  oldWasm ??= buildAppInWorker(path => Promise.resolve(path === "src/main.ts" ? oldSource : sources[path]), { distribution: f.distribution, workerUrl }).then(built => built.wasm);
+  const app = { key: `${listSource}#source-app`, source: listSource, manifest: appManifest, html: sources["page.html"], wasm: await oldWasm, icon: undefined, installedAt: 123, listVersion: "original" };
+  const files = new Map(Object.entries({ ...sources, "app.json": JSON.stringify(appManifest) }).map(([path, text]) => [path, encoder.encode(text)]));
+  await store.put(app, files);
+  const owner = await owned(f.tree);
+  return { ...f, store, app, owner, files };
+}
+
+Deno.test("起動時の旧 ABI を保存ソースから復旧し、データ・権限・役割・版・日時を保つ", async () => {
+  const f = await oldInstalled({ roles: ["files"], permissions: { schedule: { reason: "予定" } } });
+  const { computeIntegrity } = await import("@binette/core");
+  const sourceIntegrity = { "/": await computeIntegrity([...f.files].map(([path, bytes]) => ({ path, bytes })), "/") };
+  await f.store.put({ ...f.app, sourceIntegrity });
+  await f.store.data.write(f.app.key, "記録", "残す");
+  await f.store.system.putPermissions(f.app.key, ["schedule"]);
+  await f.store.system.putSettings({ roles: { files: f.app.key } });
+  const presented: string[] = [], errors: unknown[] = [];
+  const system = await startSystem({ apps: [], store: f.store, browserBuild: { distribution: f.distribution, workerUrl },
+    ui: { update() {}, report(error) { errors.push(error); }, present({ app }) { presented.push(app.key); return { remove() {} }; } },
+  });
+  try {
+    await system.open(f.app.key);
+    assertEquals(presented, [f.app.key]);
+    const rebuilt = (await f.store.get(f.app.key))!;
+    assert(rebuilt.wasm.toString() !== f.app.wasm.toString());
+    assertEquals(rebuilt.manifest, f.app.manifest);
+    assertEquals(rebuilt.installedAt, 123);
+    assertEquals(rebuilt.listVersion, "original");
+    assertEquals(rebuilt.sourceIntegrity, sourceIntegrity);
+    assertEquals(await f.store.data.read(f.app.key), new Map([["記録", "残す"]]));
+    assertEquals(await f.store.system.getPermissions(f.app.key), ["schedule"]);
+    assertEquals((await f.store.system.getSettings())!.roles, { files: f.app.key });
+    assertEquals(await f.owner.readFiles([...f.files.keys()].map(path => `/source/${path}`)), [...f.files.values()]);
+    assertEquals(errors.map(String), ["Error: ホームのシステムアプリがありません。"]);
+  } finally { system.stop(); }
+});
+
+for (const mode of ["no-source", "no-compiler", "unsupported-sdk", "unsupported-abi", "build-error", "save-error", "manifest-change", "tamper-root", "tamper-file", "missing-file", "invalid-wasm", "stop"]) {
+  Deno.test(`自動復旧の ${mode} は元の保存記録を壊さず起動エラーを保つ`, async () => {
+    const f = await oldInstalled();
+    if (mode === "no-source") await f.owner.writeFiles(new Map(), await f.owner.list("/source"));
+    if (mode === "unsupported-sdk") await f.owner.write("/source/src/main.ts", encoder.encode('export * from "jsr:@binette/replique-dom@^9.0";'));
+    if (mode === "unsupported-abi") await f.owner.write("/source/src/main.ts", encoder.encode(oldSource));
+    if (mode === "build-error") await f.owner.write("/source/src/main.ts", encoder.encode('export const bad: i32 = "文字";'));
+    if (mode === "manifest-change") await f.owner.write("/source/app.json", encoder.encode(JSON.stringify({ ...manifest, permissions: { schedule: "変更" } })));
+    if (["tamper-root", "tamper-file", "missing-file"].includes(mode)) {
+      const { computeIntegrity } = await import("@binette/core");
+      const key = mode === "tamper-root" ? "/" : "src/main.ts";
+      await f.store.put({ ...f.app, sourceIntegrity: { [key]: await computeIntegrity([...f.files].map(([path, bytes]) => ({ path, bytes })), key) } });
+      if (mode === "missing-file") await f.owner.delete("/source/src/main.ts");
+      else await f.owner.write("/source/src/main.ts", encoder.encode(source + "\n"));
+    }
+    if (mode === "invalid-wasm") await f.store.put({ ...f.app, wasm: new Uint8Array([0]) });
+    const previous = await f.store.get(f.app.key);
+    const savedRecord = await f.owner.readFiles(["/build/record.json", "/build/app.wasm", "/build/index.html"]);
+    let builds = 0;
+    const distribution = { async readSystem(path: string) { builds += Number(path === "/system/tools/asc.js"); if (mode === "stop") system.stop(); return await f.distribution.readSystem(path); } };
+    const store = mode === "save-error" ? { ...f.store, replace() { return Promise.reject(new Error("保存失敗")); } } : f.store;
+    const errors: unknown[] = [], presented: string[] = [];
+    const rebuilding: boolean[] = [];
+    const system = await startSystem({ apps: [], store, ...(mode === "no-compiler" ? {} : { browserBuild: { distribution, workerUrl } }),
+      ui: { update(view) { rebuilding.push(view.rebuilding ?? false); }, report(error) { errors.push(error); }, present({ app }) { presented.push(app.key); return { remove() {} }; } },
+    });
+    try {
+      await system.open(f.app.key);
+      assertEquals(presented, []);
+      assertEquals(rebuilding.at(-1), false);
+      assertEquals(await f.store.get(f.app.key), previous);
+      assertEquals(await f.owner.readFiles(["/build/record.json", "/build/app.wasm", "/build/index.html"]), savedRecord);
+      if (["no-source", "no-compiler", "tamper-root", "tamper-file", "missing-file", "invalid-wasm"].includes(mode)) assertEquals(builds, 0);
+      else assertEquals(builds, 1);
+      if (mode !== "stop") {
+        assertEquals(errors.length, 2);
+        if (mode !== "invalid-wasm") {
+          assert(errors[1] instanceof BinetteError);
+          assertEquals(errors[1].code, "unsupported_abi");
+          assertEquals(errors[1].message, "この OS では動きません（binette）。アプリの管理から入れ直すと直ります");
+        }
+      }
+    } finally { system.stop(); }
+  });
+}
+
+Deno.test("同時に親・サブ・同じアプリを開いてもビルドを共有し、Scene の進捗を表示して消す", async () => {
+  const f = await oldInstalled({ sub: { child: { name: "子" } } });
+  const { Window } = await import("happy-dom");
+  const { createShellUi } = await import("../../scene/src/index.ts");
+  const window = new Window();
+  const element = window.document.createElement("main") as unknown as HTMLElement;
+  window.document.body.append(element as never);
+  const ui = createShellUi(element, { installed: true });
+  let builds = 0, release = () => {}, begun = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { begun = resolve; });
+  const distribution = { async readSystem(path: string) {
+    if (path === "/system/tools/asc.js") { builds++; begun(); await gate; }
+    return await f.distribution.readSystem(path);
+  } };
+  const system = await startSystem({ apps: [], store: f.store, ui, browserBuild: { distribution, workerUrl } });
+  ui.bind(system);
+  try {
+    const parent = system.open(f.app.key);
+    await started;
+    const duplicate = system.open(f.app.key);
+    const child = system.open(f.app.key + ".child");
+    const progress = element.querySelector<HTMLElement>(".bina-shell-progress")!;
+    assertEquals(progress.textContent, "今の OS 向けに作り直しています");
+    assertEquals(progress.hidden, false);
+    assertEquals(progress.getAttribute("role"), "status");
+    release();
+    await Promise.all([parent, child, duplicate]);
+    assertEquals(builds, 1);
+    assertEquals(progress.hidden, true);
+    assert(element.querySelector("#value"));
+    await system.open(f.app.key);
+    assertEquals(builds, 1);
+  } finally { release(); system.stop(); ui.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("対応済み ABI では保存ソースを再ビルドしない", async () => {
+  const f = await oldInstalled();
+  const good = await buildStoredApp(f.tree, f.distribution, manifest.id, listSource, { workerUrl });
+  let builds = 0;
+  const shown: string[] = [];
+  const system = await startSystem({ apps: [], store: f.store,
+    browserBuild: { distribution: { readSystem() { builds++; throw new Error("不要なビルド"); } }, workerUrl },
+    ui: { update() {}, report() {}, present({ app }) { shown.push(app.key); return { remove() {} }; } },
+  });
+  try { await system.open(good.key); assertEquals(shown, [good.key]); assertEquals(builds, 0); }
+  finally { system.stop(); }
+});
+
+Deno.test("Cadre に割り当てた旧 ABI の保存アプリも起動前に復旧する", async () => {
+  const f = await oldInstalled({ roles: ["cadre"] });
+  await f.store.system.putSettings({ roles: { cadre: f.app.key } });
+  const presented: string[] = [];
+  const system = await startSystem({ apps: [], store: f.store, browserBuild: { distribution: f.distribution, workerUrl },
+    ui: { update() {}, report() {}, present({ app, cadre }) { if (cadre) presented.push(app.key); return { remove() {} }; } },
+  });
+  try {
+    assertEquals(presented, [f.app.key]);
+    assertEquals((await f.store.system.getSettings())!.roles, { cadre: f.app.key });
+    assert((await f.store.get(f.app.key))!.wasm.toString() !== f.app.wasm.toString());
+  } finally { system.stop(); }
+});
+
+Deno.test("画面なしの予定起動でも旧 ABI を復旧し、履歴に数えずデータへ書ける", async () => {
+  const f = await oldInstalled({ permissions: { schedule: { reason: "予定" } } });
+  await f.owner.write("/source/src/main.ts", encoder.encode(`import { App, Api, StorageApi, launch } from "jsr:@binette/replique";
+class Scheduled extends App {
+  onSchedule(slot: i32, api: Api): void { StorageApi.from(api)!.write("ran", slot.toString()); }
+}
+launch(new Scheduled());`));
+  await f.store.system.putSchedules!({ [`${f.app.key}/0`]: { owner: f.app.key, rule: { every: 900 }, enabled: true, registered: Date.now() } });
+  let shown = 0;
+  const system = await startSystem({ apps: [], store: f.store, browserBuild: { distribution: f.distribution, workerUrl },
+    ui: { update() {}, report() {}, present() { shown++; return { remove() {} }; } },
+  });
+  try {
+    await system.scheduler.runNow(`${f.app.key}/0`);
+    const deadline = performance.now() + 5000;
+    while ((await f.store.data.read(f.app.key)).get("ran") === undefined && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+    assertEquals((await f.store.data.read(f.app.key)).get("ran"), "0");
+    assertEquals(await f.store.system.listLaunches(), []);
+    assertEquals(shown, 0);
+  } finally { system.stop(); }
+});
+
+Deno.test("自動復旧の成功を開いているアプリ管理にも届け、古い ABI の警告を消す", async () => {
+  const f = await oldInstalled();
+  const manager = await buildAppInWorker(path => Promise.resolve(path === "app.json"
+    ? JSON.stringify({ ...manifest, id: "recovery-manager", roles: ["apps-manager"] }) : sources[path]), { distribution: f.distribution, workerUrl });
+  const snapshots: string[] = [];
+  const system = await startSystem({ apps: [{ source: "binette:system", prebuilt: manager }], store: f.store,
+    browserBuild: { distribution: f.distribution, workerUrl },
+    ui: { update() {}, report() {}, present({ app }, process) {
+      if (app.key === "recovery-manager") process.syncManager = snapshot => {
+        snapshots.push(snapshot.apps.find(app => app.key === f.app.key)?.installedError ?? "");
+      };
+      return { remove() {} };
+    } },
+  });
+  const waitFor = async (condition: () => boolean) => {
+    const deadline = performance.now() + 5000;
+    while (!condition() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+    assert(condition());
+  };
+  try {
+    await system.open("recovery-manager");
+    await waitFor(() => snapshots.length > 0);
+    assertEquals(snapshots.at(-1), "この OS では動きません。入れ直してください");
+    await system.open(f.app.key);
+    await waitFor(() => snapshots.at(-1) === "");
+  } finally { system.stop(); }
+});
+
+for (const action of ["body-delete", "data-delete", "update", "reinstall"]) {
+  Deno.test(`再ビルド待機中の手動 ${action} を遅い成果物で上書き・復活させない`, async () => {
+    const f = await oldInstalled();
+    const { Window } = await import("happy-dom");
+    const window = new Window();
+    const sourceUrl = "https://example.test/manual-source/";
+    const manualSources = { ...sources, "app.json": JSON.stringify({ ...manifest, version: "manual" }), "page.html": "<p>手動の更新</p>" };
+    const list = `<script type="application/json" id="binette-apps">${JSON.stringify({ name: "提供者", apps: [{ id: manifest.id, source: sourceUrl, version: "manual" }] })}</script>`;
+    let release = () => {}, entered = () => {}, first = true;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const pending = new Promise<void>(resolve => { entered = resolve; });
+    const distribution = { async readSystem(path: string) {
+      if (first && path === "/system/tools/asc.js") { first = false; entered(); await gate; }
+      return await f.distribution.readSystem(path);
+    } };
+    const shown: string[] = [];
+    await f.store.data.write(f.app.key, "note", "保持");
+    const system = await startSystem({ apps: [], lists: [listSource], store: f.store, browserBuild: { distribution, workerUrl },
+      providerLists: {
+        fetch(input) {
+          const url = String(input);
+          const value = url === listSource ? list : manualSources[url.slice(sourceUrl.length) as keyof typeof manualSources];
+          return Promise.resolve(new Response(value ?? "無し", { status: value === undefined ? 404 : 200 }));
+        },
+        parseHtml: html => new window.DOMParser().parseFromString(html, "text/html") as unknown as Document,
+      },
+      ui: { update() {}, report() {}, present({ app }) { shown.push(app.html); return { remove() {} }; } },
+    });
+    try {
+      const opening = system.open(f.app.key);
+      await pending;
+      if (action === "body-delete" || action === "data-delete" || action === "reinstall") await system.lists.uninstall(f.app.key, action === "data-delete");
+      if (action === "update" || action === "reinstall") await system.lists.install(listSource, manifest.id);
+      const winner = await f.store.get(f.app.key);
+      const owner = await f.tree.storage!.findApp(f.app.key);
+      const saved = owner && await f.tree.storage!.forOwner(owner.owner).readFiles(["/build/record.json", "/build/app.wasm"]);
+      release();
+      await opening;
+      assertEquals(await f.store.get(f.app.key), winner);
+      assertEquals(owner && await f.tree.storage!.forOwner(owner.owner).readFiles(["/build/record.json", "/build/app.wasm"]), saved);
+      assertEquals(shown, []);
+      if (action === "update" || action === "reinstall") {
+        assertEquals(winner!.manifest.version, "manual");
+        await system.open(f.app.key);
+        assertEquals(shown, ["<p>手動の更新</p>"]);
+      } else assertEquals(winner, undefined);
+      if (action !== "data-delete") assertEquals((await f.store.data.read(f.app.key)).get("note"), "保持");
+      else assertEquals(await f.tree.storage!.findApp(f.app.key), undefined);
+    } finally { release(); system.stop(); await window.happyDOM.close(); }
+  });
+}
+
+Deno.test("条件付き置換のない独自 AppStore では保存ソースがあっても自動復旧を保存しない", async () => {
+  const f = await oldInstalled();
+  let builds = 0, shown = 0;
+  const errors: unknown[] = [];
+  const system = await startSystem({ apps: [], store: { ...f.store, replace: undefined },
+    browserBuild: { distribution: { readSystem() { builds++; throw new Error("条件付き保存がありません"); } }, workerUrl },
+    ui: { update() {}, report(error) { errors.push(error); }, present() { shown++; return { remove() {} }; } },
+  });
+  try {
+    await system.open(f.app.key);
+    assertEquals(builds, 0);
+    assertEquals(shown, 0);
+    assertEquals(await f.store.get(f.app.key), f.app);
+    assert(errors.at(-1) instanceof BinetteError);
+    assertEquals((errors.at(-1) as BinetteError).code, "unsupported_abi");
+  } finally { system.stop(); }
 });

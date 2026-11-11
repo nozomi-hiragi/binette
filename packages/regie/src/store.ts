@@ -1,4 +1,4 @@
-import { createMemoryStorage, type ShareStorage, type StorageBackend } from "./storage.ts";
+import { createMemoryStorage, type ShareStorage, type StorageBackend, type OwnerStorage } from "./storage.ts";
 import { createMemoryPigeonStore, createIndexedDbPigeonStore, type PigeonStore } from "./pigeon.ts";
 import { appId } from "./app-key.ts";
 import type { ScheduleRule, ScheduleRun } from "./scheduler.ts";
@@ -29,6 +29,8 @@ export interface InstalledApp {
   installedAt: number;
   /** 提供リストの版。manifest.version とは独立して比べる */
   listVersion?: string;
+  /** Integrity recorded when the installed sources were fetched. */
+  sourceIntegrity?: Record<string, string>;
 }
 
 /** ビルド結果の保存先 */
@@ -43,6 +45,8 @@ export interface AppStore {
   list(): Promise<InstalledApp[]>;
   get(key: string): Promise<InstalledApp | undefined>;
   put(app: InstalledApp, files?: ReadonlyMap<string, Uint8Array>): Promise<void>;
+  /** Replace outputs only while the installed record and WASM still match expected. */
+  replace?(expected: InstalledApp, app: InstalledApp): Promise<boolean>;
   /**
    * 提供リストから入れたアプリを消す。`withData` が false なら本体（ビルド結果とソース）だけを消し、
    * データと「本体なし」の印を残す（入れ直すとデータを引き継ぐ）。true ならデータと OS の記録も消す
@@ -200,8 +204,7 @@ export function createAppStore(tree: FileTree): AppStore {
     const parent = parsed.sub ? appId(parsed.list ?? "binette:bundled", parsed.id) : id;
     return storage!.forOwner(await storage!.appOwner(parent, parsed.list));
   };
-  const readOwnedApp = async (id: string, owner: string): Promise<InstalledApp | undefined> => {
-    const [record, wasm] = await storage!.forOwner(owner).readFiles(["/build/record.json", "/build/app.wasm"]);
+  const parseOwnedApp = (id: string, record: Uint8Array | undefined, wasm: Uint8Array | undefined): InstalledApp | undefined => {
     if (record === undefined || wasm === undefined) return undefined;
     try {
       const saved = decode<StoredApp>(record);
@@ -210,6 +213,10 @@ export function createAppStore(tree: FileTree): AppStore {
       if (appId(parsed.list ?? saved.source, saved.manifest.id) !== id) return undefined;
       return { ...saved, key: id, source: parsed.list ?? saved.source, icon: saved.icon, wasm };
     } catch { return undefined; }
+  };
+  const readOwnedApp = async (id: string, owner: string): Promise<InstalledApp | undefined> => {
+    const [record, wasm] = await storage!.forOwner(owner).readFiles(["/build/record.json", "/build/app.wasm"]);
+    return parseOwnedApp(id, record, wasm);
   };
   const canonicalKey = async (key: string): Promise<string> => {
     if (!storage) return key;
@@ -246,6 +253,22 @@ export function createAppStore(tree: FileTree): AppStore {
         appFilePaths(app.manifest.id, app.source).record !== recordPath) return undefined;
       return { ...app, icon: app.icon, wasm };
     } catch { return undefined; }
+  };
+  const saveOwnedApp = async (owner: OwnerStorage, app: InstalledApp, files?: ReadonlyMap<string, Uint8Array>, expected?: ReadonlyMap<string, Uint8Array | undefined>) => {
+    const { wasm, ...record } = app;
+    const output = new Map<string, Uint8Array>();
+    for (const [path, bytes] of files ?? []) output.set(`/source/${path}`, bytes);
+    output.set("/build/record.json", encode(record));
+    output.set("/build/app.wasm", wasm);
+    output.set("/build/index.html", encoder.encode(app.html));
+    if (app.css !== undefined) output.set("/build/entry.css", encoder.encode(app.css));
+    const remove = files ? (await owner.list("/source")).filter(path => !output.has(path)) : [];
+    if (app.css === undefined) remove.push("/build/entry.css");
+    // 入れ直したら「本体なし」の印を消す。
+    if ((await owner.list("/build")).includes("/build/removed.json")) remove.push("/build/removed.json");
+    if (expected) return await owner.writeFilesIfUnchanged?.(expected, output, remove) ?? false;
+    await owner.writeFiles(output, remove);
+    return true;
   };
   const store: AppStore = {
     pigeon: tree.pigeon ?? createMemoryPigeonStore(),
@@ -426,21 +449,24 @@ export function createAppStore(tree: FileTree): AppStore {
       }
       return result.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
     },
+    async replace(expected, app) {
+      if (!storage || app.key !== expected.key) return false;
+      const entry = await storage.findApp(expected.key);
+      if (!entry) return false;
+      const owner = storage.forOwner(entry.owner);
+      if (!owner.writeFilesIfUnchanged) return false;
+      const [record, wasm] = await owner.readFiles(["/build/record.json", "/build/app.wasm"]);
+      const current = parseOwnedApp(expected.key, record, wasm);
+      if (!current) return false;
+      const { wasm: currentWasm, ...currentRecord } = current;
+      const { wasm: expectedWasm, ...expectedRecord } = expected;
+      if (JSON.stringify(currentRecord) !== JSON.stringify(expectedRecord) || currentWasm.length !== expectedWasm.length || currentWasm.some((byte, index) => byte !== expectedWasm[index])) return false;
+      return await saveOwnedApp(owner, app, undefined, new Map([["/build/record.json", record], ["/build/app.wasm", wasm]]));
+    },
     async put(app, files) {
       if (storage) {
         const owner = storage.forOwner(await storage.appOwner(app.parentKey ?? app.key, app.source, app.manifest.name));
-        const { wasm, ...record } = app;
-        const output = new Map<string, Uint8Array>();
-        for (const [path, bytes] of files ?? []) output.set(`/source/${path}`, bytes);
-        output.set("/build/record.json", encode(record));
-        output.set("/build/app.wasm", wasm);
-        output.set("/build/index.html", encoder.encode(app.html));
-        if (app.css !== undefined) output.set("/build/entry.css", encoder.encode(app.css));
-        const remove = files ? (await owner.list("/source")).filter(path => !output.has(path)) : [];
-        if (app.css === undefined) remove.push("/build/entry.css");
-        // 入れ直したら「本体なし」の印を消す。
-        if ((await owner.list("/build")).includes("/build/removed.json")) remove.push("/build/removed.json");
-        await owner.writeFiles(output, remove);
+        await saveOwnedApp(owner, app, files);
       } else await tree.writeFiles(installedAppFiles(app));
     },
   };
@@ -458,6 +484,7 @@ export function createAppStore(tree: FileTree): AppStore {
     list: () => serial(() => store.list()),
     get: key => serial(() => store.get(key)),
     put: (app, files) => { const copy = structuredClone(app); const source = files && structuredClone(files); return serial(() => store.put(copy, source)); },
+    replace: (expected, app) => { const before = structuredClone(expected), after = structuredClone(app); return serial(() => store.replace!(before, after)); },
     uninstall: (key, withData) => serial(() => store.uninstall(key, withData)),
     listRemoved: () => serial(() => store.listRemoved()),
     moveSource: (from, to, lists) => { const copy = structuredClone(lists); return serial(() => store.moveSource(from, to, copy)); },
