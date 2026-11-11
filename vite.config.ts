@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { kernelIntegrity } from "./scripts/kernel-integrity.ts";
+import { devSystem } from "./scripts/dev-system.ts";
 
 // このファイルのフォルダ。Vite は設定を Deno の上で読むので import.meta.dirname が使える
 const here = import.meta.dirname!;
@@ -9,7 +10,7 @@ export default defineConfig({
   base: "./",
   // build:system が静的ファイルと生成した目録をここにまとめる。
   publicDir: ".binapp/public",
-  plugins: [kernelIntegrity()],
+  plugins: [kernelIntegrity(), devSystem()],
   worker: {
     format: "es",
     rollupOptions: {

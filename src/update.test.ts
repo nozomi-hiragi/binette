@@ -274,3 +274,71 @@ Deno.test("登録直後は SW の準備を待ち、準備後の照合はネッ�
   assertEquals(requests, 1);
   await assertRejects(() => kernels.check("kernel-other"), Error, "目録の印が一致しません");
 });
+
+Deno.test("開発時は同じ kernel の古い system も目録の版で取り直し、取得と SHA-256 の失敗では保存物を保つ", async () => {
+  for (const failure of [undefined, "offline", "hash", "version"] as const) {
+    const f = await fixture();
+    const old = (await f.distribution.installed())!;
+    const data = encode("新版");
+    const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", data))].map(n => n.toString(16).padStart(2, "0")).join("");
+    const next = { ...old, version: failure === "version" ? "other" : "new", files: [{ path: "system/value", size: data.length, sha256: digest }] };
+    const fetched: string[] = [];
+    const distribution = createSystemDistribution(f.tree, {
+      origin: "https://example.test", manifestUrl: "https://example.test/manifest.json",
+      fetch(input, options) {
+        const path = new URL(String(input)).pathname;
+        fetched.push(path);
+        assertEquals(options?.cache, "no-store");
+        if (failure === "offline") return Promise.reject(new Error("オフライン"));
+        return Promise.resolve(new Response(path === "/manifest.json" ? JSON.stringify(next) : failure === "hash" ? encode("偽版") : data.slice()));
+      },
+    });
+    const updater = createUpdater(distribution, {
+      current: undefined, devSystemVersion: "new", check: () => Promise.resolve(), activate: () => Promise.resolve(),
+    }, () => {});
+    if (failure) {
+      await assertRejects(() => updater.boot(), Error, failure === "hash" ? "SHA-256" : "実行中のカーネル");
+      assertEquals(await distribution.installed(), old);
+      assertEquals(await f.tree.read("/system/value"), encode("旧版"));
+    } else {
+      await updater.boot();
+      assertEquals(await distribution.installed(), next);
+      assertEquals(await distribution.readSystem("/system/value"), data);
+      assertEquals(fetched, ["/manifest.json", "/system/value"]);
+    }
+  }
+});
+
+Deno.test("開発時も一致する保存済み system はオフラインで起動し、破損した保存物は拒む", async () => {
+  const f = await fixture();
+  f.offline();
+  const updater = createUpdater(f.distribution, {
+    current: undefined, devSystemVersion: "old", check: () => Promise.resolve(), activate: () => Promise.resolve(),
+  }, () => {});
+  await updater.boot();
+  assertEquals(updater.snapshot().current, "0.2.0+old");
+  const files = new Map<string, Uint8Array>();
+  for (const path of await f.tree.list("/system")) files.set(path, (await f.tree.read(path))!);
+  files.set("/system/value", encode("偽版"));
+  await f.tree.replaceSystem(files);
+  await assertRejects(() => updater.boot(), Error, "SHA-256");
+});
+
+Deno.test("本番の準備済み更新と待機 SW は起動の照合で切り替わらず、設定からの適用まで残る", async () => {
+  const f = await fixture();
+  const old = await f.distribution.installed();
+  const next = { ...f.next(), kernel: "kernel-new" };
+  let checks = 0;
+  f.setKernelCheck(() => { checks++; return Promise.resolve(); });
+  f.setManifest(next);
+  await f.updater.check();
+  const ready = f.updater.snapshot();
+  await f.updater.boot();
+  assertEquals(await f.distribution.installed(), old);
+  assertEquals(f.updater.snapshot(), ready);
+  assertEquals(checks, 1);
+  assertEquals(f.result(), { activated: "", reloads: 0 });
+  await f.updater.apply();
+  assertEquals(await f.distribution.installed(), next);
+  assertEquals(f.result(), { activated: "kernel-new", reloads: 1 });
+});

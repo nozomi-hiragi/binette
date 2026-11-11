@@ -8,6 +8,7 @@ export interface UpdateState {
 }
 export interface KernelUpdates {
   current: string | undefined;
+  devSystemVersion?: string;
   check(kernel: string | undefined): Promise<void>;
   activate(kernel: string | undefined): Promise<void>;
 }
@@ -29,8 +30,11 @@ export function createUpdater(distribution: SystemDistribution, kernels: KernelU
       let installed = await distribution.installed();
       // 開発時は入口にカーネルの印が無いので、組の照合をしない
       const paired = (kernel: string | undefined) => kernels.current === undefined || kernel === undefined || kernel === kernels.current;
-      if (!installed || !paired(installed.kernel)) {
-        if (!paired(found.manifest.kernel)) {
+      // 開発用の目録ハッシュは、本番のカーネルの印とは別に照合する。
+      const systemPaired = (manifest: SystemManifest) => kernels.devSystemVersion === undefined
+        ? paired(manifest.kernel) : manifest.version === kernels.devSystemVersion;
+      if (!installed || !systemPaired(installed)) {
+        if (!systemPaired(found.manifest)) {
           throw new Error("実行中のカーネルと組になるシステムを取得できません。");
         }
         await distribution.install(found.manifest, options);
