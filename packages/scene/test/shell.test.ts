@@ -517,7 +517,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     await waitFor(() => errors.length === 0);
     shell.stop();
     const saved = (await store.system.getSettings())!;
-    assertEquals(saved, { roles: {}, allowHttpLists: false, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
+    assertEquals(saved, { roles: {}, allowHttpLists: false, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000, theme: 0, accent: 0, wallpaper: 0 });
     shell = await mountShell(element, options);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6 && worker.live === 1);
@@ -606,6 +606,28 @@ Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で�
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
+Deno.test("実際の設定で選んだ見た目は onAppearance に届き、SystemStore に保存して次の起動でも届く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore(); const seen: unknown[] = [];
+  const options = { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker, onAppearance: (appearance: unknown) => { seen.push(appearance); } };
+  let shell = await mountShell(element, options);
+  try {
+    assertEquals(seen, [{ theme: 0, accent: 0, wallpaper: 0 }]);
+    element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await waitFor(() => element.querySelector("[data-bina-key=accent-2]") !== null);
+    element.querySelector<HTMLButtonElement>("[data-bina-key=accent-2]")!.click();
+    await waitFor(() => seen.length === 2);
+    element.querySelector<HTMLButtonElement>("[data-bina-key=wallpaper-4]")!.click();
+    await waitFor(() => seen.length === 3);
+    assertEquals(seen.slice(1), [{ theme: 0, accent: 2, wallpaper: 0 }, { theme: 0, accent: 2, wallpaper: 4 }]);
+    await waitFor(() => element.querySelector("[data-bina-key=wallpaper-4]")!.getAttribute("aria-pressed") === "true");
+    shell.stop();
+    const stored = await store.system.getSettings();
+    assertEquals([stored?.accent, stored?.wallpaper], [2, 4]);
+    shell = await mountShell(element, options);
+    assertEquals(seen.at(-1), { theme: 0, accent: 2, wallpaper: 4 });
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
 Deno.test("os.set の範囲外と知らない名前は false になり、SystemStore に保存しない", async () => {
   const files: Record<string, string> = {
     "app.json": JSON.stringify({ id: "bad-settings", name: "検査用設定", roles: ["settings"], entry: { html: "index.html", as: "main.ts" } }),
@@ -617,6 +639,7 @@ class Settings extends App {
     assert(!os.set("unknown", 1)); assert(!os.set("home", 1)); assert(!os.set("stackSize", 0));
     assert(!os.set("historyLimit", -1)); assert(!os.set("stopDelay", -1)); assert(!os.set("homeRetryWindow", -1));
     assert(!os.set("callTimeout", 999)); assert(!os.set("destroyTimeout", 999));
+    assert(!os.set("theme", 3)); assert(!os.set("accent", 256)); assert(!os.set("wallpaper", -1));
     assert(os.get("stackSize") == 3);
     document.getElementById("checked").textContent = "確認済み";
   }

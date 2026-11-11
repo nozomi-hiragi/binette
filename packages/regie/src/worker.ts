@@ -83,7 +83,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   };
   // toString() で作る Worker なので、OS と同じ設定 API の範囲をここでも確かめる
   const settingName = (name: string): name is keyof OsSnapshot["settings"] =>
-    ["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name);
+    ["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow", "theme", "accent", "wallpaper"].includes(name);
   /** __new はメモリを伸ばすことがあるので、確保してから buffer を読む */
   const writeString = (value: string): number => {
     const allocate = instance!.exports.__new;
@@ -361,7 +361,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         const name = readString(ptr);
         if (!settingName(name) || !Number.isInteger(value) || value < 0 ||
           (name === "stackSize" && value < 1) ||
-          ((name === "callTimeout" || name === "destroyTimeout") && value < 1000)) return false;
+          ((name === "callTimeout" || name === "destroyTimeout") && value < 1000) ||
+          (name === "theme" && value > 2) || ((name === "accent" || name === "wallpaper") && value > 255)) return false;
         settings[name] = value;
         scope.postMessage({ type: "os.set", name, value });
         return true;

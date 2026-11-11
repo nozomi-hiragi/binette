@@ -104,6 +104,30 @@
   [data-bina-key="stepper"] > button { min-width: 28px; }
 }
 
+/* 見た目。色見本は入口のページが出す番号ごとの色（--bina-accent-N・--bina-wallpaper-N）で塗る */
+[data-bina-key="appearance-card"] > .bina-ui-row { box-sizing: border-box; min-height: 58px; padding: 12px 16px; gap: 10px 16px; }
+[data-bina-key="appearance-card"] > .bina-ui-row + .bina-ui-row { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
+[data-bina-key="appearance-theme"] { font-size: 14px; }
+[data-bina-key="appearance-theme"] > .bina-ui-option { flex: 0 0 auto; }
+[data-bina-key$="-swatches"] { gap: 8px; }
+[data-bina-key$="-swatches"] > .bina-ui-button { box-sizing: border-box; flex: none; min-width: 0; min-height: 0; padding: 0; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); background: var(--swatch, var(--bina-ui-sunken, #eceef1)); }
+[data-bina-key="accent-swatches"] > .bina-ui-button { width: 30px; height: 30px; border-radius: 50%; }
+[data-bina-key="wallpaper-swatches"] > .bina-ui-button { width: 40px; height: 30px; border-radius: 8px; }
+[data-bina-key$="-swatches"] > .bina-ui-button.bina-ui-selected { outline: 2px solid var(--bina-ui-accent, #3273b9); outline-offset: 2px; }
+[data-bina-key$="-swatches"] > .bina-ui-button:focus-visible { outline: 2px solid var(--bina-ui-focus, #3273b9); outline-offset: 4px; }
+[data-bina-key="accent-0"] { --swatch: var(--bina-accent-0, #3273b9); }
+[data-bina-key="accent-1"] { --swatch: var(--bina-accent-1, #2e7d4f); }
+[data-bina-key="accent-2"] { --swatch: var(--bina-accent-2, #6b4fbb); }
+[data-bina-key="accent-3"] { --swatch: var(--bina-accent-3, #b83a6f); }
+[data-bina-key="accent-4"] { --swatch: var(--bina-accent-4, #b55a14); }
+[data-bina-key="accent-5"] { --swatch: var(--bina-accent-5, #4b5563); }
+[data-bina-key="wallpaper-0"] { --swatch: var(--bina-wallpaper-0); }
+[data-bina-key="wallpaper-1"] { --swatch: var(--bina-wallpaper-1); }
+[data-bina-key="wallpaper-2"] { --swatch: var(--bina-wallpaper-2); }
+[data-bina-key="wallpaper-3"] { --swatch: var(--bina-wallpaper-3); }
+[data-bina-key="wallpaper-4"] { --swatch: var(--bina-wallpaper-4); }
+[data-bina-key="wallpaper-5"] { --swatch: var(--bina-wallpaper-5); }
+
 /* 更新の説明と操作を別の行に置き、狭い幅でもボタンの文字を折らない。 */
 [data-bina-key="settings-root"] [data-bina-key="update-card"] { padding: 16px; gap: 12px; }
 [data-bina-key="settings-root"] [data-bina-key="update-status"] { padding: 0; min-height: 0; }

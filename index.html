@@ -15,21 +15,29 @@
       --color-base-200: #f3f5f8;
       --color-base-300: #d5dae1;
       --color-base-content: #16181d;
-      --color-primary: #3273b9;
+      /* アクセント色は番号（data-accent）で選ぶ。ライト用とダーク用の組で持つ */
+      --accent-light: #3273b9;
+      --accent-dark: #5b9be0;
+      --color-primary: var(--accent-light);
       --color-primary-content: #ffffff;
       --color-error: #c4352b;
       --color-success: #2e7d4f;
       --radius-box: 16px;
       --radius-field: 10px;
     }
-    /* ダークでは面（base-100）を背景（base-200）より明るくして持ち上げる。テーマの設定が無い間は OS のライト／ダークに合わせる */
+    :root[data-accent="1"] { --accent-light: #2e7d4f; --accent-dark: #5fb98a; }
+    :root[data-accent="2"] { --accent-light: #6b4fbb; --accent-dark: #a08be6; }
+    :root[data-accent="3"] { --accent-light: #b83a6f; --accent-dark: #e585ad; }
+    :root[data-accent="4"] { --accent-light: #b55a14; --accent-dark: #e59a52; }
+    :root[data-accent="5"] { --accent-light: #4b5563; --accent-dark: #a3acb9; }
+    /* ダークでは面（base-100）を背景（base-200）より明るくして持ち上げる。設定が「OS に合わせる」の間（data-theme なし）は OS のライト／ダークに合わせる */
     :root[data-theme="dark"] {
       color-scheme: dark;
       --color-base-100: #22252b;
       --color-base-200: #16181c;
       --color-base-300: #353a43;
       --color-base-content: #f1f3f5;
-      --color-primary: #5b9be0;
+      --color-primary: var(--accent-dark);
       --color-primary-content: #0d1117;
       --color-error: #ff8a80;
       --color-success: #7ec699;
@@ -41,7 +49,7 @@
         --color-base-200: #16181c;
         --color-base-300: #353a43;
         --color-base-content: #f1f3f5;
-        --color-primary: #5b9be0;
+        --color-primary: var(--accent-dark);
         --color-primary-content: #0d1117;
         --color-error: #ff8a80;
         --color-success: #7ec699;
@@ -70,12 +78,33 @@
       --bina-ui-danger: var(--color-error);
       --bina-ui-success: var(--color-success);
       --bina-ui-shadow: 0 0 0 1px color-mix(in srgb, var(--color-base-content) 8%, transparent), 0 8px 24px rgb(0 0 0 / 8%);
+      /* 設定の色見本と壁紙。番号は設定（accent・wallpaper）と同じ */
+      --bina-accent-0: light-dark(#3273b9, #5b9be0);
+      --bina-accent-1: light-dark(#2e7d4f, #5fb98a);
+      --bina-accent-2: light-dark(#6b4fbb, #a08be6);
+      --bina-accent-3: light-dark(#b83a6f, #e585ad);
+      --bina-accent-4: light-dark(#b55a14, #e59a52);
+      --bina-accent-5: light-dark(#4b5563, #a3acb9);
+      --bina-wallpaper-0: var(--color-base-200);
+      --bina-wallpaper-1: linear-gradient(160deg, color-mix(in srgb, #5b9be0 38%, var(--color-base-200)), color-mix(in srgb, #b9a2ee 30%, var(--color-base-200)));
+      --bina-wallpaper-2: linear-gradient(160deg, color-mix(in srgb, #f0a35e 36%, var(--color-base-200)), color-mix(in srgb, #e585ad 34%, var(--color-base-200)));
+      --bina-wallpaper-3: linear-gradient(160deg, color-mix(in srgb, #5fb98a 36%, var(--color-base-200)), color-mix(in srgb, #5b9be0 26%, var(--color-base-200)));
+      --bina-wallpaper-4: linear-gradient(160deg, color-mix(in srgb, #a08be6 36%, var(--color-base-200)), color-mix(in srgb, #e585ad 26%, var(--color-base-200)));
+      --bina-wallpaper-5: linear-gradient(160deg, color-mix(in srgb, #d8b47a 34%, var(--color-base-200)), color-mix(in srgb, #a3acb9 22%, var(--color-base-200)));
       --bina-shell-background: var(--color-base-200);
       --bina-shell-color: var(--color-base-content);
       --bina-shell-surface: var(--color-base-100);
       --bina-shell-border: var(--color-base-300);
       --bina-shell-focus: var(--color-primary);
     }
+    /* 壁紙はホームの後ろに敷く。ホームのグリッドは透かす */
+    :root[data-wallpaper="1"] #app { --bina-wallpaper: var(--bina-wallpaper-1); }
+    :root[data-wallpaper="2"] #app { --bina-wallpaper: var(--bina-wallpaper-2); }
+    :root[data-wallpaper="3"] #app { --bina-wallpaper: var(--bina-wallpaper-3); }
+    :root[data-wallpaper="4"] #app { --bina-wallpaper: var(--bina-wallpaper-4); }
+    :root[data-wallpaper="5"] #app { --bina-wallpaper: var(--bina-wallpaper-5); }
+    :root:is([data-wallpaper="1"], [data-wallpaper="2"], [data-wallpaper="3"], [data-wallpaper="4"], [data-wallpaper="5"]) #app { --bina-ui-grid-background: transparent; }
+    #app .bina-shell-app:not(.bina-shell-content) { background: var(--bina-wallpaper, none); }
     #app > [role="alert"] { padding: 16px; color: #b3261e; }
     /* 起動の前だけ見える。Scene と復旧画面は #app の中身を置き換える */
     @keyframes boot-fade {
@@ -90,14 +119,10 @@
       justify-content: center;
       position: relative;
       user-select: none;
-      /* テーマは起動後でないと読めないので、仮に OS のライト／ダークに合わせる */
-      --boot-background: #ffffff;
-      --boot-color: #16181d;
-      background: var(--boot-background);
+      /* 配色は :root の見た目（OS の設定か、前回の data-theme）に合わせる */
+      --boot-color: var(--color-base-content);
+      background: var(--color-base-200);
       color: var(--boot-color);
-    }
-    @media (prefers-color-scheme: dark) {
-      .boot-screen { --boot-background: #16181c; --boot-color: #f1f3f5; }
     }
     /* すぐ終わる起動でちらつかないよう、最初の 300ms は中身を出さない */
     .boot-body, .boot-note {

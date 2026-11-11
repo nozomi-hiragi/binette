@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, OsApi, SchedulerApi } from "jsr:@binette/replique";
-import { View, button, buttonOf, column, listTile, row, show, text } from "jsr:@binette/replique-ui@^0.1";
+import { View, button, buttonOf, column, listTile, row, segmented, show, text } from "jsr:@binette/replique-ui@^0.1";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
 const labels = ["スタックできるアプリの数", "Stop までの時間", "起動の履歴の最大の行数", "呼び出しの時間切れ", "onDestroy の時間切れ", "Apps を出すまでの時間"];
@@ -38,7 +38,30 @@ let schedulerApi: SchedulerApi | null = null;
 const intervals: i32[] = [60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
 let details = false;
 
+// 見た目の番号と名前。色と絵は OS の入口のページが番号から決める
+const accentNames = ["青", "緑", "紫", "桃", "橙", "灰"];
+const wallpaperNames = ["なし", "そら", "あさやけ", "もり", "すみれ", "すな"];
+
 function showDetails(): void { details = true; }
+function chooseTheme(index: i32): void {
+  const os = osApi;
+  if (os != null) os.set("theme", index);
+}
+function chooseAccent(index: i32): void {
+  const os = osApi;
+  if (os != null) os.set("accent", index);
+}
+function chooseWallpaper(index: i32): void {
+  const os = osApi;
+  if (os != null) os.set("wallpaper", index);
+}
+function swatches(names: string[], current: i32, prefix: string, title: string, f: (index: i32) => void): View {
+  const views: View[] = [];
+  for (let i: i32 = 0; i < names.length; i++) {
+    views.push(button("", f).arg(i).selected(i == current).label(title + " " + names[i] + (i == current ? "（使用中）" : "")).tip(names[i]).key(prefix + "-" + i.toString()));
+  }
+  return row(views).wrap().key(prefix + "-swatches");
+}
 function chooseHome(index: i32): void {
   const os = osApi;
   if (os == null) return;
@@ -214,6 +237,14 @@ export class Settings extends App {
           show(details, text("ブラウザだけで動く、アプリの土台です。").tone("muted").key("description")),
         ]).surface("card").key("about-card"),
       ]).key("about-section"),
+      column([
+        text("見た目").heading(2).key("appearance-title"),
+        column([
+          row([text("テーマ").grow(), segmented(["OS に合わせる", "ライト", "ダーク"], os.get("theme"), chooseTheme).label("テーマ").key("appearance-theme")]).wrap().key("appearance-theme-row"),
+          row([text("アクセント色").grow(), swatches(accentNames, os.get("accent"), "accent", "アクセント色", chooseAccent)]).wrap().key("appearance-accent-row"),
+          row([text("壁紙").grow(), swatches(wallpaperNames, os.get("wallpaper"), "wallpaper", "壁紙", chooseWallpaper)]).wrap().key("appearance-wallpaper-row"),
+        ]).surface("card").key("appearance-card"),
+      ]).key("appearance-section"),
       column([
         text("更新").heading(2).key("update-title"),
         column([

@@ -8,7 +8,7 @@ import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
 import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot } from "./launch.ts";
-import { type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
+import { APPEARANCE_LIMITS, type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
 export type SystemApp = { source: string } & (
@@ -41,7 +41,12 @@ export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "creat
   homeRetryWindow?: number;
   stackSize?: number;
   historyLimit?: number;
+  /** 見た目の設定を、起動のときと変わるたびに知らせる。色と絵は受け取る側が決める */
+  onAppearance?(appearance: Appearance): void;
 }
+
+/** 見た目の設定。theme は 0 が OS に合わせる、1 がライト、2 がダーク。accent と wallpaper は 0 が既定の番号 */
+export interface Appearance { theme: number; accent: number; wallpaper: number }
 
 /** システムが見せ方を受け持つ側に頼むこと */
 export interface SystemUi {
@@ -114,6 +119,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const stored = await options.store.system.getSettings();
   validateSystemSettings(stored ?? {});
   Object.assign(settings, stored, { roles: { ...stored?.roles } });
+  options.onAppearance?.({ theme: settings.theme, accent: settings.accent, wallpaper: settings.wallpaper });
   const bootRoles = { ...options.roles };
   const page = crypto.randomUUID();
   let frozen = false;
@@ -340,9 +346,19 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const copy = { ...settings, roles: { ...settings.roles } };
     saving = saving.then(() => options.store.system.putSettings(copy)).catch(report);
   };
+  const appearance = (): Appearance => ({ theme: settings.theme, accent: settings.accent, wallpaper: settings.wallpaper });
   const setSetting = (name: string, value: number) => {
+    if (!stopped && !changingApps && Object.hasOwn(APPEARANCE_LIMITS, name)) {
+      const key = name as keyof Appearance;
+      try { validateSystemSettings({ [key]: value }); } catch { return; }
+      if (settings[key] === value) return;
+      settings[key] = value;
+      saveSettings();
+      options.onAppearance?.(appearance());
+      return;
+    }
     if (stopped || changingApps || !["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name)) return;
-    const key = name as Exclude<keyof SystemSettings, "roles" | "allowHttpLists">;
+    const key = name as Exclude<keyof SystemSettings, "roles" | "allowHttpLists" | keyof Appearance>;
     try {
       validateSystemSettings({ [key]: value });
       if (!Number.isInteger(value) || ((key === "callTimeout" || key === "destroyTimeout") && value < 1000)) return;
