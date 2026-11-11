@@ -28,18 +28,23 @@ export async function preparePublishWorkspace(temp: string, { ascShims = false }
         await copy(join(ROOT, featureDir, "src"), join(target, feature, "src"));
         config.publish.include.push(`${feature}/deno.json`, `${feature}/src`);
       }
+      const decorVersion = JSON.parse(await Deno.readTextFile(join(ROOT, "packages/decor/deno.json"))).version as string;
       const files = ["src/index.ts", ...Object.keys(FEATURES).map(dir => `${dir.slice("packages/replique/".length)}/src/index.ts`),
         ...Object.keys(FEATURES).map(dir => `src/${dir.slice("packages/replique/".length)}.ts`)];
       for (const file of files) {
         const path = join(target, file);
         const contents = await Deno.readTextFile(path);
-        const rewritten = contents.replace(/jsr:@binette\/replique-([a-z]+)@\^0\.1/g, (_match: string, feature: string) => {
+        let rewritten = contents.replace(/jsr:@binette\/replique-([a-z]+)@\^0\.1/g, (_match: string, feature: string) => {
           if (!Object.hasOwn(FEATURES, `packages/replique/${feature}`)) throw new Error(`Unknown Réplique feature: ${feature}`);
           let destination = relative(join(path, ".."), join(target, feature, "src/index.ts"));
           if (!destination.startsWith(".")) destination = `./${destination}`;
           return destination;
         });
         if (rewritten.includes("jsr:@binette/replique-")) throw new Error(`Unrewritten Réplique dependency: ${file}`);
+        // JSR rejects a jsr: specifier without a version; the OS resolves this one itself, so only the published copy pins it.
+        rewritten = rewritten.replaceAll('"jsr:@binette/decor/', `"jsr:@binette/decor@${decorVersion}/`);
+        const unversioned = /(?:from|import)\s*"jsr:@[a-z0-9-]+\/[a-z0-9-]+(?:\/[^"]*)?"/.exec(rewritten);
+        if (unversioned) throw new Error(`Unversioned JSR dependency in ${file}: ${unversioned[0]}`);
         await Deno.writeTextFile(path, rewritten);
         // asc は拡張子付き import にも .ts を付けるため、同じ内容を用意する。
         if (ascShims && /^[a-z]+\/src\/index\.ts$/.test(file)) await Deno.writeTextFile(`${path}.ts`, rewritten);
