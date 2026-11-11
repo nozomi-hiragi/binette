@@ -1,9 +1,9 @@
 # @binette/replique-dom
 
-Réplique の `dom` 機能の AssemblyScript API です。
+Réplique の `dom` 機能の AssemblyScript API です。JSR には単独で公開せず、`@binette/replique` に含めます。OS のビルドでは機能別の指定子も使えます。
 
 ```ts
-import { ABI_VERSION } from "jsr:@binette/replique-dom@^0.1";
+import { ABI_VERSION } from "jsr:@binette/replique/dom";
 ```
 
 仕様は [Réplique](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/replique.md) を参照してください。

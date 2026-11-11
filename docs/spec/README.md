@@ -116,12 +116,12 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | `@binette/regie` | `@binette/core`、`@binette/decor`、`assemblyscript@0.28.20`（ビルドのみ）、`@std/path`（CLI のみ） |
 | `@binette/scene` | `@binette/core`、`@binette/decor`、`@binette/regie` |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
-| `@binette/replique` | なし（AS のソースだけ） |
+| `@binette/replique` | `@binette/decor`（AS） |
 
 テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
 
-- 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。v0.2 の公開で `0.2.0` にした。機能ごとの `@binette/replique-<機能>` は別に版を持つ
-- 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。どのパッケージも `src/` の TypeScript（replique は AS）をそのまま配る
+- 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。v0.2 の公開で `0.2.0` にした。OS 内の機能ごとの `@binette/replique-<機能>` は別に版を持ち、JSR には集約した `@binette/replique` のみを公開する
+- 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。TypeScript（replique は AS）のソースを配る
 - 開発は Deno だけで行う（決定 2026-10-26）。npm と Node は使わない
 
 ## v0.2 の最小限の土台（実装済み）
@@ -157,7 +157,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 - 権限の種類
 - アプリのサーバーサイドの置き場所と動かし方
 - Réplique の呼び出しの形（終わったら呼ぶ関数を渡す形でよいか）
-- エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（`deno publish --dry-run` は通る。実際の公開と補完は未確認）
+- エディタで `jsr:@binette/replique` の補完が効くか、JSR に AS のコードを公開できるか（公開スクリプトの `--dry-run` は通る。実際の公開と補完は未確認）
 - Worker の作り方（今は Blob URL。CSP に `worker-src blob:` が要る。[regie/run.md](regie/run.md#blob-url-の-worker)）。[boot.md](boot.md#配るファイル案) で `regie-worker.js` を別ファイルにすると決めた
 - asc の読み込みの重さ（約 13.6 MB、gzip で約 2.9 MB）をどうするか。[boot.md](boot.md#配るファイル案) で、カーネルに入れず、ファイルの木から取る部品にすると決めた
 
