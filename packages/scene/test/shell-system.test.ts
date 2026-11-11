@@ -57,10 +57,10 @@ Deno.test("Cadre を先に起動し、appArea のホームから設定を開き�
     assertEquals(created, 2);
     assertEquals(element.querySelector<HTMLElement>(".bina-shell-fallback")!.hidden, true);
     button("home-tile-0")!.click();
-    await waitFor(() => button("dock-0")?.getAttribute("aria-pressed") === "true" && element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => button("dock-0")?.getAttribute("aria-pressed") === "true" && element.querySelector("[data-bina-key=settings-root]") !== null);
     assertEquals(created, 3);
     assertEquals(home.hidden, true);
-    const settings = element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!;
+    const settings = element.querySelector<HTMLElement>("[data-bina-key=settings-root]")!.closest<HTMLElement>(".bina-shell-app")!;
     assertEquals(settings.parentElement, area);
     await waitFor(() => resumed === 3);
     await new Promise(resolve => setTimeout(resolve, 0));

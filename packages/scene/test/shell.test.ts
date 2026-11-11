@@ -42,6 +42,11 @@ function elementIn(window: Window): HTMLElement {
   window.document.body.append(element as never);
   return element;
 }
+/** 設定の項目の一覧から、項目の中身へ進む */
+async function openSettingsPage(element: HTMLElement, key: "open-defaults" | "open-about" | "open-debug"): Promise<void> {
+  await waitFor(() => element.querySelector(`[data-bina-key=${key}]`) !== null);
+  element.querySelector<HTMLButtonElement>(`[data-bina-key=${key}]`)!.click();
+}
 async function waitFor(condition: () => boolean): Promise<void> {
   // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
   const deadline = performance.now() + 10000;
@@ -126,7 +131,7 @@ Deno.test("実際の Cadre は同じ入口からホームと設定を別の Work
     const tiles = element.querySelectorAll<HTMLButtonElement>("[data-bina-key^=home-tile-]");
     assertEquals([...tiles].map(tile => tile.textContent), ["設定", "アプリ"]);
     tiles[0]!.click();
-    await waitFor(() => element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => element.querySelector("[data-bina-key=settings-root]") !== null);
     assertEquals(systemView(element).instances.map(instance => instance.key).sort(), ["cadre.home", "cadre.settings"]);
     assertEquals(worker.created, 3);
     assertEquals((await store.list()).map(app => app.key), ["cadre"]);
@@ -163,7 +168,7 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     // 宣言 UI の初回 build が反映されるまで待ち、詳細を開く。
     await waitFor(() => {
       if (element.querySelector("[data-bina-key=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。") return true;
-      element.querySelector<HTMLButtonElement>("[data-bina-key=details]")?.click();
+      (element.querySelector<HTMLButtonElement>("[data-bina-key=details]") ?? element.querySelector<HTMLButtonElement>("[data-bina-key=open-about]"))?.click();
       return false;
     });
     // build は起動の途中にも届く。両方の Resume が完了してから移動する。
@@ -414,6 +419,7 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
       await waitFor(() => count === 2);
       assertEquals(host.hidden, true);
       if (action === "close") {
+        await openSettingsPage(element, "open-debug");
         await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
         assertEquals(good.live, 1); assertEquals(good.terminated, 0);
         assertEquals(systemView(element).instances.filter(i => !i.home && !i.closing).map(i => i.name), ["設定"]);
@@ -460,9 +466,9 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
     await waitFor(() => resumed === 2);
     await waitForResumed(store, builtHome.manifest.id);
     operate(element, "設定", "開く");
-    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=settings-root]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     operate(element, "設定", "閉じる");
-    await waitFor(() => element.querySelector("[data-bina-key=debug]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => element.querySelector("[data-bina-key=settings-root]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(host.hidden, true); assertEquals(count, 3); assertEquals(good.live, 1);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -478,7 +484,7 @@ Deno.test("os は system の役割 settings に割り当てたアプリだけに
       await waitFor(() => element.querySelector("[data-bina-key=settings-unavailable]") !== null);
       assertEquals(errors, []);
       assertEquals(worker.terminated, 0);
-      assertEquals(element.querySelectorAll("[data-bina-key=debug]").length, 0);
+      assertEquals(element.querySelectorAll("[data-bina-key=settings-root]").length, 0);
     } finally { shell.stop(); await window.happyDOM.close(); }
   }
 });
@@ -490,6 +496,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
   let shell = await mountShell(element, options);
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
     const rows = element.querySelectorAll<HTMLElement>("[data-bina-key^=settings-row-]");
     const value = (i: number) => rows[i]!.querySelector("[data-bina-key^=settings-value-]")!.textContent;
@@ -520,6 +527,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     assertEquals(saved, { roles: {}, allowHttpLists: false, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000, theme: 0, accent: 0, wallpaper: 0 });
     shell = await mountShell(element, options);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6 && worker.live === 1);
     assertEquals([...element.querySelectorAll("[data-bina-key^=settings-value-]")].map(node => node.textContent), ["1", "1 秒", "10", "2 秒", "2 秒", "1 秒"]);
     assertEquals(errors, []);
@@ -532,6 +540,7 @@ Deno.test("設定した Stop までの時間は、残っているインスタン
   const key = builtHome.manifest.id;
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
     element.querySelectorAll<HTMLElement>("[data-bina-key^=settings-row-]")[1]!.querySelector<HTMLButtonElement>("button")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-value-]")[1]!.textContent === "0 秒");
@@ -540,7 +549,7 @@ Deno.test("設定した Stop までの時間は、残っているインスタン
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
-    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=settings-root]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     await waitFor(() => worker.live === 2);
     const deadline = performance.now() + 10000;
     while ((await store.system.getLast(key))?.state !== 5 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
@@ -556,6 +565,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
   let shell = await mountShell(element, options);
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-defaults");
     await waitFor(() => element.querySelectorAll("[data-bina-key=homes] button").length === 2);
     const homes = () => element.querySelectorAll<HTMLButtonElement>("[data-bina-key=homes] button");
     assertEquals([homes()[0]!.textContent, homes()[0]!.getAttribute("aria-pressed")], ["ホーム✓", "true"]);
@@ -589,6 +599,7 @@ Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で�
   const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker });
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key=history] > *").length === 5);
     const lines = [...element.querySelectorAll("[data-bina-key=history] > *")].map(node =>
       [...node.children[0]!.children].map(child => child.textContent!)
@@ -803,6 +814,7 @@ Deno.test("設定の更新状態は Worker へ同期して描き直し、確認�
   try {
     await waitFor(() => element.querySelector('[data-bina-key="home-grid"]') !== null);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-about");
     await waitFor(() => element.querySelector('[data-bina-key="update-status"]') !== null);
     assert(element.textContent!.includes("最新の版です。"));
     const checkButton = () => element.querySelector<HTMLButtonElement>('[data-bina-key="check-update"]')!;

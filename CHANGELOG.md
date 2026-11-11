@@ -12,6 +12,7 @@
 - `SystemOptions.onAppearance(appearance)` を足す。起動のときと設定が変わるたびに `{ theme, accent, wallpaper }` を知らせる。`@binette/regie` から `Appearance` と `APPEARANCE_LIMITS` を公開する
 - 入口のページは番号を `data-theme`・`data-accent`・`data-wallpaper` に付け、色（6 色）と壁紙（5 種類のグラデーション）を CSS で決める。前回の見た目を `localStorage` の `binette.appearance` に覚え、起動画面から同じ見た目で出す。設定の色見本には `--bina-accent-N`・`--bina-wallpaper-N` を渡す
 - 設定に「見た目」の節を足し、テーマ・アクセント色・壁紙を選べるようにする。壁紙はホームの後ろに敷く
+- 設定を項目の一覧と中身に分ける。項目は「見た目」「既定のアプリ」（ホーム・Cadre）「通知」「定期実行」「Binette について」（説明と更新）「デバッグ」（動作の値と起動の履歴）。幅 760px を超えると左に一覧・右に中身を並べ、開いた直後は「見た目」を見せる。それ以下では一覧だけを見せ、項目を押すと中身に進み「‹ 設定」で戻る。一覧のキーは `open-appearance`・`open-defaults`・`open-notifications`・`open-schedules`・`open-about`・`open-debug`。ホームの選択やデバッグの値は、項目を開くまで木に無い
 - Décor の既定のボタンに hover と押下の見た目を足し、`primary`・`ghost`・`subtle` に押下の色を足す。見出しに行間と字間を、入力欄の placeholder に色を付ける。動きを減らす設定では遷移を止める
 - ホームバーのホームとインストール（狭い幅）を、ドックのアイコンと同じ 40px にそろえ、押したときにアイコンを少し縮める。通知の中の操作を小さめのボタンにする
 - ドキュメントアプリ 0.1.1: 本文に読み物の余白・行間・見出しの区切りを付ける（`src/style.css` を追加）

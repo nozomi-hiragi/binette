@@ -70,7 +70,7 @@
 
 /* 設定のグループと行。色は Scene から届く Décor の役割の色に合わせる。 */
 :scope:has(> [data-bina-key="settings-root"]) { background: var(--bina-ui-sunken, #f2f3f6); }
-[data-bina-key="settings-root"] { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 40px 28px 48px; gap: 26px; }
+[data-bina-key="settings-root"] { box-sizing: border-box; width: 100%; max-width: 1080px; margin: 0 auto; padding: 40px 28px 48px; gap: 26px; }
 [data-bina-key="settings-header"] { padding: 0 4px 6px; }
 [data-bina-key="settings-title"] { margin: 0; font-size: 32px; font-weight: 750; letter-spacing: -.04em; line-height: 1.25; }
 [data-bina-key$="-section"] { gap: 8px; }
@@ -107,6 +107,34 @@
   [data-bina-key="debug"] > .bina-ui-row { gap: 8px; }
   [data-bina-key^="settings-value-"] { min-width: 36px; padding: 0 4px; }
   [data-bina-key="stepper"] > button { min-width: 28px; }
+}
+
+/* 設定は左に項目、右に中身。狭い幅では、未選択なら項目だけ、選んだあとは中身だけを見せて「‹ 設定」で戻る */
+[data-bina-key="settings-split"] { align-items: flex-start; gap: 36px; }
+[data-bina-key="settings-menu"] { flex: none; position: sticky; top: 0; width: 300px; gap: 20px; }
+[data-bina-key^="settings-detail"] { min-width: 0; gap: 26px; }
+[data-bina-key="settings-page-header"] { padding: 12px 4px 0; }
+[data-bina-key="settings-page-title"] { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
+[data-bina-key="settings-back"] { display: none; align-self: flex-start; margin: 0 0 8px -8px; padding: 6px 10px; border-radius: 9px; color: var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9)); font-size: 15px; }
+[data-bina-key="settings-links-card"] > button { display: flex; flex-direction: row; align-items: stretch; width: 100%; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: start; }
+[data-bina-key="settings-links-card"] > button + button { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
+[data-bina-key="settings-links-card"] > button:hover { background: color-mix(in srgb, currentColor 5%, transparent); }
+[data-bina-key="settings-links-card"] > button.bina-ui-selected { background: var(--bina-ui-accent-soft, #e6eef8); }
+[data-bina-key="settings-links-card"] > button:focus-visible { outline-offset: -3px; }
+[data-bina-key="settings-root"] [data-bina-key="settings-links-card"] .bina-ui-listTile { min-height: 60px; padding: 10px 16px; }
+[data-bina-key="page-mark"] { flex: none; padding: 0 2px; font-size: 22px; line-height: 1; }
+[data-bina-key="notifications-list"] > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
+[data-bina-key="notifications-empty"] { padding: 18px 16px; font-size: 13px; }
+@media (max-width: 760px) {
+  [data-bina-key="settings-split"] { flex-direction: column; align-items: stretch; gap: 0; }
+  [data-bina-key="settings-menu"] { position: static; width: auto; }
+  [data-bina-key="settings-detail-idle"] { display: none; }
+  [data-bina-key="settings-split"]:has(> [data-bina-key="settings-detail"]) > [data-bina-key="settings-menu"] { display: none; }
+  [data-bina-key="settings-back"] { display: inline-flex; }
+  [data-bina-key="settings-page-header"] { padding: 0 4px 6px; }
+  [data-bina-key="settings-page-title"] { font-size: 30px; font-weight: 750; letter-spacing: -.04em; line-height: 1.25; }
+  [data-bina-key="settings-links-card"] > button.bina-ui-selected { background: transparent; }
+  [data-bina-key="settings-links-card"] > button.bina-ui-selected:hover { background: color-mix(in srgb, currentColor 5%, transparent); }
 }
 
 /* 見た目。色見本は入口のページが出す番号ごとの色（--bina-accent-N・--bina-wallpaper-N）で塗る */
@@ -160,7 +188,6 @@
 /* 通知の中の操作は小さめのボタンにそろえる */
 [data-bina-key="notifications"] :is([data-bina-key="notification-actions"], [data-bina-key="notification-reply-controls"]) > .bina-ui-button { min-width: 0; min-height: 32px; padding: 5px 12px; border-radius: 8px; font-size: 14px; line-height: 1.3; }
 [data-bina-key="notifications"] > .bina-ui-column > .bina-ui-small { font-size: 12px; }
-[data-bina-key="notifications-card"] > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
 [data-bina-key="notifications-card"] .bina-ui-listTile { flex-wrap: wrap; }
 
 /* アプリ管理は設定と同じ地の色・幅・見出しにし、まとまりをカードで見せる */

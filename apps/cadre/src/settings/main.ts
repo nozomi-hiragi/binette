@@ -37,6 +37,17 @@ let schedulerApi: SchedulerApi | null = null;
 // 間隔の予定の − ＋ で選べる値（秒）
 const intervals: i32[] = [60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
 let details = false;
+// 開いている項目。-1 は未選択で、広い幅では先頭の項目を見せ、狭い幅では項目の一覧だけを見せる
+let page: i32 = -1;
+const pageTitles = ["見た目", "既定のアプリ", "通知", "定期実行", "Binette について", "デバッグ"];
+const pageKeys = ["open-appearance", "open-defaults", "open-notifications", "open-schedules", "open-about", "open-debug"];
+function openPage(next: i32): void { page = next; }
+function backToTop(): void { page = -1; }
+/** 項目の一覧の 1 行 */
+function pageLink(index: i32, detail: string, current: i32): View {
+  return buttonOf([listTile(pageTitles[index], detail, null, text("›").tone("muted").key("page-mark")).grow()], openPage)
+    .arg(index).selected(index == current).label(pageTitles[index] + "を開く").key(pageKeys[index]);
+}
 
 // 見た目の番号と名前。色と絵は OS の入口のページが番号から決める
 const accentNames = ["青", "緑", "紫", "桃", "橙", "灰"];
@@ -156,6 +167,13 @@ function scheduleView(s: SchedulerApi, i: i32): View {
   ]).key("schedule-" + s.id(i));
 }
 
+/** 役割に割り当てているアプリの名前。候補に無ければ空 */
+function roleName(os: OsApi, role: string): string {
+  const current = os.role(role);
+  for (let i: i32 = 0; i < os.candidateCount(role); i++) if (os.candidateId(role, i) == current) return os.candidateName(role, i);
+  return "";
+}
+
 export class Settings extends App {
   override onCreate(_last: Last, api: Api): void {
     osApi = OsApi.from(api);
@@ -226,26 +244,50 @@ export class Settings extends App {
     for (let i: i32 = 0; i < os.launchCount(); i++) {
       history.push(listTile(os.launchName(i), utc(os.launchTime(i))).key("launch-" + i.toString()));
     }
-    return column([
-      column([
-        text("設定").heading(1).key("settings-title"),
-      ]).key("settings-header"),
-      column([
-        text("Binette について").heading(2).key("about-title"),
-        column([
-          listTile("Binette", "仕様の版 0.2", text("B").key("about-icon"), button("詳しく", showDetails).variant("subtle").enabled(!details).key("details")),
-          show(details, text("ブラウザだけで動く、アプリの土台です。").tone("muted").key("description")),
-        ]).surface("card").key("about-card"),
-      ]).key("about-section"),
-      column([
-        text("見た目").heading(2).key("appearance-title"),
+    // 定期実行が届いていないときは、その項目を出さない
+    const current = page < 0 || (page == 3 && scheduler == null) ? 0 : page;
+    const links: View[] = [
+      pageLink(0, "テーマ・アクセント色・壁紙", current),
+      pageLink(1, "ホーム: " + roleName(os, "home") + "・Cadre: " + roleName(os, "cadre"), current),
+      pageLink(2, "アプリごとの許可", current),
+    ];
+    if (scheduler != null) links.push(pageLink(3, schedules.length == 0 ? "予定はありません" : schedules.length.toString() + " 件の予定", current));
+    links.push(pageLink(4, status, current));
+    links.push(pageLink(5, "動作の値と起動の履歴", current));
+    const sections: View[] = [];
+    if (current == 0) {
+      sections.push(column([
         column([
           row([text("テーマ").grow(), segmented(["OS に合わせる", "ライト", "ダーク"], os.get("theme"), chooseTheme).label("テーマ").key("appearance-theme")]).wrap().key("appearance-theme-row"),
           row([text("アクセント色").grow(), swatches(accentNames, os.get("accent"), "accent", "アクセント色", chooseAccent)]).wrap().key("appearance-accent-row"),
           row([text("壁紙").grow(), swatches(wallpaperNames, os.get("wallpaper"), "wallpaper", "壁紙", chooseWallpaper)]).wrap().key("appearance-wallpaper-row"),
         ]).surface("card").key("appearance-card"),
-      ]).key("appearance-section"),
-      column([
+      ]).key("appearance-section"));
+    } else if (current == 1) {
+      sections.push(column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"));
+      sections.push(column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"));
+    } else if (current == 2) {
+      sections.push(column([
+        column([
+          show(notifications.length == 0, text("通知を出すアプリはありません。").tone("muted").key("notifications-empty")),
+          column(notifications).key("notifications-list"),
+        ]).surface("card").key("notifications-card"),
+      ]).key("notifications-section"));
+    } else if (current == 3) {
+      sections.push(column([
+        column([
+          show(schedules.length == 0, text("予定はありません。").tone("muted").key("schedules-empty")),
+          column(schedules).key("schedules"),
+        ]).surface("card").key("schedules-card"),
+      ]).key("schedules-section"));
+    } else if (current == 4) {
+      sections.push(column([
+        column([
+          listTile("Binette", "仕様の版 0.2", text("B").key("about-icon"), button("詳しく", showDetails).variant("subtle").enabled(!details).key("details")),
+          show(details, text("ブラウザだけで動く、アプリの土台です。").tone("muted").key("description")),
+        ]).surface("card").key("about-card"),
+      ]).key("about-section"));
+      sections.push(column([
         text("更新").heading(2).key("update-title"),
         column([
           listTile("ソフトウェア・アップデート", status).key("update-status"),
@@ -256,25 +298,33 @@ export class Settings extends App {
             button("復旧画面を開く", openRecovery).variant("subtle").key("open-recovery"),
           ]).key("update-actions"),
         ]).surface("card").key("update-card"),
-      ]).key("update-section"),
-      column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),
-      column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"),
-      column([text("通知").heading(2), column(notifications).surface("card").key("notifications-card")]).key("notifications-section"),
-      show(scheduler != null, column([
-        text("定期実行").heading(2).key("schedules-title"),
-        column([
-          show(schedules.length == 0, text("予定はありません。").tone("muted").key("schedules-empty")),
-          column(schedules).key("schedules"),
-        ]).surface("card").key("schedules-card"),
-      ]).key("schedules-section")),
-      column([text("デバッグ").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"),
-      column([
+      ]).key("update-section"));
+    } else {
+      sections.push(column([text("動作の値").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"));
+      sections.push(column([
         row([text("起動の履歴").heading(2).grow().key("history-title"), text("UTC").small().tone("muted")]),
         column([
           show(history.length == 0, text("起動の履歴はありません。").tone("muted").key("history-empty")),
           column(history).list().key("history"),
         ]).surface("card").key("history-card"),
-      ]).key("history-section"),
+      ]).key("history-section"));
+    }
+    const detail: View[] = [
+      column([
+        button("‹ 設定", backToTop).variant("ghost").label("設定の項目に戻る").key("settings-back"),
+        text(pageTitles[current]).heading(1).key("settings-page-title"),
+      ]).key("settings-page-header"),
+    ];
+    for (let i = 0; i < sections.length; i++) detail.push(sections[i]);
+    // 広い幅は左に項目、右に中身。狭い幅は style.css が、未選択なら項目だけ、選んだあとは中身だけを見せる
+    return column([
+      row([
+        column([
+          column([text("設定").heading(1).key("settings-title")]).key("settings-header"),
+          column(links).surface("card").label("設定の項目").key("settings-links-card"),
+        ]).key("settings-menu"),
+        column(detail).grow().key(page < 0 ? "settings-detail-idle" : "settings-detail"),
+      ]).key("settings-split"),
     ]).key("settings-root");
   }
 }
