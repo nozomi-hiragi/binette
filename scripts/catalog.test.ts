@@ -1,3 +1,5 @@
+import { buildApp } from "../packages/regie/src/build.ts";
+import { readRepliqueLibraries } from "../packages/regie/src/cli.ts";
 import { repliqueFiles } from "../packages/regie/test/replique.ts";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { resolve } from "@std/path";
@@ -19,7 +21,14 @@ Deno.test("boot.json の提供リストは BINETTE_LISTS の https の URL だ�
 Deno.test("既定の提供リストは catalog/ のアプリを commit の raw で載せ、OS が入れるときの integrity と一致する", async () => {
   const entries = await catalogEntries(root, commit);
   assertEquals(entries.map(entry => entry.id), ["designer", "docs"]);
+  const libraries = await readRepliqueLibraries(resolve(root, "packages/replique"));
   for (const entry of entries) {
+    const built = await buildApp(path => Deno.readTextFile(resolve(root, "catalog", entry.id, path)), { libraries });
+    const imports = WebAssembly.Module.imports(await WebAssembly.compile(new Uint8Array(built.wasm)));
+    const actual = Object.fromEntries(imports.filter(value => value.module !== "env").map(value => value.module.slice("binette:".length).split("@")));
+    assertEquals(entry.requires, actual);
+    assertEquals(Object.keys(entry.requires!), Object.keys(entry.requires!).sort());
+    assert(!Object.hasOwn(entry.requires!, "env"));
     assert(entry.source.startsWith(`https://raw.githubusercontent.com/nozomi-hiragi/binette/${commit}/catalog/`));
     assert(entry.version.endsWith("+0123456"));
     assert(entry.integrity["/"]?.startsWith("sha256-"));

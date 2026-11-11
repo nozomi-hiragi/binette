@@ -28,6 +28,15 @@
 - 無ければ、一覧には識別子を出す
 - インストールしたあとは、アプリの `app.json` のもの（`name`・`icon`）を正とする
 
+## ABI の互換性（決定）
+
+- 提供リストの `requires`（[app-id.md](app-id.md#json-の形)）を、現在の OS の `HOST_ABI` と照合する。機能と版が一致しなければ「この OS では使えません（storage 0.3）」のように理由を出す。複数あれば機能名順に読点で並べる
+- `AppManagerApi.compatible(id)` と `compatibilityError(id)` で事前の判定と理由を読む。`requires` の省略・空辞書は事前の制限なしとし、従来どおりビルド後の WASM 検査を行う。権限を認める判定とは別で、既存の OS call・権限判定は変えない
+- 「探す」の行と詳細に理由を小さく出し、詳細の「入れる」「更新」「適用」は押せなくする。詳細を開く行は押せる。インストール処理も UI に頼らず、キャッシュした要求が非対応ならリストの再取得より前に、最新リストで非対応と分かったときは本体の取得より前に `unsupported_abi` で止める。自動更新も同じ
+- 保存済み WASM の ABI が合わないときは、`installedError(id)` が「この OS では動きません。入れ直してください」を返す。「入っている」の行と詳細に出し、カタログにあるアプリの詳細には「入れ直す」を出す
+- `reinstall(id)` は既存の「本体だけ消す（`uninstall(id, false)`）→ 同じ ID を入れる（`install`）」を順番に行い、データを残す。権限の確認も既存のインストールの手順を使う。途中で失敗・中止した場合もデータは残り、「データだけ」から再試行できる。現在のカタログも非対応なら入れ直しは押せない
+- アプリの行は中立の ghost ボタンで、行の背景と文字色を明示する。状態の pill も色を指定し、汎用ボタンの白文字を引き継がない
+
 ## 届け先
 
 - 役割 `apps-manager` を名乗り、かつ割り当てられたアプリにだけ、辞書のキー `manager` の API が届く（[roles.md](roles.md)）
@@ -117,6 +126,7 @@ Cadre のサブアプリとして `apps/cadre/app.json` の `sub` に宣言し�
 - OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため（API ドキュメントの `api/<ブランチ>/` と同じ）
 - ページ（HTML と `apps.json`）だけを、Docs の workflow で生成する。アプリのコードは写さない
 - `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/catalog/designer/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
+- `requires` は同じビルドの WASM imports から自動生成する。`env` は含めず、機能名順で安定させる
 - `version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`。`integrity` の `"/"` は CI が Régie の CLI で計算する
 - 載せるのは designer とドキュメントアプリ（`docs`）。Filer は役割 `files` の既定なので同梱のまま
 

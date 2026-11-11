@@ -1,7 +1,7 @@
 import { BinetteError } from "@binette/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
-import { HOST_ABI, validateAppAbi } from "../src/abi.ts";
+import { appCompatibility, appRequirements, HOST_ABI, validateAppAbi, validateAppRequirements } from "../src/abi.ts";
 import { launchApp, serveApp, type RegieWorker } from "../src/index.ts";
 
 async function compile(source: string): Promise<Uint8Array> {
@@ -139,4 +139,28 @@ Deno.test("提供 module の関数以外の import も機能・版・名前を�
   assertEquals(error.code, "unsupported_abi");
   const launchError = await assertRejects(() => launchApp(wasm, { createWorker }), BinetteError);
   assertEquals(launchError.message, error.message);
+});
+
+Deno.test("カタログの要求は HOST_ABI の機能と版の完全一致で判定する", () => {
+  assertEquals(appCompatibility(), "");
+  assertEquals(appCompatibility({}), "");
+  assertEquals(appCompatibility({ app: "0.1", storage: "0.1" }), "");
+  assertEquals(appCompatibility({ storage: "0.3" }), "この OS では使えません（storage 0.3）");
+  assertEquals(appCompatibility({ unknown: "1", app: "0.2" }), "この OS では使えません（app 0.2、unknown 1）");
+  try { validateAppRequirements({ storage: "0.3" }); throw new Error("拒否されませんでした"); }
+  catch (error) { assert(error instanceof BinetteError); assertEquals(error.code, "unsupported_abi"); }
+});
+
+Deno.test("requires は使われる WASM import だけを重複なし・機能順で返す", async () => {
+  const wasm = await compile(`@external("binette:storage@0.3", "read") declare function first(): void;
+@external("binette:app@1", "why") declare function second(): void;
+@external("binette:storage@0.3", "has") declare function third(): void;
+@external("binette:ui@0.2", "render") declare function unused(): void;
+export function call(): void { first(); second(); third(); }`);
+  assertEquals(JSON.stringify(await appRequirements(wasm)), '{"app":"1","storage":"0.3"}');
+  assertEquals(await appRequirements(await compile("export function answer(): i32 { return 42; }")), {});
+  const conflict = await compile(`@external("binette:ui@0.1", "render") declare function first(): void;
+@external("binette:ui@0.2", "render") declare function second(): void;
+export function call(): void { first(); second(); }`);
+  await assertRejects(() => appRequirements(conflict), Error, "複数の ABI");
 });

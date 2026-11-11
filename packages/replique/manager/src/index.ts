@@ -60,6 +60,13 @@ export class AppManagerApi {
   version(id: string): string { return hostManager.text("version", id, 0); }
   /** 入っている版。入っていなければ空 */
   installedVersion(id: string): string { return hostManager.text("installedVersion", id, 0); }
+  /** カタログの ABI 要求が現在の OS に合うか。要求のない旧リストは true */
+  compatible(id: string): bool { return hostManager.number("compatible", id, 0) != 0; }
+  compatibilityError(id: string): string { return hostManager.text("compatibilityError", id, 0); }
+  /** 保存した WASM が今の OS の ABI に合わない場合の案内。問題がなければ空 */
+  installedError(id: string): string { return hostManager.text("installedError", id, 0); }
+  /** 本体だけを消して同じ ID を入れ直す。アプリのデータを引き継ぐ */
+  reinstall(id: string): void { hostManager.act("reinstall", id, "", false); }
   /** 本体を消してデータだけが残っている */
   removed(id: string): bool { return hostManager.number("removed", id, 0) != 0; }
   removable(id: string): bool { return hostManager.number("removable", id, 0) != 0; }

@@ -107,3 +107,15 @@
 [data-bina-key="notification-reply-input"] { box-sizing: border-box; min-width: 0; width: 100%; }
 [data-bina-key="notifications-card"] > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
 [data-bina-key="notifications-card"] .bina-ui-listTile { flex-wrap: wrap; }
+
+/* アプリの行は詳細を開く中立のボタン。汎用ボタンの青背景・白文字を使わない */
+[data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]) { flex-direction: row; align-items: center; width: 100%; min-width: 0; padding: 12px; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: start; }
+[data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]):hover { background: var(--bina-ui-subtle); }
+[data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]):focus-visible { outline-offset: -3px; }
+[data-bina-key="apps-icon"], [data-bina-key="apps-initial"] { flex: none; }
+@media (max-width: 480px) {
+  [data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]) { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; }
+  [data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]) > .bina-ui-column { grid-column: 2 / -1; min-width: 0; }
+  [data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]) > .bina-ui-mono { grid-column: 2; }
+  [data-bina-key="apps-root"] [data-bina-key="apps-state"] { grid-column: 3; justify-self: end; }
+}

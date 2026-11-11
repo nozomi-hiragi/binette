@@ -25,6 +25,8 @@ export interface AppListEntry {
   version: string;
   /** 改ざん検出のハッシュの辞書（キーは `source` から見たパス） */
   integrity?: Record<string, string>;
+  /** 必要なホスト ABI（機能名 → 版）。省略時はビルド後に検査する */
+  requires?: Record<string, string>;
   /** 表示名（表示用。入れたあとは `app.json` を正とする） */
   name?: string;
   /** アイコンの URL（解決済み、表示用） */
@@ -157,6 +159,17 @@ export function parseAppList(text: string, jsonUrl: string, options: AppIdOption
       source: resolveHttp(entry.source, jsonUrl, options, `${where} の source`),
       version: entry.version,
     };
+    if (Object.hasOwn(entry, "requires")) {
+      if (!isObject(entry.requires)) invalid(`${where} の requires はオブジェクトで指定してください。`);
+      const requires: Record<string, string> = {};
+      for (const [feature, version] of Object.entries(entry.requires)) {
+        if (!/^[a-z][a-z0-9-]*(?![\s\S])/.test(feature) || typeof version !== "string" || !/^(?:0\.\d+|[1-9]\d*)(?![\s\S])/.test(version)) {
+          invalid(`${where} の requires は機能名と ABI の版（0.N または N）で指定してください。`);
+        }
+        Object.defineProperty(requires, feature, { value: version, enumerable: true, writable: true, configurable: true });
+      }
+      result.requires = requires;
+    }
     if (Object.hasOwn(entry, "integrity")) result.integrity = validateIntegrity(entry.integrity, where);
     for (const key of ["name", "description"] as const) {
       if (!Object.hasOwn(entry, key)) continue;

@@ -23,6 +23,7 @@ function openDetail(i: i32): void {
 }
 function closeDetail(): void { detail = ""; removing = false; }
 function install(): void { const m = manager; if (m != null && detail.length > 0) m.install(detail); }
+function reinstall(): void { const m = manager; if (m != null && detail.length > 0) m.reinstall(detail); }
 function cancel(): void { const m = manager; if (m != null && detail.length > 0) m.cancel(detail); }
 function apply(): void { const m = manager; if (m != null && detail.length > 0) m.apply(detail); }
 function askRemove(): void { removing = true; }
@@ -95,6 +96,8 @@ function progressText(m: AppManagerApi, id: string): string {
 function stateLabel(m: AppManagerApi, id: string): string {
   const state = m.state(id);
   if (m.removed(id) && !busy(state)) return "データだけ";
+  if (m.installedError(id).length > 0 && !busy(state)) return "入れ直してください";
+  if (!m.compatible(id) && !busy(state)) return "使えません";
   if (state == "installed") return "入っている";
   if (state == "update") return "更新あり";
   if (state == "prepared") return "適用待ち";
@@ -122,16 +125,18 @@ function appRow(m: AppManagerApi, id: string, tilePrefix: string): View {
   const status = state == "update" || state == "prepared" ? badge(label).key("apps-state")
     : busy(state) ? row([spinner(), text(label).small().tone("muted")]).gap(4).key("apps-state")
     : state == "failed" ? text(label).small().tone("danger").key("apps-state")
-    : chip(label).key("apps-state");
+    : chip(label).tone("muted").key("apps-state");
   const tile = buttonOf([
     initial(m, id),
     column([
       text(nameOf(m, id)).bold().truncate(),
       show(description.length > 0, text(description).small().tone("muted").truncate()),
+      show(m.compatibilityError(id).length > 0, text(m.compatibilityError(id)).small().tone("danger")),
+      show(m.installedError(id).length > 0, text(m.installedError(id)).small().tone("danger")),
     ]).gap(2).grow(),
     show(version.length > 0, text(version).small().tone("muted").mono()),
     status,
-  ], openDetail).arg(index).label(nameOf(m, id) + "（" + label + "）の詳細").key(tilePrefix + index.toString());
+  ], openDetail).variant("ghost").grow().gap(12).arg(index).label(nameOf(m, id) + "（" + label + "）の詳細").key(tilePrefix + index.toString());
   return removed ? tile.tone("muted") : tile;
 }
 
@@ -223,9 +228,11 @@ function lists(m: AppManagerApi): View {
 function details(m: AppManagerApi, id: string): View {
   const state = m.state(id);
   const removed = m.removed(id) && !busy(state);
-  const present = m.installedVersion(id).length > 0 && !removed;
+  const present = !removed && (m.installedVersion(id).length > 0 || m.installedError(id).length > 0);
   const listed = m.version(id).length > 0;
   const progress = busy(state);
+  const compatible = m.compatible(id);
+  const broken = m.installedError(id).length > 0;
   const host = hostOf(m.list(id));
   const listName = m.listName(id);
   const source = listName.length > 0 ? listName + "（" + host + "）" : host;
@@ -233,7 +240,7 @@ function details(m: AppManagerApi, id: string): View {
   const info: View[] = [];
   const ready = m.detailsReady(id);
   const failure = m.detailsError(id);
-  if (ready) {
+  if (ready && failure.length == 0) {
     const permissions: View[] = [];
     for (let i: i32 = 0; i < m.permissionCount(id); i++) {
       const reason = m.permissionReason(id, i);
@@ -266,9 +273,10 @@ function details(m: AppManagerApi, id: string): View {
     actions.push(button("データごと消す", removeWithData).tone("danger").key("detail-remove-data"));
     actions.push(button("やめる", keepApp).variant("ghost").key("detail-remove-cancel"));
   } else {
-    if (listed && (!present || state == "failed") && state != "prepared") actions.push(button(removed ? "入れ直す" : state == "failed" && present ? "もう一度" : "入れる", install).variant("primary").key("detail-install"));
-    if (state == "update") actions.push(button("更新", install).variant("primary").key("detail-update"));
-    if (state == "prepared") actions.push(button("適用", apply).variant("primary").key("detail-apply"));
+    if (listed && present && broken) actions.push(button("入れ直す", reinstall).variant("primary").enabled(yes(compatible)).key("detail-reinstall"));
+    if (listed && (!present || state == "failed") && state != "prepared" && !broken) actions.push(button(removed ? "入れ直す" : state == "failed" && present ? "もう一度" : "入れる", install).variant("primary").enabled(yes(compatible)).key("detail-install"));
+    if (state == "update" && !broken) actions.push(button("更新", install).variant("primary").enabled(yes(compatible)).key("detail-update"));
+    if (state == "prepared" && !broken) actions.push(button("適用", apply).variant("primary").enabled(yes(compatible)).key("detail-apply"));
     if (m.removable(id) && (present || removed)) actions.push(button(removed ? "データを消す" : "削除", askRemove).variant("ghost").tone("danger").key("detail-remove"));
   }
   const error = m.error(id);
@@ -286,6 +294,8 @@ function details(m: AppManagerApi, id: string): View {
       text("版 " + (present ? m.installedVersion(id) : m.version(id)) + (removed ? "（データだけ）" : "")).small(),
       text(id).small().mono().tone("muted").key("detail-id"),
     ]).gap(6),
+    show(!compatible, text(m.compatibilityError(id)).small().tone("danger").key("detail-compatibility")),
+    show(broken, text(m.installedError(id)).small().tone("danger").key("detail-broken")),
     show(update.length > 0, column(update).gap(4).surface("card").key("detail-update-info")),
     show(yes(progress), row([spinner(), text(progressText(m, id)).small()]).gap(6).key("detail-progress")),
     show(state == "failed" && error.length > 0, text(error).small().tone("danger").key("detail-failure")),

@@ -3,7 +3,7 @@
 // commit, because raw caches branch URLs for minutes and the integrity would not match right after a push.
 // See docs/spec/app-manager.md (Binette の既定の提供リスト).
 import { resolve } from "@std/path";
-import { computeAppIntegrity, readRepliqueLibraries } from "../packages/regie/src/cli.ts";
+import { computeAppMetadata, readRepliqueLibraries } from "../packages/regie/src/cli.ts";
 
 export const REPOSITORY = "nozomi-hiragi/binette";
 /** Where GitHub Pages serves the catalog of a branch. Outside the OS service worker scope (/binette/<branch>/). */
@@ -19,6 +19,7 @@ export interface CatalogEntry {
   icon?: string;
   description?: string;
   integrity: Record<string, string>;
+  requires?: Record<string, string>;
 }
 
 const escape = (text: string) => text.replace(/[&<>"']/g, char => `&#${char.charCodeAt(0)};`);
@@ -45,7 +46,7 @@ export async function catalogEntries(root: string, commit: string): Promise<Cata
       ...(manifest.name ? { name: manifest.name } : {}),
       ...(manifest.icon ? { icon: new URL(manifest.icon, source).href } : {}),
       ...(manifest.description ? { description: manifest.description } : {}),
-      integrity: await computeAppIntegrity(dir, [], { libraries }),
+      ...await computeAppMetadata(dir, { libraries }),
     });
   }
   return entries;

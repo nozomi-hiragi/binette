@@ -1,3 +1,4 @@
+import { appRequirements } from "./abi.ts";
 import { buildApp, type BuildOptions } from "./build.ts";
 import { stringifyPrebuiltApp } from "./prebuilt.ts";
 import { type AppFile, computeIntegrity, parseAppManifest } from "@binette/core";
@@ -72,7 +73,7 @@ export async function collectAppFiles(dir: string): Promise<AppFile[]> {
 }
 
 /** install と同じビルドとアイコンの読み込みで、取得したファイルだけを集める。 */
-async function collectBuildFiles(dir: string, keys: string[], options: BuildOptions): Promise<AppFile[]> {
+async function collectBuildFiles(dir: string, keys: string[], options: BuildOptions): Promise<{ files: AppFile[]; wasm: Uint8Array }> {
   if (options.libraries?.["jsr:@binette/replique"] === undefined) throw new Error("/ とフォルダキーのハッシュには --replique <packages/replique> を指定してください。");
   const root = resolve(dir);
   const files = new Map<string, Uint8Array>();
@@ -95,7 +96,7 @@ async function collectBuildFiles(dir: string, keys: string[], options: BuildOpti
     if (!key || appPath(key) !== key || key.includes("?") || key.includes("#")) throw new Error(`integrity のパスが正しくありません: ${key}`);
     await readBytes(key);
   }
-  return [...files].map(([path, bytes]) => ({ path, bytes }));
+  return { files: [...files].map(([path, bytes]) => ({ path, bytes })), wasm: built.wasm };
 }
 
 /**
@@ -109,7 +110,7 @@ export async function computeAppIntegrity(dir: string, keys: string[] = [], opti
     const path = key.replace(/\/$/, "");
     if (!path || appPath(path) !== path || path.includes("?") || path.includes("#")) throw new Error(`integrity のパスが正しくありません: ${key}`);
   }
-  const files = targets.some(key => key.endsWith("/")) ? await collectBuildFiles(dir, targets, options) : await Promise.all(targets.map(async key =>
+  const files = targets.some(key => key.endsWith("/")) ? (await collectBuildFiles(dir, targets, options)).files : await Promise.all(targets.map(async key =>
     ({ path: key, bytes: await Deno.readFile(resolve(dir, key)) })
   ));
   const result: Record<string, string> = {};
@@ -117,6 +118,12 @@ export async function computeAppIntegrity(dir: string, keys: string[] = [], opti
     Object.defineProperty(result, key, { value: await computeIntegrity(files, key), enumerable: true, writable: true, configurable: true });
   }
   return result;
+}
+
+/** カタログのハッシュと ABI 要求を同じビルドから求める */
+export async function computeAppMetadata(dir: string, options: BuildOptions): Promise<{ integrity: Record<string, string>; requires: Record<string, string> }> {
+  const { files, wasm } = await collectBuildFiles(dir, ["/"], options);
+  return { integrity: { "/": await computeIntegrity(files, "/") }, requires: await appRequirements(wasm) };
 }
 
 if (import.meta.main) {

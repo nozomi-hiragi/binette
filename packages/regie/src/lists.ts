@@ -1,4 +1,4 @@
-import { validateAppAbi } from "./abi.ts";
+import { validateAppAbi, validateAppRequirements } from "./abi.ts";
 import { type AppList, type AppListDocument, type AppManifest, findAppList, normalizeAppIdentifier, normalizeAppListUrl, parseAppId, parseAppList, parseAppManifest, verifyIntegrity } from "@binette/core";
 import { buildAppInWorker, type BrowserBuildOptions } from "./browser-build.ts";
 import { appPath, iconPath } from "./paths.ts";
@@ -354,6 +354,7 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     setState(key, { phase: "waiting", files: 0, bytes: 0 });
     let release: (() => void) | undefined;
     try {
+      validateAppRequirements(entry.requires);
       const ready = prepared.get(key);
       let app: InstalledApp, files: Map<string, Uint8Array>, previous: InstalledApp | undefined, progress = { files: 0, bytes: 0 };
       if (ready && ready.app.listVersion === entry.version) {
@@ -470,6 +471,12 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
       try { return lists.get(normalizeAppListUrl(url, { allowHttp: true })); } catch { return undefined; }
     },
     install: async (url, id) => {
+      const cached = api.cached(url)?.apps.find(entry => entry.id === normalizeAppIdentifier(id));
+      try { validateAppRequirements(cached?.requires); }
+      catch (error) {
+        setState(appId(await normalize(url), id), { phase: "failed", files: 0, bytes: 0, error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
       const found = await findEntry(url, id);
       return await installJob(found.url, found.list.name, found.entry, "manual");
     },
@@ -494,6 +501,7 @@ export async function createProviderLists(options: ProviderListsOptions): Promis
     }),
     details: async (url, id) => {
       const found = await findEntry(url, id);
+      validateAppRequirements(found.entry.requires);
       const key = appId(found.url, found.entry.id);
       const base = new URL(found.entry.source);
       if (!base.pathname.endsWith("/")) base.pathname += "/";
