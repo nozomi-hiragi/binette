@@ -2,7 +2,7 @@
  * ビネットと asset を配信する Coulisses。
  *
  * 配るものは {@link BinettePanoplie} にまとめて渡し、あとから足すこともできる。
- * 配る部分はファイルシステムを使わない。`node:fs` が要るのはフォルダから作る {@link importPanoplie} だけ。
+ * 配る部分はファイルシステムを使わない。フォルダを読む（Deno の API が要る）のは、フォルダから作る {@link importPanoplie} だけ。
  *
  * @packageDocumentation
  */
@@ -58,6 +58,7 @@ export function createCoulisses(options: CoulissesOptions = {}): Coulisses {
   Object.assign(panoplie.files, options.panoplie?.files);
   const { binettes, files } = panoplie;
   const encoder = new TextEncoder();
+  // deno-lint-ignore require-await -- Fetch API の非同期契約を保ち、応答生成の例外も Promise の拒否で返す。
   const fetch = async (request: Request): Promise<Response> => {
     const headers = new Headers();
     if (options.cors !== undefined) headers.set("Access-Control-Allow-Origin", options.cors);

@@ -1,0 +1,154 @@
+# @binette/core
+
+[仕様の目次](README.md)
+
+パッケージの共通物です。層ではなく、どのパッケージも参照する形式の定義と約束を置きます（のぞみ 2026-10-28）。動きは持ちません。依存は `valibot@1.5.0`（npm）だけです。
+
+置くのは、2 つ以上のパッケージ（または AS の Réplique）が同じものを使う必要がある型・数値・検査だけです。1 つのパッケージだけが使うものは、そのパッケージに置きます。
+
+## 公開するもの（実装済み）
+
+| 名前 | 種類 | 内容 |
+| --- | --- | --- |
+| `AppManifest`・`AppEntry`・`AppPermission` | 型 | `app.json` の中身 |
+| `parseAppManifest` | 関数 | `app.json` を読んで検査する |
+| `BinetteError` | クラス | 形式の誤り、未対応 ABI |
+| `State`・`DestroyKind`・`DestroyCause` | enum | ライフサイクルの番号（案・実装済み） |
+| `DomOp` | 型 | アプリの DOM 操作（案・実装済み） |
+| `Binette` ほか（下の「v0.1 の `.bina`」） | 型 | v0.1 の `.bina` の中身 |
+| `parseBinette` | 関数 | v0.1 の `.bina` を読んで検査する |
+| `BINETTE_VERSION` | 定数 | v0.1 の `.bina` の形式の版。`"0.1"` |
+
+## app.json の型
+
+```ts
+/** アプリの権限 1 つ分。用途の説明をインストール画面に出す */
+interface AppPermission {
+  reason: string;
+}
+
+/** `app.json` の入口。ファイルのパスは `app.json` からの相対 */
+interface AppEntry {
+  html?: string; // 省略すると宣言的 UI（案）
+  css?: string;
+  as: string;
+}
+
+/** アプリの説明ファイル `app.json` の中身。`id`・`name`・`entry` と任意の `icon`・`roles` の型を検査する */
+interface AppManifest {
+  id: string;
+  version?: string;
+  binette?: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  roles?: string[];
+  entry: AppEntry;
+  permissions?: Record<string, AppPermission>;
+  server?: { required?: boolean };
+  build?: { compiler?: string };
+  /** 検査しないほかの欄 */
+  [key: string]: unknown;
+}
+```
+
+- 欄の意味は [app.md](app.md#appjson) にあります
+- 型が付いていても、検査するのは `id`・`name`・`entry` と任意の `icon`・`roles` の型です。たとえば `version` に数値が入っていても、`parseAppManifest` は誤りにしません。型はあくまで「正しく書かれていればこうなる」という目安です
+
+## parseAppManifest
+
+```ts
+function parseAppManifest(text: string, options?: { strictId?: boolean }): AppManifest
+```
+
+- `text` は `app.json` の中身の文字列です
+- `id` は既定で識別子の規則を検査します。`.` はサブアプリの区切りなので使えません。サブアプリは `sub` に宣言します（[app-id.md](app-id.md#サブアプリ)）。旧形式を読む道具向けに `{ strictId: false }` を渡すと、この識別子の検査だけを省けます
+- `JSON.parse` で読み、valibot のスキーマで検査します。正しければ、読んだオブジェクトを返します。検査しない欄も含めて、中身は変えません
+- 誤りは `BinetteError` を投げます。検査の順とメッセージは [app.md の「読み込みと検査」](app.md#読み込みと検査実装済み) にあります
+
+## BinetteError
+
+```ts
+class BinetteError extends Error {
+  readonly code: "invalid_format" | "unsupported_abi" | "unsupported_sdk";
+  constructor(code: "invalid_format" | "unsupported_abi" | "unsupported_sdk", message: string);
+  // name は "BinetteError"
+}
+```
+
+- 形式の誤りはすべて `code: "invalid_format"` です。未対応の ABI module・関数は `code: "unsupported_abi"` です。ビルド時の SDK の版範囲外・未知の機能・指定形式の誤りは `code: "unsupported_sdk"` です。`message` は日本語で、利用者に見せてよい文です
+- `app.json` と `.bina` の両方で使います
+
+## ライフサイクルの番号（案）
+
+状態と Destroy の理由の番号の正です。Régie（[process.md](regie/process.md)）が使い、AS の Réplique は同じ番号を自分で書きます（AS は TypeScript のパッケージを読めないため）。番号が合っているかは、Réplique のソースを読むテストで確かめます。core の定義と Réplique の番号の一致は実装済みです。
+
+```ts
+enum State { None, Create, Start, Resume, Pause, Stop, Destroy }
+enum DestroyKind { User, System }
+enum DestroyCause { Os, App, Stack, Update, Uninstall }
+```
+
+意味は [lifecycle.md](lifecycle.md) にあります。
+
+## DomOp（案）
+
+アプリの DOM 操作です。Régie が Worker から受け取り（[run.md](regie/run.md#dom-の配送案実装済み)）、Scene が置き場に反映します（[scene/mount.md](scene/mount.md)）。core での型の公開は実装済みです。
+
+```ts
+type DomOp =
+  | { op: "byId"; handle: number; id: string }
+  | { op: "create"; handle: number; tag: string }
+  | { op: "text"; handle: number; value: string }
+  | { op: "class"; handle: number; value: string }
+  | { op: "append"; parent: number; child: number }
+  | { op: "remove"; handle: number }
+  | { op: "listen"; handle: number; type: string; listener: number }
+  | { op: "unlisten"; handle: number; type: string; listener: number }
+  | { op: "icon"; handle: number; app: number }
+  | { op: "ui-create"; handle: number; kind: "column" | "row" | "text" | "button" }
+  | { op: "ui-update"; handle: number; text: string; padding: number | null; gap: number | null; grow: boolean; label: string | null; enabled: boolean; clickable: boolean }
+  | { op: "ui-insert"; parent: number | null; child: number; before: number | null }
+  | { op: "ui-remove"; handle: number };
+```
+
+## v0.1 の `.bina`（v0.1 のまま残しているもの）
+
+Coulisses（[coulisses.md](coulisses.md)）が `.bina` を読むので、core の `.bina` の型と読み込みは v0.1 のまま残しています。v0.2 の Scene は `.bina` を使いません。残すか消すかは未決です。
+
+詳しい決まりはタグ `v0.1.0` の `docs/spec.md` にあります。ここには、今のコードが検査する内容だけを書きます。
+
+### 型
+
+```ts
+type BinetteAsset =
+  | { type: string; content: string; src?: undefined }
+  | { type: string; src: string; content?: undefined };
+
+interface BinetteBase {
+  binette: string;           // "0.1"
+  title?: string;
+  assets: Record<string, BinetteAsset>; // 省略すると空のオブジェクト
+  settings?: BinetteSettingsSection[];
+}
+interface BinettePage extends BinetteBase { entry: string; redirect?: undefined }
+interface BinetteRedirect extends BinetteBase { redirect: string; entry?: undefined }
+type Binette = BinettePage | BinetteRedirect;
+```
+
+`settings` の型（`BinetteSettingsSection`・`BinetteSettingsList`・`BinetteSettingsElement`・`BinetteSettingsEntryElement`・`BinetteSettingsComponentElement`・`BinetteSettingsRow`・`BinetteSettingsSectionBase`）は v0.1 の設定画面のためのもので、`packages/core/src/schema.ts` にあります。
+
+### parseBinette
+
+```ts
+function parseBinette(text: string): Binette
+```
+
+- JSON として読めないときは `Binette を JSON として読めません。`
+- `binette` が `BINETTE_VERSION`（`"0.1"`）と一致しないときは `対応していない Binette のバージョンです: <値>`
+- `entry` と `redirect` はどちらか一方だけ。両方か、どちらも無いときは `entry と redirect のどちらか一方を指定してください。`
+- `redirect` は `/` で始まり、`//` で始まらず、`\` と空白・制御文字（U+0000〜U+0020）を含まないパス。違えば `redirect は Scene 内のパスで指定してください。`
+- `assets` のキーは空でなく、`.`・`/`・`\` を含まない。asset は `type`（空でない文字列）と、`content`（文字列）か `src`（空でない文字列）のどちらか一方を持つ
+- `entry` は `assets` にあり、その `type` が `html` か `js`
+- `settings` の `element` セクションの `entry` は、`assets` の `js` を指す
+- 誤りはすべて `BinetteError` で、最初に見つかった誤りで止まる

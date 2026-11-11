@@ -1,0 +1,382 @@
+import { readRepliqueLibraries } from "../../regie/src/cli.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import { createMemoryAppStore, type RegieWorker, serveApp } from "@binette/regie";
+import { Window } from "happy-dom";
+import { State } from "@binette/core";
+import { mountSystem as mountShell, operate, systemView } from "./system-helper.ts";
+import { buildApp } from "@binette/regie/build";
+import { mountStartedApp } from "./mount-helper.ts";
+
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+async function waitFor(condition: () => boolean): Promise<void> {
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await sleep(5);
+  assert(condition(), "待っても状態が変わりませんでした");
+}
+async function waitForAsync(condition: () => Promise<boolean>): Promise<void> {
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!await condition() && performance.now() < deadline) await sleep(5);
+  assert(await condition(), "待っても状態が変わりませんでした");
+}
+function createWorker(): RegieWorker {
+  const { port1, port2 } = new MessageChannel();
+  port1.start(); port2.start(); serveApp(port1 as never);
+  return {
+    postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
+    addEventListener: (type, listener) => port2.addEventListener(type, listener as never),
+    terminate() { port1.close(); port2.close(); },
+  };
+}
+/** 無限ループもメインを止めずに試せる、別スレッドの Worker */
+function realWorker(): RegieWorker {
+  return new Worker(new URL("../../regie/src/worker-entry.ts", import.meta.url), { type: "module" });
+}
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
+const source = `import { Api, App, AppsApi, Last, State, DestroyReason, document, launch } from "jsr:@binette/replique";
+let appsApi: AppsApi | null = null;
+let log = "";
+function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
+class TestApp extends App {
+  onCreate(last: Last, api: Api): void {
+    appsApi = AppsApi.from(api);
+    record("create:" + last.state.toString());
+    document.getElementById("page").textContent = this.page;
+    document.getElementById("click").addEventListener("click", () => record("click"));
+    document.getElementById("finish").addEventListener("click", () => test.finishNow());
+    document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
+  }
+  onStart(last: State): void { record("start:" + last.toString()); }
+  onResume(): void { record("resume"); }
+  onPause(): void { record("pause"); }
+  onStop(): void { record("stop"); }
+  onDestroy(reason: DestroyReason): void { record("destroy:" + reason.kind.toString() + ":" + reason.cause.toString()); }
+  finishNow(): void { record("before"); this.finish(); record("after"); }
+}
+const test = new TestApp();
+launch(test);`;
+async function build(code = source, home = false) {
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { roles: ["home"] } : {}), entry: { html: "index.html", as: "main.ts" } }),
+    "index.html": '<p id="log"></p><p id="page"></p><button id="click">click</button><button id="finish">finish</button><button id="open">open</button>',
+    "main.ts": code,
+  };
+  return await buildApp(path => Promise.resolve(files[path]!), { libraries });
+}
+function host(window: Window): HTMLElement {
+  const element = window.document.createElement("div");
+  window.document.body.append(element);
+  return element as unknown as HTMLElement;
+}
+const activeHost = (element: HTMLElement) => element.querySelector<HTMLElement>(".bina-shell-app:not([hidden])")!;
+const logOf = (element: HTMLElement | null) => (element?.querySelector(".bina-shell") ? activeHost(element) : element)?.querySelector("#log")?.textContent;
+const click = (element: HTMLElement, id: string) => (element.querySelector(".bina-shell") ? activeHost(element) : element).querySelector<HTMLButtonElement>(`#${id}`)!.click();
+
+Deno.test("launch が無くても初期化のリスナーとイベントは動き、二回の launch は起動に失敗する", async () => {
+  const window = new Window(); const element = host(window);
+  const built = await build(`import { document } from "jsr:@binette/replique";
+document.getElementById("click").addEventListener("click", () => { document.getElementById("log").textContent = "届いた"; });`);
+  const mounted = await mountStartedApp(element, built, { createWorker });
+  try { click(element, "click"); await waitFor(() => logOf(element) === "届いた"); }
+  finally { mounted.stop(); await window.happyDOM.close(); }
+  const twice = await build('import { App, launch } from "jsr:@binette/replique"; launch(new App()); launch(new App());');
+  await assertRejects(() => mountStartedApp(element, twice, { createWorker }), Error, "launch は一回だけ");
+});
+
+Deno.test("hidden・visible・freeze・resume を反映し、blur だけでは Pause にしない", async () => {
+  const window = new Window(); const element = host(window);
+  Object.defineProperty(window.document, "visibilityState", { configurable: true, value: "visible" });
+  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: await build(source, true) }], store: createMemoryAppStore(), createWorker, stopDelay: 80 });
+  const event = (type: string) => window.document.dispatchEvent(new window.Event(type));
+  const visibility = (value: string) => { Object.defineProperty(window.document, "visibilityState", { configurable: true, value }); event("visibilitychange"); };
+  try {
+    window.dispatchEvent(new window.Event("blur")); await sleep(10);
+    assertEquals(logOf(element), "create:0;start:1;resume;");
+    visibility("hidden"); await waitFor(() => logOf(element)!.endsWith("pause;"));
+    click(element, "click"); event("freeze"); await sleep(120);
+    assert(logOf(element)!.endsWith("pause;"));
+    event("resume"); await sleep(15); assert(logOf(element)!.endsWith("pause;"));
+    await waitFor(() => logOf(element)!.endsWith("stop;"));
+    click(element, "click"); visibility("visible");
+    await waitFor(() => logOf(element)!.endsWith("start:5;resume;"));
+    assert(!logOf(element)!.includes("click;"));
+    visibility("hidden"); await waitFor(() => logOf(element)!.endsWith("pause;"));
+    visibility("visible"); await waitFor(() => logOf(element)!.endsWith("pause;resume;"));
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+for (const phase of ["call", "init", "destroy", "destroy-regie"] as const) {
+  Deno.test(phase + " の無限ループを打ち切り、Destroy だけはエラーを出さない", async () => {
+    const code = phase === "init" ? source + '\nwhile (true) {}' : phase === "call"
+      ? source.replace('() => record("click")', '() => { while (true) {} }')
+      : source.replace('record("destroy:" + reason.kind.toString() + ":" + reason.cause.toString());', 'while (true) {}');
+    const built = await build(code), home = await build(source, true);
+    const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
+    let launches = 0; let destroys = 0;
+    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "https://example.test/apps/", prebuilt: built }], store, createWorker() {
+      launches++;
+      const worker = realWorker();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      return {
+        postMessage(message: unknown, transfer?: Transferable[]) {
+          const data = message as { type: string; name?: string; args?: number[] };
+          // 旧 500ms 制限で通常起動が落ちる全体実行時の条件を、負荷に頼らず再現する。
+          if (data.type === "init") timer = setTimeout(() => worker.postMessage(message, transfer), 700);
+          else {
+            if (data.type === "call" && data.name === "__bina_lifecycle" && data.args?.[0] === State.Destroy) destroys++;
+            worker.postMessage(message, transfer);
+          }
+        },
+        addEventListener: worker.addEventListener.bind(worker),
+        terminate() { clearTimeout(timer); worker.terminate(); },
+      };
+    },
+      // CI の遅い機械でも、ふつうの呼び出しが打ち切られないだけの余裕を持たせる
+      // callTimeout は module Worker の起動にも効くため、通常は製品の既定値と同じ 5 秒を確保する。
+      // destroy は Process の 500ms、destroy-regie は Régie の 5 秒が先に切れる関係を保つ。
+      callTimeout: phase === "destroy" ? 15000 : 5000, destroyTimeout: phase === "destroy-regie" ? 15000 : 500, onError: e => errors.push(e) });
+    try {
+      // ホームが描かれて Resume まで進んでから開く
+      await waitFor(() => !!element.querySelector(".bina-shell-app:not([hidden])") && logOf(element) === "create:0;start:1;resume;");
+      const homeHost = activeHost(element); click(element, "open");
+      if (phase !== "init") {
+        await waitFor(() => activeHost(element) !== homeHost && logOf(element) === "create:0;start:1;resume;");
+        // 描画は call の完了より先に届くので、Resume の保存と後続のマウント処理も待つ。
+        await waitForAsync(async () => {
+          const last = await store.system.getLast("https://example.test/apps/#test");
+          return last?.state === State.Resume && last.done;
+        });
+        await sleep(0);
+        if (phase === "call") click(element, "click");
+        else operate(element, "テスト", "閉じる");
+      }
+      await waitFor(() => activeHost(element) === homeHost && !!logOf(element)?.endsWith("resume;") && (phase.startsWith("destroy") || errors.length === 1));
+      assertEquals(launches, 2);
+      assertEquals(destroys, phase.startsWith("destroy") ? 1 : 0);
+      if (phase.startsWith("destroy")) {
+        assertEquals(errors, []); assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, true);
+      } else {
+        assertEquals(errors.length, 1); assert((errors[0] as Error).message.includes("応答しない"));
+      }
+    } finally { shell.stop(); await window.happyDOM.close(); }
+  });
+}
+
+for (const state of ["pause", "stop"] as const) {
+  Deno.test(state + " の例外は続く終了通知を呼ばず、ホームへ一度だけエラーを出す", async () => {
+    const code = source.replace(`record("${state}");`, `record("${state}"); throw new Error("終了前の例外");`);
+    const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
+    const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: await build(source, true) }, { source: "https://example.test/apps/", prebuilt: await build(code) }], store, createWorker, stopDelay: 20, onError: e => errors.push(e) });
+    try {
+      const home = activeHost(element); click(element, "open");
+      await waitFor(() => activeHost(element) !== home && logOf(element) === "create:0;start:1;resume;");
+      await waitForAsync(async () => {
+        const last = await store.system.getLast("https://example.test/apps/#test");
+        return last?.state === State.Resume && last.done;
+      });
+      // Finish mounting after Resume persistence before leaving the app.
+      await sleep(0);
+      const previous = activeHost(element);
+      element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
+      await waitFor(() => errors.length === 1 && activeHost(element) === home && !!logOf(element)?.endsWith("resume;"));
+      assertEquals(logOf(previous), state === "pause" ? "create:0;start:1;resume;pause;" : "create:0;start:1;resume;pause;stop;");
+      assertEquals(element.querySelector<HTMLElement>("[role=status]")!.hidden, false);
+      assert((errors[0] as Error).message.includes("終了前の例外"));
+    } finally { shell.stop(); await window.happyDOM.close(); }
+  });
+}
+
+async function stackFixtures() {
+  const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => appsApi!.open(${i}));`).join("\n");
+  const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
+  home.html += '<button id="open1">B</button><button id="open2">C</button>';
+  const app = await build();
+  return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "https://example.test/apps/", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
+}
+// 公開システム API で切り替えと終了を行う
+const bar = (element: HTMLElement, label: string) => label.endsWith("を閉じる")
+  ? operate(element, label.slice(0, -"を閉じる".length), "閉じる")
+  : operate(element, label.slice(0, -"を開く".length), "開く");
+
+Deno.test("4 つ目は最後に前面に出た順で片付け、前面は消さない。公開 API で切り替え・閉じる", async () => {
+  const window = new Window(); const element = host(window); const store = createMemoryAppStore();
+  let launches = 0, terminated = 0;
+  const shell = await mountShell(element, { apps: await stackFixtures(), store,
+    createWorker() { launches++; const worker = createWorker(); return { ...worker, terminate() { terminated++; worker.terminate(); } }; } });
+  const home = activeHost(element);
+  const resumed = async (name: string) => {
+    await waitForAsync(async () => {
+      const view = systemView(element);
+      const instance = view.instances.find(instance => instance.name === name && instance.id === view.front);
+      const last = instance && await store.system.getLast(instance.key);
+      return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
+    });
+    // Let show() finish assigning the mounted process after the persisted lifecycle completes.
+    await sleep(0);
+  };
+  const goHome = async () => { bar(element, "ホームを開く"); await resumed("テスト"); assertEquals(activeHost(element), home); };
+  const openNew = async (id: string) => { click(home, id); await resumed(id === "open" ? "A" : id === "open1" ? "B" : "C"); return activeHost(element); };
+  try {
+    const a = await openNew("open"); await goHome();
+    const b = await openNew("open1"); await goHome();
+    // A を再び前面へ出すと、B のほうが古くなる
+    bar(element, "Aを開く"); await resumed("A"); await waitFor(() => activeHost(element) === a && logOf(a)!.endsWith("pause;resume;"));
+    await goHome(); const c = await openNew("open2");
+    await waitFor(() => !b.isConnected);
+    assertEquals(logOf(b), "create:0;start:1;resume;pause;stop;destroy:1:2;");
+    assertEquals(activeHost(element), c); assert(a.isConnected); assert(home.isConnected);
+    assertEquals(launches, 4); assertEquals(terminated, 1);
+    assertEquals(systemView(element).instances.some(i => i.name === "B"), false);
+    bar(element, "Aを閉じる"); await waitFor(() => !a.isConnected);
+    assert(logOf(a)!.endsWith("stop;destroy:0:0;")); assertEquals(activeHost(element), c);
+    bar(element, "Cを閉じる"); await waitFor(() => !c.isConnected && activeHost(element) === home);
+    assert(logOf(c)!.endsWith("pause;stop;destroy:0:0;"));
+    assertEquals((await store.system.listLaunches()).length, 4);
+    shell.stop(); assert(!logOf(home)!.includes("destroy:")); assertEquals(terminated, 4);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("Pause を待つあいだに同じアプリへ戻っても、前面を失わない", async () => {
+  // 一回だけ Pause の通知を止めておける Worker
+  let holding = false; let release: (() => void) | undefined;
+  const delayedWorker = (): RegieWorker => {
+    const inner = createWorker();
+    return {
+      postMessage(message, transfer) {
+        const call = message as { type: string; name?: string; args?: number[] };
+        if (holding && call.type === "call" && call.name === "__bina_lifecycle" && call.args?.[0] === State.Pause) {
+          holding = false; release = () => inner.postMessage(message, transfer); return;
+        }
+        inner.postMessage(message, transfer);
+      },
+      addEventListener: inner.addEventListener,
+      terminate: inner.terminate,
+    };
+  };
+  const window = new Window(); const element = host(window); const store = createMemoryAppStore();
+  const shell = await mountShell(element, { apps: await stackFixtures(), store, createWorker: delayedWorker });
+  const home = activeHost(element);
+  const visible = () => element.querySelectorAll(".bina-shell-app:not([hidden])").length;
+  try {
+    click(home, "open"); await waitFor(() => activeHost(element) !== home && !!logOf(element)?.endsWith("resume;"));
+    await waitForAsync(async () => {
+      const view = systemView(element);
+      const instance = view.instances.find(instance => instance.name === "A" && instance.id === view.front);
+      const last = instance && await store.system.getLast(instance.key);
+      return last?.state === State.Resume && last.done;
+    });
+    // Ensure show() owns the mounted process before intercepting its Pause call.
+    await sleep(0);
+    const a = activeHost(element);
+    holding = true;
+    bar(element, "ホームを開く"); await waitFor(() => release !== undefined);
+    bar(element, "Aを開く");
+    release!();
+    await waitFor(() => !!a.querySelector("#log")!.textContent!.endsWith("pause;resume;"));
+    assertEquals(activeHost(element), a); assertEquals(visible(), 1);
+    assert(systemView(element).instances.some(i => i.name === "A" && i.id === systemView(element).front));
+    bar(element, "ホームを開く"); await waitFor(() => activeHost(element) === home);
+    assertEquals(visible(), 1); assert(a.hidden);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("起動の途中のクリックは捨てずに Resume のあとに届ける", async () => {
+  // Resume の通知を止めておき、その間にクリックする
+  let release: (() => void) | undefined;
+  const heldResume = (): RegieWorker => {
+    const inner = createWorker();
+    return {
+      postMessage(message, transfer) {
+        const call = message as { type: string; name?: string; args?: number[] };
+        if (!release && call.type === "call" && call.name === "__bina_lifecycle" && call.args?.[0] === State.Resume) {
+          release = () => inner.postMessage(message, transfer); return;
+        }
+        inner.postMessage(message, transfer);
+      },
+      addEventListener: inner.addEventListener,
+      terminate: inner.terminate,
+    };
+  };
+  const window = new Window(); const element = host(window);
+  const mounting = mountStartedApp(element, await build(), { createWorker: heldResume });
+  await waitFor(() => release !== undefined);
+  click(element, "click");
+  release!();
+  const mounted = await mounting;
+  try { await waitFor(() => logOf(element) === "create:0;start:1;resume;click;"); }
+  finally { mounted.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
+  const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
+  const fixtures = await stackFixtures();
+  fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
+  const shell = await mountShell(element, { apps: fixtures, store, createWorker, stopDelay: 60, onError: e => errors.push(e) });
+  const home = activeHost(element);
+  const resumed = async (name: string) => {
+    await waitForAsync(async () => {
+      const view = systemView(element);
+      const instance = view.instances.find(instance => instance.name === name && instance.id === view.front);
+      const last = instance && await store.system.getLast(instance.key);
+      return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
+    });
+    // Complete the host continuation following the final lifecycle persistence.
+    await sleep(0);
+  };
+  try {
+    click(home, "open"); await resumed("A");
+    const a = activeHost(element);
+    bar(element, "ホームを開く"); await resumed("テスト"); await waitFor(() => activeHost(element) === home);
+    click(home, "open1"); await resumed("B");
+    const b = activeHost(element);
+    await waitFor(() => errors.length === 1);
+    assertEquals(activeHost(element), b); assert(!a.isConnected);
+    assertEquals(systemView(element).instances.some(i => i.name === "A"), false);
+    assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
+    assert((errors[0] as Error).message.includes("背面の失敗"));
+    assertEquals(element.querySelector<HTMLElement>('[role=status]')!.hidden, false);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ホームが onPause で落ちても、開いたアプリから引き離さない", async () => {
+  const fixtures = await stackFixtures();
+  const home = fixtures[0]!.prebuilt;
+  fixtures[0]!.prebuilt = { ...await build(source.replace('onPause(): void { record("pause"); }', 'onPause(): void { record("pause"); throw new Error("ホームの Pause の失敗"); }'), true), manifest: home.manifest };
+  const window = new Window(); const element = host(window); const errors: unknown[] = [];
+  const shell = await mountShell(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, onError: e => errors.push(e) });
+  const start = activeHost(element);
+  try {
+    click(start, "open");
+    await waitFor(() => errors.length === 1 && activeHost(element) !== start && !!logOf(element)?.endsWith("resume;"));
+    const opened = activeHost(element);
+    // 起動し直しの予約（100ms〜）が残っていれば、ここでホームへ戻ってしまう
+    await sleep(400);
+    assertEquals(activeHost(element), opened);
+    assertEquals(element.querySelectorAll(".bina-shell-app:not([hidden])").length, 1);
+    assert(systemView(element).instances.some(i => i.name === "A" && i.id === systemView(element).front));
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("mountApp のエラーは前面の更新では残り、次の show で消える", async () => {
+  const window = new Window(); const element = host(window); const errors: unknown[] = [];
+  const home = await build(source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.createElement("script");'), true);
+  const app = await build();
+  const shell = await mountShell(element, { apps: [{ source: "binette:system", prebuilt: home }, { source: "https://example.test/apps/", prebuilt: app }],
+    store: createMemoryAppStore(), createWorker, onError: error => errors.push(error) });
+  try {
+    const status = element.querySelector<HTMLElement>("[role=status]")!;
+    assertEquals(errors.length, 1);
+    assertEquals(status.textContent, "作れないタグです: script");
+    assertEquals(status.hidden, false);
+    const homeHost = activeHost(element);
+    click(element, "open");
+    await waitFor(() => activeHost(element) !== homeHost && activeHost(element)?.querySelector("#log")?.textContent?.endsWith("resume;") === true);
+    assertEquals(status.hidden, true);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});

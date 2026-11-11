@@ -1,83 +1,229 @@
-// npm の配布物を作り、ワークスペースを使わない別の利用者として入れて試す。
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { PUBLISHED } from "./check-version.ts";
+// JSR の公開物を想定したファイルだけを抽出し、外部の利用者として動かして確かめる。
+import { copy, exists } from "@std/fs";
+import { join } from "@std/path";
+import { FEATURES, PUBLISHED } from "./check-version.ts";
+import { preparePublishWorkspace } from "./publish.ts";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = join(import.meta.dirname!, "..");
 
-function run(file: string, args: string[], cwd: string, env = process.env): void {
-  execFileSync(file, args, { cwd, env, stdio: "inherit" });
+function run(command: string, args: string[], cwd: string): void {
+  const process = new Deno.Command(command, {
+    args,
+    cwd,
+    stdout: "inherit",
+    stderr: "inherit",
+  }).outputSync();
+  if (!process.success) {
+    throw new Error(`Command failed with code ${process.code}: ${command} ${args.join(" ")}`);
+  }
 }
-function output(file: string, args: string[], cwd: string): string {
-  return execFileSync(file, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-}
 
-const temp = mkdtempSync(join(tmpdir(), "binette-check-pack-"));
+const temp = Deno.makeTempDirSync({ prefix: "binette-check-pack-" });
 try {
-  run("npm", ["run", "build"], ROOT);
-  const dependencies: Record<string, string> = {};
+  // 実際の公開コピーを AS として検査する。OS 用の検証は元のソースでも行う。
+  const staged = join(temp, "publish");
+  Deno.mkdirSync(staged);
+  await preparePublishWorkspace(staged, { ascShims: true });
+  run(Deno.execPath(), ["task", "--cwd", "packages/replique", "check"], staged);
+
+  // 各パッケージの publish.include に含まれるファイルだけを一時ディレクトリに写す
   for (const [dir, name] of Object.entries(PUBLISHED)) {
-    const packed = JSON.parse(output("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", temp], join(ROOT, dir))) as { filename: string }[];
-    if (packed.length !== 1 || !packed[0]?.filename) throw new Error(`${name}: expected one tarball`);
-    const tarball = resolve(temp, packed[0].filename);
-    const files = output("tar", ["-tzf", tarball], temp).trim().split("\n");
-    for (const required of ["dist/index.js", "dist/index.d.ts", "README.md", "LICENSE", "package.json"]) {
-      if (!files.includes(`package/${required}`)) throw new Error(`${name}: missing ${required}`);
+    const pkgDir = join(ROOT, dir);
+    const destDir = join(temp, dir);
+    Deno.mkdirSync(destDir, { recursive: true });
+
+    const denoJsonPath = join(pkgDir, "deno.json");
+    const denoJson = JSON.parse(Deno.readTextFileSync(denoJsonPath)) as {
+      publish?: { include?: string[] };
+    };
+    const includes = denoJson.publish?.include ?? [];
+    for (const item of ["deno.json", ...includes]) {
+      const src = join(pkgDir, item);
+      const dest = join(destDir, item);
+      if (await exists(src)) {
+        await copy(src, dest);
+      } else {
+        throw new Error(`${name}: missing included file or directory ${item}`);
+      }
     }
-    for (const file of files) {
-      if (/(^|\/)(src|demo|tests?)\//.test(file) || /\.(test|spec)\./.test(file)) throw new Error(`${name}: forbidden path ${file}`);
-    }
-    console.log(`${name}: tarball verified (${files.length} files)`);
-    dependencies[name] = `file:${tarball}`;
+    console.log(`${name}: extracted included files`);
+  }
+
+  for (const dir of Object.keys(FEATURES)) {
+    const dest = join(temp, dir);
+    Deno.mkdirSync(dest, { recursive: true });
+    await copy(join(ROOT, dir, "deno.json"), join(dest, "deno.json"));
+    await copy(join(ROOT, dir, "src"), join(dest, "src"));
   }
 
   const consumer = join(temp, "consumer");
-  mkdirSync(consumer);
-  writeFileSync(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module", dependencies }));
-  const consumerEnv = { ...process.env };
-  // npm のライフサイクルが渡す allow-scripts の設定だけを外す。--ignore-scripts でスクリプトは動かさない
-  for (const key of Object.keys(consumerEnv)) {
-    if (/^npm_config_allow[_-]scripts$/i.test(key)) delete consumerEnv[key];
-  }
-  run("npm", ["install", "--ignore-scripts", "--no-package-lock", "--no-audit", "--no-fund"], consumer, consumerEnv);
-  // Node 22 で TypeScript の型除去に頼らないよう、実行の確認は JavaScript で書く
-  writeFileSync(join(consumer, "consumer.js"), `
-import assert from "node:assert/strict";
-import { BINETTE_VERSION, BinetteError, parseBinette } from "@binette/core";
-import { Scene, joueur } from "@binette/scene";
-import { createCoulisses, createPanoplie } from "@binette/coulisses";
-assert.equal(parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" })).redirect, "/home");
-assert.throws(() => parseBinette("{"), BinetteError);
-assert.equal(typeof Scene, "function");
-assert.equal(typeof joueur, "function");
+  Deno.mkdirSync(consumer, { recursive: true });
+
+  Deno.writeTextFileSync(
+    join(consumer, "deno.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          lib: ["esnext", "dom", "dom.iterable", "deno.ns"],
+        },
+        imports: {
+          "@binette/core": "../packages/core/src/index.ts",
+          "@binette/decor": "../packages/decor/src/index.ts",
+          "@binette/decor/as": "../packages/decor/src/as.ts",
+          "@binette/decor/parts": "../packages/decor/src/parts.ts",
+          "@binette/regie": "../packages/regie/src/index.ts",
+          "@binette/scene": "../packages/scene/src/index.ts",
+          "@binette/regie/build": "../packages/regie/src/build.ts",
+          "@binette/regie/cli": "../packages/regie/src/cli.ts",
+          "@std/path": "jsr:@std/path@^1.1.6",
+          "@binette/coulisses": "../packages/coulisses/src/index.ts",
+          "@binette/replique": "../packages/replique/src/index.ts",
+          "@std/assert": "jsr:@std/assert@1",
+          valibot: "npm:valibot@1.5.0",
+          "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  Deno.writeTextFileSync(
+    join(consumer, "consumer.ts"),
+    `import { assertEquals, assertThrows } from "@std/assert";
+import { BINETTE_VERSION, BinetteError, State, DestroyKind, DestroyCause, parseAppManifest, parseBinette, type AppManifest, type Binette } from "@binette/core";
+import { startSystem, createMemoryAppStore, type SystemUi, type SystemView, startProcess, type Process, type ProcessOptions, launchApp, serveApp, type LaunchOptions, type RegieApp, type RegieWorker } from "@binette/regie";
+import { buildApp, loadCompiler, type BuildOptions, type BuiltApp, type Compiler, type CompilerStream } from "@binette/regie/build";
+import { readRepliqueLibraries, writePrebuiltApp } from "@binette/regie/cli";
+import { parsePrebuiltApp, stringifyPrebuiltApp, type PrebuiltApp } from "@binette/regie";
+import { mountApp, type MountedApp } from "@binette/scene";
+import * as scene from "@binette/scene";
+import { mount as mountDecor, text } from "@binette/decor";
+const mountDeclarativeUi: typeof mountDecor = mountDecor;
+void [mountDeclarativeUi, text("公開物")];
+
+for (const name of ["buildApp", "loadCompiler", "parsePrebuiltApp", "stringifyPrebuiltApp"]) assertEquals(name in scene, false);
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedBuildOptions = import("@binette/scene").BuildOptions;
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedBuiltApp = import("@binette/scene").BuiltApp;
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedCompiler = import("@binette/scene").Compiler;
+// @ts-expect-error Scene からビルドの型は公開しない
+type RemovedCompilerStream = import("@binette/scene").CompilerStream;
+// @ts-expect-error Scene からプリビルドの型は公開しない
+type RemovedPrebuiltApp = import("@binette/scene").PrebuiltApp;
+import { createCoulisses, createPanoplie, type Coulisses } from "@binette/coulisses";
+
+const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
+assertEquals(binette.redirect, "/home");
+assertThrows(() => parseBinette("{"), BinetteError);
+assertThrows(() => parseAppManifest("{"), BinetteError);
+assertEquals(new BinetteError("unsupported_abi", "この OS では動きません（storage 0.9）。アプリの管理から入れ直すと直ります").code, "unsupported_abi");
+
+// 公開物のファイルだけで、AS をビルドして Worker 相当（MessageChannel）で動かす
+const files: Record<string, string> = {
+  "app.json": JSON.stringify({ id: "example-counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } }),
+  "src/index.html": '<p id="count">0</p>',
+  "src/main.ts": 'import { Api, App, Last, Why, document, launch } from "jsr:@binette/replique";\\nclass Counter extends App { onCreate(_last: Last, api: Api): void { assert(api.why("unknown") == Why.NotAssigned); document.getElementById("count").textContent = "0"; } }\\nlaunch(new Counter());\\n',
+};
+const libraries = await readRepliqueLibraries(new URL("../packages/replique/", import.meta.url));
+const decorAs = await Deno.readTextFile(new URL("../packages/decor/src/as.ts", import.meta.url));
+const built = await buildApp(async (path) => files[path]!, { libraries: { ...libraries, "jsr:@binette/decor/as": decorAs } });
+assertEquals(built.manifest.id, "example-counter");
+// AS の新しい入口と Réplique の互換入口を、公開物だけで解決する。
+const uiFiles: Record<string, string> = {
+  ...files,
+  "src/main.ts": 'import { App, launch } from "jsr:@binette/replique"; import { View, column } from "jsr:@binette/decor/as"; import { text } from "jsr:@binette/replique-ui@^0.1"; class Ui extends App { build(): View { return column([text("公開物")]); } } launch(new Ui());',
+};
+await buildApp(async (path) => uiFiles[path]!, {
+  libraries: { ...libraries, "jsr:@binette/decor/as": decorAs },
+});
+// 各機能の公開入口を exact・^・~ で読み、配布物の設定とソースだけで解決する。
+const featureSpecifiers = Object.keys(libraries).filter(key => key.startsWith("jsr:@binette/replique-"));
+assertEquals(featureSpecifiers.length, 13);
+for (const range of ["0.1.0", "^0.1", "~0.1.0", "legacy", "unversioned"]) {
+  const imports = featureSpecifiers.map((key, i) => 'import { ABI_VERSION as version' + i + ' } from "' + (range === "legacy" ? "jsr:@binette/replique/" + key.slice("jsr:@binette/replique-".length, key.lastIndexOf("@")) : range === "unversioned" ? key.slice(0, key.lastIndexOf("@")) : key.slice(0, key.lastIndexOf("@") + 1) + range) + '";').join("\\n");
+  const code = imports + '\\nexport function versions(): string { return ' + featureSpecifiers.map((_, i) => 'version' + i).join(' + "," + ') + '; }';
+  await buildApp(async path => path === "src/main.ts" ? code : files[path]!, { libraries });
+}
+const prebuilt: PrebuiltApp = parsePrebuiltApp(stringifyPrebuiltApp(built));
+assertEquals(prebuilt, built);
+const buildOptions: BuildOptions = {};
+const compiler: Promise<Compiler> = loadCompiler();
+const stream: CompilerStream = (await compiler).createMemoryStream();
+void [writePrebuiltApp, buildOptions, stream];
+
+function createWorker(): RegieWorker {
+  const { port1, port2 } = new MessageChannel();
+  port1.start();
+  port2.start();
+  serveApp(port1 as never);
+  return {
+    postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
+    addEventListener: (type, listener) => port2.addEventListener(type, listener as never),
+    terminate: () => { port1.close(); port2.close(); },
+  };
+}
+
+const batches: import("@binette/core").DomOp[][] = [];
+const app = await launchApp(built.wasm, {
+  createWorker,
+  onDom: (ops) => batches.push(ops),
+});
+assertEquals([...app.exports], []);
+await app.call("__bina_lifecycle", 1, 0, 1);
+assertEquals(batches, [[{ op: "byId", handle: 1, id: "count" }, { op: "text", handle: 1, value: "0" }]]);
+app.stop();
+
 const coulisses = createCoulisses({ panoplie: createPanoplie({ index: { binette: BINETTE_VERSION, redirect: "/home" } }) });
 const response = await coulisses.fetch(new Request("http://localhost/index.bina"));
-assert.equal(response.status, 200);
-assert.equal(parseBinette(await response.text()).redirect, "/home");
-console.log("Plain Node consumer passed (3 packages)");
-`);
-  run(process.execPath, ["consumer.js"], consumer);
-  writeFileSync(join(consumer, "consumer.ts"), `
-import { BINETTE_VERSION, parseBinette, type Binette } from "@binette/core";
-import { Scene, type SceneComponent, type SceneMount } from "@binette/scene";
-import { createCoulisses, type Coulisses } from "@binette/coulisses";
-const binette: Binette = parseBinette(JSON.stringify({ binette: BINETTE_VERSION, redirect: "/home" }));
-const scene: Scene = new Scene({ serverURL: "https://example.com/" });
-const component: SceneComponent = (element, sh) => { element.textContent = sh.version; };
-const mount: SceneMount = async (element, sh) => { element.textContent = await (await sh.asset("main")).text(); return () => {}; };
-const coulisses: Coulisses = createCoulisses();
-void [binette, scene, component, mount, coulisses];
-`);
-  writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: {
-    target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, lib: ["ES2022", "DOM"],
-    noEmit: true, skipLibCheck: false, types: [], noUncheckedSideEffectImports: true,
-  }, include: ["consumer.ts"] }));
-  // 別の版を取りに行かず、ロックしたコンパイラを使う
-  run(process.execPath, [join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"], consumer);
-  console.log("Strict TypeScript consumer passed (declarations checked)");
+assertEquals(response.status, 200);
+assertEquals(parseBinette(await response.text()).redirect, "/home");
+
+// 型の宣言・利用もチェック
+const manifest: AppManifest = parseAppManifest(JSON.stringify({ id: "t", name: "t", entry: { html: "a", as: "b" } }));
+const options: LaunchOptions = { onDom: (ops) => void ops, callTimeout: 5000, page: "consumer", onFinish: () => {} };
+const launch: (wasm: Uint8Array) => Promise<RegieApp> = (wasm) => launchApp(wasm, options);
+const build: (read: (path: string) => Promise<string>) => Promise<BuiltApp> = (read) => buildApp(read);
+const mount: (element: HTMLElement, html: string, process: Process) => MountedApp = mountApp;
+const processOptions: ProcessOptions = { createWorker, stopDelay: 10000 };
+const process = await startProcess(built.wasm, processOptions);
+const processBatches: import("@binette/core").DomOp[][] = [];
+process.attach(ops => { if (ops.length) processBatches.push(ops); });
+assertEquals(process.state, State.None);
+await process.begin();
+assertEquals(process.state, State.Resume);
+assertEquals(processBatches, batches);
+const destroy = (process: Process): Promise<void> => process.destroy(DestroyKind.System, DestroyCause.Stack);
+await destroy(process);
+const views: SystemView[] = [];
+const ui: SystemUi = {
+  present(_instance, process) { process.attach(() => {}); return { remove() {} }; },
+  update(view) { views.push(view); },
+  report(error) { throw error; },
+};
+const system = await startSystem({
+  apps: [{ source: "binette:system", prebuilt: { ...built, manifest: { ...built.manifest, roles: ["home"] } } }],
+  store: createMemoryAppStore(), ui, createWorker,
+});
+assertEquals(views.at(-1)?.cadreUnavailable, true);
+assertEquals(views.at(-1)?.instances.length, 1);
+await system.openHome();
+assertEquals(views.at(-1)?.instances.length, 1);
+system.setPage({ visible: false, frozen: true });
+system.stop();
+assertEquals(State.Resume, 3);
+const c: Coulisses = createCoulisses();
+void [manifest, launch, build, mount, destroy, c];
+
+console.log("Consumer passed (core, decor, regie, scene, coulisses, replique)");
+`,
+  );
+
+  run(Deno.execPath(), ["check", "consumer.ts"], consumer);
+  run(Deno.execPath(), ["run", "-A", "consumer.ts"], consumer);
+  console.log("Check-pack consumer check passed");
 } finally {
-  rmSync(temp, { recursive: true, force: true });
+  Deno.removeSync(temp, { recursive: true });
 }

@@ -120,6 +120,7 @@ function settingsEntries(sections: BinetteSettingsSection[]): string[] {
 
 const redirectPath = v.pipe(
   nonempty("redirect は Scene 内のパスで指定してください。"),
+  // deno-lint-ignore no-control-regex -- リダイレクト先に制御文字と空白を許さないため、意図的に照合する。
   v.check(path => path.startsWith("/") && !path.startsWith("//") && !path.includes("\\") && !/[\u0000-\u0020]/.test(path), "redirect は Scene 内のパスで指定してください。"),
 );
 

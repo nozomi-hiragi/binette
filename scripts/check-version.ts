@@ -1,18 +1,35 @@
-// 公開する 3 パッケージのバージョンと設定がそろっているかを、テストや公開の前に確かめる。
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+// 公開するパッケージのバージョンと設定がそろっているかを、テストや公開の前に確かめる。
+import { existsSync } from "@std/fs";
+import { join } from "@std/path";
 
 export const PUBLISHED: Record<string, string> = {
   "packages/core": "@binette/core",
+  "packages/decor": "@binette/decor",
+  "packages/regie": "@binette/regie",
   "packages/scene": "@binette/scene",
   "packages/coulisses": "@binette/coulisses",
+  "packages/replique": "@binette/replique",
 };
-const DEPENDENCY_SECTIONS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
+// OS 内の機能パッケージは公開対象ではないが、名前と版を検証する。
+export const FEATURES: Record<string, string> = {
+  "packages/replique/app": "@binette/replique-app",
+  "packages/replique/dom": "@binette/replique-dom",
+  "packages/replique/ui": "@binette/replique-ui",
+  "packages/replique/storage": "@binette/replique-storage",
+  "packages/replique/pigeon": "@binette/replique-pigeon",
+  "packages/replique/shares": "@binette/replique-shares",
+  "packages/replique/os": "@binette/replique-os",
+  "packages/replique/apps": "@binette/replique-apps",
+  "packages/replique/manager": "@binette/replique-manager",
+  "packages/replique/scheduler": "@binette/replique-scheduler",
+  "packages/replique/schedule": "@binette/replique-schedule",
+  "packages/replique/cadre": "@binette/replique-cadre",
+  "packages/replique/fs": "@binette/replique-fs",
+};
 export const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function readJson(path: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  return JSON.parse(Deno.readTextFileSync(path)) as Record<string, unknown>;
 }
 
 export interface CheckResult {
@@ -20,25 +37,30 @@ export interface CheckResult {
   version: string | null;
 }
 
-/** バージョンの一致、private の有無、内部依存の固定、LICENSE の一致を調べる。`expectedTag` を渡すとタグとも照らし合わせる */
+/** バージョンの一致、内部依存の固定、LICENSE の一致を調べる。`expectedTag` を渡すとタグとも照らし合わせる */
 export function checkVersions(root: string, expectedTag?: string): CheckResult {
   const errors: string[] = [];
   const names = new Set(Object.values(PUBLISHED));
   const versions = new Set<string>();
-  for (const [dir, name] of Object.entries(PUBLISHED)) {
-    for (const file of ["package.json", "jsr.json"]) {
-      const path = join(root, dir, file);
-      if (!existsSync(path)) {
-        errors.push(`${dir}/${file}: missing`);
-        continue;
-      }
-      const pkg = readJson(path);
-      if (pkg.name !== name) errors.push(`${dir}/${file}: expected name ${name}`);
-      if (typeof pkg.version !== "string" || !VERSION.test(pkg.version)) errors.push(`${dir}/${file}: expected a plain X.Y.Z version`);
-      else versions.add(pkg.version);
-      if (file === "package.json" && pkg.private === true) errors.push(`${dir}/${file}: must not have "private": true`);
+  const packageVersions = new Map<string, string>();
+
+  for (const [dir, name] of Object.entries({ ...PUBLISHED, ...FEATURES })) {
+    const file = "deno.json";
+    const path = join(root, dir, file);
+    if (!existsSync(path)) {
+      errors.push(`${dir}/${file}: missing`);
+      continue;
+    }
+    const pkg = readJson(path);
+    if (pkg.name !== name) errors.push(`${dir}/${file}: expected name ${name}`);
+    if (typeof pkg.version !== "string" || !VERSION.test(pkg.version)) errors.push(`${dir}/${file}: expected a plain X.Y.Z version`);
+    else {
+      packageVersions.set(name, pkg.version);
+      // 機能パッケージは個別の SDK・ABI の版を持つ。リリースタグは集約を含む既存パッケージに照合する。
+      if (!name.startsWith("@binette/replique-")) versions.add(pkg.version);
     }
   }
+
   const version = versions.size === 1 ? [...versions][0]! : null;
   if (versions.size !== 1) errors.push(`Version mismatch across packages: ${[...versions].join(", ")}`);
   if (expectedTag !== undefined) {
@@ -46,40 +68,34 @@ export function checkVersions(root: string, expectedTag?: string): CheckResult {
     else if (expectedTag.slice(1) !== version) errors.push(`Tag version ${expectedTag.slice(1)} does not match package version ${version}`);
   }
 
-  const root_ = readJson(join(root, "package.json"));
-  if (root_.private !== true) errors.push(`package.json: must have "private": true`);
-  for (const dir of [".", ...Object.keys(PUBLISHED)]) {
-    const pkg = readJson(join(root, dir, "package.json"));
-    for (const section of DEPENDENCY_SECTIONS) {
-      const deps = pkg[section] as Record<string, string> | undefined;
-      for (const [name, value] of Object.entries(deps ?? {})) {
-        if (names.has(name) && value !== version) errors.push(`${dir}/package.json: ${section} ${name} is ${value}, expected ${version}`);
-      }
-    }
-    if (dir === ".") continue;
-    const imports = readJson(join(root, dir, "jsr.json")).imports as Record<string, unknown> | undefined;
-    for (const [alias, target] of Object.entries(imports ?? {})) {
-      if (names.has(alias) && target !== `jsr:${alias}@${version}`) {
-        errors.push(`${dir}/jsr.json: import ${alias} is ${String(target)}, expected jsr:${alias}@${version}`);
+  // 各パッケージの内部依存が jsr:@binette/x@version に固定されているか調べる
+  for (const dir of Object.keys({ ...PUBLISHED, ...FEATURES })) {
+    const path = join(root, dir, "deno.json");
+    if (!existsSync(path)) continue;
+    const pkg = readJson(path);
+    const imports = (pkg.imports ?? {}) as Record<string, unknown>;
+    for (const [alias, target] of Object.entries(imports)) {
+      if (names.has(alias) && target !== `jsr:${alias}@${packageVersions.get(alias)}`) {
+        errors.push(`${dir}/deno.json: import ${alias} is ${String(target)}, expected jsr:${alias}@${packageVersions.get(alias)}`);
       }
     }
   }
 
-  const license = readFileSync(join(root, "LICENSE"));
-  for (const dir of Object.keys(PUBLISHED)) {
+  const license = Deno.readTextFileSync(join(root, "LICENSE"));
+  for (const dir of Object.keys({ ...PUBLISHED, ...FEATURES })) {
     const path = join(root, dir, "LICENSE");
     if (!existsSync(path)) errors.push(`${dir}/LICENSE: missing`);
-    else if (!license.equals(readFileSync(path))) errors.push(`${dir}/LICENSE: differs from root LICENSE`);
+    else if (license !== Deno.readTextFileSync(path)) errors.push(`${dir}/LICENSE: differs from root LICENSE`);
   }
   return { errors, version };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const printVersion = process.argv[2] === "--print-version";
-  const { errors, version } = checkVersions(fileURLToPath(new URL("..", import.meta.url)), printVersion ? undefined : process.argv[2]);
+if (import.meta.main) {
+  const printVersion = Deno.args[0] === "--print-version";
+  const { errors, version } = checkVersions(join(import.meta.dirname!, ".."), printVersion ? undefined : Deno.args[0]);
   if (errors.length) {
     console.error(errors.join("\n"));
-    process.exitCode = 1;
+    Deno.exit(1);
   } else {
     console.log(printVersion ? version : `Version check passed (version: ${version})`);
   }

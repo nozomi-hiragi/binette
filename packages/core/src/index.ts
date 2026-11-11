@@ -8,5 +8,15 @@ export type {
   BinetteSettingsComponentElement, BinetteSettingsElement, BinetteSettingsEntryElement, BinetteSettingsList,
   BinetteSettingsRow, BinetteSettingsSection, BinetteSettingsSectionBase,
 } from "./types.ts";
+export type { AppEntry, AppManifest, AppPermission, AppSubManifest, ParseAppManifestOptions } from "./app.ts";
+export { parseAppManifest } from "./app.ts";
 export { BinetteError, parseBinette } from "./parse.ts";
 export { BINETTE_VERSION } from "./schema.ts";
+export { DestroyCause, DestroyKind, State } from "./lifecycle.ts";
+export type { DomOp } from "./dom.ts";
+export type { AppId, AppIdOptions } from "./app-id.ts";
+export { formatAppId, normalizeAppIdentifier, normalizeAppListUrl, parseAppId } from "./app-id.ts";
+export type { AppList, AppListDocument, AppListEntry, AppListLocation } from "./app-list.ts";
+export { findAppList, parseAppList } from "./app-list.ts";
+export type { AppFile } from "./integrity.ts";
+export { computeIntegrity, hashFile, hashFolder, verifyIntegrity } from "./integrity.ts";

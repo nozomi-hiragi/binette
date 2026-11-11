@@ -1,0 +1,42 @@
+# システムアプリ
+
+[仕様の目次](../README.md)
+
+システムアプリは、OS（Binette）の機能を持つアプリです。ほかのアプリと同じく宣言的 UI または HTML ＋ AS で書きます（[app.md](../app.md)）。
+
+## システムアプリの扱い（決定）
+
+- Cadre は、Binette のシステムアプリとして持つ。ホームと設定は Cadre のサブアプリ（`cadre.home`・`cadre.settings`）にする
+- 置き場所はリポジトリ直下の `apps/<アプリ>/`。`app.json` を持つフォルダを足すだけで増える。リポジトリの `apps/` にあるアプリは、どれもシステムアプリ。通常のアプリを OS と一緒に配る場合は、`bundled/<アプリ>/` に置く。同梱アプリにシステムアプリの権限は渡さない
+
+- [boot.md](../boot.md) と [roles.md](../roles.md) の構成では、システムアプリはビルド済みの `.wasm` として `/system/apps/<アプリ>/` に取ってきて置く。ホームバーや通知などの大枠は、役割 `cadre` のシステムアプリ `apps/cadre` が持つ。設定はコアで、役割の差し替えも `/user` での上書きもできない（決定 2026-11-01）
+
+## 配り方（実装済み）
+
+- `deno task build:system`（`scripts/build-system.ts`）が、`apps/` の直下で `app.json` を持つフォルダを全部見つけ、`.binapp/system/<フォルダ名>.binapp` にビルドする。同じ処理で `bundled/` から `.binapp/bundled/<フォルダ名>.binapp` も作る。`bundled/` が空でもよい。書き出す前に各出力先の古い `.binapp` と、移行前の `.binapp/` 直下の生成物を消す。1 つでも失敗したら、どのアプリかを出して終わる。`.binapp` の形は [regie/build.md](../regie/build.md#書き出し実装済み)
+- `deno task start` と `deno task build` は、先にこれを走らせる。`.binapp/` は生成物で、コミットしない
+- 入口の `src/main.ts` は、`loadBootApps` でファイルの木からアプリとブートの役割を読み、`mountShell` に渡す（[boot.md](../boot.md)）
+- 入手元（`source`）はシステムアプリが `binette:system`、同梱アプリが `binette:bundled` で固定する。配信の URL は中身のハッシュで変わるので使わない
+- 埋め込みアプリの ID は入手元の接頭辞を付けない生の識別子。Cadre は `cadre`、そのホームと設定は `cadre.home`・`cadre.settings`、デザイナーは `designer`。`source` は配布区分として残る（[app-id.md](../app-id.md)）
+- Cadre の `app.json` の `sub` にホーム・設定を宣言し、親の AS の入口と CSS を共有する。起動時の `api.sub()` が空文字列なら Cadre、`home` ならホーム、`settings` なら設定を描く。入口ごとに Worker は別にする
+- 開くたびに、OS が持つ中身で保存し直す（版を上げ忘れた OS の更新でも古いものを残さない）。入れた日時 `installedAt` は最初のものを保つ
+- ブラウザではビルドも検証もしない（HTML や権限の検証、クリックの関数が export にあるかの確認）。OS と一緒にビルドして配るものなので、OS と同じだけ信頼する
+- 並び順は、システムアプリ、同梱アプリの順に、それぞれフォルダ名を UTF-16 のコード単位で比べた順。書き出し側も、読む側も同じ比べ方をする
+
+## 一覧（実装済み）
+
+| フォルダ・入口 | 名前 | 役割 | 仕様 |
+| --- | --- | --- | --- |
+| `apps/cadre`（`cadre`） | Cadre | `roles: ["cadre"]`。常駐する大枠とホームバー | [cadre.md](cadre.md) |
+| `apps/cadre` の `sub.home`（`cadre.home`） | ホーム | `roles: ["home"]`。ほかのアプリを並べて開く | [home.md](home.md) |
+| `apps/cadre` の `sub.settings`（`cadre.settings`） | 設定 | `roles: ["settings"]`。ホームの選択、更新、デバッグ値、履歴 | [settings.md](settings.md) |
+| `apps/cadre` の `sub.apps`（`cadre.apps`） | アプリ | `roles: ["apps-manager"]`。提供リストとアプリの管理 | [app-manager.md](../app-manager.md) |
+
+[Filer](filer.md) は `bundled/filer/` に置く同梱のファイル管理アプリです。デザイナー（`catalog/designer/`、ID `designer`）とドキュメントアプリ（`catalog/docs/`、ID `docs`。この `docs/` の仕様書を読む）は、同梱せず既定の提供リストに載せます（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。`catalog/` のアプリもルートの Deno workspace と `deno task check` の入口に含めます。提供リストのアプリなので、システムアプリの権限は持ちません。
+## 未決のこと
+
+- システムアプリに、ふつうのアプリより強い権限を持たせるか。今は、ホームと Cadre が `apps` を、Cadre が `cadre` を、設定アプリが `os` を受け取る（役割の割り当てで判断する）。ユーザーに許可を聞く権限の仕組みそのものが未決
+- ユーザーがシステムアプリを消したり、止めたりできるか
+- ホームなどを、ほかのアプリに差し替えられるか → 役割の割り当てで差し替えられる。設定アプリだけは差し替えない（決定 2026-11-01、[roles.md](../roles.md)）
+- 並び順と並べ替え
+- システムアプリの更新を、OS の更新と分けるか

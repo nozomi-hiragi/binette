@@ -1,12 +1,10 @@
 /**
- * ブラウザでビネットを再生する Scene。
+ * Scene。HTML を描き、アプリとシステム UI をつなぐ。
  *
  * @packageDocumentation
  */
-export { createResolver } from "./resolve.ts";
-export type { AssetResolver, ResolverOptions } from "./resolve.ts";
-export { joueur } from "./joueur.ts";
-export type { BinetteJoueur, JoueurOptions } from "./joueur.ts";
-export { Scene } from "./scene.ts";
-export type { SceneOptions } from "./scene.ts";
-export type { SceneAppShell, SceneCleanup, SceneComponent, SceneMount, SceneShell } from "./shell.ts";
+export type { MountedApp, MountOptions } from "./mount.ts";
+export { mountApp } from "./mount.ts";
+export type { ShellOptions, MountedShell, ShellUiOptions, ShellUi } from "./shell.ts";
+export { isInstalled } from "./live.ts";
+export { mountShell, createShellUi } from "./shell.ts";

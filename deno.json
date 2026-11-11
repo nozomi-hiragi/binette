@@ -1,10 +1,71 @@
 {
   "workspace": [
     "./packages/core",
+    "./packages/decor",
+    "./packages/regie",
     "./packages/scene",
-    "./packages/coulisses"
+    "./packages/coulisses",
+    "./packages/replique",
+    "./packages/replique/app",
+    "./packages/replique/dom",
+    "./packages/replique/ui",
+    "./packages/replique/storage",
+    "./packages/replique/pigeon",
+    "./packages/replique/shares",
+    "./packages/replique/os",
+    "./packages/replique/apps",
+    "./packages/replique/manager",
+    "./packages/replique/scheduler",
+    "./packages/replique/schedule",
+    "./packages/replique/cadre",
+    "./packages/replique/fs",
+    "./packages/replique/test",
+    "./apps/cadre",
+    "./catalog/designer",
+    "./bundled/filer",
+    "./catalog/docs",
+    "./catalog/docs/test",
+    "./bundled/filer/test",
+    "./catalog/designer/test"
   ],
+  "nodeModulesDir": "auto",
   "compilerOptions": {
-    "lib": ["esnext", "dom", "dom.iterable", "deno.ns"]
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable",
+      "deno.ns"
+    ]
+  },
+  "tasks": {
+    "check": "deno check apps/cadre/src/main.ts catalog/designer/src/main.ts bundled/filer/src/main.ts catalog/docs/src/main.ts bundled/filer/test/*.ts catalog/docs/test/*.ts catalog/designer/test/*.ts src/main.ts scripts/*.test.ts packages/core/src/index.ts packages/decor/src/index.ts packages/regie/src/index.ts packages/regie/src/build.ts packages/regie/src/cli.ts packages/scene/src/index.ts packages/coulisses/src/index.ts packages/replique/src/index.ts packages/core/test/*.ts packages/decor/test/*.ts packages/regie/test/*.ts packages/scene/test/*.ts packages/coulisses/test/*.ts && deno check --no-config public/sw.js && deno task --cwd packages/replique check && deno lint",
+    "check-pack": "deno run -A scripts/check-pack.ts",
+    "check-version": "deno run --allow-read scripts/check-version.ts",
+    "demo:coulisses": "deno run -A packages/coulisses/demo/server.ts",
+    "docs": "deno run -A scripts/docs.ts",
+    "docs:app": "deno run -A scripts/docs-app.ts",
+    "pages": "deno run -A scripts/pages.ts",
+    "test": "deno run --allow-read scripts/check-version.ts && deno test -A",
+    "start": "deno task build:system && deno run -A --node-modules-dir=auto npm:vite@8.3.4 --port 5175",
+    "build": "deno task build:system && deno run -A --node-modules-dir=auto npm:vite@8.3.4 build",
+    "build:system": "deno run -A scripts/build-system.ts",
+    "docs:serve": "deno run -A lume/cli.ts --serve"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.11",
+    "@std/fs": "jsr:@std/fs@^1.0.24",
+    "@std/path": "jsr:@std/path@^1.1.6",
+    "assemblyscript": "npm:assemblyscript@0.28.20",
+    "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
+    "happy-dom": "npm:happy-dom@21.0.4",
+    "valibot": "npm:valibot@1.5.0",
+    "vite": "npm:vite@8.3.4",
+    "lume/": "https://cdn.jsdelivr.net/gh/lumeland/lume@3.3.3/"
+  },
+  "test": {
+    "exclude": [
+      "dist/",
+      ".binapp/"
+    ]
   }
 }

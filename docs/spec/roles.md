@@ -1,0 +1,140 @@
+# 役割と API
+
+[仕様の目次](README.md)
+
+Cadre（ホームバーなど）、ホーム、設定などの OS の部品を、どれもふつうのアプリにするための仕様です。配り方は [boot.md](boot.md) にあります。
+
+> [!NOTE]
+> 2026-11-01 に決めた構成です。`roles`・役割の割り当て・辞書 API（`onCreate(last, api)`、`XxxApi.from(api)`、`api.why`）・`apps`・`os`・`storage`・`pigeon`・`shares` のキーは実装済みです（[replique.md](replique.md#api-の辞書実装済み形は案)、[regie/system.md](regie/system.md#権限)）。`fs` はキーだけで、今は誰にも届きません。Cadre の常駐起動・`CadreApi`・`appArea()` も実装済みです。通知は Pigeon を通して届けます。役割名 `cadre` は決定です。ほかのキーや関数の形は案です。
+
+## 方針（決定 2026-11-01）
+
+- システムの部品は、全部ふつうのアプリにする。違うのは「役割」と「届く API」だけ
+- アプリは `app.json` で役割を名乗る
+- 設定でその役割に選ばれたアプリにだけ、その役割の API が届く。名乗っただけでは届かない（今のホームの選び方と同じ 2 段）
+- 使える API は辞書で届き、キーで取り出す。取れなければ、権限がないか、その役割に設定されていない
+- ストレージや通知のような普通の機能も、同じ辞書から取る
+- 初回は、既定のアプリを割り当て済みで出す（[boot.md](boot.md#起動の流れ決定-2026-11-01)）
+
+## 書き方（案）
+
+```jsonc
+// app.json
+{ "id": "cadre", "name": "Cadre", "roles": ["cadre"], "permissions": { "fs": { "reason": "Cadre の設定を編集するため" } } }
+```
+
+```ts
+// 実装済みの例（ホーム）
+class Home extends App {
+  override onCreate(last: Last, api: Api): void {
+    const apps = AppsApi.from(api); // 取れなければ null
+    if (apps == null) {
+      // api.why("apps") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
+    }
+  }
+}
+
+// 実装済み（形は案、Cadre）
+class Bar extends App {
+  override onCreate(last: Last, api: Api): void {
+    const cadre = CadreApi.from(api); // 取れなければ null
+    if (cadre == null) {
+      // api.why("cadre") で、権限がない（NotGranted）か、割り当てられていない（NotAssigned）かを見る
+    }
+  }
+}
+```
+
+- 辞書は `onCreate(last, api)` の引数で渡す（決定）。アプリは `launch(new X())` で自分で `new` するので、コンストラクタには OS から渡せないため
+- 各機能の `XxxApi.from(api)` で取り出し、対応するキーが届いていなければ null にする（決定）
+- `app.json` の欄は `roles`（文字列の配列）にした（実装済み、名前は案）。旧名の `role`（文字列 1 つ）は読み替えず、エラーにして書き直してもらう（案。まだ公開していない形のため）
+- 古い `onCreate(last)` の上書きは、AS がオーバーロードを認めないためコンパイルエラーになる。`api: Api` を足して移行する（決定）。互換の形は用意しない
+
+## 役割の割り当て（実装済み、形は案）
+
+名乗った（`roles`）アプリのうち、どれを割り当てるかを 2 段で決めます（[regie/system.md](regie/system.md#役割の割り当て実装済み形は案)）。
+
+既定の埋め込みは Cadre（`cadre`）と、そのサブアプリのホーム（`cadre.home`）・設定（`cadre.settings`）、同梱の Filer（`filer`、役割 `files`）です。`apps/cadre/app.json` の親と `sub` がそれぞれ役割を名乗ります。ホームと Cadre の割り当ては独立しており、Cadre を差し替えても設定の割り当ては変わりません。
+
+1. 初回は `system/boot.json` の既定（`roles.cadre`・`roles.home`・`roles.settings` にアプリの ID）。カーネルがブートのとき、これを `SystemOptions.roles`（役割 → 完全なアプリ ID）にして Régie に渡す
+2. そのあとは設定（SystemStore の `settings.roles`、役割 → 完全なアプリ ID）が優先する。割り当てを変えられるのは設定アプリの `os.assign(役割, 候補の番号)` だけ。API で変えられる役割は `home`・`cadre`・`files`（設定画面には `home`・`cadre` を表示）
+3. どちらも使えなければ、入手元が `binette:system` の、その役割を名乗る最初のアプリ
+
+`settings` は固定で、設定では変えられません（設定アプリは入手元が `binette:system` のものだけ。ブートでも設定を含む `/apps/cadre` パッケージへの `/user` の上書きを拒む）。キーごとの届け先は Régie の表（`API_RULES`）で決まります。
+
+## 許可されていない呼び出し（実装済み）
+
+辞書は「使えるかを調べる入口」です。載っていないキーに対応する `XxxApi.from(api)` を呼んでも、アプリは終了せず null を受け取ります。一方、辞書を通さずに `apps.*`・`os.*`・`storage.*` の import を直接呼んだときは、今までどおり例外でアプリを終了します（[regie/run.md](regie/run.md#辞書を通さない呼び出し実装済み)）。強制は import 側が続けて受け持つので、辞書を迂回しても権限は増えません。
+
+## Cadre（決定 2026-11-01）
+
+Windows のエクスプローラーのような、OS の一番外側を受け持つアプリです（のぞみ 2026-11-01）。
+
+- 本当に最初に起動するアプリ。カーネルは起動の流れを終えたら、まず Cadre を起動する
+- ホームバーや通知など、OS の大枠の UI を全部受け持つ
+- 大枠の中に「アプリの表示領域」を置く。ホームは Cadre が呼び、ホームやほかのアプリはカーネルがその領域に出す
+- 機能（アプリの切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知など）はカーネルが固定で持ち、`cadre` の API として渡す
+- 見た目と並びは、Cadre が Décor で好きに作る
+
+```ts
+// 例（案）。appArea() はカーネルがアプリを出す場所
+override build(): View {
+  const dock: View[] = [];
+  for (let i = 0; i < this.cadre.running(); i++) dock.push(buttonOf([appIcon(i)], switchTo).arg(i));
+  return column([
+    appArea().grow(),
+    row([button("ホーム", home), ...dock]).gap(),
+  ]);
+}
+```
+
+- 役割の名前は `cadre`（決定）。部品 `appArea()` の名前は案
+- Cadre もほかのアプリと同じく Worker の WASM で動き、DOM には触れない。アプリの表示領域の中身（アプリの DOM）は、Cadre からは見えない
+- Cadre はブートと保存設定の役割の割り当てで選ぶ。設定画面からも差し替えられる（設定アプリと違ってコアではない）
+- ホームバーは既定の Cadre `apps/cadre` が AS の Décor で描く（[apps/cadre.md](apps/cadre.md)）。Scene はアプリを `appArea()` に配置する
+- 吹き出しとメニューのような重ね表示は、Décor にまだ部品がない。どう渡すかは未決
+
+## 常駐する役割の落ちたとき（決定）
+
+ホームと同じ決まりにします（[lifecycle.md](lifecycle.md#落ちたとき決定)）。落ちたら起動し直し、落ち続けたらカーネルが直接描く最後の受け皿を出します。Cadre の受け皿は、アプリの表示領域とホームへ戻るボタンだけの最低限の大枠です（実装済み、形は案）。再起動の待ちと打ち切りにはホームと同じ `homeRetryWindow` を使います。Cadre のような常駐する役割は、スタックに数えません。
+
+## 設定アプリ（決定 2026-11-01）
+
+- 設定アプリはコア。カスタムさせない（テーマの適用くらいはある）
+- `/user` で上書きできない固定物として扱う（[boot.md](boot.md#ファイルの木決定-2026-11-01)）
+- 役割の割り当てを変えられるのは設定アプリだけ
+
+## 役割の候補（案）
+
+| 役割 | 仕事 | 常駐 |
+| --- | --- | --- |
+| `home` | ほかのアプリを並べて開く | いいえ（スタックに数える。今のまま） |
+| `cadre` | OS の大枠（ホームバー、通知など）とアプリの表示領域 | はい |
+| `settings` | OS の設定、役割の割り当て | いいえ |
+| `apps-manager` | 提供リストの登録、アプリのインストール・更新・削除、アプリのデータの管理（[app-manager.md](app-manager.md)、決定 2026-11-09。設定と同じく差し替えない） | いいえ |
+
+ロック画面やキーボードなどは、要るようになったら足します。
+
+## API のキー
+
+| キー | 中身 | 届く相手 | 状態 |
+| --- | --- | --- | --- |
+| `cadre` | 切り替え、閉じる、戻る、ホームへ、起動中の一覧、通知 | Cadre | 実装済み（形は案） |
+| `apps` | アプリの一覧、アイコン、開く（`AppsApi`） | ホームと Cadre | 実装済み |
+| `os` | OS の設定、役割の割り当て、起動の履歴、更新（`OsApi`） | 設定アプリ | 実装済み |
+| `manager` | 提供リストとアプリの管理（`AppManagerApi`、[app-manager.md](app-manager.md)） | アプリ管理（役割 `apps-manager`） | 決定 2026-11-09。実装済み |
+| `fs` | ファイルの木を読む・書く（範囲つき。`FsApi`） | 権限を許したアプリ（デザイナー、エディタなど） | キーだけ。今は誰にも届かない |
+| `pigeon` | 手紙の送受信と通知（`PigeonApi`） | すべてのアプリ | 実装済み。ユーザーへの送信には `notify` 権限が必要 |
+| `shares` | 共有の作成・承認・退出とファイル操作（`SharesApi`） | すべてのアプリ | 実装済み。共有ごとに参加状態とアクセス権を確認 |
+| `storage` | アプリ自身の領域のデータ（`/data/…`。`StorageApi`） | すべてのアプリ | 実装済み（読む・書く・一覧・削除） |
+| `scheduler` | すべての予定の一覧と変更（`SchedulerApi`、[scheduler.md](scheduler.md)） | 設定アプリ | 実装済み |
+| `schedule` | 自分の予定の登録・変更（`ScheduleApi`） | `permissions` に `schedule` を書いたアプリ | 実装済み |
+
+## 未決のこと
+
+- 役割とキーの名前、一覧
+- ユーザーに許可を聞く流れ。`permissions` は名前 → `{ reason }` の辞書。権限による NotGranted は `fs` だけが使う
+- `fs` の範囲の決め方（どのパスを読める・書けるか）
+- `storage` の容量の上限と、ほかのタブや窓との同時書き込み
+- 知らないキーの `api.why`（今は NotAssigned）
+- 割り当てを変えたとき、変わる前のアプリの API を取り上げる流れ（ホームは前のものを Destroy する。ほかの役割は未決）

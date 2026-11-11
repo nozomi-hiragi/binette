@@ -1,0 +1,42 @@
+{
+  "id": "cadre",
+  "version": "0.1.0",
+  "binette": "0.2",
+  "name": "Cadre",
+  "roles": [
+    "cadre"
+  ],
+  "icon": "icon.svg",
+  "entry": {
+    "css": "src/style.css",
+    "as": "src/main.ts"
+  },
+  "sub": {
+    "home": {
+      "name": "ホーム",
+      "icon": "home.svg",
+      "roles": [
+        "home"
+      ]
+    },
+    "settings": {
+      "name": "設定",
+      "icon": "settings.svg",
+      "roles": [
+        "settings"
+      ]
+    },
+    "apps": {
+      "name": "アプリ",
+      "icon": "apps.svg",
+      "roles": [
+        "apps-manager"
+      ]
+    }
+  },
+  "permissions": {
+    "notify": {
+      "reason": "通知を表示するため"
+    }
+  }
+}

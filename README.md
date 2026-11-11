@@ -1,42 +1,62 @@
 # Binette
 
-サーバーが画面の定義を JSON で渡し、ブラウザがそれを再生するための仕組みです。ファイルの拡張子は `.bina` です。
+ブラウザだけで動く、スマホの OS のようなアプリの土台です。アプリ（HTML ＋ AssemblyScript）を取ってきて、ブラウザの中でビルドして動かします。
 
 > [!WARNING]
-> **設計中です。** 仕様はまだ固まっていません。
+> **設計中です。** 仕様はまだ固まっていません。v0.2 は、ホームから設定アプリを開いて戻れるところまでの最小限の土台です。
 
-仕様は [docs/spec.md](docs/spec.md) にあります。
+仕様は [docs/spec/](docs/spec/README.md) にあります。
 
 ## 構成
 
 | 名前 | 役割 |
 |---|---|
-| Binette | `.bina` の形式。Scene と Coulisses が共有する |
-| Scene（シーン、舞台） | `.bina` を受け取り、ブラウザで再生する側 |
-| Coulisses（クーリス、舞台裏） | `.bina` と、そこから使うファイルを用意して返す側 |
+| Binette | パッケージの共通物（`app.json` の型など）。層ではない |
+| Régie（レジ、操作室） | カーネル。中身を全部持つ。アプリのビルド、実行（Worker ＋ WASM）、状態、スタック、権限、保存 |
+| Scene（シーン、舞台） | システム UI。ホームバーなどの大枠と、その中のアプリの置き場を描く。判断は Régie が持つ |
+| Coulisses（クーリス、舞台裏） | サーバー側。今は v0.1 の `.bina` を配るだけ |
+| Réplique（レプリク、セリフ） | アプリが Régie を呼ぶためのライブラリ（AS） |
 
 ## パッケージ
 
+分け直しの途中です（2026-10-28）。仕様は分け直したあとの形で書いています（[docs/spec/README.md](docs/spec/README.md#層の分担決定-2026-10-28)）。
+
 | パッケージ | 内容 |
 |---|---|
-| [`@binette/core`](packages/core) | 形式の型と検査 |
-| [`@binette/scene`](packages/scene) | ブラウザでの再生 |
-| [`@binette/coulisses`](packages/coulisses) | `.bina` の配信 |
+| [`@binette/core`](packages/core) | パッケージの共通物。`app.json` の型と検査（v0.1 の `.bina` の型も残している） |
+| [`@binette/regie`](packages/regie) | カーネル。今はアプリの実行（Worker ＋ WASM）と保存 |
+| [`@binette/scene`](packages/scene) | システム UI。今はアプリのビルドと、状態・スタックなどの判断も持っている |
+| [`@binette/coulisses`](packages/coulisses) | v0.1 の `.bina` の配信 |
+| [`@binette/replique`](packages/replique) | アプリ用の AS ライブラリ |
 
-## デモ
+設定は [apps/cadre](apps/cadre) のサブアプリ `cadre.settings` が持ちます。ホームと Cadre の選択、OS の更新、デバッグ値、起動履歴を扱います（[仕様](docs/spec/apps/settings.md)）。アプリ管理はサブアプリ `cadre.apps`（「アプリ」）が持ち、提供リストからのインストール・更新・削除を扱います（[仕様](docs/spec/app-manager.md)）。
 
-Node.js 22.18 以上が必要です。
+## デザイナー
+
+デザイナーは Décor の宣言 UI をコードと部品の木の間で編集する通常の同梱アプリです。`text`・`button`・`input`・`appIcon` と `column`・`row`・`grid`・`stack` などの配置、`checkbox`・`slider`・`tabs`・`listTile`・`chip` などのよくある部品、余白・大きさ・見出し・位置（`align`）等の修飾を扱います。インスペクターでは部品の値・範囲（min・max）・選択肢・状態・選択中の番号も編集できます。既存の式を読み込んで編集後の Décor コードを出力でき、ボタンや入力欄などのコールバック式は実行せず、そのまま保持します。`appIcon` は通常アプリからアイコンを取得できないため、プレビューには代わりの表示を出します。
+
+使うには `deno task start` で Binette を起動し、ホームから「デザイナー」を開きます。Décor の式を読み込むか入力し、部品や修飾を編集して、出力されたコードをアプリのソースに使います。
+
+## 単独で起動する
+
+Deno 2.9 以上が必要です。
 
 ```sh
-npm install
-npm run demo:coulisses  # 配信（http://localhost:8790）
-npm run demo:scene      # 再生（http://localhost:5175/）
+deno task start  # http://localhost:5175/
 ```
 
-2 つを別々の端末で起動し、http://localhost:5175/ を開きます。
+http://localhost:5175/ を開くと、ホームに設定とデザイナーが並びます。システムアプリと同梱アプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
+
+`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。GitHub Pages ではブランチごとに OS を公開します（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/`、API ドキュメントは `https://nozomi-hiragi.github.io/binette/api/v0.2.0/`）。入口はリポジトリ直下の `index.html` と `src/main.ts` です。本番のカーネルは `regie.js` と `regie-worker.js` に分かれ、入口は SRI 付きで `regie.js` を読みます。`apps/` の直下に `app.json` を持つフォルダを足すとシステムアプリ、`bundled/` に足すと通常の同梱アプリが増えます。どちらも `deno task build:system` でビルドします。同梱アプリの入手元は `binette:bundled` で、システムアプリの権限は持ちません。`catalog/` のアプリ（デザイナー `catalog/designer/`、ドキュメントアプリ `catalog/docs/`）は OS に同梱せず、Binette の既定の提供リスト（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）に載せ、「アプリ」から入れます。提供リストは `deno task pages` が作り、`source` は commit 入りの raw.githubusercontent.com の URL です。ドキュメントアプリの中身は `docs/` から `deno task docs:app` で作ります。既定のシステムアプリは `apps/cadre/` で、ID `cadre` の親と `cadre.home`・`cadre.settings`・`cadre.apps` の入口を 1 つのパッケージに持ちます。
+
+ブラウザのタブでは「ライブモード」と表示し、ホームバーの「インストール」からインストールの画面か手順を開けます。iPhone の Safari では「共有 → ホーム画面に追加」を使います。ライブで試した内容は、インストール後に引き継げることを保証しません。本番では OS の Service Worker がオフライン用にキャッシュします。初回の登録後にオンラインで再読み込みしてから使ってください。開発サーバーでは登録しません。
+
+ホームは [apps/cadre](apps/cadre) のサブアプリ `cadre.home` です。AS の Décor がタイルの見た目と並びを持ち、どれをホームにしてどう開くかは Régie、ホームバーとアプリの表示領域の宣言は Cadre、アプリの配置は Scene が持ちます。ホームは設定から差し替えられます（[仕様](docs/spec/apps/home.md)）。
 
 確かめ方とリリースの手順は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 
 ## ライセンス
 
 [Apache License 2.0](LICENSE)
+
+Décor のテーマ（案）は、`theme({ space: { md: 16 }, button: { padding: space.md } }, view)` で部分木ごとの段と部品の既定を設定できます。`.gap()` / `.padding()` は標準の md、数の引数は引き続き px です。TS と AS の両方に対応し、アプリに CSS の記述は不要です。詳しくは [Décor の仕様](docs/spec/decor.md) を参照してください。

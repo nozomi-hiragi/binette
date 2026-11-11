@@ -1,0 +1,16 @@
+{
+  "name": "@binette/coulisses",
+  "version": "0.2.0",
+  "exports": "./src/index.ts",
+  "imports": {
+    "@binette/core": "jsr:@binette/core@0.2.0",
+    "@std/path": "jsr:@std/path@^1.1.6"
+  },
+  "publish": {
+    "include": [
+      "src",
+      "README.md",
+      "LICENSE"
+    ]
+  }
+}

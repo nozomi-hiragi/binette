@@ -1,0 +1,17 @@
+{
+  "name": "@binette/scene",
+  "version": "0.2.0",
+  "exports": "./src/index.ts",
+  "imports": {
+    "@binette/core": "jsr:@binette/core@0.2.0",
+    "@binette/regie": "jsr:@binette/regie@0.2.0",
+    "@binette/decor": "jsr:@binette/decor@0.2.0"
+  },
+  "publish": {
+    "include": [
+      "src",
+      "README.md",
+      "LICENSE"
+    ]
+  }
+}

@@ -1,3 +1,4 @@
+import { join } from "@std/path";
 import { parseBinette, type Binette } from "@binette/core";
 
 /** パノプリに入れる、ビネット以外のファイル */
@@ -126,7 +127,7 @@ export function parsePanoplie(text: string): BinettePanoplie {
 /**
  * フォルダの中身からパノプリを作る。`.bina` はビネットとして検査し、ほかはファイルとして入れる。
  *
- * `node:fs` を使うので、それが無い環境（Cloudflare Workers など）では動かない。
+ * Deno の API（`Deno.readDir`・`Deno.readFile`）でフォルダを読むので、Deno でだけ動く。
  * 読むのは呼んだときの 1 回だけ。シンボリックリンクと、`.` で始まるファイルやフォルダは入れない。
  *
  * @param root 読むフォルダ
@@ -138,27 +139,34 @@ export function parsePanoplie(text: string): BinettePanoplie {
  * ```
  */
 export async function importPanoplie(root: string): Promise<BinettePanoplie> {
-  // ほかの関数は node:fs 無しで使えるように、ここで読み込む
-  const { readdir, readFile } = await import("node:fs/promises");
-  const { join, relative, sep } = await import("node:path");
   const panoplie = createPanoplie();
-  for (const entry of await readdir(root, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const path = join(entry.parentPath, entry.name);
-    const key = relative(root, path).split(sep).join("/");
-    if (key.split("/").some(part => part.startsWith("."))) continue;
-    const body = await readFile(path);
-    if (key.endsWith(".bina")) {
-      let value: unknown;
-      try {
-        value = JSON.parse(body.toString("utf8"));
-      } catch {
-        throw new Error(`/${key}: JSON として読めません。`);
+  const decoder = new TextDecoder();
+  // key は root からの相対パスを / でつないだもの
+  const walk = async (dir: string, prefix: string): Promise<void> => {
+    for await (const entry of Deno.readDir(dir)) {
+      if (entry.name.startsWith(".")) continue;
+      const path = join(dir, entry.name);
+      const key = prefix + entry.name;
+      // シンボリックリンクは isDirectory も isFile も偽なので入らない
+      if (entry.isDirectory) {
+        await walk(path, `${key}/`);
+        continue;
       }
-      addBinette(panoplie, key.slice(0, -".bina".length), value);
-    } else {
-      addFile(panoplie, key, body);
+      if (!entry.isFile) continue;
+      const body = await Deno.readFile(path);
+      if (key.endsWith(".bina")) {
+        let value: unknown;
+        try {
+          value = JSON.parse(decoder.decode(body));
+        } catch {
+          throw new Error(`/${key}: JSON として読めません。`);
+        }
+        addBinette(panoplie, key.slice(0, -".bina".length), value);
+      } else {
+        addFile(panoplie, key, body);
+      }
     }
-  }
+  };
+  await walk(root, "");
   return panoplie;
 }

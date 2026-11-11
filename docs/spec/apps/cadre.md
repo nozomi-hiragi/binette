@@ -1,0 +1,17 @@
+# Cadre（`apps/cadre`）
+
+[システムアプリの目次](README.md)
+
+役割 `cadre` に割り当てられた、最初に起動する常駐アプリです。ほかのアプリと同じ Worker の WASM で動き、AS の Décor で OS の大枠を描きます（実装済み、形は案。名前は決定）。
+
+ID は `cadre` です。`apps/cadre/app.json` の `sub` にホーム（`cadre.home`）と設定（`cadre.settings`）を持ち、AS の入口と CSS は 1 つです。`api.sub()` が空文字列なら Cadre、`home`・`settings` なら各サブアプリとして起動します。保存領域と権限は親と共有し、それぞれ別の Worker で動きます。
+
+`onCreate(last, api)` で `CadreApi` を取り、`CadreApi.openHome()` を呼びます。`build()` は上に `appArea().grow()`、下にホームバーを置きます。Scene がその領域へホームとアプリを配置します。Cadre 自身はスタック・ホームの一覧・起動中アプリの一覧に数えません。
+
+バーの左にホーム、中央の台に起動中アプリのアイコン（無ければ頭文字）、右にライブモードのインストールを並べます。前面のアプリには点を付け、名前はマウスを載せるかキーボードでフォーカスすると吹き出しに出します。右クリック・長押し・メニューキー・Shift+F10 のメニューからアプリを開くか閉じます。設定はホームから開きます。起動中の一覧と前面の変化は Régie が Worker に知らせ、再描画します。切り替え・終了の判断は Régie が行います。
+
+`CadreApi` は `count()`（別名 `running()`）、`name(i)`、`isFront(i)`、`isHome()`、`hasIcon(i)`、`appIndex(i)`（`appIcon` に渡す番号）、`isInstalled()`、`installBusy()`、`install()`、`open(i)`、`close(i)`、`openHome()`（別名 `home()`）、`back()`、`openSettings()`（設定の役割に割り当てたアプリを開く）を持ちます。番号は起動中の一覧の番号で、`AppsApi` のインストール済み一覧とは別です。Pigeon のユーザー宛ての手紙は通知として表示し、操作の結果を差出人に届けます。
+
+ライブモードではインストールボタンを表示し、確認を待つ間は押せなくします。吹き出しとメニューは Décor の部品、見た目はアプリの CSS で指定します。通知の見た目の細部は案です。Cadre の差し替えはブートと保存設定で選べますが、設定画面からも変更できます。
+
+落ちたときは Régie が待ちを入れて再起動し、`homeRetryWindow` を過ぎても落ち続ければ、Scene がアプリの表示領域とホームボタンだけを出します（[lifecycle.md](../lifecycle.md#落ちたとき決定)）。

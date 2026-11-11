@@ -1,0 +1,41 @@
+{
+  "name": "@binette/replique",
+  "version": "0.2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./app": "./src/app.ts",
+    "./dom": "./src/dom.ts",
+    "./ui": "./src/ui.ts",
+    "./storage": "./src/storage.ts",
+    "./pigeon": "./src/pigeon.ts",
+    "./shares": "./src/shares.ts",
+    "./os": "./src/os.ts",
+    "./apps": "./src/apps.ts",
+    "./manager": "./src/manager.ts",
+    "./scheduler": "./src/scheduler.ts",
+    "./schedule": "./src/schedule.ts",
+    "./cadre": "./src/cadre.ts",
+    "./fs": "./src/fs.ts"
+  },
+  "tasks": {
+    "check": "deno run -A scripts/check.ts"
+  },
+  "publish": {
+    "include": [
+      "src",
+      "README.md",
+      "LICENSE",
+      "scripts"
+    ]
+  },
+  "compilerOptions": {
+    "lib": [],
+    "types": [
+      "npm:assemblyscript@0.28.20/std/assembly/index.d.ts"
+    ]
+  },
+  "imports": {
+    "@binette/decor/as": "jsr:@binette/decor@0.2.0/as",
+    "@binette/decor/parts": "jsr:@binette/decor@0.2.0/parts"
+  }
+}

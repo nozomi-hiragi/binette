@@ -1,11 +1,18 @@
 # @binette/core
 
-Binette の型、スキーマ、形式検証（`parseBinette` / `BinetteError`）を提供します。依存は valibot だけです。
+Binette の型、スキーマ、形式検証を提供します。アプリの説明ファイル `app.json` は `parseAppManifest`、v0.1 の `.bina` は `parseBinette` で読みます（どちらも失敗すると `BinetteError`）。依存は valibot だけです。
 
 ```ts
 import { parseBinette, type Binette } from "@binette/core";
 const binette: Binette = parseBinette('{"binette": "0.1", "redirect": "/home"}');
 ```
 
-ルートで `npm install` 後、`npm run typecheck -w @binette/core` で型検査します。
-単独のデモはありません。配信と再生のデモは、それぞれ `npm run demo -w @binette/coulisses` と `npm run demo -w @binette/scene` で起動します。
+```ts
+import { parseAppManifest } from "@binette/core";
+const app = parseAppManifest(await readFile("app.json", "utf8")); // id・name・entry だけを検査する
+```
+
+テストと型検査は、ルートの `deno task test` と `deno task check` で行います。
+単独フロントは `deno task start`、v0.1 の配信のデモは `deno task demo:coulisses` で起動します。
+
+仕様は [docs/spec/core.md](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/core.md) にあります。

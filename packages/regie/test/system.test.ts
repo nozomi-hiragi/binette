@@ -1,0 +1,1014 @@
+import { repliqueVersions, resolveSdkSpecifier } from "../src/sdk.ts";
+import { BinetteError } from "@binette/core";
+import { readRepliqueLibraries } from "../src/cli.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import { parseAppManifest, State, type DomOp } from "@binette/core";
+import { createMemoryAppStore, appId, startSystem, serveApp, type Process, type RegieWorker, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "../src/index.ts";
+import asc from "assemblyscript/asc";
+import { loadCompiler, type Compiler } from "../src/build.ts";
+
+const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
+const versions = repliqueVersions(libraries);
+const decorAs = await Deno.readTextFile(new URL("../../decor/src/as.ts", import.meta.url));
+const decorParts = await Deno.readTextFile(new URL("../../decor/src/parts.ts", import.meta.url));
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+async function waitFor(condition: () => boolean): Promise<void> {
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await sleep(5);
+  assert(condition(), "待っても状態が変わりませんでした");
+}
+async function waitForAsync(condition: () => Promise<boolean>): Promise<void> {
+  const deadline = performance.now() + 10000;
+  while (!await condition() && performance.now() < deadline) await sleep(5);
+  assert(await condition(), "待っても状態が変わりませんでした");
+}
+function createWorker(): RegieWorker {
+  const { port1, port2 } = new MessageChannel();
+  port1.start(); port2.start(); serveApp(port1 as never);
+  return {
+    postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
+    addEventListener: (type, listener) => port2.addEventListener(type, listener as never),
+    terminate() { port1.close(); port2.close(); },
+  };
+}
+/** 無限ループもメインを止めずに試せる、別スレッドの Worker */
+function realWorker(): RegieWorker {
+  return new Worker(new URL("../src/worker-entry.ts", import.meta.url), { type: "module" });
+}
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
+const source = `import { Api, App, AppsApi, Last, State, DestroyReason, document, launch } from "jsr:@binette/replique";
+let appsApi: AppsApi | null = null;
+let log = "";
+function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
+class TestApp extends App {
+  onCreate(last: Last, api: Api): void {
+    appsApi = AppsApi.from(api);
+    record("create:" + last.state.toString());
+    document.getElementById("page").textContent = this.page;
+    document.getElementById("click").addEventListener("click", () => record("click"));
+    document.getElementById("finish").addEventListener("click", () => test.finishNow());
+    document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
+  }
+  onStart(last: State): void { record("start:" + last.toString()); }
+  onResume(): void { record("resume"); }
+  onPause(): void { record("pause"); }
+  onStop(): void { record("stop"); }
+  onDestroy(reason: DestroyReason): void { record("destroy:" + reason.kind.toString() + ":" + reason.cause.toString()); }
+  finishNow(): void { record("before"); this.finish(); record("after"); }
+}
+const test = new TestApp();
+launch(test);`;
+/** ライフサイクルの試験用 WASM。Scene のビルドと DOM に依存しない */
+async function build(code = source, home = false) {
+  let wasm: Uint8Array | undefined;
+  const stderr = asc.createMemoryStream();
+  const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
+    readFile(name: string) {
+      if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle, __bina_pigeon, __bina_cadre_sync, __bina_schedule } from "jsr:@binette/replique";';
+      if (name.startsWith("node_modules/jsr:@binette/replique")) return libraries[resolveSdkSpecifier(name.slice("node_modules/".length, -3), versions)] ?? null;
+      if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
+      if (name === "node_modules/jsr:@binette/decor/parts.ts") return decorParts;
+      return null;
+    },
+    writeFile(name: string, contents: string | Uint8Array) { if (name === "main.wasm" && typeof contents !== "string") wasm = contents; },
+    listFiles: () => [], stderr,
+  });
+  assert(!error && wasm, stderr.toString());
+  return { manifest: parseAppManifest(JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { roles: ["home"] } : {}), entry: { html: "index.html", as: "main.ts" } })), html: "", wasm };
+}
+
+/** プロセスの出力と置き場の寿命だけを記録する偽 UI */
+function output() {
+  const records = new Map<number, { id: number; process: Process; text: Map<string, string>; listeners: Map<string, number>; connected: boolean }>();
+  let view: SystemView = { instances: [], front: undefined, apps: [], clearError: false };
+  let homeApps: { id: string; name: string; icon?: string }[] | undefined;
+  const errors: unknown[] = [];
+  const reported = new WeakSet<object>();
+  const ui: SystemUi = {
+    update(value) { view = value; },
+    report(error) {
+      if (typeof error === "object" && error !== null) {
+        if (reported.has(error)) return;
+        reported.add(error);
+      }
+      errors.push(error);
+    },
+    present(instance, process) {
+      if (instance.home) homeApps = instance.apps;
+      const record = { id: instance.id, process, text: new Map<string, string>(), listeners: new Map<string, number>(), connected: true };
+      const ids = new Map<number, string>();
+      process.attach((ops: DomOp[]) => {
+        for (const op of ops) {
+          if (op.op === "byId") ids.set(op.handle, op.id);
+          else if (op.op === "text") record.text.set(ids.get(op.handle)!, op.value);
+          else if (op.op === "listen") record.listeners.set(ids.get(op.handle)!, op.listener);
+        }
+      });
+      records.set(instance.id, record);
+      return { remove() { record.connected = false; process.attach(() => {}); } };
+    },
+  };
+  return { ui, errors, get homeApps() { return homeApps; }, get view() { return view; }, get active() { return records.get(view.front as number)!; } };
+}
+type Output = ReturnType<typeof output>;
+type RecordOutput = Output["active"];
+async function waitForResumed(element: Output, store: ReturnType<typeof createMemoryAppStore>, name: string) {
+  await waitForAsync(async () => {
+    const instance = element.view.instances.find(instance => instance.name === name && instance.id === element.view.front);
+    const last = instance && await store.system.getLast(instance.key);
+    return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
+  });
+  // Finish the host continuation after Resume persistence before the next operation.
+  await sleep(0);
+}
+const activeHost = (result: Output) => result.active;
+const logOf = (result: Output | RecordOutput) => ("active" in result ? result.active : result)?.text.get("log");
+const click = (result: Output | RecordOutput, id: string) => {
+  const record = "active" in result ? result.active : result;
+  record.process.dispatch(record.listeners.get(id)!);
+};
+async function mountSystem(result: Output, options: Omit<SystemOptions, "ui">) {
+  const system = await startSystem({ ...options, ui: result.ui });
+  if (!result.view.cadreUnavailable) await system.openHome();
+  return system;
+}
+function bar(result: Output, system: BinetteSystem, label: string) {
+  if (label === "ホームを開く") { void system.openHome(); return; }
+  const close = label.endsWith("を閉じる");
+  const name = label.slice(0, -4);
+  const instance = result.view.instances.find(instance => instance.name === name)!;
+  if (close) void system.close(instance.id); else void system.open(instance.key);
+}
+async function stackFixtures() {
+  const extra = [1, 2].map(i => `document.getElementById("open${i}").addEventListener("click", () => appsApi!.open(${i}));`).join("\n");
+  const home = await build(source.replace('record("create:" + last.state.toString());', `record("create:" + last.state.toString()); ${extra}`), true);
+  home.html += '<button id="open1">B</button><button id="open2">C</button>';
+  const app = await build();
+  return [{ source: "binette:system", prebuilt: home }, ...["A", "B", "C"].map(id => ({ source: "https://example.test/apps/", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id } } }))];
+}
+
+Deno.test("ホームに戻っても画面を残し、finish は User・App で閉じる。ページの識別子は共有する", async () => {
+  const builtHome = await build(source, true), built = await build();
+  const element = output(); const errors = element.errors; const store = createMemoryAppStore();
+  const cadre = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "https://example.test/apps/", prebuilt: built }], store, createWorker });
+  const page = activeHost(element).text.get("page");
+  const home = activeHost(element);
+  const resumed = async (record: RecordOutput) => {
+    await waitForAsync(async () => {
+      const key = element.view.instances.find(instance => instance.id === record.id)?.key;
+      const last = key && await store.system.getLast(key);
+      return !!last && last.state === State.Resume && last.done;
+    });
+    // Finish show() after its persisted Resume before requesting another transition.
+    await sleep(0);
+  };
+  try {
+    assert(page); click(home, "open");
+    await waitFor(() => activeHost(element) !== home && logOf(element) === "create:0;start:1;resume;");
+    const app = activeHost(element);
+    await resumed(app);
+    await waitFor(() => logOf(home) === "create:0;start:1;resume;pause;");
+    assertEquals(logOf(home), "create:0;start:1;resume;pause;");
+    assertEquals(app.text.get("page"), page);
+    void cadre.openHome();
+    await waitFor(() => activeHost(element) === home && logOf(home)!.endsWith("pause;resume;"));
+    await resumed(home);
+    await waitFor(() => logOf(app) === "create:0;start:1;resume;pause;");
+    assertEquals(logOf(app), "create:0;start:1;resume;pause;");
+    click(home, "open");
+    await waitFor(() => activeHost(element) === app && logOf(app)!.endsWith("pause;resume;"));
+    await resumed(app);
+    click(app, "finish");
+    await waitFor(() => activeHost(element) === home && !app.connected);
+    assert(logOf(app)!.endsWith("before;after;pause;stop;destroy:0:1;"));
+    click(home, "finish");
+    await waitFor(() => activeHost(element) !== home && !!logOf(element)?.includes("start:1;resume;"));
+    assert(logOf(home)!.endsWith("before;after;pause;stop;destroy:0:1;"));
+    assertEquals(activeHost(element).text.get("page"), page);
+    assertEquals(errors, []);
+    const other = output();
+    const second = await mountSystem(other, { apps: [{ source: "binette:system", prebuilt: builtHome }], store: createMemoryAppStore(), createWorker });
+    try { assert(other.active.text.get("page") !== page); }
+    finally { second.stop(); }
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("起動で固まるホームは、時間切れのあと開き直し続けない", async () => {
+  const builtHome = await build("let spin: i32 = 0;\nwhile (true) { spin++; }", true);
+  const element = output(); const errors = element.errors; let count = 0;
+  const cadre = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }], store: createMemoryAppStore(),
+    callTimeout: 50, homeRetryWindow: 50, createWorker() { count++; return realWorker(); } });
+  try {
+    await waitFor(() => count >= 2);
+    await sleep(400);
+    const settled = count;
+    await sleep(300);
+    assertEquals(count, settled);
+    assert(settled <= 3);
+    assert((errors.at(-1) as Error).message.includes("応答しない"));
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("保存した設定は ShellOptions より優先し、スタック 1 ではホームも Destroy して戻ると起動", async () => {
+  const element = output(); const store = createMemoryAppStore();
+  await store.system.putSettings({ roles: { home: "後続で使う設定" }, stackSize: 1, historyLimit: 2, stopDelay: 15 });
+  const cadre = await mountSystem(element, { apps: await stackFixtures(), store, createWorker, stackSize: 9, historyLimit: 9, stopDelay: 10000 });
+  const home = activeHost(element);
+  try {
+    click(home, "open"); await waitFor(() => !home.connected);
+    assert(logOf(home)!.endsWith("pause;stop;destroy:1:2;"));
+    const a = activeHost(element);
+    bar(element, cadre, "ホームを開く"); await waitFor(() => activeHost(element) !== a && !a.connected && !!logOf(element)?.endsWith("resume;"));
+    assert(activeHost(element) !== home); assert(logOf(element)!.startsWith("create:6;"));
+    const history = await store.system.listLaunches();
+    assertEquals(history.map(r => r.app), ["https://example.test/apps/#A", "home"]);
+    assert(history.every(r => r.time > 0));
+    assertEquals((await store.system.getSettings())!.roles, { home: "後続で使う設定" });
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("スタック内では前面だけを Pause・Resume し、freeze は全インスタンスの計時を止める", async () => {
+  const element = output(); const store = createMemoryAppStore();
+  let visible = true, frozen = false;
+  const event = (type: string) => { frozen = type === "freeze"; cadre.setPage({ visible, frozen }); };
+  const visibility = (value: string) => { visible = value === "visible"; cadre.setPage({ visible, frozen }); };
+  const cadre = await mountSystem(element, { apps: await stackFixtures(), store, createWorker, stopDelay: 150 });
+  const home = activeHost(element);
+  try {
+    click(home, "open"); await waitForResumed(element, store, "A");
+    const a = activeHost(element);
+    visibility("hidden"); await waitFor(() => logOf(a)!.endsWith("pause;"));
+    const homeLog = logOf(home), appLog = logOf(a);
+    event("freeze"); await sleep(200);
+    assertEquals(logOf(home), homeLog); assertEquals(logOf(a), appLog);
+    event("resume"); await sleep(30);
+    assertEquals(logOf(home), homeLog); assertEquals(logOf(a), appLog);
+    visibility("visible"); await waitFor(() => logOf(a)!.endsWith("pause;resume;"));
+    await waitFor(() => logOf(home)!.endsWith("stop;"));
+    assertEquals(logOf(a), appLog + "resume;");
+    bar(element, cadre, "ホームを開く"); await waitFor(() => activeHost(element) === home && logOf(home)!.endsWith("stop;start:5;resume;"));
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
+  const element = output(); const errors = element.errors; const store = createMemoryAppStore();
+  const fixtures = await stackFixtures();
+  fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
+  const cadre = await mountSystem(element, { apps: fixtures, store, createWorker, stopDelay: 60 });
+  const home = activeHost(element);
+  try {
+    click(home, "open"); await waitForResumed(element, store, "A");
+    const a = activeHost(element);
+    bar(element, cadre, "ホームを開く"); await waitForResumed(element, store, "テスト"); await waitFor(() => activeHost(element) === home);
+    click(home, "open1"); await waitForResumed(element, store, "B");
+    const b = activeHost(element);
+    await waitFor(() => errors.length === 1);
+    assertEquals(activeHost(element), b); assert(!a.connected);
+    assertEquals(element.view.instances.find(instance => instance.name === "A"), undefined);
+    assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
+    assert((errors[0] as Error).message.includes("背面の失敗"));
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("ホームが onPause で落ちても、開いたアプリから引き離さない", async () => {
+  const fixtures = await stackFixtures();
+  const home = fixtures[0]!.prebuilt;
+  fixtures[0]!.prebuilt = { ...await build(source.replace('onPause(): void { record("pause"); }', 'onPause(): void { record("pause"); throw new Error("ホームの Pause の失敗"); }'), true), manifest: home.manifest };
+  const element = output(); const errors = element.errors;
+  const cadre = await mountSystem(element, { apps: fixtures, store: createMemoryAppStore(), createWorker });
+  const start = activeHost(element);
+  try {
+    click(start, "open");
+    await waitFor(() => errors.length === 1 && activeHost(element) !== start && !!logOf(element)?.endsWith("resume;"));
+    const opened = activeHost(element);
+    // 起動し直しの予約（100ms〜）が残っていれば、ここでホームへ戻ってしまう
+    await sleep(400);
+    assertEquals(activeHost(element), opened);
+    assertEquals(typeof element.view.front, "number");
+    assertEquals(element.view.instances.find(instance => instance.name === "A")!.id, element.view.front);
+  } finally { cadre.stop(); }
+});
+
+
+const builtHome = await build(source, true);
+const homeApp = { source: "binette:system", prebuilt: builtHome };
+const fixtures = ["設定", "設定の写し"].map((name, i) => {
+  const manifest = { ...builtHome.manifest, id: `settings-${i}`, name, roles: ["settings"] };
+  return { ...builtHome, manifest, key: appId("binette:system", manifest.id), source: "binette:system", installedAt: 1, icon: undefined };
+});
+const apps = fixtures.map(fixture => ({ source: fixture.source, read: (path: string) => {
+  assertEquals(path, "app.json"); return Promise.resolve(JSON.stringify(fixture.manifest));
+} }));
+async function savedStore() {
+  const store = createMemoryAppStore();
+  for (const fixture of fixtures) await store.put(fixture);
+  return store;
+}
+function heldWorker() {
+  let listener: ((event: MessageEvent) => void) | undefined;
+  const messages: unknown[] = [];
+  let terminated = 0;
+  return {
+    messages, get terminated() { return terminated; },
+    emit(data: unknown) { listener?.({ data } as MessageEvent); },
+    createWorker: (): RegieWorker => ({
+      postMessage: (message) => { messages.push(message); },
+      addEventListener: (type, callback) => { if (type === "message") listener = callback as (event: MessageEvent) => void; },
+      terminate: () => { terminated++; },
+    }),
+  };
+}
+
+Deno.test("read は同じ版を再ビルドせず、版が変われば保存し直す", async () => {
+  const element = output(); const store = await savedStore();
+  const asc = await loadCompiler(); let builds = 0;
+  const compiler: Compiler = { ...asc, main(argv, options) { builds++; return asc.main(argv, options); } };
+  const cached = apps.map((app) => ({ ...app, async read(path: string) { assertEquals(path, "app.json"); return await app.read(path); } }));
+  let cadre = await startSystem({ ui: element.ui, apps: [homeApp, ...cached], store, compiler, createWorker });
+  try {
+    await cadre.openHome();
+    assertEquals(builds, 0); assertEquals(element.homeApps!.map(app => app.name), ["設定", "設定の写し"]);
+    cadre.stop();
+    const app = apps[0]!;
+    cadre = await startSystem({ ui: element.ui, apps: [homeApp, { ...app, async read(path) {
+      if (path === "app.json") return JSON.stringify({ ...JSON.parse(await app.read(path)), version: "0.2.0" });
+      return path === "main.ts" ? source : "";
+    } }], store, compiler, libraries });
+    assertEquals(builds, 1); assertEquals((await store.get(fixtures[0]!.key))!.manifest.version, "0.2.0");
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("startSystem の compiler と libraries を read のアプリのビルドに使う", async () => {
+  const element = output(); const store = await savedStore();
+  const asc = await loadCompiler(); let builds = 0;
+  const compiler: Compiler = { ...asc, main(argv, options) { builds++; return asc.main(argv, options); } };
+  const manifest = { ...fixtures[0]!.manifest, version: "0.2.0" };
+  const files: Record<string, string> = { "app.json": JSON.stringify(manifest), "index.html": "<p>更新</p>", "main.ts": source };
+  const cadre = await startSystem({ ui: element.ui, store, apps: [homeApp, { source: fixtures[0]!.source, read: path => Promise.resolve(files[path]!) }],
+    compiler, libraries });
+  try {
+    assertEquals(element.errors, []); assertEquals(builds, 1);
+    const saved = await store.get(fixtures[0]!.key);
+    assertEquals(saved!.manifest.version, "0.2.0"); assertEquals(saved!.html, "<p>更新</p>");
+    assert(WebAssembly.validate(saved!.wasm as Uint8Array<ArrayBuffer>));
+  } finally { cadre.stop(); }
+});
+
+Deno.test("prebuilt は compiler を使わず毎回保存し、installedAt を保つ", async () => {
+  const element = output(); const store = await savedStore();
+  const compiler: Compiler = { main() { throw new Error("ビルド不要"); }, createMemoryStream() { throw new Error("ビルド不要"); } };
+  const fixture = fixtures[0]!; const changed = { ...fixture, html: "更新した HTML", manifest: { ...fixture.manifest, version: "0.3.0" } };
+  const cadre = await startSystem({ ui: element.ui, apps: [homeApp, { source: fixture.source, prebuilt: changed }], store, compiler });
+  try {
+    const saved = (await store.get(fixture.key))!;
+    assertEquals(saved.html, changed.html); assertEquals(saved.manifest.version, "0.3.0"); assertEquals(saved.installedAt, 1);
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("読み込み・保存の失敗があっても残りを渡し、重複は並べない", async () => {
+  const element = output(); const store = await savedStore(); const errors = element.errors;
+  const cadre = await startSystem({ ui: element.ui, apps: [homeApp, { source: "bad", read: () => Promise.resolve("{") }, ...apps, apps[1]!],
+    store: { ...store, get(key) { return key === fixtures[0]!.key ? Promise.reject(new Error("保存失敗")) : store.get(key); } }, createWorker,
+     });
+  try {
+    await cadre.openHome();
+    assertEquals(errors.length, 2); assertEquals(element.homeApps!.map(app => app.name), ["設定の写し"]);
+  } finally { cadre.stop(); }
+});
+
+
+Deno.test("ホームは system かつ roles に home を持つ最初のもの。別のホームも一覧に含めない", async () => {
+  const element = output();
+  const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" }, html: "別のホーム" } };
+  const cadre = await startSystem({ ui: element.ui, createWorker, apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store: createMemoryAppStore() });
+  try { await cadre.openHome(); assertEquals(element.homeApps!.map(app => app.name), ["設定"]); assertEquals(element.view.instances.find(instance => instance.home)!.key, appId(homeApp.source, builtHome.manifest.id)); }
+  finally { cadre.stop(); }
+});
+
+
+Deno.test("フォルダ外の icon は読まずに拒む", async () => {
+  const element = output(); const reads: string[] = []; const errors = element.errors; const app = apps[0]!;
+  const cadre = await startSystem({ ui: element.ui, apps: [homeApp, { source: app.source, async read(path) {
+    reads.push(path); const text = await app.read(path); return path === "app.json" ? JSON.stringify({ ...JSON.parse(text), icon: "../secret.svg" }) : text;
+  } }], store: createMemoryAppStore(), createWorker });
+  try { await cadre.openHome(); assertEquals(reads, ["app.json"]); assertEquals(errors.length, 1); assertEquals(element.homeApps, []); }
+  finally { cadre.stop(); }
+});
+
+Deno.test("文字列のエラーは後続の update で再通知しない", async () => {
+  const element = output();
+  const cadre = await startSystem({ ui: element.ui, apps: [homeApp, { source: "bad", read: () => Promise.reject("設定の失敗") }],
+    createWorker, store: createMemoryAppStore() });
+  try {
+    assertEquals(element.errors, ["設定の失敗"]);
+    await cadre.openHome();
+    await cadre.openHome();
+    assertEquals(element.errors, ["設定の失敗"]);
+  } finally { cadre.stop(); }
+});
+
+Deno.test("保存した home が無ければ system のホームを使う", async () => {
+  const element = output(); const store = createMemoryAppStore();
+  await store.system.putSettings({ roles: { home: "missing" } });
+  const cadre = await mountSystem(element, { apps: [homeApp], store, createWorker });
+  try { assertEquals((await store.system.listLaunches())[0]!.app, appId(homeApp.source, builtHome.manifest.id)); }
+  finally { cadre.stop(); }
+});
+
+
+Deno.test("落ちたホームを起動し直す前の待ちは倍になって頭打ちになり、「ホーム」で最初に戻る", async () => {
+  const element = output(); const times: number[] = [];
+  const cadre = await mountSystem(element, { apps: [homeApp, ...apps], store: createMemoryAppStore(), homeRetryWindow: 2600,
+    createWorker() {
+      times.push(performance.now());
+      const held = heldWorker();
+      queueMicrotask(() => held.emit({ type: "failed", message: "ホームの失敗" }));
+      return held.createWorker();
+    } });
+  try {
+    // 100 → 200 → 400 → 800 → 1000 の待ちで起動し直し、2.6 秒の窓を過ぎたら Apps
+    await waitFor(() => element.view.front === "apps");
+    const gaps = times.slice(1).map((time, i) => time - times[i]!);
+    assert(gaps.length >= 5, `起動し直した回数が少なすぎます: ${gaps.length}`);
+    for (const [i, gap] of gaps.entries()) {
+      const least = Math.min(100 * 2 ** i, 1000);
+      assert(gap >= least - 5, `${i} 回目の待ちが短すぎます: ${gap}`);
+      // 1000ms で頭打ちになり、それより大きく延びない
+      if (least === 1000) assert(gap < 1900, `待ちが頭打ちになっていません: ${gap}`);
+    }
+    // 「ホーム」で数え直すと、待ちも 100ms に戻る
+    const before = times.length;
+    void cadre.openHome();
+    await waitFor(() => times.length >= before + 2);
+    assert(times[before + 1]! - times[before]! < 600, `待ちが戻っていません: ${times[before + 1]! - times[before]!}`);
+  } finally { cadre.stop(); }
+});
+
+const permissionApp = await build(source + `
+import { OsApi } from "jsr:@binette/replique";
+const osApi = OsApi.from(new Api());
+export function hasOs(): void { document.getElementById("os").textContent = (osApi != null).toString(); }
+export function writeSetting(): void { osApi!.set("historyLimit", 7); }
+export function selectHome(): void { osApi!.assign("home", 0); }
+export function readHomes(): void { document.getElementById("homes").textContent = osApi!.candidateCount("home").toString(); }
+`);
+
+Deno.test("OS の API は system の settings の役割に割り当てたアプリだけに届き、同梱の設定アプリや通常のシステムアプリの辞書には載らない", async () => {
+  for (const [source, roles] of [["binette:system", ["settings"]], ["binette:bundled", ["settings"]], ["binette:system", undefined]] as const) {
+    const granted = source === "binette:system" && roles !== undefined;
+    for (const action of ["writeSetting", "selectHome", "readHomes"]) {
+      const element = output(); const store = createMemoryAppStore();
+      let writes = 0;
+      const putSettings = store.system.putSettings.bind(store.system);
+      store.system.putSettings = async settings => { await putSettings(settings); writes++; };
+      const app = { source, prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, roles: roles as string[] | undefined } } };
+      const bundledHome = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
+      const bundledHomeKey = appId(bundledHome.source, bundledHome.prebuilt.manifest.id);
+      const cadre = await mountSystem(element, { apps: [bundledHome, homeApp, app], store, createWorker });
+      try {
+        await cadre.open(appId(source, app.prebuilt.manifest.id));
+        const process = element.active.process;
+        await process.app.call("hasOs");
+        assertEquals(element.active.text.get("os"), String(granted));
+        if (granted) {
+          await process.app.call(action);
+          if (action !== "readHomes") await waitFor(() => writes === 1);
+          if (action === "writeSetting") {
+            assertEquals((await store.system.getSettings())!.historyLimit, 7);
+          } else if (action === "selectHome") {
+            assertEquals((await store.system.getSettings())!.roles, { home: bundledHomeKey });
+            await cadre.openHome();
+            assertEquals(element.view.instances.find(instance => instance.home)!.key, bundledHomeKey);
+          } else assertEquals(element.active.text.get("homes"), "2");
+          assertEquals(element.errors, []);
+        } else {
+          // 辞書を通さない呼び出しは、権限のない呼び出しとしてアプリを終了する
+          await assertRejects(() => process.app.call(action), Error, "アプリが中断しました");
+          assertEquals(await store.system.getSettings(), undefined);
+          await cadre.openHome();
+          assertEquals(element.view.instances.find(instance => instance.home)!.key, appId(homeApp.source, builtHome.manifest.id));
+        }
+      } finally { cadre.stop(); }
+    }
+  }
+});
+
+Deno.test("同梱ホームは既定のホームにならず、明示的に選ぶと使える", async () => {
+  const bundled = { source: "binette:bundled", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "bundled-home" } } };
+  const bundledKey = appId(bundled.source, bundled.prebuilt.manifest.id);
+  for (const selected of [false, true]) {
+    const element = output(); const store = createMemoryAppStore();
+    if (selected) await store.system.putSettings({ roles: { home: bundledKey } });
+    const cadre = await mountSystem(element, { apps: [bundled, homeApp], store, createWorker });
+    try {
+      assertEquals(element.view.instances.find(instance => instance.home)!.key,
+        selected ? bundledKey : appId(homeApp.source, builtHome.manifest.id));
+      assertEquals(element.homeApps, []);
+      assertEquals(element.errors, []);
+    } finally { cadre.stop(); }
+  }
+});
+
+Deno.test("役割の割り当ては、設定、ブートの既定、system の最初のものの順で選ぶ。名乗らないアプリは選ばない", async () => {
+  const second = { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "second" } } };
+  const secondKey = appId(second.source, "second");
+  const homeKey = appId(homeApp.source, builtHome.manifest.id);
+  const homeOf = async (settings: { roles: Record<string, string> } | undefined, roles?: Record<string, string>) => {
+    const element = output(); const store = createMemoryAppStore();
+    if (settings) await store.system.putSettings(settings);
+    const cadre = await mountSystem(element, { apps: [homeApp, second, { source: fixtures[0]!.source, prebuilt: fixtures[0]! }], store, createWorker, roles });
+    try { return element.view.instances.find(instance => instance.home)!.key; } finally { cadre.stop(); }
+  };
+  assertEquals(await homeOf(undefined), homeKey);
+  assertEquals(await homeOf(undefined, { home: secondKey }), secondKey);
+  assertEquals(await homeOf({ roles: { home: homeKey } }, { home: secondKey }), homeKey);
+  // 設定アプリは home を名乗っていないので、設定にあっても選ばない
+  assertEquals(await homeOf({ roles: { home: fixtures[0]!.key } }, { home: secondKey }), secondKey);
+});
+
+const storageApp = await build(source + `
+import { StorageApi } from "jsr:@binette/replique";
+const storageApi = StorageApi.from(new Api());
+export function save(): void { storageApi!.write("メモ", "保存した"); storageApi!.write("消す", "x"); storageApi!.remove("消す"); }
+export function load(): void { const value = storageApi!.read("メモ"); document.getElementById("memo").textContent = value == null ? "なし" : value; }
+`);
+
+Deno.test("storage reaches every app and persists owner data across launches", async () => {
+  const store = createMemoryAppStore();
+  const app = { source: "https://example.test/apps/", prebuilt: storageApp };
+  const other = { source: "https://example.test/apps/", prebuilt: { ...storageApp, manifest: { ...storageApp.manifest, id: "other" } } };
+  for (const expected of ["なし", "保存した"]) {
+    const element = output();
+    const cadre = await mountSystem(element, { apps: [homeApp, app, other], store, createWorker });
+    try {
+      await cadre.open(appId(app.source, storageApp.manifest.id));
+      await element.active.process.app.call("load");
+      assertEquals(element.active.text.get("memo"), expected);
+      if (expected === "なし") {
+        await element.active.process.app.call("save");
+        // 書き込みは呼び出しの外で順に保存される
+        for (let i = 0; i < 200 && (await store.data.read(appId(app.source, storageApp.manifest.id))).size === 0; i++) await sleep(10);
+      }
+      assertEquals(element.errors, []);
+    } finally { cadre.stop(); }
+  }
+  assertEquals(await store.data.read(appId(app.source, storageApp.manifest.id)), new Map([["メモ", "保存した"]]));
+  assertEquals(await store.data.read("other"), new Map());
+});
+
+Deno.test("保存待ちの書き込みがあるうちに開き直しても、書き込みのあとのデータを読む", async () => {
+  const store = createMemoryAppStore();
+  const write = store.data.write.bind(store.data);
+  store.data.write = async (...args) => { await sleep(100); return write(...args); };
+  const app = { source: "https://example.test/apps/", prebuilt: storageApp };
+  const key = appId(app.source, storageApp.manifest.id);
+  const element = output();
+  const cadre = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+  try {
+    await cadre.open(key);
+    await element.active.process.app.call("save");
+    const first = element.view.instances.find(instance => instance.key === key)!;
+    await cadre.close(first.id);
+    await waitFor(() => !element.view.instances.some(instance => instance.key === key));
+    await cadre.open(key);
+    await element.active.process.app.call("load");
+    assertEquals([element.active.text.get("memo"), element.errors], ["保存した", []]);
+  } finally { cadre.stop(); }
+});
+
+const updateApp = await build(source + `
+import { OsApi } from "jsr:@binette/replique";
+const updateOs = OsApi.from(new Api());
+export function update(): void { updateOs!.update(); document.getElementById("available").textContent = updateOs!.updateAvailable().toString(); }
+`);
+
+Deno.test("設定アプリの update は渡された更新を一度呼び、新しい版が無ければ updateAvailable は false", async () => {
+  for (const available of [true, false]) {
+    const element = output(); let applied = 0;
+    const settings = { source: "binette:system", prebuilt: { ...updateApp, manifest: { ...updateApp.manifest, id: "settings", roles: ["settings"] } } };
+    const cadre = await mountSystem(element, { apps: [homeApp, settings], store: createMemoryAppStore(), createWorker,
+      update: available ? { apply: () => { applied++; return Promise.resolve(); } } : undefined });
+    try {
+      await cadre.open(appId(settings.source, "settings"));
+      await element.active.process.app.call("update");
+      assertEquals(element.active.text.get("available"), String(available));
+      await waitFor(() => !available || applied === 1);
+      await sleep(20);
+      assertEquals([applied, element.errors], [available ? 1 : 0, []]);
+    } finally { cadre.stop(); }
+  }
+});
+
+Deno.test("更新の失敗は report に届き、起動中のアプリを止めない", async () => {
+  const element = output();
+  const settings = { source: "binette:system", prebuilt: { ...updateApp, manifest: { ...updateApp.manifest, id: "settings", roles: ["settings"] } } };
+  const cadre = await mountSystem(element, { apps: [homeApp, settings], store: createMemoryAppStore(), createWorker,
+    update: { apply: () => Promise.reject(new Error("更新に失敗")) } });
+  try {
+    await cadre.open(appId(settings.source, "settings"));
+    await element.active.process.app.call("update");
+    await waitFor(() => element.errors.length === 1);
+    assertEquals((element.errors[0] as Error).message, "更新に失敗");
+    assertEquals(element.view.instances.length, 2);
+  } finally { cadre.stop(); }
+});
+
+Deno.test("Cadre が起動後に落ち続けると再起動を止め、最低限の大枠でホームを開く", async () => {
+  const crashing = await build(`import { Api, App, Last, launch } from "jsr:@binette/replique";
+class Cadre extends App {
+  onCreate(_last: Last, _api: Api): void {}
+  onResume(): void { unreachable(); }
+}
+launch(new Cadre());`);
+  crashing.manifest = { ...crashing.manifest, id: "cadre", roles: ["cadre"] };
+  const element = output();
+  let starts = 0;
+  const system = await startSystem({ ui: element.ui, apps: [homeApp, { source: "binette:system", prebuilt: crashing }],
+    store: createMemoryAppStore(), homeRetryWindow: 220, createWorker() { starts++; return createWorker(); } });
+  try {
+    await waitFor(() => element.view.cadreUnavailable === true && element.view.instances.some(instance => instance.home));
+    assert(starts >= 4, `再起動とホームの起動が足りません: ${starts}`);
+    assertEquals(element.view.instances.some(instance => instance.key.endsWith("cadre")), false);
+    const settled = starts;
+    await sleep(400);
+    assertEquals(starts, settled);
+  } finally { system.stop(); }
+});
+
+Deno.test("サブは独立した Worker と履歴を持ち、完全 ID の保存領域と権限を親と共有する", async () => {
+  const code = source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.getElementById("sub").textContent = api.sub(); document.getElementById("why").textContent = api.why("fs").toString();') + `
+import { StorageApi } from "jsr:@binette/replique";
+const storage = StorageApi.from(new Api());
+export function saveShared(): void { storage!.write("shared", "共通"); }
+export function readShared(): void { const value = storage!.read("shared"); document.getElementById("shared").textContent = value == null ? "なし" : value; }
+`;
+  const built = await build(code);
+  const app = { source: "https://example.test/list/", prebuilt: { ...built, subIcons: { child: "<svg>child</svg>" }, manifest: { ...built.manifest, id: "parent", permissions: { fs: { reason: "編集" } }, sub: {
+    child: { name: "子", icon: "child.svg" }, secret: { name: "隠れたホーム", roles: ["home"], listed: false },
+  } } } };
+  const store = createMemoryAppStore(); const element = output();
+  const system = await mountSystem(element, { apps: [homeApp, app, { source: "binette:system", prebuilt: { ...permissionApp, manifest: { ...permissionApp.manifest, id: "settings", roles: ["settings"] } } }], store, createWorker, stackSize: 5 });
+  try {
+    assertEquals(element.homeApps!.map(app => app.id), ["https://example.test/list/#parent", "https://example.test/list/#parent.child", "settings"]);
+    await system.open("https://example.test/list/#parent");
+    const parent = element.active;
+    assertEquals(parent.text.get("sub"), "");
+    await parent.process.app.call("saveShared");
+    await system.open("https://example.test/list/#parent.child");
+    const child = element.active;
+    assert(child !== parent);
+    assertEquals(child.text.get("sub"), "child");
+    assertEquals(child.text.get("why"), parent.text.get("why"));
+    await child.process.app.call("readShared");
+    assertEquals(child.text.get("shared"), "共通");
+    assertEquals(element.view.instances.find(i => i.name === "子")!.icon, "<svg>child</svg>");
+    assertEquals(await store.data.read("https://example.test/list/#parent"), new Map([["shared", "共通"]]));
+    assertEquals(await store.data.read("https://example.test/list/#parent.child"), new Map([["shared", "共通"]]));
+    assertEquals((await store.list()).filter(app => app.source === "https://example.test/list/").length, 1);
+    await system.open("settings");
+    await element.active.process.app.call("readHomes");
+    assertEquals(element.active.text.get("homes"), "2");
+    // 一覧に出ないサブアプリとホームは open で開かない
+    const shown = element.active;
+    await system.open("https://example.test/list/#parent.secret");
+    await system.open("home");
+    assertEquals(element.active, shown);
+    assertEquals((await store.system.listLaunches()).map(r => r.app), ["home", "https://example.test/list/#parent", "https://example.test/list/#parent.child", "settings"]);
+    assert(await store.system.getLast("https://example.test/list/#parent.child"));
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("保存した完全 ID の割り当てで非表示のサブアプリをホームにできる", async () => {
+  const built = await build(source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.getElementById("sub").textContent = api.sub();'));
+  const app = { source: "https://example.test/other/", prebuilt: { ...built, manifest: { ...built.manifest, sub: { home: { name: "別のホーム", listed: false, roles: ["home"] } } } } };
+  const store = createMemoryAppStore();
+  await store.system.putSettings({ roles: { home: "https://example.test/other/#test.home" } });
+  const element = output();
+  const system = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+  try {
+    assertEquals(element.view.instances.find(app => app.home)!.key, "https://example.test/other/#test.home");
+    assertEquals(element.active.text.get("sub"), "home");
+    assertEquals(element.homeApps!.map(app => app.id), ["https://example.test/other/#test"]);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("Pigeon は停止中と動作中に届け、urgent 起動と通知返信とミュートを仲介する", async () => {
+  const target = "https://example.test/pigeon/#receiver";
+  const senderId = "https://example.test/pigeon/#sender";
+  const sending = await build(`import { Api, App, PigeonApi, document, launch } from "jsr:@binette/replique";
+let pigeon: PigeonApi | null = null;
+class Sender extends App { onCreate(last: Last, api: Api): void { pigeon = PigeonApi.from(api); } }
+import { Last } from "jsr:@binette/replique";
+export function sendMail(): void { pigeon!.send("${target}", "open", "題", "本文"); }
+export function urgentMail(): void { pigeon!.send("${target}", "urgent", "", "至急", true); }
+export function notify(): void { document.getElementById("result").textContent = pigeon!.send("user", "chat", "通知", "通知本文", false, '[{"id":"reply","label":"返信","input":true},{"id":"ack","label":"確認"}]').toString(); }
+launch(new Sender());`);
+  const receiving = await build(`import { Api, App, PigeonApi, Last, document, launch } from "jsr:@binette/replique";
+let pigeon: PigeonApi | null = null;
+function inspect(): void { document.getElementById("count").textContent = pigeon!.count().toString(); if (pigeon!.count()) { document.getElementById("from").textContent = pigeon!.from(0); document.getElementById("kind").textContent = pigeon!.kind(0); document.getElementById("body").textContent = pigeon!.body(0); } }
+class Receiver extends App { onCreate(last: Last, api: Api): void { pigeon = PigeonApi.from(api); inspect(); } onPigeon(): void { inspect(); } }
+export function acknowledge(): void { pigeon!.done(0); inspect(); }
+launch(new Receiver());`);
+  const cadre = await build(`import { Api, App, Last, CadreApi, StorageApi, launch } from "jsr:@binette/replique";
+let storage: StorageApi | null = null;
+let api: CadreApi | null = null;
+class Frame extends App { onCreate(last: Last, dictionary: Api): void { api = CadreApi.from(dictionary); storage = StorageApi.from(dictionary); } }
+export function inspectNotifications(): void { storage!.write("notifications", api!.notificationCount().toString()); }
+export function reply(): void { api!.notificationReply(api!.notificationId(0), "reply", "返事"); }
+export function replyButton(): void { api!.notificationReply(api!.notificationId(0), "ack", "無視する値"); }
+launch(new Frame());`);
+  const settings = await build(`import { Api, App, Last, OsApi, launch } from "jsr:@binette/replique";
+let api: OsApi | null = null;
+class Settings extends App { onCreate(last: Last, dictionary: Api): void { api = OsApi.from(dictionary); } }
+export function muteSender(): void { for (let i = 0; i < api!.notificationCount(); i++) if (api!.notificationId(i) == "${senderId}") api!.setNotificationMuted(i, true); }
+launch(new Settings());`);
+  const store = createMemoryAppStore(); const element = output();
+  let frame: Process | undefined;
+  const originalPresent = element.ui.present;
+  element.ui.present = (instance, process) => { if (instance.cadre) frame = process; return originalPresent(instance, process); };
+  const system = await mountSystem(element, { apps: [homeApp,
+    { source: "https://example.test/pigeon/", prebuilt: { ...sending, manifest: { ...sending.manifest, id: "sender", permissions: { notify: { reason: "通知" } } } } },
+    { source: "https://example.test/pigeon/", prebuilt: { ...sending, manifest: { ...sending.manifest, id: "denied" } } },
+    { source: "https://example.test/pigeon/", prebuilt: { ...receiving, manifest: { ...receiving.manifest, id: "receiver" } } },
+    { source: "binette:system", prebuilt: { ...cadre, manifest: { ...cadre.manifest, id: "cadre", roles: ["cadre"] } } },
+    { source: "binette:system", prebuilt: { ...settings, manifest: { ...settings.manifest, id: "settings", roles: ["settings"] } } },
+  ], store, createWorker, stackSize: 10 });
+  try {
+    await system.open(senderId); const sender = element.active.process;
+    await sender.app.call("sendMail");
+    await waitForAsync(async () => (await store.pigeon.read(target)).length === 1);
+    assertEquals(element.view.instances.some(instance => instance.key === target), false);
+    await system.open(target);
+    const receiver = element.active;
+    assertEquals(receiver.text.get("count"), "1");
+    assertEquals(receiver.text.get("from"), senderId);
+    await sender.app.call("sendMail");
+    await waitFor(() => receiver.text.get("count") === "2");
+    await receiver.process.app.call("acknowledge");
+    await waitForAsync(async () => (await store.pigeon.read(target)).length === 1);
+    await system.close(receiver.id);
+    await sender.app.call("urgentMail");
+    await waitFor(() => element.view.instances.some(instance => instance.key === target));
+    await waitFor(() => element.active?.text.get("count") === "2");
+    await sender.app.call("notify");
+    assertEquals((await store.pigeon.read(senderId)).length, 0);
+    await sleep(20);
+    await frame!.app.call("reply");
+    await waitForAsync(async () => (await store.pigeon.read(senderId)).length === 1);
+    const reply = (await store.pigeon.read(senderId))[0]!;
+    assertEquals([reply.from, reply.kind, reply.body], ["user", "reply", "返事"]);
+    await sender.app.call("notify");
+    await sleep(20);
+    await frame!.app.call("replyButton");
+    await waitForAsync(async () => (await store.pigeon.read(senderId)).length === 2);
+    assertEquals((await store.pigeon.read(senderId))[1]!.body, "");
+    await system.open("https://example.test/pigeon/#denied");
+    await element.active.process.app.call("notify");
+    assertEquals(element.active.text.get("result"), "false");
+    await system.open("settings");
+    await element.active.process.app.call("muteSender");
+    await waitForAsync(() => store.pigeon.muted(senderId));
+    await sender.app.call("notify");
+    await sleep(20);
+    // The muted notification never becomes an actionable Cadre letter.
+    await frame!.app.call("inspectNotifications");
+    await waitForAsync(async () => (await store.data.read("cadre")).get("notifications") === "0");
+    assertEquals((await store.pigeon.read(senderId)).length, 2);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("共有添付は招待になり、承認とバイナリと失効を OS が毎回検査する", async () => {
+  const source = "https://example.test/shares/";
+  const senderId = source + "#sender", receiverId = source + "#receiver";
+  const store = createMemoryAppStore();
+  const share = await store.shares.createShare(senderId, "資料");
+  const program = await build(`import { App, SharesApi, PigeonApi, document, launch } from "jsr:@binette/replique";
+export { __bina_share } from "jsr:@binette/replique";
+let request = 0;
+class Page extends App { onShare(): void { const result = new SharesApi().result(request); if (result !== null) document.getElementById("result").textContent = result; } }
+export function invite(): void { new PigeonApi().send("${receiverId}", "share", "", "", false, "[]", '[{"id":"${share.id}","access":"read"}]'); }
+export function join(): void { request = new SharesApi().join("${share.id}"); }
+export function read(): void { request = new SharesApi().readBase64("${share.id}", "/binary"); }
+export function write(): void { request = new SharesApi().writeBase64("${share.id}", "/binary", "AP+A"); }
+launch(new Page());`);
+  const element = output();
+  const system = await mountSystem(element, { apps: [homeApp, ...["sender", "receiver"].map(id => ({ source, prebuilt: { ...program, manifest: { ...program.manifest, id } } }))], store, createWorker, stackSize: 10 });
+  try {
+    await system.open(senderId); const sender = element.active;
+    await sender.process.app.call("write");
+    await waitFor(() => sender.text.has("result"));
+    assertEquals(JSON.parse(sender.text.get("result")!).ok, true);
+    assertEquals(await store.shares.shareFiles(share.id, senderId).read("/binary"), new Uint8Array([0, 255, 128]));
+    await sender.process.app.call("invite");
+    await waitForAsync(async () => (await store.pigeon.read(receiverId)).length === 1);
+    assertEquals((await store.pigeon.read(receiverId))[0]!.from, senderId);
+    assertEquals((await store.shares.getShare(share.id))!.members[receiverId]!.state, "invited");
+    await system.open(receiverId); const receiver = element.active;
+    const invoke = async (name: string) => { receiver.text.delete("result"); await receiver.process.app.call(name); await waitFor(() => receiver.text.has("result")); return JSON.parse(receiver.text.get("result")!); };
+    assertEquals((await invoke("read")).ok, false);
+    assertEquals((await invoke("join")).ok, true);
+    assertEquals(await invoke("read"), { ok: true, value: "AP+A" });
+    assertEquals((await invoke("write")).ok, false);
+    await store.shares.leaveShare(share.id, receiverId);
+    assertEquals((await invoke("read")).ok, false);
+    await store.shares.leaveShare(share.id, senderId);
+    assertEquals((await invoke("join")).ok, false);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+const managerApp = await build(source + `
+import { AppManagerApi } from "jsr:@binette/replique";
+const managerApi = AppManagerApi.from(new Api());
+export function hasManager(): void { document.getElementById("manager").textContent = (managerApi != null).toString(); }
+export function repos(): void { document.getElementById("repos").textContent = managerApi!.repoCount().toString() + ":" + managerApi!.installedCount().toString(); }
+export function autoAll(): void { managerApi!.setAutoUpdateAll(true); }
+`);
+
+Deno.test("manager は binette:system の apps-manager にだけ届き、操作で自動更新の設定を保存する", async () => {
+  for (const [source, roles] of [["binette:system", ["apps-manager"]], ["binette:bundled", ["apps-manager"]], ["binette:system", undefined]] as const) {
+    const granted = source === "binette:system" && roles !== undefined;
+    const element = output(); const store = createMemoryAppStore();
+    const app = { source, prebuilt: { ...managerApp, manifest: { ...managerApp.manifest, id: "manager", roles: roles as string[] | undefined } } };
+    const system = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+    try {
+      await system.open(appId(source, "manager"));
+      const process = element.active.process;
+      await process.app.call("hasManager");
+      assertEquals(element.active.text.get("manager"), String(granted));
+      if (granted) {
+        await process.app.call("repos");
+        assertEquals(element.active.text.get("repos"), "0:2");
+        await process.app.call("autoAll");
+        await waitForAsync(async () => (await store.system.getAutoUpdate?.())?.all === true);
+        assertEquals(system.lists.autoUpdate().all, true);
+      }
+    } finally { system.stop(); }
+  }
+});
+
+const schedulerApp = await build(source + `
+import { SchedulerApi } from "jsr:@binette/replique";
+const schedulerApi = SchedulerApi.from(new Api());
+export function hasScheduler(): void { document.getElementById("scheduler").textContent = (schedulerApi != null).toString(); }
+export function list(): void {
+  const s = schedulerApi!;
+  document.getElementById("list").textContent = s.count().toString() + ":" + s.id(0) + ":" + s.ownerName(0) + ":" + s.description(0) + ":" + s.enabled(0).toString();
+}
+export function slower(): void { schedulerApi!.update(schedulerApi!.id(0), '{"every":3600}'); }
+export function pause(): void { schedulerApi!.setEnabled(schedulerApi!.id(0), false); }
+`);
+
+Deno.test("scheduler は binette:system の設定アプリにだけ届き、操作で予定を変えて写しを送り直す", async () => {
+  for (const [source, roles] of [["binette:system", ["settings"]], ["binette:bundled", ["settings"]], ["binette:system", undefined]] as const) {
+    const granted = source === "binette:system" && roles !== undefined;
+    const element = output(); const store = createMemoryAppStore();
+    const app = { source, prebuilt: { ...schedulerApp, manifest: { ...schedulerApp.manifest, id: "settings", roles: roles as string[] | undefined } } };
+    const system = await mountSystem(element, { apps: [homeApp, app], store, createWorker });
+    try {
+      await system.open(appId(source, "settings"));
+      const process = element.active.process;
+      await process.app.call("hasScheduler");
+      assertEquals(element.active.text.get("scheduler"), String(granted));
+      if (granted) {
+        await process.app.call("list");
+        assertEquals(element.active.text.get("list"), "1:os/catalogs:OS:30 分ごと:true");
+        await process.app.call("slower");
+        await waitForAsync(async () => JSON.stringify((await store.system.getSchedules!())["os/catalogs"]?.rule) === `{"every":3600}`);
+        await process.app.call("pause");
+        await waitForAsync(async () => (await store.system.getSchedules!())["os/catalogs"]?.enabled === false);
+        await waitForAsync(async () => { await process.app.call("list"); return element.active.text.get("list") === "1:os/catalogs:OS:1 時間ごと:false"; });
+      }
+    } finally { system.stop(); }
+  }
+});
+
+const scheduleApp = await build((source + `
+import { ScheduleApi, StorageApi } from "jsr:@binette/replique";
+const scheduleApi = ScheduleApi.from(new Api());
+class Mail extends App {
+  onSchedule(slot: i32, api: Api): void {
+    StorageApi.from(api)!.write("ran", slot.toString());
+    document.getElementById("ran").textContent = "slot" + slot.toString();
+  }
+}
+export function hasSchedule(): void { document.getElementById("schedule").textContent = (scheduleApi != null).toString(); }
+export function registerTwice(): void {
+  const s = scheduleApi!;
+  const first = s.register(0, '{"every":900}', "新着の確認");
+  const again = s.register(0, '{"every":1800}');
+  const outside = s.register(1, '{"every":900}');
+  const tooShort = s.update(0, '{"every":60}');
+  document.getElementById("register").textContent = first.toString() + ":" + again.toString() + ":" + outside.toString() + ":" + tooShort.toString() + ":" + s.rule(0);
+}
+export function runNow(): void { scheduleApi!.runNow(0); }
+export function removeIt(): void { document.getElementById("remove").textContent = scheduleApi!.remove(0).toString() + ":" + scheduleApi!.exists(0).toString(); }
+`).replace("const test = new TestApp();\nlaunch(test);", "const test = new Mail();\nlaunch(test);").replace("class TestApp extends App", "class TestBase extends App").replace("class Mail extends App", "class Mail extends TestBase"));
+
+Deno.test("schedule は permissions に schedule を書いたアプリに届き、枠 0 にだけ登録できる", async () => {
+  for (const declared of [true, false]) {
+    const element = output(); const store = createMemoryAppStore();
+    const manifest = { ...scheduleApp.manifest, id: "mail", ...(declared ? { permissions: { schedule: { reason: "新着の確認" } } } : {}) };
+    const system = await mountSystem(element, { apps: [homeApp, { source: "binette:bundled", prebuilt: { ...scheduleApp, manifest } }], store, createWorker });
+    const key = appId("binette:bundled", "mail");
+    try {
+      await system.open(key);
+      const process = element.active.process;
+      await process.app.call("hasSchedule");
+      assertEquals(element.active.text.get("schedule"), String(declared));
+      if (!declared) continue;
+      await process.app.call("registerTwice");
+      assertEquals(element.active.text.get("register"), `true:false:false:false:{"every":900}`);
+      await waitForAsync(async () => (await store.system.getSchedules!())[`${key}/0`]?.label === "新着の確認");
+      const info = system.scheduler.list().find(info => info.id === `${key}/0`);
+      assertEquals([info?.owner, JSON.stringify(info?.rule)], [key, `{"every":900}`]);
+      // 開いているインスタンスには、そのまま onSchedule を届ける
+      await process.app.call("runNow");
+      await waitFor(() => element.active.text.get("ran") === "slot0");
+      await waitForAsync(async () => (await store.system.getSchedules!())[`${key}/0`]?.last?.result === "ok");
+      await process.app.call("removeIt");
+      assertEquals(element.active.text.get("remove"), "true:false");
+      await waitForAsync(async () => (await store.system.getSchedules!())[`${key}/0`] === undefined);
+    } finally { system.stop(); }
+  }
+});
+
+Deno.test("インスタンスが無ければ画面なしで起こして onSchedule を呼び、履歴に数えない。消えたアプリの予定は消す", async () => {
+  const element = output(); const store = createMemoryAppStore();
+  const key = appId("binette:bundled", "mail");
+  await store.system.putSchedules!({
+    [`${key}/0`]: { owner: key, rule: { every: 900 }, enabled: true, registered: Date.now() },
+    "https://example.com/list/#gone/0": { owner: "https://example.com/list/#gone", rule: { every: 900 }, enabled: true, registered: Date.now() },
+  });
+  const manifest = { ...scheduleApp.manifest, id: "mail", permissions: { schedule: { reason: "新着の確認" } } };
+  const system = await mountSystem(element, { apps: [homeApp, { source: "binette:bundled", prebuilt: { ...scheduleApp, manifest } }], store, createWorker });
+  try {
+    await waitForAsync(async () => Object.keys(await store.system.getSchedules!()).sort().join() === `${key}/0,os/catalogs`);
+    const entry = system.scheduler.list().find(info => info.id === `${key}/0`);
+    assertEquals(entry?.label, undefined);
+    const launches = (await store.system.listLaunches()).length;
+    await system.scheduler.runNow(`${key}/0`);
+    await waitForAsync(async () => (await store.data.read(key)).get("ran") === "0");
+    assertEquals((await store.system.getSchedules!())[`${key}/0`]?.last?.result, "ok");
+    assertEquals((await store.system.listLaunches()).length, launches);
+    assert(!element.view.instances.some(instance => instance.key === key));
+  } finally { system.stop(); }
+});
+
+for (const input of ["prebuilt", "source"] as const) {
+  Deno.test(`startSystem の ${input} 登録は未対応 ABI を保存せず既存の成果物を残す`, async () => {
+    const store = createMemoryAppStore();
+    const origin = "https://example.test/apps/";
+    const previous = { ...await build(), key: appId(origin, "test"), source: origin, icon: undefined, installedAt: 1 };
+    await store.put(previous);
+    const legacy = "binette";
+    const code = `@external("${legacy}", "dom.text") declare function text(handle: i32, value: string): void; export function run(): void { text(1, "古い"); }`;
+    const bad = await build(code);
+    bad.manifest.version = "next";
+    const app = input === "prebuilt" ? { source: origin, prebuilt: bad } : {
+      source: origin,
+      read: (path: string) => Promise.resolve(path === "app.json" ? JSON.stringify(bad.manifest) : path === "main.ts" ? code : ""),
+    };
+    const element = output();
+    const system = await startSystem({ ui: element.ui, store, libraries, createWorker,
+      apps: [{ source: "binette:system", prebuilt: await build(source, true) }, app] });
+    try {
+      assertEquals(element.errors.length, 1);
+      assert(element.errors[0] instanceof BinetteError);
+      assertEquals(element.errors[0].code, "unsupported_abi");
+      assertEquals(element.errors[0].message, "この OS では動きません（binette）。アプリの管理から入れ直すと直ります");
+      assertEquals(await store.get(previous.key), previous);
+    } finally { system.stop(); }
+  });
+}
+
+Deno.test("system と bundled のビルド済みアプリの ABI 不一致は復旧画面で system の取り直しを案内する", async () => {
+  const bad = await build('@external("binette", "dom.text") declare function text(handle: i32, value: string): void; export function run(): void { text(1, "古い"); }');
+  for (const source of ["binette:system", "binette:bundled"]) {
+    const element = output();
+    const store = createMemoryAppStore();
+    const system = await startSystem({ ui: element.ui, store, libraries, createWorker, apps: [homeApp, { source, prebuilt: bad }] });
+    try {
+      assertEquals(element.errors.length, 1);
+      assert(element.errors[0] instanceof BinetteError);
+      assertEquals(element.errors[0].code, "unsupported_abi");
+      assertEquals(element.errors[0].message, "この OS では動きません（binette）。復旧画面で「/system を取り直す」を選んでください");
+      assertEquals(await store.get(appId(source, bad.manifest.id)), undefined);
+    } finally { system.stop(); }
+  }
+});

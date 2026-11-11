@@ -1,0 +1,617 @@
+import { readRepliqueLibraries } from "../src/cli.ts";
+import { assert, assertEquals, assertStrictEquals, assertRejects } from "@std/assert";
+import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, startProcess } from "../src/index.ts";
+import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
+import { buildApp } from "../src/build.ts";
+
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+async function waitFor(condition: () => boolean): Promise<void> {
+  // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
+  const deadline = performance.now() + 10000;
+  while (!condition() && performance.now() < deadline) await sleep(5);
+  assert(condition(), "待っても状態が変わりませんでした");
+}
+function createWorker(): RegieWorker {
+  const { port1, port2 } = new MessageChannel();
+  port1.start(); port2.start(); serveApp(port1 as never);
+  return {
+    postMessage: (message, transfer) => port2.postMessage(message, transfer as never),
+    addEventListener: (type, listener) => port2.addEventListener(type, listener as never),
+    terminate() { port1.close(); port2.close(); },
+  };
+}
+/** 無限ループもメインを止めずに試せる、別スレッドの Worker */
+function realWorker(): RegieWorker {
+  return new Worker(new URL("../src/worker-entry.ts", import.meta.url), { type: "module" });
+}
+// 最初の module Worker は読み込みが遅く、短い時間切れの試験が揺れるので、先に一度起動しておく
+await new Promise<void>(resolve => {
+  const worker = realWorker();
+  worker.addEventListener("message", () => { worker.terminate(); resolve(); });
+  worker.postMessage({ type: "init", wasm: new ArrayBuffer(0) });
+});
+const source = `import { Api, App, AppsApi, Last, State, DestroyReason, document, launch } from "jsr:@binette/replique";
+let appsApi: AppsApi | null = null;
+let log = "";
+function record(value: string): void { log += value + ";"; document.getElementById("log").textContent = log; }
+class TestApp extends App {
+  onCreate(last: Last, api: Api): void {
+    appsApi = AppsApi.from(api);
+    record("create:" + last.state.toString());
+    document.getElementById("page").textContent = this.page;
+    document.getElementById("click").addEventListener("click", () => record("click"));
+    document.getElementById("finish").addEventListener("click", () => test.finishNow());
+    document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
+  }
+  onStart(last: State): void { record("start:" + last.toString()); }
+  onResume(): void { record("resume"); }
+  onPause(): void { record("pause"); }
+  onStop(): void { record("stop"); }
+  onDestroy(reason: DestroyReason): void { record("destroy:" + reason.kind.toString() + ":" + reason.cause.toString()); }
+  finishNow(): void { record("before"); this.finish(); record("after"); }
+}
+const test = new TestApp();
+launch(test);`;
+async function build(code = source, home = false) {
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: home ? "home" : "test", name: "テスト", ...(home ? { roles: ["home"] } : {}), entry: { html: "index.html", as: "main.ts" } }),
+    "index.html": '<p id="log"></p><p id="page"></p><button id="click">click</button><button id="finish">finish</button><button id="open">open</button>',
+    "main.ts": code,
+  };
+  return await buildApp(path => Promise.resolve(files[path]!), { libraries });
+}
+/** DOM を作らず、アプリが知らせた文字とリスナーの番号だけを記録する。 */
+function output() {
+  const ids = new Map<number, string>();
+  const text = new Map<string, string>();
+  const listeners = new Map<string, number>();
+  return {
+    text: (id: string) => text.get(id),
+    listener: (id: string) => { const listener = listeners.get(id); assert(listener !== undefined); return listener; },
+    receive(ops: DomOp[]) {
+      for (const op of ops) {
+        if (op.op === "byId") ids.set(op.handle, op.id);
+        else if (op.op === "text") text.set(ids.get(op.handle)!, op.value);
+        else if (op.op === "listen") listeners.set(ids.get(op.handle)!, op.listener);
+      }
+    },
+  };
+}
+async function begin(built: Awaited<ReturnType<typeof build>>, result: ReturnType<typeof output>, options: ProcessOptions) {
+  const process = await startProcess(built.wasm, options);
+  try { process.attach(result.receive); await process.begin(); return process; }
+  catch (error) { process.stop(); throw error; }
+}
+const logOf = (result: ReturnType<typeof output>) => result.text("log");
+const dispatch = (process: Awaited<ReturnType<typeof begin>>, result: ReturnType<typeof output>, id: string) => process.dispatch(result.listener(id));
+
+Deno.test("起動の順と Last、Pause・Stop のクリック抑止、Stop から Start と Resume", async () => {
+  const element = output();
+  const mounted = await begin(await build(), element, { createWorker, stopDelay: 40, page: "ページ🏠" });
+  try {
+    assertEquals(mounted.state, State.Resume);
+    assertEquals(logOf(element), "create:0;start:1;resume;");
+    assertEquals(element.text("page"), "ページ🏠");
+    await mounted.pause(); await mounted.pause();
+    dispatch(mounted, element, "click"); await sleep(10);
+    assertEquals(logOf(element), "create:0;start:1;resume;pause;");
+    await mounted.resume();
+    assertEquals(logOf(element), "create:0;start:1;resume;pause;resume;");
+    await mounted.pause();
+    await waitFor(() => mounted.state === State.Stop && logOf(element)!.endsWith("stop;"));
+    dispatch(mounted, element, "click"); await sleep(10);
+    assert(!logOf(element)!.includes("click;"));
+    await mounted.resume(); await mounted.resume();
+    assert(logOf(element)!.endsWith("stop;start:5;resume;"));
+    dispatch(mounted, element, "click"); await waitFor(() => logOf(element)!.endsWith("click;"));
+    await mounted.destroy(DestroyKind.System, DestroyCause.Stack);
+    assert(logOf(element)!.endsWith("click;pause;stop;destroy:1:2;"));
+    assertEquals(mounted.state, State.Destroy);
+    const previous = logOf(element); dispatch(mounted, element, "click"); await sleep(10); assertEquals(logOf(element), previous);
+  } finally { mounted.stop(); }
+});
+
+Deno.test("Stop までの残り時間は freeze の間は減らず、resume から続ける", async () => {
+  const element = output();
+  const mounted = await begin(await build(), element, { createWorker, stopDelay: 200 });
+  try {
+    await mounted.pause(); await sleep(50); mounted.setFrozen(true);
+    await sleep(250); assertEquals(mounted.state, State.Pause);
+    mounted.setFrozen(false); await sleep(80); assertEquals(mounted.state, State.Pause);
+    await waitFor(() => logOf(element)!.endsWith("stop;"));
+    assertEquals(mounted.state, State.Stop);
+    // stop は状態の通知を追加しない
+    mounted.stop(); assert(!logOf(element)!.includes("destroy:"));
+  } finally { mounted.stop(); }
+});
+
+Deno.test("onCreate の finish は続く起動通知をやめ、今の呼び出し後に閉じる", async () => {
+  const code = source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); this.finish(); record("after");');
+  const element = output();
+  let finishes = 0;
+  const mounted = await begin(await build(code), element, { createWorker, onFinish() { finishes++; } });
+  try {
+    await waitFor(() => finishes === 1);
+    assertEquals(logOf(element), "create:0;after;");
+    await mounted.destroy(DestroyKind.User, DestroyCause.App);
+    assertEquals(logOf(element), "create:0;after;pause;stop;destroy:0:1;");
+  } finally { mounted.stop(); }
+});
+
+Deno.test("onStart(Stop) で finish したら onResume を呼ばずに閉じる", async () => {
+  const built = await build(source.replace('onStart(last: State): void { record("start:" + last.toString()); }',
+    'onStart(last: State): void { record("start:" + last.toString()); if (last == State.Stop) this.finish(); }'));
+  const element = output(); let finished = 0;
+  const mounted = await begin(built, element, { createWorker, stopDelay: 10, onFinish: () => finished++ });
+  try {
+    await mounted.pause();
+    await waitFor(() => mounted.state === State.Stop);
+    await mounted.resume();
+    await waitFor(() => finished === 1);
+    assertEquals(logOf(element), "create:0;start:1;resume;pause;stop;start:5;");
+    assertEquals(mounted.state, State.Start);
+  } finally { mounted.stop(); }
+});
+
+const lastSource = `import { Api, App, Last, document, launch } from "jsr:@binette/replique";
+class TestApp extends App {
+  onCreate(last: Last, _api: Api): void {
+    document.getElementById("page").textContent = last.state.toString() + "," + last.done.toString() + "," + last.page + "," + last.reason.kind.toString() + "," + last.reason.cause.toString();
+  }
+}
+launch(new TestApp());`;
+
+Deno.test("6 メソッドの前後の保存を待ち、次の onCreate に state・done・page・reason を渡す", async () => {
+  const element = output(); const system = createMemoryAppStore().system;
+  const records: import("@binette/regie").LifecycleRecord[] = [];
+  let latest: import("@binette/regie").LifecycleRecord | undefined;
+  const persistence = { key: "test", store: { ...system, async putLast(key: string, record: import("@binette/regie").LifecycleRecord) {
+    await sleep(1); await system.putLast(key, record); latest = structuredClone(record); records.push(latest);
+  } } };
+  const built = await build(lastSource);
+  const mounted = await begin(built, element, { page: "前のページ🏠", stopDelay: 20, persistence, createWorker() {
+    const worker = createWorker();
+    return { ...worker, postMessage(message: unknown, transfer?: Transferable[]) {
+      const data = message as { type: string; args?: number[] };
+      if (data.type === "call") { assertEquals(latest!.state, data.args![0]); assertEquals(latest!.done, false); }
+      worker.postMessage(message, transfer);
+    } };
+  } });
+  try {
+    assertEquals(element.text("page"), "0,true,,0,0");
+    await mounted.pause(); await mounted.resume(); await mounted.pause();
+    await waitFor(() => records.at(-1)?.state === State.Stop && records.at(-1)?.done === true);
+    await mounted.resume(); await mounted.destroy(DestroyKind.System, DestroyCause.Stack);
+    const states = [State.Create, State.Start, State.Resume, State.Pause, State.Resume, State.Pause, State.Stop, State.Start, State.Resume, State.Pause, State.Stop, State.Destroy];
+    assertEquals(records.map(r => [r.state, r.done]), states.flatMap(state => [[state, false], [state, true]]));
+    assert(records.every(r => r.page === "前のページ🏠"));
+    assertEquals(await system.getLast("test"), { state: State.Destroy, done: true, page: "前のページ🏠", reason: { kind: DestroyKind.System, cause: DestroyCause.Stack } });
+    const second = await begin(built, element, { page: "次のページ", persistence, createWorker });
+    try {
+      assertEquals(element.text("page"), "6,true,前のページ🏠,1,2");
+      assertEquals((await system.getLast("test"))!.reason, { kind: DestroyKind.System, cause: DestroyCause.Stack });
+      assertEquals((await system.listLaunches()).length, 2);
+    } finally { second.stop(); }
+  } finally { mounted.stop(); }
+});
+
+for (const phase of ["Create", "Stop", "Destroy", "CreateTimeout", "DestroyTimeout"] as const) {
+  Deno.test(phase + " の途中で落ちた記録は done=false のまま次の起動に届く", async () => {
+    const element = output(); const system = createMemoryAppStore().system;
+    const state = phase.startsWith("Create") ? State.Create : phase === "Stop" ? State.Stop : State.Destroy;
+    const method = state === State.Create ? "Create" : state === State.Stop ? "Stop" : "Destroy";
+    const parameters = method === "Create" ? "last: Last, api: Api" : method === "Destroy" ? "reason: DestroyReason" : "";
+    const code = source.replace(`on${method}(${parameters}): void {`,
+      `on${method}(${parameters}): void { ${phase.endsWith("Timeout") ? "while (true) {}" : 'throw new Error("記録の途中");'}`);
+    const persistence = { store: system, key: "test" };
+    let mounted: Awaited<ReturnType<typeof begin>> | undefined;
+    let exits = 0;
+    try {
+      // Allow real Worker initialization to complete before testing lifecycle timeouts.
+      const callTimeout = phase.endsWith("Timeout") ? 2000 : 100;
+      const mounting = () => begin(built, element, { page: "切れたページ", persistence, createWorker: phase.endsWith("Timeout") ? realWorker : createWorker, callTimeout, destroyTimeout: 50, stopDelay: 10, onExit() { exits++; } });
+      const built = await build(code);
+      if (state === State.Create) await assertRejects(mounting);
+      else {
+        mounted = await mounting();
+        if (state === State.Stop) { await mounted.pause(); await waitFor(() => exits === 1); }
+        else await mounted.destroy(DestroyKind.System, DestroyCause.Stack);
+      }
+      const expectedReason = state === State.Destroy ? { kind: 1, cause: 2 } : { kind: 0, cause: 0 };
+      assertEquals(await system.getLast("test"), { state, done: false, page: "切れたページ", reason: expectedReason });
+      const next = await begin(await build(lastSource), element, { persistence, createWorker });
+      try { assertEquals(element.text("page"), `${state},false,切れたページ,${expectedReason.kind},${expectedReason.cause}`); }
+      finally { next.stop(); }
+    } finally { mounted?.stop(); }
+  });
+}
+
+
+Deno.test("リスナーの解除と部分木の解放は Worker 越しに届き、古い番号を再利用しない", async () => {
+  const code = `import { Api, App, Last, document, Element, Event, launch, __bina_listener_count, __bina_element_count } from "jsr:@binette/replique";
+let count = 0;
+let parent = document.createElement("div");
+let child = document.createElement("button");
+function clicked(_event: Event): void { count++; document.getElementById("log").textContent = count.toString(); }
+export function setup(): void {
+  parent = document.createElement("div"); child = document.createElement("button");
+  parent.appendChild(child); document.getElementById("page").appendChild(parent);
+  parent.addEventListener("click", clicked); child.addEventListener("click", clicked);
+}
+export function unbind(): void { child.removeEventListener("click", clicked); }
+export function rebind(): void { child.addEventListener("click", clicked); }
+export function removeTree(): void { parent.remove(); }
+export function clearTree(): void { document.getElementById("page").textContent = ""; }
+export function stress(): void {
+  const listenerCount = __bina_listener_count();
+  const elementCount = __bina_element_count();
+  for (let i = 0; i < 1000; i++) {
+    const p = document.createElement("div");
+    const c = document.createElement("button");
+    const known = document.getElementById("stress-" + i.toString());
+    p.appendChild(c); p.appendChild(known); document.getElementById("page").appendChild(p);
+    known.addEventListener("click", clicked);
+    p.addEventListener("click", clicked); c.addEventListener("click", clicked);
+    c.removeEventListener("click", clicked); c.addEventListener("click", clicked);
+    p.remove();
+  }
+  assert(__bina_listener_count() == listenerCount);
+  assert(__bina_element_count() == elementCount);
+}
+class TestApp extends App { onCreate(_last: Last, _api: Api): void { setup(); } }
+launch(new TestApp());`;
+  const ops: DomOp[] = [];
+  const mounted = await startProcess((await build(code)).wasm, { createWorker });
+  try {
+    mounted.attach(batch => ops.push(...batch));
+    await mounted.begin();
+    const listens = () => ops.filter((op): op is Extract<DomOp, { op: "listen" }> => op.op === "listen");
+    const texts = () => ops.filter((op): op is Extract<DomOp, { op: "text" }> => op.op === "text");
+    const first = listens();
+    assertEquals(first.length, 2);
+    mounted.dispatch(first[1]!.listener);
+    await waitFor(() => texts().some(op => op.value === "1"));
+    await mounted.app.call("unbind");
+    assert(ops.some(op => op.op === "unlisten" && op.listener === first[1]!.listener));
+    await mounted.app.call("rebind");
+    const next = listens()[2]!.listener;
+    assert(next > first[1]!.listener);
+    mounted.dispatch(first[1]!.listener);
+    mounted.dispatch(next);
+    await waitFor(() => texts().some(op => op.value === "2"));
+    assert(!texts().some(op => op.value === "3"));
+    await mounted.app.call("removeTree");
+    mounted.dispatch(first[0]!.listener); mounted.dispatch(next);
+    await mounted.app.call("setup");
+    const afterRemove = listens().slice(-2);
+    mounted.dispatch(afterRemove[1]!.listener);
+    await waitFor(() => texts().some(op => op.value === "3"));
+    await mounted.app.call("clearTree");
+    mounted.dispatch(afterRemove[0]!.listener); mounted.dispatch(afterRemove[1]!.listener);
+    await mounted.app.call("setup");
+    mounted.dispatch(listens().at(-1)!.listener);
+    await waitFor(() => texts().some(op => op.value === "4"));
+    assert(!texts().some(op => op.value === "5"));
+    await mounted.app.call("stress");
+  } finally { mounted.stop(); }
+});
+
+Deno.test("宣言 UI の連続クリックはすべて届き、再描画は差分だけを送る", async () => {
+  const code = `import { Api, App, Last, document, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
+let count = 0;
+function increment(): void { count++; }
+function add(value: i32): void { count += value; }
+class Counter extends App {
+  onCreate(_last: Last, _api: Api): void { document.createElement("div").textContent = "ignored"; }
+  build(): View { return column([text("count:" + count.toString()), button("+1", increment), button("+5", add).arg(5), text("quote:\\" newline:\\n")]); }
+}
+launch(new Counter());`;
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "counter", name: "Counter", entry: { as: "main.ts" } }),
+    "main.ts": code,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  assertEquals(built.html, "");
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker, declarative: true });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const initial = batches.flat();
+    assert(initial.every(op => op.op.startsWith("ui-")));
+    const textCreate = initial.find(op => op.op === "ui-create" && op.kind === "text");
+    const buttonCreate = initial.find(op => op.op === "ui-create" && op.kind === "button");
+    assert(textCreate?.op === "ui-create" && buttonCreate?.op === "ui-create");
+    const button = initial.find(op => op.op === "ui-update" && op.handle === buttonCreate.handle);
+    const addButton = initial.find(op => op.op === "ui-update" && op.text === "+5");
+    assert(button?.op === "ui-update" && button.clickable && addButton?.op === "ui-update" && addButton.clickable);
+    assert(initial.some(op => op.op === "ui-update" && op.text === 'quote:" newline:\n'));
+    batches.length = 0;
+    process.dispatchUi(button.handle);
+    process.dispatchUi(button.handle);
+    process.dispatchUi(button.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:3"));
+    const changed = batches.flat();
+    assert(changed.some(op => op.op === "ui-update" && op.handle === textCreate.handle && op.text === "count:3"));
+    assert(changed.every(op => op.op === "ui-update" && op.handle === textCreate.handle));
+    batches.length = 0;
+    process.dispatchUi(addButton.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "count:8"));
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI のキー付き並べ替えは要素を再利用する", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
+let reversed = false;
+let total = 0;
+function swap(): void { reversed = !reversed; }
+function add(i: i32): void { total += i; }
+class Demo extends App {
+  build(): View {
+    const a = button("A", add).arg(1).key("a");
+    const b = button("B", add).arg(10).key("b");
+    return column([text(total.toString()), button("swap", swap), reversed
+      ? column([b, a]) : column([a, b])]);
+  }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const initial = batches.flat();
+    const a = initial.find(op => op.op === "ui-update" && op.text === "A");
+    const b = initial.find(op => op.op === "ui-update" && op.text === "B");
+    const button = initial.filter(op => op.op === "ui-update" && op.text === "swap").at(-1);
+    assert(a?.op === "ui-update" && b?.op === "ui-update" && button?.op === "ui-update" && button.clickable);
+    batches.length = 0;
+    process.dispatchUi(button.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-insert"));
+    const ops = batches.flat();
+    assert(ops.some(op => op.op === "ui-insert" && op.child === b.handle && op.before === a.handle));
+    assert(!ops.some(op => op.op === "ui-create" || op.op === "ui-remove"));
+    batches.length = 0;
+    process.dispatchUi(a.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI で取り除いたボタンへのイベントは捨てる", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
+let visible = true;
+let count = 0;
+function hide(): void { visible = false; }
+function increment(): void { count++; }
+class Demo extends App {
+  build(): View { return column(visible ? [text(count.toString()), button("hide", hide), button("add", increment)] : [text(count.toString()), button("hide", hide)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const hide = batches.flat().find(op => op.op === "ui-update" && op.text === "hide");
+    const add = batches.flat().find(op => op.op === "ui-update" && op.text === "add");
+    assert(hide?.op === "ui-update" && add?.op === "ui-update");
+    batches.length = 0;
+    process.dispatchUi(hide.handle);
+    process.dispatchUi(add.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-remove" && op.handle === add.handle));
+    await sleep(50);
+    assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI で押せなくしたボタンへの、待っているイベントは捨てる", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
+let count = 0;
+function submit(): void { count++; }
+class Demo extends App {
+  build(): View { return column([text(count.toString()), button("submit", submit).enabled(count == 0)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const submit = batches.flat().find(op => op.op === "ui-update" && op.text === "submit");
+    assert(submit?.op === "ui-update" && submit.enabled);
+    batches.length = 0;
+    process.dispatchUi(submit.handle);
+    process.dispatchUi(submit.handle);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "1"));
+    await sleep(50);
+    assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "2"));
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI で押せなくした入力に届いた入力は、版を進めてアプリの値を返す", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, input } from "jsr:@binette/replique-ui@^0.1";
+let value = "";
+function typed(s: string): void { value = s; }
+class Demo extends App {
+  build(): View { return column([input(value, typed).enabled(value == "")]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const field = batches.flat().find(op => op.op === "ui-create" && op.kind === "input");
+    assert(field?.op === "ui-create");
+    batches.length = 0;
+    process.dispatchUiText(field.handle, "a", 1);
+    process.dispatchUiText(field.handle, "ab", 2);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.handle === field.handle && op.inputVersion === 2));
+    const last = batches.flat().filter(op => op.op === "ui-update" && op.handle === field.handle).at(-1);
+    assert(last?.op === "ui-update" && last.text === "a" && last.inputVersion === 2 && !last.enabled);
+  } finally { process.stop(); }
+});
+
+Deno.test("宣言 UI で Pause のために捨てた入力も、版を進めてアプリの値を返す", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, input } from "jsr:@binette/replique-ui@^0.1";
+let value = "";
+function typed(s: string): void { value = s; }
+class Demo extends App {
+  build(): View { return column([input(value, typed)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const field = batches.flat().find(op => op.op === "ui-create" && op.kind === "input");
+    assert(field?.op === "ui-create");
+    batches.length = 0;
+    process.dispatchUiText(field.handle, "x", 1);
+    await process.pause();
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.handle === field.handle && op.inputVersion === 1));
+    const last = batches.flat().filter(op => op.op === "ui-update" && op.handle === field.handle).at(-1);
+    assert(last?.op === "ui-update" && last.text === "" && last.inputVersion === 1);
+  } finally { process.stop(); }
+});
+
+Deno.test("AS の theme と段は WASM の描画・差分更新から Décor DOM に届く", async () => {
+  const { Window } = await import("happy-dom");
+  const { createUiDom } = await import("@binette/decor");
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, button, theme, Theme, Scale, ComponentTheme, space, radius, fontSize } from "jsr:@binette/decor/as";
+let size: i32 = 20;
+function change(): void { size = 28; }
+class Demo extends App {
+  build(): View {
+    const config = new Theme();
+    const scale = new Scale(); scale.md = size; config.space = scale;
+    const part = new ComponentTheme(); part.padding = space.sm; part.radius = radius.md; part.fontSize = fontSize.lg; config.button = part;
+    const nested = new Theme(); const nestedScale = new Scale(); nestedScale.md = 30; nested.space = nestedScale;
+    return column([theme(config, column([button("更新", change), theme(nested, text("内側").padding(space.md))]).padding().gap()), text("外側").padding(8)]);
+  }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  const dom = createUiDom(host, { dispatchUi: handle => process.dispatchUi(handle), dispatchUiText() {} });
+  try {
+    process.attach(ops => { batches.push(ops); dom.apply(ops); });
+    await process.begin();
+    const scopes = host.querySelectorAll(".bina-ui-column");
+    const scope = scopes[1] as HTMLElement;
+    assertEquals(scope.style.getPropertyValue("--bina-ui-space-md"), "20px");
+    assertEquals(scope.style.getPropertyValue("--bina-ui-gap"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
+    assertEquals(scope.style.getPropertyValue("--bina-ui-padding"), "var(--bina-ui-space-md, var(--bina-ui-default-space-md))");
+    const spans = host.querySelectorAll("span");
+    assertEquals(spans[0].style.getPropertyValue("--bina-ui-space-md"), "30px");
+    assertEquals(spans[1].style.getPropertyValue("--bina-ui-padding"), "8px");
+    assertEquals(spans[1].style.getPropertyValue("--bina-ui-space-md"), "");
+    assert(host.querySelector("button")!.style.getPropertyValue("--bina-ui-padding").includes("--bina-ui-button-padding-md"));
+    host.querySelector("button")!.click();
+    await waitFor(() => scope.style.getPropertyValue("--bina-ui-space-md") === "28px");
+    assertStrictEquals(host.querySelectorAll(".bina-ui-column")[1], scope);
+  } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("AS の複数行入力は Worker を経て textarea を描画し、改行を往復する", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, input } from "jsr:@binette/replique-ui@^0.1";
+let value = "first\\nsecond";
+function typed(s: string): void { value = s; }
+class Demo extends App {
+  build(): View { return input(value, typed).multiline(); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const { Window } = await import("happy-dom");
+  const { createUiDom } = await import("@binette/decor");
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  const process = await startProcess(built.wasm, { createWorker: realWorker });
+  const dom = createUiDom(host, process);
+  const batches: DomOp[][] = [];
+  try {
+    process.attach(ops => { batches.push(ops); dom.apply(ops); });
+    await process.begin();
+    const field = host.querySelector("textarea");
+    assert(field);
+    assertEquals(field.value, "first\nsecond");
+    field.value = "edited\nvalue\n";
+    field.dispatchEvent(new window.Event("input") as unknown as Event);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "edited\nvalue\n" && op.inputVersion === 1));
+    field.value = "final\nvalue";
+    field.dispatchEvent(new window.Event("input") as unknown as Event);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "final\nvalue" && op.inputVersion === 2));
+    assertEquals(host.querySelector("textarea"), field);
+    assertEquals(field.value, "final\nvalue");
+  } finally { process.stop(); dom.clear(); dom.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("宣言 UI の値を返す部品は、無効・範囲外・Pause で捨てた操作にも版を進めてアプリの値を返す", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, text, checkbox, slider, tabs } from "jsr:@binette/replique-ui@^0.1";
+let on = false;
+let level: f64 = 1;
+let tab: i32 = 0;
+let calls: i32 = 0;
+function check(value: bool): void { on = value; calls++; }
+function move(value: f64): void { level = value; calls++; }
+function open(i: i32): void { tab = i; calls++; }
+class Demo extends App {
+  build(): View { return column([text("calls:" + calls.toString()), checkbox(on, check).enabled(calls < 3), slider(level, 0, 4, move), tabs(["一", "二"], tab, open)]); }
+}
+launch(new Demo());`;
+  const built = await build(code);
+  const batches: DomOp[][] = [];
+  const process = await startProcess(built.wasm, { createWorker });
+  try {
+    process.attach(ops => batches.push(ops));
+    await process.begin();
+    const created = (kind: string) => batches.flat().find(op => op.op === "ui-create" && op.kind === kind);
+    const [box, range, list] = [created("checkbox"), created("slider"), created("tabs")];
+    assert(box?.op === "ui-create" && range?.op === "ui-create" && list?.op === "ui-create");
+    const last = (handle: number) => batches.flat().filter(op => op.op === "ui-update" && op.handle === handle).at(-1);
+    batches.length = 0;
+    // slider は範囲に丸め、tabs の範囲外の番号は捨てて今の番号を返す
+    process.dispatchUiValue(range.handle, 99, 1);
+    process.dispatchUiValue(list.handle, 5, 1);
+    process.dispatchUiValue(list.handle, 1.5, 2);
+    process.dispatchUiValue(list.handle, 1, 3);
+    process.dispatchUiValue(box.handle, 1, 1);
+    await waitFor(() => batches.flat().some(op => op.op === "ui-update" && op.text === "calls:3"));
+    const slid = last(range.handle), opened = last(list.handle), checked = last(box.handle);
+    assert(slid?.op === "ui-update" && slid.value === 4 && slid.inputVersion === 1);
+    assert(opened?.op === "ui-update" && opened.index === 1 && opened.inputVersion === 3);
+    assert(checked?.op === "ui-update" && checked.checked === true && !checked.enabled);
+    // 無効になった checkbox への操作は捨て、版だけを進めて今の値を返す
+    batches.length = 0;
+    process.dispatchUiValue(box.handle, 0, 2);
+    await waitFor(() => last(box.handle)?.op === "ui-update" && (last(box.handle) as { inputVersion?: number }).inputVersion === 2);
+    const kept = last(box.handle);
+    assert(kept?.op === "ui-update" && kept.checked === true);
+    batches.length = 0;
+    process.dispatchUiValue(range.handle, 2, 2);
+    await process.pause();
+    await waitFor(() => last(range.handle)?.op === "ui-update" && (last(range.handle) as { inputVersion?: number }).inputVersion === 2);
+    const paused = last(range.handle);
+    assert(paused?.op === "ui-update" && paused.value === 4);
+    assert(!batches.flat().some(op => op.op === "ui-update" && op.text === "calls:4"));
+  } finally { process.stop(); }
+});
