@@ -6,7 +6,7 @@ Réplique（レプリク、セリフ）はアプリが Régie を呼ぶ Assembly
 
 ## 機能ごとの構成（決定）
 
-Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` に対応する単位で、`packages/replique/<機能名>/src/index.ts` の独立した JSR パッケージ `@binette/replique-<機能名>` に分けます。各パッケージは `deno.json`、`README.md`、`LICENSE` を持ち、初期版は `0.1.0` です。集約パッケージ `@binette/replique` の `src/index.ts` は既存の公開名を再 export する入口です。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
+Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` に対応する単位で、`packages/replique/<機能名>/src/index.ts` の機能別のソースに分けます。各機能は OS 内で独立した版を持ち、初期版は `0.1.0` です。JSR には全機能のソースを含む単一の `@binette/replique` を公開し、集約入口から既存の公開名を再 export します。API の取得には各機能の `XxxApi.from(api)` を使います。WASM の `__bina_*` の呼び出し口は変えません。
 
 | 機能名 | 内容 |
 | --- | --- |
@@ -18,9 +18,9 @@ Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` �
 | `scheduler`・`schedule` | 予定の管理、自分の予定 |
 | `cadre`・`fs` | Cadre の操作、ファイル API の予約 |
 
-機能間とアプリからは `jsr:@binette/replique-<機能名>@^0.1` で参照できます。各機能パッケージの exports は `./src/index.ts` だけです。集約入口 `jsr:@binette/replique` も引き続き使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。ホスト ABI の版は機能ごとに管理します。辞書と権限・役割の判定は維持します。
+OS のビルドでは機能間とアプリから `jsr:@binette/replique-<機能名>@^0.1` で参照できます。JSR では集約入口 `jsr:@binette/replique` と `jsr:@binette/replique/<機能名>` を使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。ホスト ABI の版は機能ごとに管理します。辞書と権限・役割の判定は維持します。
 
-旧指定子 `jsr:@binette/replique/<機能名>` も全 13 機能の互換入口として維持します。Régie は版指定のない旧入口を提供中の機能パッケージの完全な版へ解決し、新しい指定子・集約入口と同じクラスと状態を使います。未知の機能や不正なサブパスは `unsupported_sdk` です。JSR の集約パッケージにも各旧サブパスを exports として残し、`src/<機能名>.ts` から新パッケージを再 export します。新規コードでは依存する範囲が明確な版付き指定子を推奨します。Designer は原文の import を保持し、integrity `/` の `sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=` を維持します。ハッシュの対象と計算方法は変更しません。
+旧指定子 `jsr:@binette/replique/<機能名>` も全 13 機能の互換入口として維持します。Régie は版指定のない旧入口を提供中の機能パッケージの完全な版へ解決し、新しい指定子・集約入口と同じクラスと状態を使います。未知の機能や不正なサブパスは `unsupported_sdk` です。JSR の集約パッケージにも各旧サブパスを exports として残し、各機能を再 export します。機能別の指定子は OS 内で解決され、個別の JSR パッケージとしては公開しません。Designer は原文の import を保持し、integrity `/` の `sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=` を維持します。ハッシュの対象と計算方法は変更しません。
 
 `app/src/index.ts` は Décor の `View` だけを import し、Réplique のほかの機能には依存しません。`ui/src/index.ts` がトップレベルで描画関数を `app/src/index.ts` の `setRebuild` に登録し、ライフサイクルからの `rebuild` はその関数参照を呼びます。未登録なら何もしません。クロージャを使わず、機能間の import に循環を作らない構造です。集約入口の `index.ts` だけを import するアプリでも描画関数が登録されます。
 

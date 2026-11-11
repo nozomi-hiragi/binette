@@ -13,12 +13,12 @@ deno task docs:app       # docs/ を直したら、ドキュメントアプリ�
 deno task pages          # GitHub Pages に出すもの（OS と API ドキュメント）を pages/os と pages/api に生成
 deno task test           # バージョンの検査とテスト
 deno task check-pack     # JSR に出すファイルだけを写し、別の利用者として動かして試す
-deno publish --dry-run   # JSR への公開の予行
+deno run -A scripts/publish.ts --dry-run --allow-dirty  # JSR への公開の予行
 ```
 
 実ブラウザの OPFS 検証は別途 `node scripts/storage-opfs.browser.cjs` で実行します。グローバルの Playwright と Google Chrome が必要です（別の Chromium チャンネルを使う場合は `PLAYWRIGHT_CHANNEL` を指定）。この検証は `deno task test` には含めません。
 
-ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
+ワークスペースは、ルートの `deno.json` の `workspace` にあるパッケージです。各パッケージの `deno.json` に name・version・exports・imports と、JSR に出すファイル（`publish.include`）を書きます。公開時は一時ワークスペースに 6 パッケージを用意し、Réplique の公開用コピーに全機能を含め、機能間の指定子を相対パスに書き換えます。npm の依存は `npm:` で指定し、`deno.lock` で固定します。Vite のために `nodeModulesDir: "auto"` にしているので、`node_modules` ができます（git には入れません）。
 
 Deno のコードでは `node:` のモジュールを使いません。ファイルは `Deno.readTextFile` などの Deno の API と `@std/fs`・`@std/path` で、サーバーは `Deno.serve` で扱います。
 
@@ -48,13 +48,15 @@ deno run -A packages/regie/src/cli.ts integrity catalog/designer --replique pack
 - `X.Y` は仕様書の版と同じにする。仕様書 v0.1 を実装するパッケージは `0.1.Z`
 - 仕様書を変えたリリースは、仕様書の版を上げ、パッケージをその版の `X.Y.0` にする
 - 仕様書を変えず、実装だけを変えたリリースは、パッチ `Z` だけを上げる
-- 全パッケージは常に同じバージョンにする。1.0.0 より前は、パッチでも破壊的変更を含むことがある
+- JSR に公開する 6 パッケージは常に同じバージョンにする。OS 内の Réplique の機能別の版は別に管理する。1.0.0 より前は、パッチでも破壊的変更を含むことがある
 
 ## リリース（JSR）
 
+JSR に公開するのは `@binette/core`、`@binette/decor`、`@binette/regie`、`@binette/scene`、`@binette/coulisses`、`@binette/replique` の 6 パッケージです。Réplique の 13 機能は集約パッケージに含め、機能別パッケージは公開しません。
+
 リリースは、バージョンを揃えて CHANGELOG の見出しに日付を入れた変更を `main` にマージして行います。マージ後、JSR への公開、タグと GitHub Release の作成が自動で進みます。タグは手で作りません。
 
-1. 全パッケージの `deno.json` の `version` を新しいバージョンにする
+1. 公開する 6 パッケージの `deno.json` の `version` を新しいバージョンにする
 2. パッケージどうしの依存（各 `deno.json` の `imports` の `jsr:@binette/core@…`）を同じバージョンに揃える
 3. `deno task test` でバージョンの検査を通す
 4. CHANGELOG.md の見出しを `## vX.Y.Z（未リリース）` から `## vX.Y.Z (YYYY-MM-DD)` にする。日付は公開日
@@ -64,6 +66,6 @@ deno run -A packages/regie/src/cli.ts integrity catalog/designer --replique pack
 
 - `main` への push で動きます。`plan` ジョブが、今のバージョンのタグ `vX.Y.Z` が origin にあるかを調べ、あれば何もしません
 - タグが無ければ、`npm-jsr` 環境で `publish` ジョブが進みます。CI と同じ確認に加え、CHANGELOG の見出しを確かめます。未リリースの見出しのままでは公開の前に失敗します
-- `deno publish` で、GitHub Actions の OIDC を使って JSR に公開します。環境の名前 `npm-jsr` は、npm に出していたころの名残です（GitHub 側の設定に合わせて残しています）
+- `deno run -A scripts/publish.ts` で公開用コピーを用意し、GitHub Actions の OIDC を使って JSR に公開します。CI の予行も同じスクリプトに `--dry-run` を渡します。環境の名前 `npm-jsr` は、npm に出していたころの名残です（GitHub 側の設定に合わせて残しています）
 - npm には出しません。npm に公開済みの 0.1.0 はそのまま残ります
 - 公開が済むと、`release` ジョブがタグ `vX.Y.Z` と GitHub Release を作ります。メジャーが 0 の間は pre-release です

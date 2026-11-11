@@ -1,7 +1,8 @@
 // JSR の公開物を想定したファイルだけを抽出し、外部の利用者として動かして確かめる。
 import { copy, exists } from "@std/fs";
 import { join } from "@std/path";
-import { PUBLISHED } from "./check-version.ts";
+import { FEATURES, PUBLISHED } from "./check-version.ts";
+import { preparePublishWorkspace } from "./publish.ts";
 
 const ROOT = join(import.meta.dirname!, "..");
 
@@ -19,6 +20,12 @@ function run(command: string, args: string[], cwd: string): void {
 
 const temp = Deno.makeTempDirSync({ prefix: "binette-check-pack-" });
 try {
+  // 実際の公開コピーを AS として検査する。OS 用の検証は元のソースでも行う。
+  const staged = join(temp, "publish");
+  Deno.mkdirSync(staged);
+  await preparePublishWorkspace(staged, { ascShims: true });
+  run(Deno.execPath(), ["task", "--cwd", "packages/replique", "check"], staged);
+
   // 各パッケージの publish.include に含まれるファイルだけを一時ディレクトリに写す
   for (const [dir, name] of Object.entries(PUBLISHED)) {
     const pkgDir = join(ROOT, dir);
@@ -40,6 +47,13 @@ try {
       }
     }
     console.log(`${name}: extracted included files`);
+  }
+
+  for (const dir of Object.keys(FEATURES)) {
+    const dest = join(temp, dir);
+    Deno.mkdirSync(dest, { recursive: true });
+    await copy(join(ROOT, dir, "deno.json"), join(dest, "deno.json"));
+    await copy(join(ROOT, dir, "src"), join(dest, "src"));
   }
 
   const consumer = join(temp, "consumer");
