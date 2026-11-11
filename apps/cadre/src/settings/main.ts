@@ -124,8 +124,8 @@ function scheduleView(s: SchedulerApi, i: i32): View {
     text(s.description(i)).key("schedule-every"),
     button("＋", changeEvery).arg(i * 2 + 1).enabled(stepEvery(every, owner, 1) > 0).label(title + "の間隔を長くする"),
   ]).key("stepper"));
-  controls.push(button(enabled ? "止める" : "再開する", toggleSchedule).arg(i).variant("ghost").label(title + "を" + (enabled ? "止める" : "再開する")).key("schedule-toggle"));
-  controls.push(button("今すぐ実行", runSchedule).arg(i).variant("ghost").enabled(!running).label(title + "を今すぐ実行する").key("schedule-run"));
+  controls.push(button(enabled ? "止める" : "再開する", toggleSchedule).arg(i).variant("subtle").label(title + "を" + (enabled ? "止める" : "再開する")).key("schedule-toggle"));
+  controls.push(button("今すぐ実行", runSchedule).arg(i).variant("subtle").enabled(!running).label(title + "を今すぐ実行する").key("schedule-run"));
   return column([
     listTile(title, detail).key("schedule-summary"),
     text(lastLine).small().tone(result.startsWith("error") ? "danger" : "muted").key("schedule-last"),
@@ -177,7 +177,7 @@ export class Settings extends App {
       const name = os.notificationName(i);
       const muted = os.notificationMuted(i);
       notifications.push(listTile(name, muted ? "通知を停止中" : "通知を許可", null,
-        button(muted ? "許可する" : "停止する", toggleNotification).arg(i)
+        button(muted ? "許可する" : "停止する", toggleNotification).arg(i).variant("subtle")
           .label(name + "の通知を" + (muted ? "許可する" : "停止する")),
       ).key("notification-setting-" + os.notificationId(i)));
     }
@@ -210,7 +210,7 @@ export class Settings extends App {
       column([
         text("Binette について").heading(2).key("about-title"),
         column([
-          listTile("Binette", "仕様の版 0.2", text("B").key("about-icon"), button("詳しく", showDetails).variant("ghost").enabled(!details).key("details")),
+          listTile("Binette", "仕様の版 0.2", text("B").key("about-icon"), button("詳しく", showDetails).variant("subtle").enabled(!details).key("details")),
           show(details, text("ブラウザだけで動く、アプリの土台です。").tone("muted").key("description")),
         ]).surface("card").key("about-card"),
       ]).key("about-section"),
@@ -221,9 +221,9 @@ export class Settings extends App {
           text(os.updateCurrent() + (next.length > 0 ? " → " + next : "")).small().tone("muted").key("update-version"),
           row([
             show(available || updating, button(updating ? "更新中…" : "更新", update).variant("primary").enabled(available && !updating).key("update")),
-            button(phase == "download-failed" ? "再試行" : "今すぐ確認", checkUpdate).variant("ghost").enabled(!checking && !downloading && !updating).key("check-update"),
+            button(phase == "download-failed" ? "再試行" : "今すぐ確認", checkUpdate).variant("subtle").enabled(!checking && !downloading && !updating).key("check-update"),
+            button("復旧画面を開く", openRecovery).variant("subtle").key("open-recovery"),
           ]).key("update-actions"),
-          button("復旧画面を開く", openRecovery).variant("ghost").key("open-recovery"),
         ]).surface("card").key("update-card"),
       ]).key("update-section"),
       column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),

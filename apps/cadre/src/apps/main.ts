@@ -173,7 +173,7 @@ function installed(m: AppManagerApi): View {
       text(count > 0 ? "更新が " + count.toString() + " 件あります" : "更新はありません").bold().key("apps-update-count"),
       row([
         button("すべて更新", updateAll).variant("primary").enabled(count > 0).key("apps-update-all"),
-        button("更新を確認", checkAll).variant("ghost").key("apps-check-all"),
+        button("更新を確認", checkAll).variant("subtle").key("apps-check-all"),
       ]).gap(8).wrap(),
       row([
         text("すべてのリストを自動更新").grow(),
@@ -203,7 +203,7 @@ function lists(m: AppManagerApi): View {
       ]).gap(8),
       show(yes(state.startsWith("error")), text(state.startsWith("error: ") ? state.slice(7) : "読み込めませんでした。").small().tone("danger")),
       row([
-        button("更新を確認", checkRepo).arg(i).variant("ghost").enabled(state != "loading").label((name.length > 0 ? name : url) + "の更新を確認"),
+        button("更新を確認", checkRepo).arg(i).variant("subtle").enabled(state != "loading").label((name.length > 0 ? name : url) + "の更新を確認"),
         row([
           text("自動更新").small(),
           button((name.length > 0 ? name : url) + "を自動更新", toggleRepo).arg(i).toggle(yes(m.autoUpdateRepo(url))),
@@ -267,11 +267,11 @@ function details(m: AppManagerApi, id: string): View {
     if (added.length > 0) update.push(text("増える権限: " + added.join("、")).tone("danger"));
   }
   const actions: View[] = [];
-  if (progress) actions.push(button("中止", cancel).variant("ghost").enabled(state != "saving").key("detail-cancel"));
+  if (progress) actions.push(button("中止", cancel).variant("subtle").enabled(state != "saving").key("detail-cancel"));
   else if (removing) {
     if (present) actions.push(button("本体だけ消す", removeApp).key("detail-remove-app"));
     actions.push(button("データごと消す", removeWithData).tone("danger").key("detail-remove-data"));
-    actions.push(button("やめる", keepApp).variant("ghost").key("detail-remove-cancel"));
+    actions.push(button("やめる", keepApp).variant("subtle").key("detail-remove-cancel"));
   } else {
     if (listed && present && broken) actions.push(button("入れ直す", reinstall).variant("primary").enabled(yes(compatible)).key("detail-reinstall"));
     if (listed && (!present || state == "failed") && state != "prepared" && !broken) actions.push(button(removed ? "入れ直す" : state == "failed" && present ? "もう一度" : "入れる", install).variant("primary").enabled(yes(compatible)).key("detail-install"));
@@ -281,7 +281,7 @@ function details(m: AppManagerApi, id: string): View {
   }
   const error = m.error(id);
   return column([
-    row([button("戻る", closeDetail).variant("ghost").key("detail-back")]),
+    row([button("‹ 戻る", closeDetail).variant("ghost").label("戻る").key("detail-back")]),
     row([
       initial(m, id, 48),
       column([

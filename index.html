@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Binette</title>
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181c" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <style>
@@ -21,18 +22,30 @@
       --radius-box: 16px;
       --radius-field: 10px;
     }
+    /* ダークでは面（base-100）を背景（base-200）より明るくして持ち上げる。テーマの設定が無い間は OS のライト／ダークに合わせる */
     :root[data-theme="dark"] {
       color-scheme: dark;
-      --color-base-100: #0b0c0e;
-      --color-base-200: #1a1c21;
-      --color-base-300: #2e323a;
-      --color-base-content: #f5f6f8;
-      --color-primary: #3273b9;
-      --color-primary-content: #ffffff;
+      --color-base-100: #22252b;
+      --color-base-200: #16181c;
+      --color-base-300: #353a43;
+      --color-base-content: #f1f3f5;
+      --color-primary: #5b9be0;
+      --color-primary-content: #0d1117;
       --color-error: #ff8a80;
       --color-success: #7ec699;
-      --radius-box: 16px;
-      --radius-field: 10px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --color-base-100: #22252b;
+        --color-base-200: #16181c;
+        --color-base-300: #353a43;
+        --color-base-content: #f1f3f5;
+        --color-primary: #5b9be0;
+        --color-primary-content: #0d1117;
+        --color-error: #ff8a80;
+        --color-success: #7ec699;
+      }
     }
     html, body { margin: 0; height: 100%; overflow: hidden; }
     body { font-family: "IBM Plex Sans JP", system-ui, sans-serif; background: var(--color-base-100); color: var(--color-base-content); }
@@ -84,7 +97,7 @@
       color: var(--boot-color);
     }
     @media (prefers-color-scheme: dark) {
-      .boot-screen { --boot-background: #0b0c0e; --boot-color: #f5f6f8; }
+      .boot-screen { --boot-background: #16181c; --boot-color: #f1f3f5; }
     }
     /* すぐ終わる起動でちらつかないよう、最初の 300ms は中身を出さない */
     .boot-body, .boot-note {

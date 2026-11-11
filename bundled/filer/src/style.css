@@ -1,7 +1,7 @@
 [data-bina-key="filer-tabs"] { display: none; }
 [data-bina-key="filer-toolbar"] > * { white-space: nowrap; }
 [data-bina-key^="filer-entry-"] { width: 100%; color: var(--color-base-content, #16181d); }
-[data-bina-key^="filer-icon-"] { display: inline-flex; flex: none; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 10px; background: color-mix(in srgb, var(--color-primary, #3273b9) 12%, transparent); color: var(--color-primary, #3273b9); }
+[data-bina-key^="filer-icon-"] { display: inline-flex; flex: none; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 10px; background: color-mix(in srgb, var(--bina-ui-accent, #3273b9) 12%, transparent); color: var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9)); }
 [data-bina-key^="filer-icon-"]::before { content: ""; display: block; width: 22px; height: 22px; background: currentColor; -webkit-mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; mask-position: center; mask-size: contain; mask-repeat: no-repeat; }
 [data-bina-key="filer-capacity"] { width: 100%; max-width: 260px; }
 @container bina-ui (width < 720px) {
@@ -11,7 +11,17 @@
   [data-bina-key="filer-crumb"] { width: 100%; }
   [data-bina-key="filer-actions"] { justify-content: flex-end; width: 100%; }
 }
-.bina-ui-filePick { color: var(--color-primary-content, #fff); }
+/* 読み込みは主操作。ほかの道具と同じ高さにそろえる */
+.bina-ui-filePick { min-height: 34px; padding: 6px 14px; border-color: transparent; border-radius: 9px; background: var(--bina-ui-accent, #3273b9); color: var(--bina-ui-accent-content, #fff); font-size: 14px; font-weight: 500; line-height: 1.3; }
+.bina-ui-filePick:not(:disabled):hover { background: color-mix(in srgb, var(--bina-ui-accent, #3273b9) 86%, #000); }
+[data-bina-key="filer-actions"] > .bina-ui-button { min-height: 34px; padding: 6px 12px; border-radius: 9px; font-size: 14px; }
+[data-bina-key="filer-title"] { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
+[data-bina-key="filer-places"] > .bina-ui-button { align-self: stretch; justify-content: flex-start; padding: 8px 12px; border-radius: 9px; }
+[data-bina-key="filer-places"] > .bina-ui-button.bina-ui-selected { color: var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9)); font-weight: 600; }
+[data-bina-key="filer-places"] { align-self: stretch; border-right: 1px solid var(--bina-ui-line, #e3e6ea); background: var(--bina-ui-sunken, #f3f5f8); }
+[data-bina-key="filer-empty"] { padding: 48px 16px; font-size: 14px; }
+[data-bina-key="filer-empty"] > [data-bina-key="filer-icon-folder"] { width: 56px; height: 56px; border-radius: 16px; }
+[data-bina-key="filer-empty"] > [data-bina-key="filer-icon-folder"]::before { width: 30px; height: 30px; }
 [data-bina-key="filer-icon-folder"]::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%206.5A1.5%201.5%200%200%201%204.5%205h4l2%202h9A1.5%201.5%200%200%201%2021%208.5v9A1.5%201.5%200%200%201%2019.5%2019h-15A1.5%201.5%200%200%201%203%2017.5z%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%206.5A1.5%201.5%200%200%201%204.5%205h4l2%202h9A1.5%201.5%200%200%201%2021%208.5v9A1.5%201.5%200%200%201%2019.5%2019h-15A1.5%201.5%200%200%201%203%2017.5z%22%2F%3E%3C%2Fsvg%3E"); }
 [data-bina-key="filer-icon-file"]::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203.5h8l4%204v13H6z%22%2F%3E%3Cpath%20d%3D%22M14%203.5v4h4%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203.5h8l4%204v13H6z%22%2F%3E%3Cpath%20d%3D%22M14%203.5v4h4%22%2F%3E%3C%2Fsvg%3E"); }
 [data-bina-key="filer-icon-text"]::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203.5h8l4%204v13H6z%22%2F%3E%3Cpath%20d%3D%22M14%203.5v4h4M9%2012h6M9%2015h6M9%2018h4%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203.5h8l4%204v13H6z%22%2F%3E%3Cpath%20d%3D%22M14%203.5v4h4M9%2012h6M9%2015h6M9%2018h4%22%2F%3E%3C%2Fsvg%3E"); }

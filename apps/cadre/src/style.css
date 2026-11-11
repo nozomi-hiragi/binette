@@ -47,6 +47,22 @@
   [data-bina-key="dock"] { background: var(--bina-shell-dock-background, light-dark(var(--bina-shell-surface, #fff), color-mix(in srgb, var(--bina-shell-color, #f5f6f8) 9%, var(--bina-shell-background, #1a1c21)))); }
 }
 
+/* ホーム。タイルは枠のないアイコンと名前にし、列は中央に寄せる。押せる面は hover と focus で示す */
+[data-bina-key="home-grid"] { grid-template-columns: repeat(auto-fit, 88px); justify-content: center; gap: 20px 12px; padding: 40px max(16px, calc((100% - 888px) / 2)) 32px; --bina-ui-icon-size: 60px; }
+[data-bina-key^="home-tile-"] { box-sizing: border-box; min-width: 0; padding: 10px 2px 8px; border: 0; border-radius: 18px; background: transparent; font-size: 13px; line-height: 1.35; -webkit-tap-highlight-color: transparent; transition: background-color .12s; }
+[data-bina-key^="home-tile-"]:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
+[data-bina-key^="home-tile-"]:active { background: color-mix(in srgb, currentColor 11%, transparent); }
+[data-bina-key^="home-tile-"] > .bina-ui-column { align-items: center; gap: 8px; width: 100%; min-width: 0; }
+[data-bina-key^="home-tile-"] .bina-ui-appIcon { display: block; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 14%)); transition: transform .12s; }
+[data-bina-key^="home-tile-"]:active .bina-ui-appIcon { transform: scale(.94); }
+[data-bina-key^="home-tile-"] .bina-ui-text { display: -webkit-box; box-sizing: border-box; max-width: 100%; padding: 0 2px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-align: center; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  [data-bina-key="home-grid"] { grid-template-columns: repeat(auto-fit, 76px); gap: 16px 8px; padding: 28px 12px 24px; --bina-ui-icon-size: 56px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-bina-key^="home-tile-"], [data-bina-key^="home-tile-"] .bina-ui-appIcon { transition: none; }
+}
+
 /* 設定のグループと行。色は Scene から届く Décor の役割の色に合わせる。 */
 :scope:has(> [data-bina-key="settings-root"]) { background: var(--bina-ui-sunken, #f2f3f6); }
 [data-bina-key="settings-root"] { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 40px 28px 48px; gap: 26px; }
@@ -71,7 +87,7 @@
 [data-bina-key="debug-controls"] { flex: none; max-width: 100%; margin-left: auto; align-items: center; }
 [data-bina-key^="settings-value-"] { min-width: 55px; padding: 0 8px; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 [data-bina-key="stepper"] { flex: none; align-items: center; gap: 0; border-radius: 8px; background: var(--bina-ui-sunken, #eceef1); overflow: hidden; }
-[data-bina-key="stepper"] > button { display: grid; place-items: center; min-width: 32px; min-height: 26px; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9)); font-size: 20px; line-height: 1; }
+[data-bina-key="stepper"] > button { display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--bina-ui-accent-text, var(--bina-ui-accent, #3273b9)); font-size: 20px; line-height: 1; }
 [data-bina-key="stepper"] > button:last-child { border-left: 1px solid var(--bina-ui-line, #e3e6ea); }
 [data-bina-key="stepper"] > button:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, transparent); }
 [data-bina-key="stepper"] > button:disabled { opacity: .35; }
@@ -93,8 +109,15 @@
 [data-bina-key="settings-root"] [data-bina-key="update-status"] { padding: 0; min-height: 0; }
 [data-bina-key="update-version"] { min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.5; font-variant-numeric: tabular-nums; }
 [data-bina-key="update-actions"] { gap: 8px; flex-wrap: wrap; align-items: center; }
-[data-bina-key="update-actions"] button, [data-bina-key="open-recovery"] { flex: none; white-space: nowrap; }
-[data-bina-key="open-recovery"] { align-self: flex-start; }
+[data-bina-key="update-actions"] button { flex: none; white-space: nowrap; }
+/* 設定の中の操作は、押せると分かる面を持つ同じ大きさのボタンにする */
+[data-bina-key="settings-root"] .bina-ui-button:is(.bina-ui-variant-subtle, .bina-ui-variant-primary) { min-height: 34px; padding: 6px 14px; border-radius: 9px; font-size: 14px; font-weight: 500; line-height: 1.3; white-space: nowrap; }
+[data-bina-key="schedules"] > .bina-ui-column { padding-bottom: 14px; }
+[data-bina-key="schedules"] > .bina-ui-column + .bina-ui-column { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
+[data-bina-key="schedule-last"] { padding: 0 16px; }
+[data-bina-key="schedule-controls"] { flex-wrap: wrap; gap: 8px; padding: 10px 16px 0; }
+[data-bina-key="schedule-every"] { min-width: 64px; padding: 0 8px; text-align: center; font-size: 14px; white-space: nowrap; }
+[data-bina-key="schedules-empty"] { padding: 18px 16px; font-size: 13px; }
 
 /* Overlay notifications without shrinking the application or home bar. */
 [data-bina-key="cadre-root"] { position: relative; }
@@ -107,6 +130,26 @@
 [data-bina-key="notification-reply-input"] { box-sizing: border-box; min-width: 0; width: 100%; }
 [data-bina-key="notifications-card"] > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
 [data-bina-key="notifications-card"] .bina-ui-listTile { flex-wrap: wrap; }
+
+/* アプリ管理は設定と同じ地の色・幅・見出しにし、まとまりをカードで見せる */
+:scope:has(> [data-bina-key="apps-root"]) { background: var(--bina-ui-sunken, #f2f3f6); }
+[data-bina-key="apps-root"] { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 40px 28px 48px; gap: 20px; }
+[data-bina-key="apps-title"] { margin: 0; padding: 0 4px; font-size: 32px; font-weight: 750; letter-spacing: -.04em; line-height: 1.25; }
+[data-bina-key="apps-root"] .bina-ui-surface-card { overflow: hidden; border: 1px solid var(--bina-ui-line, #e3e6ea); border-radius: 14px; box-shadow: 0 1px 3px color-mix(in srgb, currentColor 3%, transparent); }
+[data-bina-key="apps-root"] .bina-ui-surface-card:empty { display: none; }
+[data-bina-key="apps-root"] .bina-ui-surface-card > * + * { border-top: 1px solid var(--bina-ui-line, #e3e6ea); }
+[data-bina-key="apps-root"] :is([data-bina-key="apps-updates"], [data-bina-key="apps-repo-form"], [data-bina-key="detail-info"], [data-bina-key="detail-update-info"]) { padding: 16px; }
+[data-bina-key="apps-root"] :is([data-bina-key="apps-updates"], [data-bina-key="apps-repo-form"], [data-bina-key="detail-info"], [data-bina-key="detail-update-info"]) > * + * { border-top: 0; }
+[data-bina-key^="find-repo-"] .bina-ui-heading-2 { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.4; }
+[data-bina-key^="find-repo-"] > .bina-ui-column:first-child { padding: 0 4px; }
+[data-bina-key="apps-root"] .bina-ui-button:is(.bina-ui-variant-subtle, .bina-ui-variant-primary) { min-height: 34px; padding: 6px 14px; border-radius: 9px; font-size: 14px; font-weight: 500; line-height: 1.3; white-space: nowrap; }
+[data-bina-key="apps-root"] .bina-ui-input { min-height: 34px; border-radius: 9px; }
+[data-bina-key="apps-updates"] { gap: 12px; }
+[data-bina-key="apps-detail"] .bina-ui-heading-1 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; }
+@media (max-width: 520px) {
+  [data-bina-key="apps-root"] { padding: 26px 12px 32px; }
+  [data-bina-key="apps-title"] { font-size: 30px; }
+}
 
 /* アプリの行は詳細を開く中立のボタン。汎用ボタンの青背景・白文字を使わない */
 [data-bina-key="apps-root"] button:is([data-bina-key^="find-app-"], [data-bina-key^="installed-"]) { flex-direction: row; align-items: center; width: 100%; min-width: 0; padding: 12px; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: start; }
