@@ -1,6 +1,6 @@
 import { readRepliqueLibraries } from "../../../packages/regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
-import asc from "assemblyscript/asc";
+import { buildApp } from "../../../packages/regie/src/build.ts";
 
 interface PreviewNode {
   kind: string;
@@ -23,22 +23,10 @@ interface PreviewNode {
 
 /** デザイナーを実際の asc でコンパイルし、描いた部品の木を読み書きできるようにする。 */
 async function start() {
-  const sources: Record<string, string> = {
-    "main.ts": await Deno.readTextFile(new URL("../src/main.ts", import.meta.url)) + '\nexport { __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value } from "jsr:@binette/replique";',
-    ...Object.fromEntries(Object.entries(await readRepliqueLibraries(new URL("../../../packages/replique/src/", import.meta.url))).map(([key, value]) => [`node_modules/${key}.ts`, value])),
-    "model.ts": await Deno.readTextFile(new URL("../src/model.ts", import.meta.url)),
-    "node_modules/jsr:@binette/decor/as.ts": await Deno.readTextFile(new URL("../../../packages/decor/src/as.ts", import.meta.url)),
-    "node_modules/jsr:@binette/decor/parts.ts": await Deno.readTextFile(new URL("../../../packages/decor/src/parts.ts", import.meta.url)),
-  };
-  const stderr = asc.createMemoryStream();
-  let wasm: Uint8Array | undefined;
-  const result = await asc.main(["main.ts", "--outFile", "main.wasm", "--exportStart", "_start", "--exportRuntime"], {
-    readFile: (name) => sources[name] ?? null,
-    writeFile(name, value) { if (name === "main.wasm" && typeof value !== "string") wasm = value; },
-    listFiles: () => [], stderr,
+  const built = await buildApp(path => Deno.readTextFile(new URL(path, new URL("../", import.meta.url))), {
+    libraries: await readRepliqueLibraries(new URL("../../../packages/replique/", import.meta.url)),
   });
-  assertEquals(result.error, null, stderr.toString());
-  const module = await WebAssembly.compile(new Uint8Array(wasm!));
+  const module = await WebAssembly.compile(new Uint8Array(built.wasm));
   let frame!: { build: number; root: PreviewNode };
   function string(pointer: number): string {
     // 大きな木の JSON でも引数の数の上限に当たらないよう、まとめて読む

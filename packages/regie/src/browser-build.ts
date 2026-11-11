@@ -1,3 +1,5 @@
+import { BinetteError } from "@binette/core";
+import { parseRepliqueVersions } from "./sdk.ts";
 import { validateAppAbi } from "./abi.ts";
 import type { BuiltApp, BuildOptions } from "./build.ts";
 import type { SystemDistribution } from "./distribution.ts";
@@ -33,12 +35,9 @@ export async function buildAppInWorker(read: (path: string) => Promise<string>, 
   };
   // URL を渡して再取得させず、検査済みのバイトをそのまま Worker に渡す。
   const compiler = (await required("/system/tools/asc.js")).slice();
-  const features: unknown = JSON.parse(decoder.decode(await required("/system/libraries/replique/index.json")));
-  if (!Array.isArray(features) || features.some(name => typeof name !== "string" || !/^[a-z][a-z0-9-]*$/.test(name) || name === "index") || new Set(features).size !== features.length) {
-    throw new Error("Invalid Réplique feature index.");
-  }
-  for (const name of ["index", ...features]) {
-    const specifier = name === "index" ? "jsr:@binette/replique" : `jsr:@binette/replique/${name}`;
+  const features = parseRepliqueVersions(JSON.parse(decoder.decode(await required("/system/libraries/replique/index.json"))));
+  for (const name of ["index", ...Object.keys(features)]) {
+    const specifier = name === "index" ? "jsr:@binette/replique" : `jsr:@binette/replique-${name}@${features[name]}`;
     if (libraries[specifier] === undefined) libraries[specifier] = decoder.decode(await required(`/system/libraries/replique/${name}.ts`));
   }
   aborted();
@@ -67,7 +66,7 @@ export async function buildAppInWorker(read: (path: string) => Promise<string>, 
       if (settled) return;
       const data = event.data;
       if (data.type === "built") finish(undefined, data.built);
-      else if (data.type === "failed") finish(new Error(data.message));
+      else if (data.type === "failed") finish(data.code === "unsupported_sdk" ? new BinetteError("unsupported_sdk", data.message) : new Error(data.message));
       else if (data.type === "read") {
         const path = typeof data.path === "string" ? appPath(data.path) : null;
         const value = path ? Promise.resolve().then(() => read(path)) : Promise.reject(new Error("アプリのフォルダ外は読めません。"));

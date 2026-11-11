@@ -55,18 +55,29 @@ Deno.test("integrity: コマンドが JSON を出す", async () => {
   });
 });
 
-Deno.test("--replique reads all direct AS files and rejects a file or a directory without index.ts", async () => {
+Deno.test("--replique はパッケージルートの全機能を読み、旧ソースフォルダ・単一ファイル・欠損を拒む", async () => {
+  const root = new URL("../../replique/", import.meta.url);
+  const libraries = await readRepliqueLibraries(root);
+  assertEquals(Object.keys(libraries).length, 14);
+  assertEquals(libraries["jsr:@binette/replique"], await Deno.readTextFile(new URL("src/index.ts", root)));
+  assertEquals(libraries["jsr:@binette/replique-ui@0.1.0"], await Deno.readTextFile(new URL("ui/src/index.ts", root)));
+  for (const path of ["src/", "src/index.ts", "missing/"]) {
+    await assertRejects(() => readRepliqueLibraries(new URL(path, root)), Error, "packages/replique");
+  }
   const directory = await Deno.makeTempDir({ prefix: "binette-replique-" });
   try {
-    await Deno.writeTextFile(join(directory, "index.ts"), "export {};\n");
-    await Deno.writeTextFile(join(directory, "extra.ts"), "export const extra = 1;\n");
-    await Deno.writeTextFile(join(directory, "README.md"), "ignored");
-    await Deno.mkdir(join(directory, "nested"));
-    await Deno.writeTextFile(join(directory, "nested/hidden.ts"), "ignored");
-    assertEquals(await readRepliqueLibraries(directory), {
-      "jsr:@binette/replique": "export {};\n", "jsr:@binette/replique/extra": "export const extra = 1;\n",
-    });
-    await assertRejects(() => readRepliqueLibraries(join(directory, "index.ts")), Error, "source directory, not a file");
-    await assertRejects(() => readRepliqueLibraries(join(directory, "nested")), Error, "must contain index.ts");
+    await Deno.mkdir(join(directory, "src"));
+    await Deno.writeTextFile(join(directory, "src/index.ts"), "export {};\n");
+    await Deno.writeTextFile(join(directory, "deno.json"), JSON.stringify({ name: "@binette/replique", exports: "./src/index.ts" }));
+    await assertRejects(() => readRepliqueLibraries(directory), Error, "app/deno.json");
+    await Deno.mkdir(join(directory, "app/src"), { recursive: true });
+    await Deno.writeTextFile(join(directory, "app/deno.json"), JSON.stringify({ name: "@binette/wrong", exports: "./src/index.ts", version: "0.1.0" }));
+    await assertRejects(() => readRepliqueLibraries(directory), Error, "name または exports");
   } finally { await Deno.remove(directory, { recursive: true }); }
+});
+
+Deno.test("Designer の旧 import の原文を保ち、指定された integrity に一致する", async () => {
+  const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
+  const integrity = await computeAppIntegrity(new URL("../../../catalog/designer/", import.meta.url).pathname, [], { libraries });
+  assertEquals(integrity, { "/": "sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=" });
 });

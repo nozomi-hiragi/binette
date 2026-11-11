@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { App, Api, Last, StorageApi, launch } from "jsr:@binette/replique";
-import { View, column, row, text, button, buttonOf, space } from "jsr:@binette/replique/ui";
+import { View, column, row, text, button, buttonOf, space } from "jsr:@binette/replique-ui@^0.1";
 import { ids, titles, bodies } from "./content.ts";
 
 // Layout of content.ts (scripts/docs-app.ts writes it):

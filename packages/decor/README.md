@@ -25,7 +25,7 @@ draw();
 
 Flutter・Jetpack Compose・SwiftUI によくある部品も、同じ書き方で使えます（案）。余りを埋める `spacer()`、区切り線の `separator()`（修飾の `divider(side)` と区別するための名前）、子を重ねる `stack(children)` と位置の `align(name)`、値を返す `checkbox(checked, onChange)`・`radio(selected, onSelect)`・`slider(value, min, max, onChange)`（刻みは `step(n)`）・`picker(options, index, onChange)`・`segmented(options, index, onChange)`・`tabs(options, index, onChange)`、進み具合の `progress(value)`（負は不定）・`spinner()`、画像の `image(src)`（base64 のラスターか、URL エンコードした SVG の data URL だけ）、一覧の行の `listTile(title, subtitle, leading, trailing)`、札の `chip(label)`・`badge(value)` です。値を返す部品は入力欄と同じく値をアプリが持ち、描き直しでアプリの値にそろえます。role・aria・キー操作は [宣言的 UI の仕様](../../docs/spec/ui.md) を参照してください。
 
-AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique/ui` も互換の入口として使えます。関数の部品とフックは TS の `mount` 向けです。JSX は含みません。
+AS の View と部品は `jsr:@binette/decor/as` にあります。従来の `jsr:@binette/replique-ui@^0.1` も互換の入口として使えます。関数の部品とフックは TS の `mount` 向けです。JSX は含みません。
 
 API と分担の細部は案です。[仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/decor.md) を参照してください。
 

@@ -1,3 +1,4 @@
+import { repliqueVersions } from "../packages/regie/src/sdk.ts";
 import { readRepliqueLibraries } from "../packages/regie/src/cli.ts";
 import { resolve } from "@std/path";
 import { copy } from "@std/fs";
@@ -151,7 +152,7 @@ export async function buildApps(root: string): Promise<void> {
   const staging = await Deno.makeTempDir({ prefix: "binette-system-" });
   try {
     const system = resolve(staging, "system");
-    const replique = resolve(root, "packages/replique/src");
+    const replique = resolve(root, "packages/replique");
     for (const [source, output, label] of [["apps", "apps", "システムアプリ"], ["bundled", "bundled", "同梱アプリ"]] as const) {
       const names = await buildFolder(resolve(root, source), resolve(system, output), replique, label);
       for (const name of names) console.log(`system/${output}/${name}`);
@@ -168,11 +169,10 @@ export async function buildApps(root: string): Promise<void> {
     const libraries = await readRepliqueLibraries(replique);
     const libraryRoot = resolve(system, "libraries/replique");
     await Deno.mkdir(libraryRoot, { recursive: true });
-    const features: string[] = [];
+    const features = repliqueVersions(libraries);
     for (const [specifier, source] of Object.entries(libraries)) {
-      const name = specifier === "jsr:@binette/replique" ? "index" : specifier.slice("jsr:@binette/replique/".length);
+      const name = specifier === "jsr:@binette/replique" ? "index" : specifier.slice("jsr:@binette/replique-".length).split("@")[0];
       await Deno.writeTextFile(resolve(libraryRoot, `${name}.ts`), source);
-      if (name !== "index") features.push(name);
     }
     await Deno.writeFile(resolve(libraryRoot, "index.json"), encode(features));
     const manifest = await systemManifest(system);

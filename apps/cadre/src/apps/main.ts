@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, AppManagerApi, Last } from "jsr:@binette/replique";
-import { View, badge, button, buttonOf, chip, column, image, input, row, show, spinner, tabs, text } from "jsr:@binette/replique/ui";
+import { View, badge, button, buttonOf, chip, column, image, input, row, show, spinner, tabs, text } from "jsr:@binette/replique-ui@^0.1";
 
 // 辞書から取った API と画面の状態。ボタンのコールバックは関数なので、グローバルで持つ
 let manager: AppManagerApi | null = null;

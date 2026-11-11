@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, OsApi, SchedulerApi } from "jsr:@binette/replique";
-import { View, button, buttonOf, column, listTile, row, show, text } from "jsr:@binette/replique/ui";
+import { View, button, buttonOf, column, listTile, row, show, text } from "jsr:@binette/replique-ui@^0.1";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
 const labels = ["スタックできるアプリの数", "Stop までの時間", "起動の履歴の最大の行数", "呼び出しの時間切れ", "onDestroy の時間切れ", "Apps を出すまでの時間"];

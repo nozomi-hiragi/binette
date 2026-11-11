@@ -4,7 +4,7 @@ import { createMemoryAppStore, type ProcessOptions, type RegieWorker, serveApp, 
 import { type DomOp, DestroyCause, DestroyKind, State } from "@binette/core";
 import { buildApp } from "../src/build.ts";
 
-const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(condition: () => boolean): Promise<void> {
   // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
@@ -299,7 +299,7 @@ launch(new TestApp());`;
 
 Deno.test("宣言 UI の連続クリックはすべて届き、再描画は差分だけを送る", async () => {
   const code = `import { Api, App, Last, document, launch } from "jsr:@binette/replique";
-import { View, column, text, button } from "jsr:@binette/replique/ui";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
 let count = 0;
 function increment(): void { count++; }
 function add(value: i32): void { count += value; }
@@ -344,7 +344,7 @@ launch(new Counter());`;
 
 Deno.test("宣言 UI のキー付き並べ替えは要素を再利用する", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, text, button } from "jsr:@binette/replique/ui";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
 let reversed = false;
 let total = 0;
 function swap(): void { reversed = !reversed; }
@@ -383,7 +383,7 @@ launch(new Demo());`;
 
 Deno.test("宣言 UI で取り除いたボタンへのイベントは捨てる", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, text, button } from "jsr:@binette/replique/ui";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
 let visible = true;
 let count = 0;
 function hide(): void { visible = false; }
@@ -412,7 +412,7 @@ launch(new Demo());`;
 
 Deno.test("宣言 UI で押せなくしたボタンへの、待っているイベントは捨てる", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, text, button } from "jsr:@binette/replique/ui";
+import { View, column, text, button } from "jsr:@binette/replique-ui@^0.1";
 let count = 0;
 function submit(): void { count++; }
 class Demo extends App {
@@ -438,7 +438,7 @@ launch(new Demo());`;
 
 Deno.test("宣言 UI で押せなくした入力に届いた入力は、版を進めてアプリの値を返す", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, input } from "jsr:@binette/replique/ui";
+import { View, column, input } from "jsr:@binette/replique-ui@^0.1";
 let value = "";
 function typed(s: string): void { value = s; }
 class Demo extends App {
@@ -464,7 +464,7 @@ launch(new Demo());`;
 
 Deno.test("宣言 UI で Pause のために捨てた入力も、版を進めてアプリの値を返す", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, input } from "jsr:@binette/replique/ui";
+import { View, column, input } from "jsr:@binette/replique-ui@^0.1";
 let value = "";
 function typed(s: string): void { value = s; }
 class Demo extends App {
@@ -532,7 +532,7 @@ launch(new Demo());`;
 
 Deno.test("AS の複数行入力は Worker を経て textarea を描画し、改行を往復する", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, input } from "jsr:@binette/replique/ui";
+import { View, input } from "jsr:@binette/replique-ui@^0.1";
 let value = "first\\nsecond";
 function typed(s: string): void { value = s; }
 class Demo extends App {
@@ -566,7 +566,7 @@ launch(new Demo());`;
 
 Deno.test("宣言 UI の値を返す部品は、無効・範囲外・Pause で捨てた操作にも版を進めてアプリの値を返す", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
-import { View, column, text, checkbox, slider, tabs } from "jsr:@binette/replique/ui";
+import { View, column, text, checkbox, slider, tabs } from "jsr:@binette/replique-ui@^0.1";
 let on = false;
 let level: f64 = 1;
 let tab: i32 = 0;

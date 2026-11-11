@@ -1,10 +1,12 @@
+import { repliqueVersions, resolveSdkSpecifier } from "../src/sdk.ts";
 import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import asc from "assemblyscript/asc";
 import type { DomOp } from "@binette/core";
 import { launchApp, type ManagerSnapshot, type OsSnapshot, type SchedulerSnapshot, serveApp, type RegieWorker } from "../src/index.ts";
 
-const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
+const versions = repliqueVersions(libraries);
 
 const source = `
 @external("binette:dom@0.1", "text")
@@ -18,7 +20,7 @@ async function build(code: string, runtime = false): Promise<Uint8Array> {
   let wasm: Uint8Array | undefined;
   let stderr = "";
   const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", ...(runtime ? ["--exportRuntime"] : [])], {
-    readFile: (name) => name === "main.ts" ? code : name === "replique.ts" ? libraries["jsr:@binette/replique"] : name === "node_modules/jsr:@binette/decor/as.ts" ? Deno.readTextFileSync(new URL("../../decor/src/as.ts", import.meta.url)) : name === "node_modules/jsr:@binette/decor/parts.ts" ? Deno.readTextFileSync(new URL("../../decor/src/parts.ts", import.meta.url)) : libraries[name.replace(/^node_modules\//, "").replace(/\.ts$/, "")] ?? null,
+    readFile: (name) => name === "main.ts" ? code : name === "replique.ts" ? libraries["jsr:@binette/replique"] : name === "node_modules/jsr:@binette/decor/as.ts" ? Deno.readTextFileSync(new URL("../../decor/src/as.ts", import.meta.url)) : name === "node_modules/jsr:@binette/decor/parts.ts" ? Deno.readTextFileSync(new URL("../../decor/src/parts.ts", import.meta.url)) : libraries[resolveSdkSpecifier(name.replace(/^node_modules\//, "").replace(/\.ts$/, ""), versions)] ?? null,
     writeFile: (name, contents) => { if (name === "main.wasm") wasm = contents as Uint8Array; },
     listFiles: () => [],
     stderr: { write: (chunk: string) => { stderr += chunk; return true; } } as never,

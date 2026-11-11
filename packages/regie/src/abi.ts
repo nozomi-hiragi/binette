@@ -40,8 +40,8 @@ export async function validateAppAbi(wasm: Uint8Array | ArrayBuffer): Promise<We
   const supported: ReadonlyMap<string, readonly string[]> = new Map(Object.values(HOST_ABI).map(abi => [abi.module, abi.functions]));
   const imports = WebAssembly.Module.imports(module);
   const missing = [...new Set(imports.filter(entry => !supported.has(entry.module)).map(entry => entry.module))];
-  if (missing.length) throw new BinetteError("unsupported_abi", `この OS では動きません（${missing.map(moduleLabel).sort().join("、")}）`);
+  if (missing.length) throw new BinetteError("unsupported_abi", `この OS では動きません（${missing.map(moduleLabel).sort().join("、")}）。アプリの管理から入れ直すと直ります`);
   const invalid = imports.filter(entry => entry.kind !== "function" || !supported.get(entry.module)!.includes(entry.name));
-  if (invalid.length) throw new BinetteError("unsupported_abi", `この OS では動きません（${invalid.map(entry => `${moduleLabel(entry.module)} の ${entry.name}`).sort().join("、")}）`);
+  if (invalid.length) throw new BinetteError("unsupported_abi", `この OS では動きません（${invalid.map(entry => `${moduleLabel(entry.module)} の ${entry.name}`).sort().join("、")}）。アプリの管理から入れ直すと直ります`);
   return module;
 }

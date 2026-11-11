@@ -1,3 +1,4 @@
+import { BinetteError } from "@binette/core";
 import { buildApp, type Compiler } from "./build.ts";
 
 /** ブラウザと MessageChannel で共通に使う、ビルド専用 Worker の受け口。 */
@@ -34,7 +35,7 @@ export function serveBuild(scope: BuildWorkerScope): void {
           }), { compiler, libraries: data.libraries });
           scope.postMessage({ type: "built", built });
         } finally { URL.revokeObjectURL(url); }
-      })().catch(error => scope.postMessage({ type: "failed", message: error instanceof Error ? error.message : String(error) }));
+      })().catch(error => scope.postMessage({ type: "failed", message: error instanceof Error ? error.message : String(error), ...(error instanceof BinetteError ? { code: error.code } : {}) }));
     }
   });
 }

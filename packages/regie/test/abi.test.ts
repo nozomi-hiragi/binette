@@ -27,20 +27,25 @@ function createWorker(): RegieWorker {
 }
 
 Deno.test("各機能の版・全 external・OS の提供一覧が一致し、全関数を Worker にリンクできる", async () => {
-  const directory = new URL("../../replique/src/", import.meta.url);
+  const directory = new URL("../../replique/", import.meta.url);
   const imports: { module: string; name: string; kind: string }[] = [];
   const wrappers: string[] = [];
   const found: string[] = [];
   for await (const file of Deno.readDir(directory)) {
-    if (!file.name.endsWith(".ts") || file.name === "index.ts") continue;
-    const source = await Deno.readTextFile(new URL(file.name, directory));
+    if (!file.isDirectory || ["src", "scripts", "test"].includes(file.name)) continue;
+    const source = await Deno.readTextFile(new URL(`${file.name}/src/index.ts`, directory));
+    const config = JSON.parse(await Deno.readTextFile(new URL(`${file.name}/deno.json`, directory)));
     const declarations = [...source.matchAll(/@external\("([^"]+)", "([^"]+)"\)\s+(?:export )?declare function \w+\(([^)]*)\): ([^;]+);/g)];
     assertEquals(declarations.length, [...source.matchAll(/@external\(/g)].length, file.name);
-    const feature = file.name.slice(0, -3);
+    const feature = file.name;
+    assertEquals(config.name, `@binette/replique-${feature}`);
+    assertEquals(config.exports, "./src/index.ts");
+    const [major, minor] = config.version.split(".");
     found.push(feature);
     const versions = [...source.matchAll(/^export const ABI_VERSION = "([^"]+)";/gm)];
     assertEquals(versions.length, 1, file.name);
     assert(/^0\.\d+$|^[1-9]\d*$/.test(versions[0][1]), file.name);
+    assertEquals(versions[0][1], major === "0" ? `${major}.${minor}` : major, feature);
     if (feature === "fs") {
       assertEquals(declarations.length, 0);
       assertEquals(Object.hasOwn(HOST_ABI, feature), false);
@@ -80,9 +85,9 @@ for (const [module, label] of [
     const ops: unknown[] = [];
     const validation = await assertRejects(() => validateAppAbi(wasm), BinetteError);
     assertEquals(validation.code, "unsupported_abi");
-    assertEquals(validation.message, `この OS では動きません（${label}）`);
+    assertEquals(validation.message, `この OS では動きません（${label}）。アプリの管理から入れ直すと直ります`);
     const error = await assertRejects(() => launchApp(wasm, { createWorker, onDom: values => ops.push(values) }), BinetteError);
-    assertEquals(error.message, `この OS では動きません（${label}）`);
+    assertEquals(error.message, `この OS では動きません（${label}）。アプリの管理から入れ直すと直ります`);
     assertEquals(error.code, "unsupported_abi");
     assertEquals(ops, []);
   });
@@ -94,7 +99,7 @@ Deno.test("env.abort と対応する版は受け入れ、未提供の関数名�
   assert(WebAssembly.Module.imports(module).some(entry => entry.module === "env" && entry.name === "abort"));
   const bad = await compile('@external("binette:storage@0.1", "read2") declare function unknown(): void; export function call(): void { unknown(); }');
   const error = await assertRejects(() => validateAppAbi(bad), BinetteError);
-  assertEquals(error.message, "この OS では動きません（storage 0.1 の read2）");
+  assertEquals(error.message, "この OS では動きません（storage 0.1 の read2）。アプリの管理から入れ直すと直ります");
   assertEquals(error.code, "unsupported_abi");
   const launchError = await assertRejects(() => launchApp(bad, { createWorker }), BinetteError);
   assertEquals(launchError.code, "unsupported_abi");
@@ -107,7 +112,7 @@ Deno.test("env.abort と対応する版は受け入れ、未提供の関数名�
 Deno.test("実際の Worker 越しでも未対応 ABI のコードを保ち、不正な WASM は区別する", async () => {
   const wasm = await compile('@external("binette:dom@0.2", "text") declare function text(): void; export function call(): void { text(); }');
   const error = await assertRejects(() => launchApp(wasm), BinetteError);
-  assertEquals(error.message, "この OS では動きません（dom 0.2）");
+  assertEquals(error.message, "この OS では動きません（dom 0.2）。アプリの管理から入れ直すと直ります");
   assertEquals(error.code, "unsupported_abi");
   const malformed = await assertRejects(() => launchApp(new Uint8Array([1, 2, 3]), { createWorker }), Error, "起動できません");
   assertEquals(malformed instanceof BinetteError, false);
@@ -119,7 +124,7 @@ Deno.test("複数の未対応 module は重複を除き機能と版を読点で�
 @external("binette:storage@0.9", "has") declare function third(): void;
 export function call(): void { first(); second(); third(); }`);
   const error = await assertRejects(() => validateAppAbi(wasm), BinetteError);
-  assertEquals(error.message, "この OS では動きません（storage 0.9、ui 0.2）");
+  assertEquals(error.message, "この OS では動きません（storage 0.9、ui 0.2）。アプリの管理から入れ直すと直ります");
   assertEquals(error.code, "unsupported_abi");
   const launchError = await assertRejects(() => launchApp(wasm, { createWorker }), BinetteError);
   assertEquals(launchError.message, error.message);
@@ -130,7 +135,7 @@ Deno.test("提供 module の関数以外の import も機能・版・名前を�
   const imports = [1, ...name("binette:storage@0.1"), ...name("read"), 3, 0x7f, 0];
   const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 2, imports.length, ...imports]);
   const error = await assertRejects(() => validateAppAbi(wasm), BinetteError);
-  assertEquals(error.message, "この OS では動きません（storage 0.1 の read）");
+  assertEquals(error.message, "この OS では動きません（storage 0.1 の read）。アプリの管理から入れ直すと直ります");
   assertEquals(error.code, "unsupported_abi");
   const launchError = await assertRejects(() => launchApp(wasm, { createWorker }), BinetteError);
   assertEquals(launchError.message, error.message);

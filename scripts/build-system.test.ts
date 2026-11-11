@@ -2,7 +2,7 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import { appNames, buildApps, buildFolder, type SystemManifest, systemManifest } from "./build-system.ts";
 import { systemLabel } from "./system-metadata.ts";
 
-const replique = new URL("../packages/replique/src/", import.meta.url).pathname;
+const replique = new URL("../packages/replique/", import.meta.url).pathname;
 async function app(root: string, name: string): Promise<void> {
   await Deno.mkdir(`${root}/${name}`, { recursive: true });
   await Deno.writeTextFile(`${root}/${name}/app.json`, JSON.stringify({ id: name, name, icon: "assets/picture.svg", entry: { html: "view.html", css: "assets/style.css", as: "main.ts" } }));
@@ -98,8 +98,8 @@ Deno.test("目録は全ファイルのバイト数と SHA-256 を持ち、版は
 Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同梱アプリ・古い生成物を扱う", async () => {
   const dir = await Deno.makeTempDir();
   try {
-    await Deno.mkdir(`${dir}/packages/replique`, { recursive: true });
-    await Deno.symlink(replique, `${dir}/packages/replique/src`);
+    await Deno.mkdir(`${dir}/packages`, { recursive: true });
+    await Deno.symlink(replique, `${dir}/packages/replique`);
     await Deno.mkdir(`${dir}/packages/regie`);
     await Deno.writeTextFile(`${dir}/packages/regie/deno.json`, JSON.stringify({ version: "0.2.0" }));
     await Deno.mkdir(`${dir}/public`);
@@ -128,11 +128,12 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     assert(first.files.some((file) => file.path === "system/apps/cadre/app.wasm"));
     assert(first.files.some((file) => file.path === "system/bundled/home/app.wasm"));
     assert(!first.files.some((file) => file.path === "system/libraries/replique.ts"));
-    const features: string[] = JSON.parse(await Deno.readTextFile(`${out}/system/libraries/replique/index.json`));
-    for (const name of ["index", ...features]) {
+    const features: Record<string, string> = JSON.parse(await Deno.readTextFile(`${out}/system/libraries/replique/index.json`));
+    assertEquals(Object.values(features), Array(13).fill("0.1.0"));
+    for (const name of ["index", ...Object.keys(features)]) {
       const path = `system/libraries/replique/${name}.ts`;
       assert(first.files.some(file => file.path === path));
-      assertEquals(await Deno.readTextFile(`${out}/${path}`), await Deno.readTextFile(`${replique}/${name}.ts`));
+      assertEquals(await Deno.readTextFile(`${out}/${path}`), await Deno.readTextFile(`${replique}/${name === "index" ? "src/index.ts" : `${name}/src/index.ts`}`));
     }
     const compiler = first.files.find((file) => file.path === "system/tools/asc.js");
     assert(compiler);

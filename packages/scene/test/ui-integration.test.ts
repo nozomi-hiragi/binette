@@ -5,7 +5,7 @@ import { buildApp } from "@binette/regie/build";
 import { Window } from "happy-dom";
 import { mountStartedApp } from "./mount-helper.ts";
 
-const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
 
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();
@@ -27,7 +27,7 @@ Deno.test("HTML なしの宣言アプリでカウンターを押し、key の順
   const files: Record<string, string> = {
     "app.json": JSON.stringify({ id: "ui-counter", name: "カウンター", entry: { as: "main.ts" } }),
     "main.ts": `import { App, launch } from "jsr:@binette/replique";
-import { View, column, row, text, button } from "jsr:@binette/replique/ui";
+import { View, column, row, text, button } from "jsr:@binette/replique-ui@^0.1";
 let count = 0;
 let reversed = false;
 function increment(): void { count++; }
@@ -74,7 +74,7 @@ Deno.test("入力の連続イベントは Worker 越しに届き、show と grid
   const files: Record<string, string> = {
     "app.json": JSON.stringify({ id: "ui-input", name: "入力", entry: { as: "main.ts" } }),
     "main.ts": `import { App, launch } from "jsr:@binette/replique";
-import { View, column, grid, text, input, show } from "jsr:@binette/replique/ui";
+import { View, column, grid, text, input, show } from "jsr:@binette/replique-ui@^0.1";
 let value = "";
 function change(next: string): void { value = next; }
 class InputApp extends App {
@@ -108,7 +108,7 @@ Deno.test("appIcon はホームのアイコンを画像として表示し、権�
   const files: Record<string, string> = {
     "app.json": JSON.stringify({ id: "ui-icon", name: "アイコン", entry: { as: "main.ts" } }),
     "main.ts": `import { App, launch } from "jsr:@binette/replique";
-import { View, appIcon } from "jsr:@binette/replique/ui";
+import { View, appIcon } from "jsr:@binette/replique-ui@^0.1";
 class IconApp extends App { build(): View { return appIcon(0); } }
 launch(new IconApp());`,
   };

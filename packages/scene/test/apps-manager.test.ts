@@ -8,7 +8,7 @@ import { mountSystem, systemView } from "./system-helper.ts";
 import { buildCompiler } from "../../../scripts/build-system.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/", root)) };
 const listUrl = "https://provider.test/apps/";
 const sourceUrl = "https://sources.test/memo/";
 const sources: Record<string, string> = {

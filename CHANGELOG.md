@@ -2,6 +2,13 @@
 
 ## v0.2.0（未リリース）
 
+- Réplique の 13 機能を `packages/replique/<機能>/src/index.ts` の独立パッケージ `@binette/replique-<機能>`（初期版 `0.1.0`）にし、機能間・アプリの import を `jsr:@binette/replique-<機能>@^0.1` に変更する。集約入口 `@binette/replique` の公開名、既存の ABI 名・OS call・権限判定は維持する
+- SDK の exact・`^`・`~` 要求を提供版に照合し、範囲外・未知の機能・不正な形式をコンパイル前に `unsupported_sdk` で拒む。複数の範囲指定と集約入口は同じ実体へ解決する。ブラウザ Worker も専用コードと文言を保つ
+- `--replique` は `packages/replique` のパッケージルートを読む。配布目録 `index.json` は機能名から完全なパッケージ版への辞書に変更する。公開物検査に全機能を含め、パッケージ版・ABI 宣言・HOST_ABI の一致を検証する
+- `jsr:@binette/replique-ui` など版なしの機能指定子を受け入れ、提供中の完全な版へ解決する。旧指定子・版付き指定子とクラスや状態を共有し、未知の機能はコンパイル前に `unsupported_sdk` で拒む
+- 旧 `jsr:@binette/replique/<機能>` は全 13 機能の互換入口として残し、版付きの新入口と同じ実体へ解決する。JSR の旧サブパスも再 export で維持する。Designer は元の import を残し、integrity `/` の `sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=` を維持する。ハッシュの対象と計算方法は変えない
+- 未対応 ABI のエラーには「アプリの管理から入れ直すと直ります」を加える。integrity はビルドで読んだ元ソースをハッシュする動作を維持する
+
 - 破壊的変更: Réplique の WASM import を `binette` / `dom.text` などから、機能ごとの `binette:dom@0.1` / `text` などへ変更する。`binette` / `storage.read` → `binette:storage@0.1` / `read`。`api.why`・`api.sub` は `binette:app@0.1` / `why`・`sub`。旧 `binette` は非対応で、既存のアプリは対応する SDK で再ビルドが必要
 - ABI の版は 0.x では `0.minor`、1 以降では `major` を使う。既存の呼び出しを壊す変更で版を変え、追加のみでは変更しない
 - SDK の各機能（外部呼び出しのない `fs` を含む）に ABI の版を宣言し、全 external と OS の提供一覧・実際のリンクの一致をテストする。OS の一覧は Worker と起動・インストール時の検査で共有する。未対応 module・関数は実行・保存前に `BinetteError`（`code: "unsupported_abi"`）にし、Worker を越えてコードと日本語のメッセージを保持して、既存の経路で Scene に表示する。OS call の実装、権限と役割の条件は維持する

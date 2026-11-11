@@ -1545,17 +1545,17 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
+      "bundled/filer": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
       "catalog/designer": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]
       },
       "catalog/docs": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
-      "bundled/filer": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]
@@ -1587,6 +1587,71 @@
       "packages/replique": {
         "dependencies": [
           "jsr:@binette/decor@0.1.0",
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/app": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/apps": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/cadre": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/dom": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/fs": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/manager": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/os": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/pigeon": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/schedule": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/scheduler": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/shares": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/storage": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/ui": {
+        "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]
       },

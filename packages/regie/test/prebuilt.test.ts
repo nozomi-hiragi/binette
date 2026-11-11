@@ -35,7 +35,7 @@ Deno.test("CLI build は .binapp を書き、manifest と SVG が一致する", 
   try {
     const out = `${dir}/apps/cadre.binapp`;
     const command = new Deno.Command(Deno.execPath(), { args: ["run", "-A", "packages/regie/src/cli.ts", "build", "apps/cadre", "--out", out,
-      "--replique", "packages/replique/src/"], cwd: root });
+      "--replique", "packages/replique/"], cwd: root });
     const result = await command.output();
     assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
     const built = parsePrebuiltApp(await Deno.readTextFile(out));
@@ -63,7 +63,7 @@ Deno.test("CLI build はサブアプリのアイコンも .binapp に含める",
     await Deno.writeTextFile(`${dir}/app.json`, JSON.stringify({ id: "parent", name: "親", entry: { as: "main.ts" }, sub: { child: { name: "子", icon: "child.svg" } } }));
     await Deno.writeTextFile(`${dir}/main.ts`, "export function main(): void {}");
     await Deno.writeTextFile(`${dir}/child.svg`, "<svg>子</svg>");
-    const path = await writePrebuiltApp(dir, `${dir}/out.binapp`, new URL("../../replique/src/", import.meta.url).pathname);
+    const path = await writePrebuiltApp(dir, `${dir}/out.binapp`, new URL("../../replique/", import.meta.url).pathname);
     assertEquals(parsePrebuiltApp(await Deno.readTextFile(path)).subIcons, { child: "<svg>子</svg>" });
   } finally { await Deno.remove(dir, { recursive: true }); }
 });

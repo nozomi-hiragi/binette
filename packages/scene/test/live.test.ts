@@ -6,7 +6,7 @@ import { Window } from "happy-dom";
 import { isInstalled, mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/", root)) };
 const cadreApp = { source: "binette:system", prebuilt: await buildApp(path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)), { libraries }) };
 function createWorker(): RegieWorker {
   const { port1, port2 } = new MessageChannel();

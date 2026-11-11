@@ -6,7 +6,7 @@ HTML 方式に加え、`app.json` の `entry.html` を省略すると宣言的 U
 
 ```ts
 import { App, launch } from "jsr:@binette/replique";
-import { View, column, row, text, button } from "jsr:@binette/replique/ui";
+import { View, column, row, text, button } from "jsr:@binette/replique-ui@^0.1";
 let count = 0;
 function increment(): void { count++; }
 class Counter extends App {
@@ -64,7 +64,7 @@ Réplique は build ごとにハンドラー番号を振り直し、画面の木
 
 ## よくある部品（案）
 
-Flutter・Jetpack Compose・SwiftUI に共通する考え方の部品を、Décor の書き方（部品関数＋修飾の連鎖、色は OS の役割）で足します。名前と形はすべて案です。どれも TS（`@binette/decor`）と AS（`jsr:@binette/replique/ui`・`jsr:@binette/decor/as`）で同じ名前と引数です。AS のハンドラーはトップレベルの関数で、外の変数をつかむクロージャは使えません。
+Flutter・Jetpack Compose・SwiftUI に共通する考え方の部品を、Décor の書き方（部品関数＋修飾の連鎖、色は OS の役割）で足します。名前と形はすべて案です。どれも TS（`@binette/decor`）と AS（`jsr:@binette/replique-ui@^0.1`・`jsr:@binette/decor/as`）で同じ名前と引数です。AS のハンドラーはトップレベルの関数で、外の変数をつかむクロージャは使えません。
 
 | 部品 | 引数 | DOM と role | キー操作 | 主に効く修飾 |
 | --- | --- | --- | --- | --- |

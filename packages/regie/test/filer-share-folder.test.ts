@@ -5,7 +5,7 @@ import { createMemoryAppStore, serveApp, startSystem, type Process, type RegieWo
 import { buildApp } from "../src/build.ts";
 import { mountApp } from "../../scene/src/mount.ts";
 
-const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
 const filerRoot = new URL("../../../bundled/filer/", import.meta.url);
 function worker(): RegieWorker {
   const { port1, port2 } = new MessageChannel(); port1.start(); port2.start(); serveApp(port1 as never);

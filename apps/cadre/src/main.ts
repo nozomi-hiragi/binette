@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, DestroyReason, Last, State, launch } from "jsr:@binette/replique";
-import { View } from "jsr:@binette/replique/ui";
+import { View } from "jsr:@binette/replique-ui@^0.1";
 import { CadreApp } from "./cadre.ts";
 import { Home } from "./home/main.ts";
 import { Settings } from "./settings/main.ts";

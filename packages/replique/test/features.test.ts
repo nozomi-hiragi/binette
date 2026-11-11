@@ -14,7 +14,7 @@ class Page extends App {
 }
 launch(new Page());`,
   };
-  const libraries = await readRepliqueLibraries(new URL("../src/", import.meta.url));
+  const libraries = await readRepliqueLibraries(new URL("../", import.meta.url));
   const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
   const module = new WebAssembly.Module(new Uint8Array(built.wasm));
   const frames: { build: number; root: { kind: string; children: { kind: string; text: string; handler: number }[] } }[] = [];
@@ -57,12 +57,12 @@ Deno.test("Feature imports retain class identity with the aggregate SDK and feat
     fs: "FsApi", cadre: "CadreApi", manager: "AppManagerApi", scheduler: "SchedulerApi", schedule: "ScheduleApi",
   };
   const code = [
-    'import { Api, App, launch } from "jsr:@binette/replique/app";',
-    'import { Element, Event, document } from "jsr:@binette/replique/dom";',
-    'import { View, text } from "jsr:@binette/replique/ui";',
+    'import { Api, App, launch } from "jsr:@binette/replique-app@^0.1";',
+    'import { Element, Event, document } from "jsr:@binette/replique-dom@^0.1";',
+    'import { View, text } from "jsr:@binette/replique-ui@^0.1";',
     'import { App as AggregateApp, Element as AggregateElement, Event as AggregateEvent, View as AggregateView } from "jsr:@binette/replique";',
     ...Object.entries(classes).flatMap(([feature, name]) => [
-      `import { ${name} } from "jsr:@binette/replique/${feature}";`,
+      `import { ${name} } from "jsr:@binette/replique-${feature}@^0.1";`,
       `import { ${name} as Aggregate${name} } from "jsr:@binette/replique";`,
     ]),
     'class Page extends App { build(): View { return text("features"); } }',
@@ -78,7 +78,7 @@ Deno.test("Feature imports retain class identity with the aggregate SDK and feat
     "app.json": JSON.stringify({ id: "features", name: "Features", entry: { as: "main.ts" } }),
     "main.ts": code,
   };
-  const libraries = await readRepliqueLibraries(new URL("../src/", import.meta.url));
+  const libraries = await readRepliqueLibraries(new URL("../", import.meta.url));
   const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
   const module = new WebAssembly.Module(new Uint8Array(built.wasm));
   const binette: Record<string, (...args: number[]) => number> = {};
@@ -106,4 +106,35 @@ Deno.test("Feature imports retain class identity with the aggregate SDK and feat
   assertEquals(WebAssembly.Module.exports(module).filter(entry => entry.name.startsWith("__bina_")).map(entry => entry.name).sort(), [
     "__bina_cadre_sync", "__bina_event", "__bina_lifecycle", "__bina_pigeon", "__bina_schedule", "__bina_share", "__bina_ui_event", "__bina_ui_text", "__bina_ui_value",
   ]);
+});
+
+Deno.test("全13機能の版なし・旧サブパスは版付きと同じ ABI 版へ解決し、互換入口も持つ", async () => {
+  const root = new URL("../", import.meta.url);
+  const libraries = await readRepliqueLibraries(root);
+  const config = JSON.parse(await Deno.readTextFile(new URL("deno.json", root)));
+  const features = Object.keys(libraries).filter(key => key.startsWith("jsr:@binette/replique-")).map(key => key.slice("jsr:@binette/replique-".length).split("@")[0]);
+  assertEquals(features.length, 13);
+  for (const feature of features) {
+    const target = config.exports[`./${feature}`];
+    assertEquals(target, `./src/${feature}.ts`);
+    const wrapper = await Deno.readTextFile(new URL(target, root));
+    assertEquals(wrapper.includes(`export * from "jsr:@binette/replique-${feature}@^0.1";`), true);
+  }
+  const imports = features.flatMap((feature, i) => [
+    `import { ABI_VERSION as old${i} } from "jsr:@binette/replique/${feature}";`,
+    `import { ABI_VERSION as next${i} } from "jsr:@binette/replique-${feature}@^0.1";`,
+    `import { ABI_VERSION as current${i} } from "jsr:@binette/replique-${feature}";`,
+  ]).join("\n");
+  const code = imports + `\nexport function verify(): bool { return ${features.map((_, i) => `old${i} == next${i} && current${i} == next${i}`).join(" && ")}; }`;
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "legacy", name: "互換", entry: { as: "main.ts" } }),
+    "main.ts": code,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]), { libraries });
+  const module = new WebAssembly.Module(new Uint8Array(built.wasm));
+  const importsObject: WebAssembly.Imports = {};
+  for (const entry of WebAssembly.Module.imports(module)) { importsObject[entry.module] ??= {}; importsObject[entry.module][entry.name] = () => 0; }
+  const instance = new WebAssembly.Instance(module, importsObject);
+  (instance.exports._start as CallableFunction)();
+  assertEquals((instance.exports.verify as CallableFunction)(), 1);
 });

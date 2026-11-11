@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { App, Api, Last, PigeonApi, SharesApi, StorageApi, launch } from "jsr:@binette/replique";
-import { View, column, row, text, button, buttonOf, input, tabs, listTile, menuItem, filePick, image, chip, progress, space } from "jsr:@binette/replique/ui";
+import { View, column, row, text, button, buttonOf, input, tabs, listTile, menuItem, filePick, image, chip, progress, space } from "jsr:@binette/replique-ui@^0.1";
 import { args, Json, parseJson } from "./json.ts";
 
 const base = "/data/filer";

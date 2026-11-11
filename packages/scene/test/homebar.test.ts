@@ -6,7 +6,7 @@ import { Window } from "happy-dom";
 import { mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
-const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/src/", root)) };
+const libraries = { ...await readRepliqueLibraries(new URL("packages/replique/", root)) };
 const apps = await Promise.all(["cadre"].map(async name => {
   const read = (path: string) => Deno.readTextFile(new URL(`apps/${name}/${path}`, root));
   const built = await buildApp(read, { libraries });
@@ -17,7 +17,7 @@ const apps = await Promise.all(["cadre"].map(async name => {
 }));
 const plain = await buildApp(path => Promise.resolve(path === "app.json"
   ? JSON.stringify({ id: "plain", name: "アイコンなし", version: "0.1.0", binette: "0.2", entry: { as: "main.ts" } })
-  : 'import { App, launch } from "jsr:@binette/replique"; import { text, View } from "jsr:@binette/replique/ui"; class Plain extends App { override build(): View { return text("本文"); } } launch(new Plain());'), { libraries });
+  : 'import { App, launch } from "jsr:@binette/replique"; import { text, View } from "jsr:@binette/replique-ui@^0.1"; class Plain extends App { override build(): View { return text("本文"); } } launch(new Plain());'), { libraries });
 apps.push({ source: "binette:system", prebuilt: { ...plain, icon: undefined } });
 
 async function waitFor(condition: () => boolean): Promise<void> {

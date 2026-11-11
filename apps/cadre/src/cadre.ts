@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, CadreApi } from "jsr:@binette/replique";
-import { appArea, appIcon, button, buttonOf, column, input, menuItem, row, show, text, View } from "jsr:@binette/replique/ui";
+import { appArea, appIcon, button, buttonOf, column, input, menuItem, row, show, text, View } from "jsr:@binette/replique-ui@^0.1";
 
 // 辞書から取った Cadre の API。ボタンのコールバックは関数なので、グローバルで持つ
 let cadreApi: CadreApi | null = null;

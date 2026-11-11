@@ -9,8 +9,8 @@ const { error } = await asc.main([entry, "--noEmit"], {
   readFile: async (name: string) => {
     if (name.endsWith("/jsr:@binette/decor/as.ts")) return decorAs;
     if (name.endsWith("/jsr:@binette/decor/parts.ts")) return decorParts;
-    const feature = name.match(/\/jsr:@binette\/replique\/(\w+)\.ts$/);
-    if (feature) return await Deno.readTextFile(new URL(`../src/${feature[1]}.ts`, import.meta.url));
+    const feature = name.match(/\/jsr:@binette\/replique-([a-z]+)@\^0\.1\.ts$/);
+    if (feature) return await Deno.readTextFile(new URL(`../${feature[1]}/src/index.ts`, import.meta.url));
     try { return await Deno.readTextFile(name); } catch { return null; }
   },
 });

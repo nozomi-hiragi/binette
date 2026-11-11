@@ -5,7 +5,7 @@ import { Window } from "happy-dom";
 import { buildApp } from "@binette/regie/build";
 import { mountStartedApp } from "./mount-helper.ts";
 
-const libraries = { ...await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url)) };
+const libraries = { ...await readRepliqueLibraries(new URL("../../replique/", import.meta.url)) };
 const files: Record<string, string> = {
   "app.json": JSON.stringify({ id: "click-state", name: "クリックの状態", entry: { html: "index.html", as: "main.ts" } }),
   "index.html": '<p id="count">0</p><button id="button">+1</button>',

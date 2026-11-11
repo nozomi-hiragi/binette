@@ -26,7 +26,7 @@ const escape = (text: string) => text.replace(/[&<>"']/g, char => `&#${char.char
 /** Reads every folder in `catalog/` with an app.json and describes it for the list. */
 export async function catalogEntries(root: string, commit: string): Promise<CatalogEntry[]> {
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error(`commit は 40 桁のハッシュで指定してください: ${commit}`);
-  const libraries = await readRepliqueLibraries(resolve(root, "packages/replique/src"));
+  const libraries = await readRepliqueLibraries(resolve(root, "packages/replique"));
   const folders: string[] = [];
   for await (const entry of Deno.readDir(resolve(root, "catalog"))) if (entry.isDirectory) folders.push(entry.name);
   folders.sort();

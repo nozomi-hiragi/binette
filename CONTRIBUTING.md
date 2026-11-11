@@ -37,8 +37,8 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 Réplique の AS ソースは `/system/libraries/replique/` に機能ごとに配布します。CLI の `--replique` は単一ファイルではなく、直下に `index.ts` と各機能の `.ts` を持つソースフォルダを受け取ります。
 
 ```sh
-deno run -A packages/regie/src/cli.ts build catalog/designer --out .binapp/designer.binapp --replique packages/replique/src
-deno run -A packages/regie/src/cli.ts integrity catalog/designer --replique packages/replique/src
+deno run -A packages/regie/src/cli.ts build catalog/designer --out .binapp/designer.binapp --replique packages/replique
+deno run -A packages/regie/src/cli.ts integrity catalog/designer --replique packages/replique
 ```
 
 ## バージョンの決め方

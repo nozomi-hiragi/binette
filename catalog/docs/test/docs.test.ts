@@ -8,7 +8,7 @@ type Node = { kind: string; text: string; label: string; handler: number; childr
 async function start(saved?: string) {
   const root = new URL("../", import.meta.url);
   const built = await buildApp(path => Deno.readTextFile(new URL(path, root)), { libraries: {
-    ...await readRepliqueLibraries(new URL("../../../packages/replique/src/", import.meta.url)),
+    ...await readRepliqueLibraries(new URL("../../../packages/replique/", import.meta.url)),
   } });
   const module = new WebAssembly.Module(new Uint8Array(built.wasm));
   let frame!: { build: number; root: Node };

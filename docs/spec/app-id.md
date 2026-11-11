@@ -190,4 +190,4 @@ ID は、アプリをどう入れたかで分けます。
 
 - 入手元はシステムアプリが `binette:system`、同梱アプリが `binette:bundled`（[apps/](apps/README.md)）。Cadre は `apps/cadre` の 1 つのパッケージで、ホーム・設定はその `sub`。ID は `cadre`・`cadre.home`・`cadre.settings`。designer は同梱のまま、ID は `designer`。`app.json` の `id` は既定で識別子の規則（`.` を含まない）で検査し、旧 ID の暫定例外は使わない
 - `system/boot.json` は `roles` に上の埋め込み ID を持ち、`lists: []` を出力する。Régie は既定とユーザー登録の提供リスト、インストール・更新・移転に対応する。提供リストのページとアプリ管理（[app-manager.md](app-manager.md)）はまだ無い
-- `@binette/core` に識別子・提供リストの URL・完全な ID の正規化と組み立て、提供リストの読み取り、`app.json` の `sub` の検査、`integrity` の計算と検証の関数がある。Régie は取得したファイルを使って `/` を含む `integrity` を検証し、CLI には `integrity` コマンドがある。CLI で `/` またはフォルダキーを計算するときは、実際にビルドして取得ファイルを確定するため、`--replique <Réplique の AS ソースフォルダ>` が必要。ファイルキーだけを指定するときは、各ファイルを直接読む
+- `@binette/core` に識別子・提供リストの URL・完全な ID の正規化と組み立て、提供リストの読み取り、`app.json` の `sub` の検査、`integrity` の計算と検証の関数がある。Régie は取得したファイルを使って `/` を含む `integrity` を検証し、CLI には `integrity` コマンドがある。CLI で `/` またはフォルダキーを計算するときは、実際にビルドして取得ファイルを確定するため、`--replique <packages/replique>` が必要。ファイルキーだけを指定するときは、各ファイルを直接読む

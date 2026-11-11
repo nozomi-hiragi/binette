@@ -1,3 +1,4 @@
+import { repliqueVersions, resolveSdkSpecifier } from "../src/sdk.ts";
 import { BinetteError } from "@binette/core";
 import { readRepliqueLibraries } from "../src/cli.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
@@ -6,7 +7,8 @@ import { createMemoryAppStore, appId, startSystem, serveApp, type Process, type 
 import asc from "assemblyscript/asc";
 import { loadCompiler, type Compiler } from "../src/build.ts";
 
-const libraries = await readRepliqueLibraries(new URL("../../replique/src/", import.meta.url));
+const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
+const versions = repliqueVersions(libraries);
 const decorAs = await Deno.readTextFile(new URL("../../decor/src/as.ts", import.meta.url));
 const decorParts = await Deno.readTextFile(new URL("../../decor/src/parts.ts", import.meta.url));
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -68,7 +70,7 @@ async function build(code = source, home = false) {
   const { error } = await asc.main(["main.ts", "--outFile", "main.wasm", "--optimizeLevel", "2", "--exportStart", "_start", "--exportRuntime"], {
     readFile(name: string) {
       if (name === "main.ts") return code + '\nexport { __bina_event, __bina_lifecycle, __bina_pigeon, __bina_cadre_sync, __bina_schedule } from "jsr:@binette/replique";';
-      if (name.startsWith("node_modules/jsr:@binette/replique")) return libraries[name.slice("node_modules/".length, -3)] ?? null;
+      if (name.startsWith("node_modules/jsr:@binette/replique")) return libraries[resolveSdkSpecifier(name.slice("node_modules/".length, -3), versions)] ?? null;
       if (name === "node_modules/jsr:@binette/decor/as.ts") return decorAs;
       if (name === "node_modules/jsr:@binette/decor/parts.ts") return decorParts;
       return null;
@@ -989,7 +991,7 @@ for (const input of ["prebuilt", "source"] as const) {
       assertEquals(element.errors.length, 1);
       assert(element.errors[0] instanceof BinetteError);
       assertEquals(element.errors[0].code, "unsupported_abi");
-      assertEquals(element.errors[0].message, "この OS では動きません（binette）");
+      assertEquals(element.errors[0].message, "この OS では動きません（binette）。アプリの管理から入れ直すと直ります");
       assertEquals(await store.get(previous.key), previous);
     } finally { system.stop(); }
   });
