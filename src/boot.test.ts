@@ -9,6 +9,7 @@ import {
 import { Window } from "happy-dom";
 import { bootAppStore, loadBootApps } from "./boot.ts";
 import { showRecovery } from "./recovery.ts";
+import { createUpdater } from "./update.ts";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value));
@@ -66,7 +67,7 @@ async function fixture(subApps = true, subHome = "home") {
     },
   });
   await distribution.install();
-  return { tree, distribution };
+  return { tree, distribution, files, manifest };
 }
 
 Deno.test("起動は固定物を検証し、設定の上書きと古い固定アプリを使わない", async () => {
@@ -214,4 +215,23 @@ Deno.test("ブートのサブ ID は日本語と小文字の % エンコード�
     assertEquals(roles.home, "cadre.%E3%83%A1%E3%83%A2");
     assertEquals(apps[0]!.prebuilt?.subIcons?.["%E3%83%A1%E3%83%A2"], "<svg>home</svg>");
   }
+});
+
+Deno.test("開発時の再ビルド後は古い system を交換してから起動アプリを読む", async () => {
+  const { tree, distribution, files, manifest } = await fixture();
+  const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+  files.set("system/apps/cadre/app.wasm", wasm);
+  const entry = manifest.files.find(file => file.path === "system/apps/cadre/app.wasm")!;
+  entry.size = wasm.length;
+  entry.sha256 = [...new Uint8Array(await crypto.subtle.digest("SHA-256", wasm))].map(n => n.toString(16).padStart(2, "0")).join("");
+  manifest.version = "rebuilt";
+  const updater = createUpdater(distribution, {
+    current: undefined, devSystemVersion: "rebuilt", check: () => Promise.resolve(), activate: () => Promise.resolve(),
+  }, () => {});
+  await updater.boot();
+  const { apps, roles } = await loadBootApps(tree, distribution);
+  assertEquals((await distribution.installed())?.version, "rebuilt");
+  assertEquals(roles.cadre, "cadre");
+  assertEquals(apps[0].prebuilt?.wasm, wasm);
+  assertEquals(WebAssembly.Module.imports(await WebAssembly.compile(apps[0].prebuilt!.wasm.slice())), []);
 });

@@ -239,7 +239,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       }
       installedApps.push(installed);
       seen.add(key);
-    } catch (error) { report(error); }
+    } catch (error) {
+      if (app.prebuilt !== undefined && (app.source === "binette:system" || app.source === "binette:bundled") && error instanceof BinetteError && error.code === "unsupported_abi") {
+        report(new BinetteError(error.code, error.message.replace("アプリの管理から入れ直すと直ります", "復旧画面で「/system を取り直す」を選んでください")));
+      } else report(error);
+    }
   }
   let changing = async (_source: string, _id?: string) => {};
   let changed = async () => {};

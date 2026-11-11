@@ -19,6 +19,7 @@ Deno.test("配布カーネルと Worker は独立した固定名で、HTML の S
     const html = await Deno.readTextFile(`${outDir}/index.html`);
     const script = html.match(/<script\b[^>]*src="\.\/regie\.js"[^>]*>/)?.[0];
     assert(script?.includes(`integrity="${expected}"`));
+    assert(!html.includes("binette-dev-system"));
     const source = new TextDecoder().decode(kernel);
     assert(source.includes("regie-worker.js"));
     assert(!/new Worker\([^;]*createObjectURL/.test(source));

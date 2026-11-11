@@ -27,6 +27,9 @@ try {
   const registration = import.meta.env.PROD && "serviceWorker" in navigator
     ? await navigator.serviceWorker.register(new URL("./sw.js", document.baseURI), { scope: "./", updateViaCache: "none" }) : undefined;
   const current = document.querySelector<HTMLMetaElement>('meta[name="binette-kernel"]')?.content;
+  const devSystemVersion = import.meta.env.DEV
+    ? document.querySelector<HTMLMetaElement>('meta[name="binette-dev-system"]')?.content : undefined;
+  if (import.meta.env.DEV && !devSystemVersion) throw new Error("開発用のシステムの版がありません。build:system を実行して再読み込みしてください。");
   if (current && navigator.serviceWorker.controller) {
     // 旧 SW は問い合わせに未対応。返答がある版では必ず照合する。
     const activeKernel = await kernelIdentity(navigator.serviceWorker.controller).catch(() => undefined);
@@ -51,7 +54,7 @@ try {
   }
   let reloading = false;
   const updater = createUpdater(distribution, registration ? browserKernels(registration, current) : {
-    current, check(kernel) { return current && kernel && kernel !== current ? Promise.reject(new Error("カーネルを更新できません。")) : Promise.resolve(); }, activate() { return Promise.resolve(); },
+    current, devSystemVersion, check(kernel) { return current && kernel && kernel !== current ? Promise.reject(new Error("カーネルを更新できません。")) : Promise.resolve(); }, activate() { return Promise.resolve(); },
   }, () => { if (!reloading) { reloading = true; location.reload(); } });
   setBootStage("更新を確認中", container);
   await updater.boot({

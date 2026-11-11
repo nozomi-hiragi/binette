@@ -996,3 +996,19 @@ for (const input of ["prebuilt", "source"] as const) {
     } finally { system.stop(); }
   });
 }
+
+Deno.test("system と bundled のビルド済みアプリの ABI 不一致は復旧画面で system の取り直しを案内する", async () => {
+  const bad = await build('@external("binette", "dom.text") declare function text(handle: i32, value: string): void; export function run(): void { text(1, "古い"); }');
+  for (const source of ["binette:system", "binette:bundled"]) {
+    const element = output();
+    const store = createMemoryAppStore();
+    const system = await startSystem({ ui: element.ui, store, libraries, createWorker, apps: [homeApp, { source, prebuilt: bad }] });
+    try {
+      assertEquals(element.errors.length, 1);
+      assert(element.errors[0] instanceof BinetteError);
+      assertEquals(element.errors[0].code, "unsupported_abi");
+      assertEquals(element.errors[0].message, "この OS では動きません（binette）。復旧画面で「/system を取り直す」を選んでください");
+      assertEquals(await store.get(appId(source, bad.manifest.id)), undefined);
+    } finally { system.stop(); }
+  }
+});
