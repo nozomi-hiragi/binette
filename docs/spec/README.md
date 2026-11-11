@@ -120,7 +120,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 
 テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
 
-- 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。今はすべて `0.1.0` で、v0.2 として公開するときに `0.2.0` にする
+- 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。v0.2 の公開で `0.2.0` にした。機能ごとの `@binette/replique-<機能>` は別に版を持つ
 - 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。どのパッケージも `src/` の TypeScript（replique は AS）をそのまま配る
 - 開発は Deno だけで行う（決定 2026-10-26）。npm と Node は使わない
 
