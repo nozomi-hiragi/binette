@@ -23,7 +23,7 @@ try {
   // 実際の公開コピーを AS として検査する。OS 用の検証は元のソースでも行う。
   const staged = join(temp, "publish");
   Deno.mkdirSync(staged);
-  await preparePublishWorkspace(staged);
+  await preparePublishWorkspace(staged, { ascShims: true });
   run(Deno.execPath(), ["task", "--cwd", "packages/replique", "check"], staged);
 
   // 各パッケージの publish.include に含まれるファイルだけを一時ディレクトリに写す

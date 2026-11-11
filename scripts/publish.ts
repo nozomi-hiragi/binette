@@ -5,8 +5,11 @@ import { FEATURES, PUBLISHED } from "./check-version.ts";
 
 const ROOT = join(import.meta.dirname!, "..");
 
-/** 公開対象と同じ一時ワークスペースを作る。呼び出し元が削除する。 */
-export async function preparePublishWorkspace(temp: string): Promise<void> {
+/**
+ * 公開対象と同じ一時ワークスペースを作る。呼び出し元が削除する。
+ * `ascShims` は asc で検査するときだけ使い、JSR に出すコピーには含めない。
+ */
+export async function preparePublishWorkspace(temp: string, { ascShims = false } = {}): Promise<void> {
   const rootConfig = JSON.parse(await Deno.readTextFile(join(ROOT, "deno.json")));
   rootConfig.workspace = Object.keys(PUBLISHED).map(dir => `./${dir}`);
   await Deno.writeTextFile(join(temp, "deno.json"), JSON.stringify(rootConfig, null, 2));
@@ -39,7 +42,7 @@ export async function preparePublishWorkspace(temp: string): Promise<void> {
         if (rewritten.includes("jsr:@binette/replique-")) throw new Error(`Unrewritten Réplique dependency: ${file}`);
         await Deno.writeTextFile(path, rewritten);
         // asc は拡張子付き import にも .ts を付けるため、同じ内容を用意する。
-        if (/^[a-z]+\/src\/index\.ts$/.test(file)) await Deno.writeTextFile(`${path}.ts`, rewritten);
+        if (ascShims && /^[a-z]+\/src\/index\.ts$/.test(file)) await Deno.writeTextFile(`${path}.ts`, rewritten);
       }
     }
     await Deno.writeTextFile(join(target, "deno.json"), JSON.stringify(config, null, 2));
