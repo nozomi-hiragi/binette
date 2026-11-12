@@ -10,6 +10,8 @@ export interface ProcessOptions {
   stopDelay?: number;
   /** onDestroy の時間切れ（ミリ秒、既定 5000） */
   destroyTimeout?: number;
+  /** 起動中の OS のビルド情報 */
+  osBuild?: LaunchOptions["osBuild"];
   /** 今のページの識別子 */
   page?: string;
   /** サブアプリの識別子。親として開いたら空文字列 */
@@ -160,6 +162,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   const app = await launchApp(wasm, {
     createWorker: options.createWorker,
     workerUrl: options.workerUrl,
+    osBuild: options.osBuild,
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,

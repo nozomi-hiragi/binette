@@ -720,3 +720,18 @@ Deno.test("scheduler の写しを読み、操作を OS に渡す。届いてい�
   const denied = await launchApp(wasm, { createWorker });
   try { await assertRejects(() => denied.call("summary"), Error, "アプリが中断しました"); } finally { denied.stop(); }
 });
+
+Deno.test("Worker は起動した OS の ref と commit を権限なしで返す", async () => {
+  const code = `
+@external("binette:app@0.1", "osRef") declare function ref(): string;
+@external("binette:app@0.1", "osCommit") declare function commit(): string;
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function read(): void { text(1, ref()); text(2, commit()); }
+`;
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(code, true), { createWorker, osBuild: { ref: "v0.2.1", commit: "1234567890123456789012345678901234567890" }, onDom: ops => texts.push(ops) });
+  try {
+    await app.call("read");
+    assertEquals(texts, [[{ op: "text", handle: 1, value: "v0.2.1" }, { op: "text", handle: 2, value: "1234567890123456789012345678901234567890" }]]);
+  } finally { app.stop(); }
+});

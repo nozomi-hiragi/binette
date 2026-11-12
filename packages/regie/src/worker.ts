@@ -32,6 +32,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let pigeon: PigeonSnapshot | undefined;
   const acknowledgedLetters = new Set<number>();
   let denied: Record<string, ApiDenial> = {};
+  let osBuild = { ref: "dev", commit: "" };
   let page = "";
   let sub = "";
   let declarative = false;
@@ -501,6 +502,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     [HOST_ABI.app.module]: {
       // 辞書の中身。0 は届いている、1 は NotGranted、2 は NotAssigned。知らないキーはどの役割にもないので NotAssigned
       "sub": () => writeString(sub),
+      "osRef": () => writeString(osBuild.ref),
+      "osCommit": () => writeString(osBuild.commit),
       "why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;
@@ -549,7 +552,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
     if (data.type === "shares.result") {
       shareResults.set(data.id!, data.result!);
       const callback = instance?.exports.__bina_share;
@@ -558,6 +561,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     }
     if (data.type === "init") {
       try {
+        osBuild = data.osBuild ?? osBuild;
         apps = data.apps;
         os = data.os;
         manager = data.manager;

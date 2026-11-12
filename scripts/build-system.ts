@@ -164,7 +164,7 @@ export async function buildApps(root: string): Promise<void> {
     roles.settings = `${cadre.id}.settings`;
     try { roles.files = JSON.parse(await Deno.readTextFile(resolve(system, "bundled/filer/app.json"))).id; }
     catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
-    await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: bootLists() }));
+    await Deno.writeFile(resolve(system, "boot.json"), encode({ roles, lists: bootLists(), ref: Deno.env.get("BINETTE_BUILD_REF") ?? "dev", commit: Deno.env.get("BINETTE_BUILD_COMMIT") ?? "" }));
     await buildCompiler(resolve(system, "tools/asc.js"));
     const libraries = await readRepliqueLibraries(replique);
     const libraryRoot = resolve(system, "libraries/replique");

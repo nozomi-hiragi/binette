@@ -68,7 +68,7 @@ try {
     onProgress: (p) => setBootProgress(p, container),
   });
   setBootStage("起動中", container);
-  const { apps, roles, lists } = await loadBootApps(tree, distribution);
+  const { apps, roles, lists, ref, commit } = await loadBootApps(tree, distribution);
   let booting = true;
   const errors: unknown[] = [];
   const shell = await mountShell(container, {
@@ -76,6 +76,7 @@ try {
     workerUrl: import.meta.env.PROD ? new URL("./regie-worker.js", document.baseURI) : undefined,
     roles,
     lists,
+    osBuild: { ref, commit },
     browserBuild: { distribution, workerUrl: import.meta.env.PROD ? new URL("./build-worker.js", document.baseURI) : undefined },
     update: { ...updater, openRecovery() { location.assign("?recovery"); } },
     store,

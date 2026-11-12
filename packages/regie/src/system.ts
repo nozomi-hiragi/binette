@@ -21,6 +21,8 @@ export type SystemApp = { source: string } & (
 /** システムの設定 */
 export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
+  /** 起動中の OS のビルド情報 */
+  osBuild?: { ref: string; commit: string };
   /** boot.json の提供リスト */
   lists?: string[];
   providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout" | "confirm" | "concurrency">;
@@ -609,6 +611,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       worker = await launchApp(app.wasm, {
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
+        osBuild: options.osBuild,
         signal: controller.signal,
         callTimeout: settings.callTimeout,
         page,
@@ -968,6 +971,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
+        osBuild: options.osBuild,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
         destroyTimeout: settings.destroyTimeout,
@@ -1111,6 +1115,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         declarative: selectedCadre.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
+        osBuild: options.osBuild,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
         destroyTimeout: settings.destroyTimeout,

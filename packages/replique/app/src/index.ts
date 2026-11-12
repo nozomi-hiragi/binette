@@ -70,8 +70,17 @@ export function jsonString(value: string): string {
   return result + '\"';
 }
 
+// @ts-ignore: decorator
+@external("binette:app@0.1", "osRef")
+declare function osRefImport(): string;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "osCommit")
+declare function osCommitImport(): string;
+
 /** アプリの大本。必要な知らせだけ上書きする */
 export class App {
+  osRef(): string { return osRefImport(); }
+  osCommit(): string { return osCommitImport(); }
   build(): View | null { return null; }
   onCreate(_last: Last, _api: Api): void {}
   onStart(_last: State): void {}

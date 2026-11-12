@@ -164,6 +164,8 @@ export interface RegieWorker {
 
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
+  /** 起動中の OS のビルド情報 */
+  osBuild?: { ref: string; commit: string };
   /** 一回の呼び出しと起動の時間切れ（ミリ秒、既定 5000） */
   callTimeout?: number;
   /** 今のページの識別子 */
@@ -453,7 +455,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();
