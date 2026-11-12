@@ -122,6 +122,7 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 | `storage`（アプリごとのデータ） | すべてのアプリ。アプリのデータの読み込みに失敗したときと、ID が `system` のときだけ載せない | NotGranted |
 | `scheduler`（すべての予定の一覧と変更） | 役割 `settings` に割り当てられたアプリ（入手元が `binette:system`） | NotAssigned（[scheduler.md](../scheduler.md)） |
 | `schedule`（自分の予定） | `app.json` の `permissions` に `schedule` を書いたアプリ（書けば届く。インストールの確認で権限を見せる） | NotGranted |
+| `net`（外との通信） | `app.json` の `permissions` に `net` を書いたアプリ。通信先は要求 URL・allow list・deny list で毎回確かめる（[net.md](../net.md)、未実装） | NotGranted |
 | `fs`（ファイルの木） | 誰にも届かない。`app.json` の `permissions` に書くアプリに、ユーザーの許可を得て渡す流れは未決 | NotGranted |
 
 - `os` には、設定・役割の割り当て・役割ごとの候補・新しい順の履歴・更新があるかを写して渡す。履歴の写しは、設定アプリ自身の起動記録を足す直前に作る

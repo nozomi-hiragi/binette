@@ -2,6 +2,8 @@
 
 ## v0.2.1（未リリース）
 
+- ドキュメントアプリの `src/content.ts` を、本文の区切りごとに行を分けて書き出す（1 行が長すぎて差分が読めなかったため）。GitHub では生成物として畳む（`.gitattributes`）
+- 仕様に「ネット通信（net）」を足す（`docs/spec/net.md`）。権限 `net`（`request`・`tools`）、要求 URL・allow list・deny list、更新で増えた要求 URL の確認、標準の fetch に寄せた `NetApi`、`App.osRef()`・`osCommit()`。実装はまだ
 - デザイナーを Binette から binette-apps へ移し、Binette の提供リストにはドキュメントアプリだけを残す
 - 破壊的変更: デザイナーの完全な ID は `https://nozomi-hiragi.github.io/binette-apps/#designer` に変わる。従来の Binette の提供リストで入れたデザイナーの保存データは引き継がない
 - GitHub Pages の既定の提供リストに `https://nozomi-hiragi.github.io/binette-apps/` を追加し、ブランチの Binette のリストの次に置く。ローカルの `BINETTE_LISTS` 未指定時は空リストを維持する

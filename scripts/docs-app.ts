@@ -251,7 +251,11 @@ export function render(pages: Page[]): string {
     `export const ids: string[] = [${pages.map((page) => literal(page.id)).join(", ")}];`,
     `export const titles: string[] = [${pages.map((page) => literal(page.title)).join(", ")}];`,
     "export const bodies: string[] = [",
-    ...pages.map((page) => `  ${literal(page.body)},`),
+    // One block per line, so a diff of content.ts shows the blocks that changed instead of one huge line.
+    ...pages.map((page) => {
+      const parts = page.body.split(BLOCK);
+      return `  ${parts.map((part, i) => literal(i < parts.length - 1 ? part + BLOCK : part)).join(" +\n    ")},`;
+    }),
     "];",
     "",
   ].join("\n");
