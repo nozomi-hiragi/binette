@@ -754,7 +754,7 @@ export function go(): void { const net = NetApi.from(new Api()); if (net !== nul
     net: true,
     onNet(request) {
       assertEquals(request, { url: "https://example.com/a", method: "GET", headers: [["Accept", "text/plain"]], redirect: "manual" });
-      return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [["etag", "abc"]], body: [104, 105], reason: "" });
+      return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [["etag", "abc"]], body: new Uint8Array([104, 105]), reason: "" });
     },
     onDom: ops => received?.(ops),
   });
@@ -789,7 +789,7 @@ export function go(): void { const net = NetApi.from(new Api()); if (net !== nul
   let calls = 0;
   const app = await launchApp(await build(code, true), {
     createWorker, net: true,
-    onNet(_request, signal) { return new Promise(resolve => signal.addEventListener("abort", () => resolve({ status: 0, statusText: "", url: "", type: "error", headers: [], body: [], reason: "aborted" }))); },
+    onNet(_request, signal) { return new Promise(resolve => signal.addEventListener("abort", () => resolve({ status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "aborted" }))); },
     onDom: ops => { calls++; received?.(ops); },
   });
   try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "aborted" }]); assertEquals(calls, 1); }
@@ -823,7 +823,7 @@ export function go(): void { const net = NetApi.from(new Api()); if (net !== nul
   let received: ((ops: DomOp[]) => void) | undefined;
   const result = new Promise<DomOp[]>(resolve => { received = resolve; });
   const app = await launchApp(await build(code, true), { createWorker, net: true,
-    onNet(request) { return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [], body: new Array<number>(4 * 1024 * 1024).fill(65), reason: "" }); },
+    onNet(request) { return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [], body: new Uint8Array(4 * 1024 * 1024).fill(65), reason: "" }); },
     onDom: ops => received?.(ops),
   });
   try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "4194304" }]); }

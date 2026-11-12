@@ -4,7 +4,6 @@
 
 - ネット通信の第 1 段として、権限と URL の検査、GET 通信の制限、Réplique の `NetApi` を追加する。リストの操作と更新時の確認は今後対応する
 - `App.osRef()`・`App.osCommit()` で起動中の OS のビルド情報を取得できるようにする
-
 - 仕様に「ネット通信（net）」を足す（`docs/spec/net.md`）。権限 `net`（`request`・`tools`）、要求 URL・allow list・deny list、更新で増えた要求 URL の確認、標準の fetch に寄せた `NetApi`、`App.osRef()`・`osCommit()`。実装はまだ
 - デザイナーを Binette から binette-apps へ移し、Binette の提供リストにはドキュメントアプリだけを残す
 - 破壊的変更: デザイナーの完全な ID は `https://nozomi-hiragi.github.io/binette-apps/#designer` に変わる。従来の Binette の提供リストで入れたデザイナーの保存データは引き継がない

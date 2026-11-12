@@ -40,11 +40,12 @@ export interface NetResponse {
   url: string;
   type: string;
   headers: [string, string][];
-  body: number[];
+  /** 本文。Worker へは転送で渡す */
+  body: Uint8Array;
   reason: string;
 }
 
-const failure = (reason: string): NetResponse => ({ status: 0, statusText: "", url: "", type: "error", headers: [], body: [], reason });
+const failure = (reason: string): NetResponse => ({ status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason });
 const allowedHeaders = new Set(["accept", "if-none-match", "if-modified-since"]);
 const exposedHeaders = ["content-type", "etag", "last-modified"];
 const maxBytes = 4 * 1024 * 1024;
@@ -93,7 +94,7 @@ export function createNetService(fetcher: typeof fetch = fetch, timeout = 30_000
       const response = await Promise.race([interrupted, fetcher(url.href, { method: "GET", headers, credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store", redirect: "manual", signal: controller.signal })]);
       if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400 && response.status !== 304)) {
         if (request.redirect === "error") return failure("redirect");
-        return { status: 0, statusText: "", url: "", type: "opaqueredirect", headers: [], body: [], reason: "" };
+        return { status: 0, statusText: "", url: "", type: "opaqueredirect", headers: [], body: new Uint8Array(0), reason: "" };
       }
       const chunks: Uint8Array[] = [];
       let length = 0;
@@ -115,7 +116,7 @@ export function createNetService(fetcher: typeof fetch = fetch, timeout = 30_000
       const body = new Uint8Array(length);
       let offset = 0;
       for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.length; }
-      return { status: response.status, statusText: response.statusText, url: response.url, type: "cors", headers: exposedHeaders.flatMap(name => { const value = response.headers.get(name); return value === null ? [] : [[name, value] as [string, string]]; }), body: Array.from(body), reason: "" };
+      return { status: response.status, statusText: response.statusText, url: response.url, type: "cors", headers: exposedHeaders.flatMap(name => { const value = response.headers.get(name); return value === null ? [] : [[name, value] as [string, string]]; }), body, reason: "" };
     } catch {
       return failure(timedOut ? "timeout" : signal.aborted ? "aborted" : typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "network");
     } finally {

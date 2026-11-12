@@ -24,7 +24,7 @@ Deno.test("通信のヘッダーと fetch の設定を制限する", async () =>
   });
   const lists = { request: ["https://example.com/"], appAllow: [], appDeny: [], commonAllow: [], commonDeny: [] };
   const result = await service("app", { url: "https://example.com/a", headers: [["Accept", "text/plain"]] }, lists, new AbortController().signal);
-  assertEquals(result.body, [...new TextEncoder().encode("hello")]);
+  assertEquals(result.body, new TextEncoder().encode("hello"));
   assertEquals(result.headers, [["content-type", "text/plain;charset=UTF-8"], ["etag", "tag"]]);
   assertEquals([init?.credentials, init?.referrerPolicy, init?.cache, init?.redirect], ["omit", "no-referrer", "no-store", "manual"]);
   assertEquals((await service("app", { url: "https://example.com/", headers: [["Authorization", "secret"]] }, lists, new AbortController().signal)).reason, "invalid");

@@ -422,9 +422,9 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           const controller = new AbortController();
           netRequests.set(data.id!, controller);
           options.onNet(message.request, controller.signal).then(result => {
-            if (!stopped && netRequests.get(data.id!) === controller) worker.postMessage({ type: "net.result", id: data.id, result: controller.signal.aborted ? { status: 0, statusText: "", url: "", type: "error", headers: [], body: [], reason: "aborted" } : result });
+            if (!stopped && netRequests.get(data.id!) === controller) { const reply = controller.signal.aborted ? { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "aborted" } : result; worker.postMessage({ type: "net.result", id: data.id, result: reply }, [reply.body.buffer]); }
           }).catch(() => {
-            if (!stopped && netRequests.get(data.id!) === controller) worker.postMessage({ type: "net.result", id: data.id, result: { status: 0, statusText: "", url: "", type: "error", headers: [], body: [], reason: controller.signal.aborted ? "aborted" : "network" } });
+            if (!stopped && netRequests.get(data.id!) === controller) worker.postMessage({ type: "net.result", id: data.id, result: { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: controller.signal.aborted ? "aborted" : "network" } });
           }).finally(() => netRequests.delete(data.id!));
           break;
         }
