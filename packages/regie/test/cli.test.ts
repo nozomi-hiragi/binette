@@ -58,7 +58,7 @@ Deno.test("integrity: コマンドが JSON を出す", async () => {
 Deno.test("--replique はパッケージルートの全機能を読み、旧ソースフォルダ・単一ファイル・欠損を拒む", async () => {
   const root = new URL("../../replique/", import.meta.url);
   const libraries = await readRepliqueLibraries(root);
-  assertEquals(Object.keys(libraries).length, 14);
+  assertEquals(Object.keys(libraries).length, 15);
   assertEquals(libraries["jsr:@binette/replique"], await Deno.readTextFile(new URL("src/index.ts", root)));
   assertEquals(libraries["jsr:@binette/replique-ui@0.1.0"], await Deno.readTextFile(new URL("ui/src/index.ts", root)));
   for (const path of ["src/", "src/index.ts", "missing/"]) {

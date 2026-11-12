@@ -11,6 +11,7 @@ export const HOST_ABI = {
   pigeon: { module: "binette:pigeon@0.1", functions: ["send", "count", "shares", "from", "to", "kind", "title", "body", "urgent", "actions", "done", "opened"] },
   schedule: { module: "binette:schedule@0.1", functions: ["text", "number", "do"] },
   scheduler: { module: "binette:scheduler@0.1", functions: ["text", "number", "do"] },
+  net: { module: "binette:net@0.1", functions: ["request", "abort", "text", "number", "copy"] },
   shares: { module: "binette:shares@0.1", functions: ["request", "result"] },
   storage: { module: "binette:storage@0.1", functions: ["has", "read", "write", "remove", "count", "name"] },
   ui: { module: "binette:ui@0.1", functions: ["render"] },

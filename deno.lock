@@ -1615,6 +1615,11 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
+      "packages/replique/net": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
       "packages/replique/os": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"

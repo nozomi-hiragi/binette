@@ -1121,3 +1121,31 @@ Deno.test("system と bundled のビルド済みアプリの ABI 不一致は復
     } finally { system.stop(); }
   }
 });
+
+Deno.test("権限のあるアプリの通信は要求 URL と deny list を通して OS が行う", async () => {
+  const code = source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); net = NetApi.from(api);') + `
+import { NetApi, Response, __bina_net } from "jsr:@binette/replique";
+let net: NetApi | null = null;
+export { __bina_net };
+export function request(): void { net!.fetch("https://example.com/docs/a"); }
+`;
+  const appCode = code.replace('  onStart(last: State): void', '  onNet(_id: i32, response: Response): void { document.getElementById("result").textContent = response.type + ":" + response.reason + ":" + response.text(); }\n  onStart(last: State): void');
+  const built = await build(appCode);
+  built.manifest.permissions = { net: { reason: "資料", request: ["https://example.com/docs/"] } };
+  const store = createMemoryAppStore();
+  const element = output();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = () => { calls++; return Promise.resolve(new Response("本文")); };
+  const system = await mountSystem(element, { apps: [homeApp, { source: "https://example.test/list/", prebuilt: built }], store, createWorker });
+  try {
+    await system.open("https://example.test/list/#test");
+    await element.active.process.app.call("request");
+    await waitFor(() => element.active.text.has("result"));
+    assertEquals(element.active.text.get("result"), "cors::本文");
+    await store.system.putNetLists!({ commonAllow: [], commonDeny: ["https://example.com/docs/"], apps: {} });
+    await element.active.process.app.call("request");
+    await waitFor(() => element.active.text.get("result") === "error:blocked:");
+    assertEquals(calls, 1);
+  } finally { system.stop(); globalThis.fetch = originalFetch; }
+});
