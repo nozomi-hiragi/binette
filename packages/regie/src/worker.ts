@@ -76,6 +76,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   const notificationAt = (i: number) => { const letter = cadreState().notifications?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("通知の番号が範囲外です。"); return letter; };
   const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
   const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
+  const receivedAt = (i: number) => { const letter = system().letters?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("手紙の番号が範囲外です。"); return letter; };
   const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "scheduler" ? scheduler !== undefined : key === "schedule" ? ownSchedule !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
@@ -332,6 +333,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       },
       "count": () => inbox().letters.length,
       "done": (i: number) => { const letter = letterAt(i); acknowledgedLetters.add(letter.id); inbox().letters.splice(i, 1); scope.postMessage({ type: "pigeon.done", i: letter.id }); },
+      "opened": (kind: number) => { inbox(); scope.postMessage({ type: "pigeon.opened", kind: readString(kind) }); },
       "urgent": (i: number) => !!letterAt(i).urgent,
       "actions": (i: number) => writeString(JSON.stringify(letterAt(i).actions ?? [])),
       "from": (i: number) => writeString(letterAt(i).from),
@@ -391,6 +393,15 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "launchName": (i: number) => writeString(launchAt(i).name),
       "launchText": (i: number) => writeString(formatTime(launchAt(i).time, { seconds: true })),
       "timeZone": () => { system(); return writeString(systemTimeZone()); },
+      "letterCount": () => system().letters?.length ?? 0,
+      "letterId": (i: number) => receivedAt(i).id,
+      "letterFrom": (i: number) => writeString(receivedAt(i).from),
+      "letterName": (i: number) => writeString(receivedAt(i).name),
+      "letterTitle": (i: number) => writeString(receivedAt(i).title),
+      "letterBody": (i: number) => writeString(receivedAt(i).body),
+      "letterTime": (i: number) => writeString(formatTime(receivedAt(i).time)),
+      "letterOpened": (i: number) => receivedAt(i).opened,
+      "letterDo": (action: number, id: number) => { system(); scope.postMessage({ type: "os.letter", action: readString(action), i: id }); },
     },
     [HOST_ABI.cadre.module]: {
       "notificationCount": () => cadreState().notifications?.length ?? 0,

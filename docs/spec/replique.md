@@ -237,6 +237,7 @@ class Home extends App {
 - get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
 - `role(role)` は役割に割り当てたアプリの完全なアプリ ID です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・完全なアプリ ID です。割り当てを変えられるのは `home` と `cadre`（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
+- letterCount と `letterId(i)`・`letterFrom(i)`（差出人の完全なアプリ ID）・`letterName(i)`（差出人の名前。もう無いアプリは ID）・`letterTitle(i)`・`letterBody(i)`・`letterTime(i)`（届いた時刻。OS のタイムゾーンの「YYYY-MM-DD HH:MM」）・`letterOpened(i)` は、ユーザー宛てに届いた手紙の写しです。新しい順で、届く・開封・削除のたびに OS が同期します。操作には番号ではなく `letterId(i)` を渡します。`showLetter(id)` は開封にして差出人のアプリを開き、`openLetter(id)`・`openAllLetters()` は開封にするだけ、`deleteLetter(id)`・`deleteAllLetters()` は消します（[Pigeon](pigeon.md#届いた通知と開封)）
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ完全なアプリ ID。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
 - `updateAvailable()` は準備済みの新しい版があるかです。`updateCurrent()`・`updateNext()` は現在と新しい版の表示用の文字列、`updatePhase()` は確認や更新の状態です。`checkUpdate()` は確認を、`update()` は準備済みの組への更新を、`openRecovery()` は復旧画面を開くことを OS に頼みます。状態の変化は設定アプリに同期され、画面を描き直します。呼び出し名と状態の形は案です
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
@@ -263,7 +264,7 @@ class Home extends App {
 
 ### PigeonApi
 
-`PigeonApi.from(api)` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
+`PigeonApi.from(api)` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。`opened(kind = "")` は、自分が送ったユーザー宛ての手紙を開封にします（`kind` を省くと全部）。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
 
 ### SharesApi
 

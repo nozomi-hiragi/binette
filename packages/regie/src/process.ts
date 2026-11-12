@@ -64,6 +64,8 @@ export interface ProcessOptions {
   onShare?: LaunchOptions["onShare"];
   onPigeonSend?: LaunchOptions["onPigeonSend"];
   onPigeonDone?: LaunchOptions["onPigeonDone"];
+  onPigeonOpened?: LaunchOptions["onPigeonOpened"];
+  onLetter?: LaunchOptions["onLetter"];
   onNotificationMuted?: LaunchOptions["onNotificationMuted"];
   onNotificationOpen?: LaunchOptions["onNotificationOpen"];
   onNotificationDismiss?: LaunchOptions["onNotificationDismiss"];
@@ -192,6 +194,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onCadreInstall: options.onCadreInstall,
     onPigeonSend: options.onPigeonSend,
     onPigeonDone: options.onPigeonDone,
+    onPigeonOpened: options.onPigeonOpened,
+    onLetter: options.onLetter,
     onNotificationMuted: options.onNotificationMuted,
     onNotificationOpen: options.onNotificationOpen,
     onNotificationDismiss: options.onNotificationDismiss,
