@@ -10,6 +10,8 @@ export interface ProcessOptions {
   stopDelay?: number;
   /** onDestroy の時間切れ（ミリ秒、既定 5000） */
   destroyTimeout?: number;
+  /** 起動中の OS のビルド情報 */
+  osBuild?: LaunchOptions["osBuild"];
   /** 今のページの識別子 */
   page?: string;
   /** サブアプリの識別子。親として開いたら空文字列 */
@@ -41,6 +43,7 @@ export interface ProcessOptions {
     cadre?: LaunchOptions["cadre"];
     pigeon?: LaunchOptions["pigeon"];
     shares?: boolean;
+    net?: boolean;
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
@@ -62,6 +65,7 @@ export interface ProcessOptions {
   onCadreNotify?: LaunchOptions["onCadreNotify"];
   onCadreInstall?: LaunchOptions["onCadreInstall"];
   onShare?: LaunchOptions["onShare"];
+  onNet?: LaunchOptions["onNet"];
   onPigeonSend?: LaunchOptions["onPigeonSend"];
   onPigeonDone?: LaunchOptions["onPigeonDone"];
   onPigeonOpened?: LaunchOptions["onPigeonOpened"];
@@ -160,6 +164,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   const app = await launchApp(wasm, {
     createWorker: options.createWorker,
     workerUrl: options.workerUrl,
+    osBuild: options.osBuild,
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,
@@ -177,6 +182,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     cadre: options.grants?.cadre,
     pigeon: options.grants?.pigeon,
     shares: options.grants?.shares,
+    net: options.grants?.net,
+    onNet: options.onNet,
     onShare: options.onShare,
     denied: options.grants?.denied,
     onSet: options.onSet,

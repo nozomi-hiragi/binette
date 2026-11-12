@@ -104,16 +104,16 @@ Deno.test("Feature imports retain class identity with the aggregate SDK and feat
     }
   }
   assertEquals(WebAssembly.Module.exports(module).filter(entry => entry.name.startsWith("__bina_")).map(entry => entry.name).sort(), [
-    "__bina_cadre_sync", "__bina_event", "__bina_lifecycle", "__bina_pigeon", "__bina_schedule", "__bina_share", "__bina_ui_event", "__bina_ui_text", "__bina_ui_value",
+    "__bina_cadre_sync", "__bina_event", "__bina_lifecycle", "__bina_net", "__bina_pigeon", "__bina_schedule", "__bina_share", "__bina_ui_event", "__bina_ui_text", "__bina_ui_value",
   ]);
 });
 
-Deno.test("全13機能の版なし・旧サブパスは版付きと同じ ABI 版へ解決し、互換入口も持つ", async () => {
+Deno.test("全14機能の版なし・旧サブパスは版付きと同じ ABI 版へ解決し、互換入口も持つ", async () => {
   const root = new URL("../", import.meta.url);
   const libraries = await readRepliqueLibraries(root);
   const config = JSON.parse(await Deno.readTextFile(new URL("deno.json", root)));
   const features = Object.keys(libraries).filter(key => key.startsWith("jsr:@binette/replique-")).map(key => key.slice("jsr:@binette/replique-".length).split("@")[0]);
-  assertEquals(features.length, 13);
+  assertEquals(features.length, 14);
   for (const feature of features) {
     const target = config.exports[`./${feature}`];
     assertEquals(target, `./src/${feature}.ts`);

@@ -119,8 +119,13 @@ export const DEFAULT_SYSTEM_SETTINGS: Readonly<SystemSettings> = Object.freeze({
 /** 登録した提供リスト。boot は削除できない既定リストの元の URL */
 export interface ProviderListRegistration { url: string; boot?: string }
 
+/** ネットのユーザー設定。アプリのキーごとに allow と deny を保存する。 */
+export interface SavedNetLists { commonAllow: string[]; commonDeny: string[]; apps: Record<string, { allow: string[]; deny: string[] }> }
+
 /** アプリの記録と OS の設定。アプリのキーは完全な ID を使う */
 export interface SystemStore {
+  getNetLists?(): Promise<SavedNetLists>;
+  putNetLists?(lists: SavedNetLists): Promise<void>;
   getLists(): Promise<ProviderListRegistration[]>;
   putLists(lists: ProviderListRegistration[]): Promise<void>;
   getPermissions(key: string): Promise<string[]>;
@@ -191,6 +196,7 @@ const launchesPath = "/data/system/launches.json";
 const listsPath = "/data/system/lists.json";
 const permissionsPath = (key: string) => `/data/system/permissions/${encodeURIComponent(key)}.json`;
 const settingsPath = "/data/system/settings.json";
+const netListsPath = "/data/system/net-lists.json";
 const schedulesPath = "/data/system/schedules.json";
 const autoUpdatePath = "/data/system/auto-update.json";
 const dataDirectory = (id: string) => {
@@ -330,6 +336,8 @@ export function createAppStore(tree: FileTree): AppStore {
         if (copy.roles) copy.roles = Object.fromEntries(await Promise.all(Object.entries(copy.roles).map(async ([role, key]) => [role, await stableKey(key)])));
         return tree.write(settingsPath, encode(copy));
       },
+      getNetLists: async () => decode<SavedNetLists>(await tree.read(netListsPath)) ?? { commonAllow: [], commonDeny: [], apps: {} },
+      putNetLists: lists => tree.write(netListsPath, encode(lists)),
       getSchedules: async () => decode<Record<string, SavedSchedule>>(await tree.read(schedulesPath)) ?? {},
       putSchedules: schedules => tree.write(schedulesPath, encode(schedules)),
     },
@@ -526,6 +534,8 @@ export function createAppStore(tree: FileTree): AppStore {
         const copy = structuredClone(settings);
         return serial(() => store.system.putSettings(copy));
       },
+      getNetLists: () => serial(async () => await store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} }),
+      putNetLists: lists => { const copy = structuredClone(lists); return serial(async () => { await store.system.putNetLists?.(copy); }); },
       getSchedules: () => serial(async () => await store.system.getSchedules?.() ?? {}),
       putSchedules: schedules => { const copy = structuredClone(schedules); return serial(async () => { await store.system.putSchedules?.(copy); }); },
     },

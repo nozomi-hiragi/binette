@@ -720,3 +720,112 @@ Deno.test("scheduler の写しを読み、操作を OS に渡す。届いてい�
   const denied = await launchApp(wasm, { createWorker });
   try { await assertRejects(() => denied.call("summary"), Error, "アプリが中断しました"); } finally { denied.stop(); }
 });
+
+Deno.test("Worker は起動した OS の ref と commit を権限なしで返す", async () => {
+  const code = `
+@external("binette:app@0.1", "osRef") declare function ref(): string;
+@external("binette:app@0.1", "osCommit") declare function commit(): string;
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function read(): void { text(1, ref()); text(2, commit()); }
+`;
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(code, true), { createWorker, osBuild: { ref: "v0.2.1", commit: "1234567890123456789012345678901234567890" }, onDom: ops => texts.push(ops) });
+  try {
+    await app.call("read");
+    assertEquals(texts, [[{ op: "text", handle: 1, value: "v0.2.1" }, { op: "text", handle: 2, value: "1234567890123456789012345678901234567890" }]]);
+  } finally { app.stop(); }
+});
+
+Deno.test("NetApi の要求と onNet の応答が Worker を往復する", async () => {
+  const code = `
+import { App, Api, NetApi, RequestInit, Response, launch, __bina_net } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+class Test extends App {
+  onNet(id: i32, res: Response): void { text(id, res.type + ":" + res.text() + ":" + (res.headers.get("ETag") || "")); }
+}
+launch(new Test());
+export { __bina_net };
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) net.fetch("https://example.com/a", new RequestInit().header("Accept", "text/plain")); }
+`;
+  let received: ((ops: DomOp[]) => void) | undefined;
+  const result = new Promise<DomOp[]>(resolve => { received = resolve; });
+  const app = await launchApp(await build(code, true), {
+    createWorker,
+    net: true,
+    onNet(request) {
+      assertEquals(request, { url: "https://example.com/a", method: "GET", headers: [["Accept", "text/plain"]], redirect: "manual" });
+      return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [["etag", "abc"]], body: new Uint8Array([104, 105]), reason: "" });
+    },
+    onDom: ops => received?.(ops),
+  });
+  try {
+    await app.call("go");
+    assertEquals(await result, [{ op: "text", handle: 1, value: "cors:hi:abc" }]);
+  } finally { app.stop(); }
+});
+
+Deno.test("net が届かないアプリの why は NotGranted", async () => {
+  const code = `
+import { Api } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function check(): void { text(1, new Api().why("net").toString()); }
+`;
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(code, true), { createWorker, onDom: ops => texts.push(ops) });
+  try { await app.call("check"); assertEquals(texts, [[{ op: "text", handle: 1, value: "1" }]]); }
+  finally { app.stop(); }
+});
+
+Deno.test("net の abort は onNet に一回だけ aborted を届ける", async () => {
+  const code = `
+import { App, Api, NetApi, Response, launch, __bina_net } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+class Test extends App { onNet(id: i32, res: Response): void { text(id, res.reason); } }
+launch(new Test()); export { __bina_net };
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) { const id = net.fetch("https://example.com/"); net.abort(id); } }
+`;
+  let received: ((ops: DomOp[]) => void) | undefined;
+  const result = new Promise<DomOp[]>(resolve => { received = resolve; });
+  let calls = 0;
+  const app = await launchApp(await build(code, true), {
+    createWorker, net: true,
+    onNet(_request, signal) { return new Promise(resolve => signal.addEventListener("abort", () => resolve({ status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "aborted" }))); },
+    onDom: ops => { calls++; received?.(ops); },
+  });
+  try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "aborted" }]); assertEquals(calls, 1); }
+  finally { app.stop(); }
+});
+
+Deno.test("アプリの終了は進行中の通信を中断する", async () => {
+  const code = `
+import { Api, NetApi } from "jsr:@binette/replique";
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) net.fetch("https://example.com/"); }
+`;
+  let observed: AbortSignal | undefined;
+  const app = await launchApp(await build(code, true), {
+    createWorker, net: true,
+    onNet(_request, signal) { observed = signal; return new Promise(() => {}); },
+  });
+  await app.call("go");
+  assert(observed);
+  app.stop();
+  assertEquals(observed.aborted, true);
+});
+
+Deno.test("net は上限の 4 MiB を Worker と WASM に渡せる", async () => {
+  const code = `
+import { App, Api, NetApi, Response, launch, __bina_net } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+class Test extends App { onNet(_id: i32, res: Response): void { text(1, res.arrayBuffer().byteLength.toString()); } }
+launch(new Test()); export { __bina_net };
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) net.fetch("https://example.com/"); }
+`;
+  let received: ((ops: DomOp[]) => void) | undefined;
+  const result = new Promise<DomOp[]>(resolve => { received = resolve; });
+  const app = await launchApp(await build(code, true), { createWorker, net: true,
+    onNet(request) { return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [], body: new Uint8Array(4 * 1024 * 1024).fill(65), reason: "" }); },
+    onDom: ops => received?.(ops),
+  });
+  try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "4194304" }]); }
+  finally { app.stop(); }
+});

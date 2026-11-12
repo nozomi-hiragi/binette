@@ -153,7 +153,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler", "schedule"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler", "schedule", "net"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -164,6 +164,10 @@ export interface RegieWorker {
 
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
+  net?: boolean;
+  onNet?: (request: import("./net.ts").NetRequest, signal: AbortSignal) => Promise<import("./net.ts").NetResponse>;
+  /** 起動中の OS のビルド情報 */
+  osBuild?: { ref: string; commit: string };
   /** 一回の呼び出しと起動の時間切れ（ミリ秒、既定 5000） */
   callTimeout?: number;
   /** 今のページの識別子 */
@@ -287,11 +291,14 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const assignments: [string, number][] = [];
   let nextId = 1;
   let stopped = false;
+  const netRequests = new Map<number, AbortController>();
   let rejectLaunch: ((error: Error) => void) | undefined;
 
   const finish = (error: Error, notify: boolean) => {
     if (stopped) return;
     stopped = true;
+    for (const controller of netRequests.values()) controller.abort();
+    netRequests.clear();
     clearTimeout(initTimer);
     options.signal?.removeEventListener("abort", stop);
     worker.terminate();
@@ -409,6 +416,19 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "scheduler.do": { const args = (data as { schedulerArgs?: [string, string, boolean] }).schedulerArgs ?? ["", "", false]; options.onScheduler?.(data.action!, args[0], args[1], args[2]); break; }
         case "schedule.do": { const args = (data as { scheduleArgs?: [number, string, string] }).scheduleArgs ?? [-1, "", ""]; options.onSchedule?.(data.action!, args[0], args[1], args[2]); break; }
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
+        case "net.request": {
+          const message = data as typeof data & { request: import("./net.ts").NetRequest };
+          if (!options.net || !options.onNet || !Number.isInteger(data.id) || netRequests.has(data.id!)) break;
+          const controller = new AbortController();
+          netRequests.set(data.id!, controller);
+          options.onNet(message.request, controller.signal).then(result => {
+            if (!stopped && netRequests.get(data.id!) === controller) { const reply = controller.signal.aborted ? { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "aborted" } : result; worker.postMessage({ type: "net.result", id: data.id, result: reply }, [reply.body.buffer]); }
+          }).catch(() => {
+            if (!stopped && netRequests.get(data.id!) === controller) worker.postMessage({ type: "net.result", id: data.id, result: { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: controller.signal.aborted ? "aborted" : "network" } });
+          }).finally(() => netRequests.delete(data.id!));
+          break;
+        }
+        case "net.abort": netRequests.get(data.id!)?.abort(); break;
         case "shares.request": {
           const reply = (result: unknown) => { if (!stopped) worker.postMessage({ type: "shares.result", id: data.id, result: JSON.stringify(result) }); };
           Promise.resolve().then(() => { if (!options.shares || !options.onShare) throw new Error("共有 API は許可されていません。"); return options.onShare(data.operation!, data.args!); }).then(value => reply({ ok: true, value: value ?? null }), error => reply({ ok: false, error: error instanceof Error ? error.message : String(error) }));
@@ -453,7 +473,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", net: options.net, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

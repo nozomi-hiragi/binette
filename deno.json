@@ -17,6 +17,7 @@
     "./packages/replique/manager",
     "./packages/replique/scheduler",
     "./packages/replique/schedule",
+    "./packages/replique/net",
     "./packages/replique/cadre",
     "./packages/replique/fs",
     "./packages/replique/test",

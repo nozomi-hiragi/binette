@@ -11,6 +11,9 @@ const output = Deno.env.get("BINETTE_PAGES_OUT") || "pages/os";
 const apiOutput = Deno.env.get("BINETTE_PAGES_API_OUT") || "pages/api";
 const appsOutput = Deno.env.get("BINETTE_PAGES_APPS_OUT") || "pages/apps";
 const branch = await currentBranch();
+const commit = await currentCommit();
+Deno.env.set("BINETTE_BUILD_REF", branch);
+Deno.env.set("BINETTE_BUILD_COMMIT", commit);
 // The OS of this branch starts with the provider list of the same branch.
 Deno.env.set("BINETTE_LISTS", `${catalogUrl(branch)},https://nozomi-hiragi.github.io/binette-apps/`);
 await run(["task", "build"]);
@@ -19,4 +22,4 @@ await Deno.remove(output, { recursive: true }).catch((error) => {
 });
 await copy("dist", output);
 await api(apiOutput);
-await writeCatalog(resolve(import.meta.dirname!, ".."), appsOutput, branch, await currentCommit());
+await writeCatalog(resolve(import.meta.dirname!, ".."), appsOutput, branch, commit);

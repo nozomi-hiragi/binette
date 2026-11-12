@@ -3,6 +3,7 @@ import { createProviderLists, type InstallConfirmation, type ProviderLists, type
 import { BinetteError, normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
 import { launchApp } from "./launch.ts";
+import { createNetService, type NetRequest } from "./net.ts";
 import { formatDate } from "./time.ts";
 import { PIGEON_HISTORY_LIMIT } from "./pigeon.ts";
 import type { BuildOptions } from "./build.ts";
@@ -21,6 +22,8 @@ export type SystemApp = { source: string } & (
 /** システムの設定 */
 export interface SystemOptions extends Pick<ProcessOptions, "workerUrl" | "createWorker" | "callTimeout" | "stopDelay" | "destroyTimeout">, BuildOptions {
   apps: SystemApp[];
+  /** 起動中の OS のビルド情報 */
+  osBuild?: { ref: string; commit: string };
   /** boot.json の提供リスト */
   lists?: string[];
   providerLists?: Pick<ProviderListsOptions, "fetch" | "parseHtml" | "fetchTimeout" | "confirm" | "concurrency">;
@@ -95,6 +98,7 @@ const API_RULES: Record<string, { roles?: string[]; permission?: string; declare
   manager: { roles: ["apps-manager"] },
   scheduler: { roles: ["settings"] },
   schedule: { permission: "schedule", declared: true },
+  net: { permission: "net", declared: true },
   storage: {},
   fs: { permission: "fs" },
   cadre: { roles: ["cadre"] },
@@ -406,6 +410,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }
     renderBar();
   };
+  const netService = createNetService();
+  const netRequest = async (app: InstalledApp, request: NetRequest, signal: AbortSignal) => {
+    const saved = await options.store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} };
+    const own = saved.apps[app.parentKey ?? app.key];
+    return netService(app.parentKey ?? app.key, request, { request: app.manifest.permissions?.net?.request ?? [], appAllow: own?.allow ?? [], appDeny: own?.deny ?? [], commonAllow: saved.commonAllow, commonDeny: saved.commonDeny }, signal);
+  };
   /** アプリに届く辞書のキーと、届かないキーの理由 */
   const apiOf = (installed: InstalledApp) => {
     const keys = new Set<string>();
@@ -609,6 +619,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       worker = await launchApp(app.wasm, {
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
+        osBuild: options.osBuild,
         signal: controller.signal,
         callTimeout: settings.callTimeout,
         page,
@@ -617,6 +628,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         denied: api.denied,
         pigeon,
         shares: api.keys.has("shares"),
+        net: api.keys.has("net"),
         ...(storage ? { storage } : {}),
         ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(app) } : {}),
         onStorage(name, value) {
@@ -624,6 +636,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           saving = saving.then(() => options.store.data.write(owner, name, value)).catch(report);
         },
         onShare(operation, args) { return shareRequest(app, operation, args); },
+        onNet(request, signal) { return netRequest(app, request, signal); },
         onPigeonSend(letter) { routePigeon(app, letter); },
         onPigeonDone(id) { donePigeon(app, id); },
         onPigeonOpened(kind) { openLetters(letter => letter.from === app.key && (kind === "" || letter.kind === kind)); },
@@ -968,6 +981,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         declarative: installed.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
+        osBuild: options.osBuild,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
         destroyTimeout: settings.destroyTimeout,
@@ -994,6 +1008,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           denied: api.denied,
           pigeon,
           shares: api.keys.has("shares"),
+          net: api.keys.has("net"),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
           ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
           ...(manager ? { manager } : {}),
@@ -1006,6 +1021,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           void show(apps[i]!, false);
         },
         onShare(operation, args) { return shareRequest(installed, operation, args); },
+        onNet(request, signal) { return netRequest(installed, request, signal); },
         onManager(action, args) { if (api.keys.has("manager")) managerAction(action, args); },
         onScheduler(action, id, value, on) { if (api.keys.has("scheduler")) schedulerAction(action, id, value, on); },
         onSchedule(action, slot, rule, label) { scheduleAction(installed, action, slot, rule, label); },
@@ -1111,6 +1127,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         declarative: selectedCadre.manifest.entry.html === undefined,
         createWorker: options.createWorker,
         workerUrl: options.workerUrl,
+        osBuild: options.osBuild,
         callTimeout: settings.callTimeout,
         stopDelay: settings.stopDelay,
         destroyTimeout: settings.destroyTimeout,
@@ -1145,6 +1162,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(selectedCadre) } : {}),
           pigeon,
           shares: api.keys.has("shares"),
+          net: api.keys.has("net"),
           ...(storage ? { storage } : {}),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
         },
@@ -1153,6 +1171,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           saving = saving.then(() => options.store.data.write(selectedCadre.parentKey ?? selectedCadre.key, name, value)).catch(report);
         },
         onShare(operation, args) { return shareRequest(selectedCadre, operation, args); },
+        onNet(request, signal) { return netRequest(selectedCadre, request, signal); },
         onSchedule(action, slot, rule, label) { scheduleAction(selectedCadre, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
         onPigeonDone(id) { donePigeon(selectedCadre, id); },

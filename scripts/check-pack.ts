@@ -141,7 +141,7 @@ await buildApp(async (path) => uiFiles[path]!, {
 });
 // 各機能の公開入口を exact・^・~ で読み、配布物の設定とソースだけで解決する。
 const featureSpecifiers = Object.keys(libraries).filter(key => key.startsWith("jsr:@binette/replique-"));
-assertEquals(featureSpecifiers.length, 13);
+assertEquals(featureSpecifiers.length, 14);
 for (const range of ["0.1.0", "^0.1", "~0.1.0", "legacy", "unversioned"]) {
   const imports = featureSpecifiers.map((key, i) => 'import { ABI_VERSION as version' + i + ' } from "' + (range === "legacy" ? "jsr:@binette/replique/" + key.slice("jsr:@binette/replique-".length, key.lastIndexOf("@")) : range === "unversioned" ? key.slice(0, key.lastIndexOf("@")) : key.slice(0, key.lastIndexOf("@") + 1) + range) + '";').join("\\n");
   const code = imports + '\\nexport function versions(): string { return ' + featureSpecifiers.map((_, i) => 'version' + i).join(' + "," + ') + '; }';

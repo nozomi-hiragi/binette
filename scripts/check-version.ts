@@ -23,6 +23,7 @@ export const FEATURES: Record<string, string> = {
   "packages/replique/manager": "@binette/replique-manager",
   "packages/replique/scheduler": "@binette/replique-scheduler",
   "packages/replique/schedule": "@binette/replique-schedule",
+  "packages/replique/net": "@binette/replique-net",
   "packages/replique/cadre": "@binette/replique-cadre",
   "packages/replique/fs": "@binette/replique-fs",
 };

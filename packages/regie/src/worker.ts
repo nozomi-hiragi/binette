@@ -26,12 +26,16 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let ownSchedule: ScheduleSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
+  let net = false;
+  let nextNetRequest = 0;
+  const netResults = new Map<number, import("./net.ts").NetResponse>();
   let shares = false;
   let nextShareRequest = 0;
   const shareResults = new Map<number, string>();
   let pigeon: PigeonSnapshot | undefined;
   const acknowledgedLetters = new Set<number>();
   let denied: Record<string, ApiDenial> = {};
+  let osBuild = { ref: "dev", commit: "" };
   let page = "";
   let sub = "";
   let declarative = false;
@@ -77,7 +81,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
   const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
   const receivedAt = (i: number) => { const letter = system().letters?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("手紙の番号が範囲外です。"); return letter; };
-  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "scheduler" ? scheduler !== undefined : key === "schedule" ? ownSchedule !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
+  const granted = (key: string) => key === "net" ? net : key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "scheduler" ? scheduler !== undefined : key === "schedule" ? ownSchedule !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -302,6 +306,33 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "manager.do", action: name, managerArgs: [readString(a), readString(b), !!flag] });
       },
     },
+    [HOST_ABI.net.module]: {
+      "request": (url: number, method: number, headers: number, redirect: number) => {
+        if (!net) throw new Error("net API は許可されていません。");
+        if (nextNetRequest >= 2147483647) throw new Error("net の要求番号を使い切りました。");
+        const id = ++nextNetRequest;
+        scope.postMessage({ type: "net.request", id, request: { url: readString(url), method: readString(method), headers: JSON.parse(readString(headers)), redirect: readString(redirect) } });
+        return id;
+      },
+      "abort": (id: number) => scope.postMessage({ type: "net.abort", id }),
+      "text": (id: number, field: number) => {
+        const result = netResults.get(id)!;
+        const key = readString(field);
+        const value = key === "statusText" ? result.statusText : key === "url" ? result.url : key === "type" ? result.type : key === "reason" ? result.reason : result.headers.find(([name]) => name === key)?.[1];
+        return value === undefined ? 0 : writeString(value);
+      },
+      "number": (id: number, field: number, _index: number) => {
+        const result = netResults.get(id)!;
+        const key = readString(field);
+        return key === "status" ? result.status : key === "length" ? result.body.length : 0;
+      },
+      "copy": (id: number, ptr: number, length: number) => {
+        const body = netResults.get(id)!.body;
+        if (length !== body.length) throw new Error("net の応答の長さが一致しません。");
+        const memory = instance!.exports.memory as WebAssembly.Memory;
+        new Uint8Array(memory.buffer, ptr, length).set(body);
+      },
+    },
     [HOST_ABI.shares.module]: {
       "request": (operation: number, args: number) => {
         if (!shares) throw new Error("共有 API は許可されていません。");
@@ -501,6 +532,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     [HOST_ABI.app.module]: {
       // 辞書の中身。0 は届いている、1 は NotGranted、2 は NotAssigned。知らないキーはどの役割にもないので NotAssigned
       "sub": () => writeString(sub),
+      "osRef": () => writeString(osBuild.ref),
+      "osCommit": () => writeString(osBuild.commit),
       "why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;
@@ -549,15 +582,23 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
+    if (data.type === "net.result") {
+      netResults.set(data.id!, data.result as import("./net.ts").NetResponse);
+      const callback = instance?.exports.__bina_net;
+      if (typeof callback === "function") { try { callback(data.id!); flush(); } catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); } }
+      netResults.delete(data.id!);
+      return;
+    }
     if (data.type === "shares.result") {
-      shareResults.set(data.id!, data.result!);
+      shareResults.set(data.id!, data.result as string);
       const callback = instance?.exports.__bina_share;
       if (typeof callback === "function") { try { callback(); flush(); } catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); } }
       return;
     }
     if (data.type === "init") {
       try {
+        osBuild = data.osBuild ?? osBuild;
         apps = data.apps;
         os = data.os;
         manager = data.manager;
@@ -567,6 +608,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         cadre = data.cadre;
         pigeon = data.pigeon;
         shares = data.shares === true;
+        net = data.net === true;
         denied = data.denied ?? {};
         page = data.page ?? "";
         sub = data.sub ?? "";

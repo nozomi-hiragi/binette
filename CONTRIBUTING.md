@@ -54,7 +54,7 @@ deno run -A packages/regie/src/cli.ts integrity catalog/docs --replique packages
 
 ## リリース（JSR）
 
-JSR に公開するのは `@binette/core`、`@binette/decor`、`@binette/regie`、`@binette/scene`、`@binette/coulisses`、`@binette/replique` の 6 パッケージです。Réplique の 13 機能は集約パッケージに含め、機能別パッケージは公開しません。
+JSR に公開するのは `@binette/core`、`@binette/decor`、`@binette/regie`、`@binette/scene`、`@binette/coulisses`、`@binette/replique` の 6 パッケージです。Réplique の 14 機能は集約パッケージに含め、機能別パッケージは公開しません。
 
 リリースは、バージョンを揃えて CHANGELOG の見出しに日付を入れた変更を `main` にマージして行います。マージ後、JSR への公開、タグと GitHub Release の作成が自動で進みます。タグは手で作りません。
 

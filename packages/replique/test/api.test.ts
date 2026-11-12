@@ -9,13 +9,17 @@ const files: Record<string, string> = {
   "main.ts": `import { Api, App, Last, launch } from "jsr:@binette/replique";
 const initial = new Api().sub();
 let created = "";
+let buildRef = "";
+let buildCommit = "";
 class Page extends App {
-  onCreate(_last: Last, api: Api): void { created = api.sub(); }
+  onCreate(_last: Last, api: Api): void { created = api.sub(); buildRef = this.osRef(); buildCommit = this.osCommit(); }
 }
 launch(new Page());
 export function initialSub(): string { return initial; }
 export function createdSub(): string { return created; }
-export function freshSub(): string { return new Api().sub(); }`,
+export function freshSub(): string { return new Api().sub(); }
+export function osRef(): string { return buildRef; }
+export function osCommit(): string { return buildCommit; }`,
 };
 const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
 const module = new WebAssembly.Module(new Uint8Array(built.wasm));
@@ -39,6 +43,8 @@ for (const sub of ["", "home", "%E8%A8%AD%E5%AE%9A"]) {
       if (entry.module.startsWith("binette:")) binette[`${entry.module}/${entry.name}`] = () => { throw new Error(`予期しない import: ${entry.name}`); };
     }
     binette["binette:app@0.1/sub"] = () => writeString(sub);
+    binette["binette:app@0.1/osRef"] = () => writeString("v0.2.1");
+    binette["binette:app@0.1/osCommit"] = () => writeString("1234567890123456789012345678901234567890");
     binette["binette:app@0.1/lastPage"] = () => writeString("");
     binette["binette:app@0.1/lastKind"] = () => 0;
     binette["binette:app@0.1/lastCause"] = () => 0;
@@ -51,6 +57,8 @@ for (const sub of ["", "home", "%E8%A8%AD%E5%AE%9A"]) {
     assertEquals(readString(call("initialSub")), sub);
     call("__bina_lifecycle", 1, 0, 1);
     assertEquals(readString(call("createdSub")), sub);
+    assertEquals(readString(call("osRef")), "v0.2.1");
+    assertEquals(readString(call("osCommit")), "1234567890123456789012345678901234567890");
     assertEquals(readString(call("freshSub")), sub);
   });
 }

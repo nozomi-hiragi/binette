@@ -2,7 +2,7 @@ import { BinetteError } from "@binette/core";
 
 /** OS が提供する WASM import。Worker の型と、起動・インストール時の検査で共有する */
 export const HOST_ABI = {
-  app: { module: "binette:app@0.1", functions: ["why", "sub", "page", "lastPage", "lastKind", "lastCause", "finish"] },
+  app: { module: "binette:app@0.1", functions: ["why", "sub", "osRef", "osCommit", "page", "lastPage", "lastKind", "lastCause", "finish"] },
   apps: { module: "binette:apps@0.1", functions: ["icon", "count", "name", "id", "open"] },
   cadre: { module: "binette:cadre@0.1", functions: ["notificationCount", "notificationId", "notificationFrom", "notificationTitle", "notificationBody", "notificationActionCount", "notificationActionId", "notificationActionLabel", "notificationActionPlaceholder", "notificationActionInput", "notificationOpen", "notificationDismiss", "notificationReply", "count", "name", "isFront", "isHome", "hasIcon", "appIndex", "isInstalled", "installBusy", "install", "open", "close", "openHome", "back", "openSettings", "notify"] },
   dom: { module: "binette:dom@0.1", functions: ["byId", "create", "text", "class", "append", "remove", "listen", "unlisten"] },
@@ -11,6 +11,7 @@ export const HOST_ABI = {
   pigeon: { module: "binette:pigeon@0.1", functions: ["send", "count", "shares", "from", "to", "kind", "title", "body", "urgent", "actions", "done", "opened"] },
   schedule: { module: "binette:schedule@0.1", functions: ["text", "number", "do"] },
   scheduler: { module: "binette:scheduler@0.1", functions: ["text", "number", "do"] },
+  net: { module: "binette:net@0.1", functions: ["request", "abort", "text", "number", "copy"] },
   shares: { module: "binette:shares@0.1", functions: ["request", "result"] },
   storage: { module: "binette:storage@0.1", functions: ["has", "read", "write", "remove", "count", "name"] },
   ui: { module: "binette:ui@0.1", functions: ["render"] },
