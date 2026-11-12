@@ -17,7 +17,7 @@
 - `deno task start` と `deno task build` は、先にこれを走らせる。`.binapp/` は生成物で、コミットしない
 - 入口の `src/main.ts` は、`loadBootApps` でファイルの木からアプリとブートの役割を読み、`mountShell` に渡す（[boot.md](../boot.md)）
 - 入手元（`source`）はシステムアプリが `binette:system`、同梱アプリが `binette:bundled` で固定する。配信の URL は中身のハッシュで変わるので使わない
-- 埋め込みアプリの ID は入手元の接頭辞を付けない生の識別子。Cadre は `cadre`、そのホームと設定は `cadre.home`・`cadre.settings`、デザイナーは `designer`。`source` は配布区分として残る（[app-id.md](../app-id.md)）
+- 埋め込みアプリの ID は入手元の接頭辞を付けない生の識別子。Cadre は `cadre`、そのホームと設定は `cadre.home`・`cadre.settings`、同梱の Filer は `filer`。`source` は配布区分として残る（[app-id.md](../app-id.md)）
 - Cadre の `app.json` の `sub` にホーム・設定を宣言し、親の AS の入口と CSS を共有する。起動時の `api.sub()` が空文字列なら Cadre、`home` ならホーム、`settings` なら設定を描く。入口ごとに Worker は別にする
 - 開くたびに、OS が持つ中身で保存し直す（版を上げ忘れた OS の更新でも古いものを残さない）。入れた日時 `installedAt` は最初のものを保つ
 - ブラウザではビルドも検証もしない（HTML や権限の検証、クリックの関数が export にあるかの確認）。OS と一緒にビルドして配るものなので、OS と同じだけ信頼する
@@ -32,7 +32,7 @@
 | `apps/cadre` の `sub.settings`（`cadre.settings`） | 設定 | `roles: ["settings"]`。ホームの選択、更新、デバッグ値、履歴 | [settings.md](settings.md) |
 | `apps/cadre` の `sub.apps`（`cadre.apps`） | アプリ | `roles: ["apps-manager"]`。提供リストとアプリの管理 | [app-manager.md](../app-manager.md) |
 
-[Filer](filer.md) は `bundled/filer/` に置く同梱のファイル管理アプリです。デザイナー（`catalog/designer/`、ID `designer`）とドキュメントアプリ（`catalog/docs/`、ID `docs`。この `docs/` の仕様書を読む）は、同梱せず既定の提供リストに載せます（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。`catalog/` のアプリもルートの Deno workspace と `deno task check` の入口に含めます。提供リストのアプリなので、システムアプリの権限は持ちません。
+[Filer](filer.md) は `bundled/filer/` に置く同梱のファイル管理アプリです。ドキュメントアプリ（`catalog/docs/`、ID `docs`。この `docs/` の仕様書を読む）は、同梱せず Binette の提供リストに載せます。デザイナーは [binette-apps](https://github.com/nozomi-hiragi/binette-apps) へ移し、`https://nozomi-hiragi.github.io/binette-apps/` で配布します（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。`catalog/` のアプリもルートの Deno workspace と `deno task check` の入口に含めます。提供リストのアプリなので、システムアプリの権限は持ちません。
 ## 未決のこと
 
 - システムアプリに、ふつうのアプリより強い権限を持たせるか。今は、ホームと Cadre が `apps` を、Cadre が `cadre` を、設定アプリが `os` を受け取る（役割の割り当てで判断する）。ユーザーに許可を聞く権限の仕組みそのものが未決

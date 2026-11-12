@@ -12,7 +12,7 @@ const apiOutput = Deno.env.get("BINETTE_PAGES_API_OUT") || "pages/api";
 const appsOutput = Deno.env.get("BINETTE_PAGES_APPS_OUT") || "pages/apps";
 const branch = await currentBranch();
 // The OS of this branch starts with the provider list of the same branch.
-Deno.env.set("BINETTE_LISTS", catalogUrl(branch));
+Deno.env.set("BINETTE_LISTS", `${catalogUrl(branch)},https://nozomi-hiragi.github.io/binette-apps/`);
 await run(["task", "build"]);
 await Deno.remove(output, { recursive: true }).catch((error) => {
   if (!(error instanceof Deno.errors.NotFound)) throw error;

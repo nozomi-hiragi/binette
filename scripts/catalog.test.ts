@@ -12,6 +12,14 @@ const root = resolve(import.meta.dirname!, "..");
 const commit = "0123456789abcdef0123456789abcdef01234567";
 
 Deno.test("boot.json の提供リストは BINETTE_LISTS の https の URL だけを受け付ける", () => {
+  const previous = Deno.env.get("BINETTE_LISTS");
+  try {
+    Deno.env.delete("BINETTE_LISTS");
+    assertEquals(bootLists(), []);
+  } finally {
+    if (previous === undefined) Deno.env.delete("BINETTE_LISTS");
+    else Deno.env.set("BINETTE_LISTS", previous);
+  }
   assertEquals(bootLists(""), []);
   assertEquals(bootLists(" https://a.test/apps/ ,https://b.test/"), ["https://a.test/apps/", "https://b.test/"]);
   assertThrows(() => bootLists("http://a.test/"), Error, "https");
@@ -20,7 +28,7 @@ Deno.test("boot.json の提供リストは BINETTE_LISTS の https の URL だ�
 
 Deno.test("既定の提供リストは catalog/ のアプリを commit の raw で載せ、OS が入れるときの integrity と一致する", async () => {
   const entries = await catalogEntries(root, commit);
-  assertEquals(entries.map(entry => entry.id), ["designer", "docs"]);
+  assertEquals(entries.map(entry => entry.id), ["docs"]);
   const libraries = await readRepliqueLibraries(resolve(root, "packages/replique"));
   for (const entry of entries) {
     const built = await buildApp(path => Deno.readTextFile(resolve(root, "catalog", entry.id, path)), { libraries });

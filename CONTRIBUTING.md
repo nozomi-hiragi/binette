@@ -34,11 +34,13 @@ Deno のコードでは `node:` のモジュールを使いません。ファイ
 
 設定は Cadre のサブアプリ `cadre.settings`（`apps/cadre`）が持ちます（決定）。今はホームの選択、新しい版への更新、デバッグ値、起動の履歴で、ほかの項目は未決です。ホームも Cadre のサブアプリ `cadre.home`（`app.json` の `sub.home.roles: ["home"]`）です。ホーム・設定は親と同じ AS の入口と CSS を使い、`api.sub()` で入口を選びます。役割は名乗るだけでは効かず、`system/boot.json` の既定と設定で割り当てたアプリにだけ、その役割の API が `onCreate(last, api)` の辞書で届きます（[docs/spec/roles.md](docs/spec/roles.md)）。Régie が常駐のシステムアプリ `apps/cadre`（`"roles": ["cadre"]`）を最初に起動し、Cadre が `CadreApi.openHome()` でホームを開きます。Cadre は AS の Décor でホームバーと `appArea()` を描き、Scene はその領域にアプリを配置します。Cadre はスタックに数えず、落ち続けたときだけ Scene が表示領域とホームボタンの最低限の大枠を出します。
 
+Binette の提供リストには `catalog/docs/` のドキュメントアプリだけを載せます。デザイナーは [binette-apps](https://github.com/nozomi-hiragi/binette-apps) で開発・配布します。`deno task pages` はブランチの提供リスト、`https://nozomi-hiragi.github.io/binette-apps/` の順で既定リストを設定します。ローカルの `build:system` は `BINETTE_LISTS` 未指定なら空のままです。必要ならカンマ区切りの https の URL で指定します。
+
 Réplique の AS ソースは `/system/libraries/replique/` に機能ごとに配布します。CLI の `--replique` は単一ファイルではなく、直下に `index.ts` と各機能の `.ts` を持つソースフォルダを受け取ります。
 
 ```sh
-deno run -A packages/regie/src/cli.ts build catalog/designer --out .binapp/designer.binapp --replique packages/replique
-deno run -A packages/regie/src/cli.ts integrity catalog/designer --replique packages/replique
+deno run -A packages/regie/src/cli.ts build catalog/docs --out .binapp/docs.binapp --replique packages/replique
+deno run -A packages/regie/src/cli.ts integrity catalog/docs --replique packages/replique
 ```
 
 ## バージョンの決め方
