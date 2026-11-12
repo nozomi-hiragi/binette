@@ -7,30 +7,6 @@ const labels = ["スタックできるアプリの数", "Stop までの時間", 
 const steps: i32[] = [1, 1000, 10, 1000, 1000, 1000];
 const minimums: i32[] = [1, 0, 0, 1000, 1000, 0];
 
-function pad(value: i64, width: i32 = 2): string {
-  let result = value.toString();
-  while (result.length < width) result = "0" + result;
-  return result;
-}
-
-// Unix epoch の日数をグレゴリオ暦に直す。負の日時とうるう年も扱う
-function utc(time: f64): string {
-  const seconds = <i64>Math.floor(time / 1000);
-  const days = <i64>Math.floor(<f64>seconds / 86400);
-  const within = seconds - days * 86400;
-  const z = days + 719468;
-  const era = (z >= 0 ? z : z - 146096) / 146097;
-  const doe = z - era * 146097;
-  const yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  let year = yoe + era * 400;
-  const doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-  const mp = (5 * doy + 2) / 153;
-  const day = doy - (153 * mp + 2) / 5 + 1;
-  const month = mp + (mp < 10 ? 3 : -9);
-  if (month <= 2) year++;
-  return pad(year, 4) + "-" + pad(month) + "-" + pad(day) + " " + pad(within / 3600) + ":" + pad(within / 60 % 60) + ":" + pad(within % 60);
-}
-
 // 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
 let osApi: OsApi | null = null;
 let schedulerApi: SchedulerApi | null = null;
@@ -39,8 +15,8 @@ const intervals: i32[] = [60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 432
 let details = false;
 // 開いている項目。-1 は未選択で、広い幅では先頭の項目を見せ、狭い幅では項目の一覧だけを見せる
 let page: i32 = -1;
-const pageTitles = ["見た目", "既定のアプリ", "通知", "定期実行", "Binette について", "デバッグ"];
-const pageKeys = ["open-appearance", "open-defaults", "open-notifications", "open-schedules", "open-about", "open-debug"];
+const pageTitles = ["見た目", "既定のアプリ", "通知", "定期実行", "Binette について", "デバッグ", "日付と時刻"];
+const pageKeys = ["open-appearance", "open-defaults", "open-notifications", "open-schedules", "open-about", "open-debug", "open-time"];
 function openPage(next: i32): void { page = next; }
 function backToTop(): void { page = -1; }
 /** 項目の一覧の 1 行 */
@@ -242,7 +218,7 @@ export class Settings extends App {
     if (scheduler != null) for (let i: i32 = 0; i < scheduler.count(); i++) schedules.push(scheduleView(scheduler, i));
     const history: View[] = [];
     for (let i: i32 = 0; i < os.launchCount(); i++) {
-      history.push(listTile(os.launchName(i), utc(os.launchTime(i))).key("launch-" + i.toString()));
+      history.push(listTile(os.launchName(i), os.launchText(i)).key("launch-" + i.toString()));
     }
     // 定期実行が届いていないときは、その項目を出さない
     const current = page < 0 || (page == 3 && scheduler == null) ? 0 : page;
@@ -252,6 +228,8 @@ export class Settings extends App {
       pageLink(2, "アプリごとの許可", current),
     ];
     if (scheduler != null) links.push(pageLink(3, schedules.length == 0 ? "予定はありません" : schedules.length.toString() + " 件の予定", current));
+    const zone = os.timeZone();
+    links.push(pageLink(6, zone, current));
     links.push(pageLink(4, status, current));
     links.push(pageLink(5, "動作の値と起動の履歴", current));
     const sections: View[] = [];
@@ -299,10 +277,16 @@ export class Settings extends App {
           ]).key("update-actions"),
         ]).surface("card").key("update-card"),
       ]).key("update-section"));
+    } else if (current == 6) {
+      sections.push(column([
+        column([
+          listTile("タイムゾーン", "ブラウザの設定に合わせています。画面に出る日時は、すべてこのタイムゾーンで表します。", null, text(zone).key("time-zone-value")).key("time-zone"),
+        ]).surface("card").key("time-card"),
+      ]).key("time-section"));
     } else {
       sections.push(column([text("動作の値").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"));
       sections.push(column([
-        row([text("起動の履歴").heading(2).grow().key("history-title"), text("UTC").small().tone("muted")]),
+        row([text("起動の履歴").heading(2).grow().key("history-title"), text(zone).small().tone("muted").key("history-zone")]),
         column([
           show(history.length == 0, text("起動の履歴はありません。").tone("muted").key("history-empty")),
           column(history).list().key("history"),

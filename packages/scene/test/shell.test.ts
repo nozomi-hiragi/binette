@@ -1,6 +1,6 @@
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
-import { createProviderLists, createMemoryAppStore, createScheduler, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
+import { createProviderLists, createMemoryAppStore, createScheduler, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, formatTime, serveApp, systemTimeZone } from "@binette/regie";
 import { Window } from "happy-dom";
 import { State } from "@binette/core";
 import { createShellUi } from "../src/index.ts";
@@ -43,7 +43,7 @@ function elementIn(window: Window): HTMLElement {
   return element;
 }
 /** 設定の項目の一覧から、項目の中身へ進む */
-async function openSettingsPage(element: HTMLElement, key: "open-defaults" | "open-about" | "open-debug"): Promise<void> {
+async function openSettingsPage(element: HTMLElement, key: "open-defaults" | "open-about" | "open-debug" | "open-time"): Promise<void> {
   await waitFor(() => element.querySelector(`[data-bina-key=${key}]`) !== null);
   element.querySelector<HTMLButtonElement>(`[data-bina-key=${key}]`)!.click();
 }
@@ -592,7 +592,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で表示する", async () => {
+Deno.test("実際の設定は履歴を新しい順に OS のタイムゾーンの日時と名前で表示する", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
   const times = [-1, 0, Date.UTC(2000, 1, 29, 12, 34, 56), Date.UTC(2100, 2, 1)];
   for (const time of times) await store.system.recordLaunch({ time, app: "無いアプリの識別子" });
@@ -606,14 +606,14 @@ Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で�
     );
     assertEquals(lines[0]![0], "ホーム");
     assertEquals(lines.slice(1), [
-      ["無いアプリの識別子", "2100-03-01 00:00:00"],
-      ["無いアプリの識別子", "2000-02-29 12:34:56"],
-      ["無いアプリの識別子", "1970-01-01 00:00:00"],
-      ["無いアプリの識別子", "1969-12-31 23:59:59"],
+      ...times.toReversed().map(time => ["無いアプリの識別子", formatTime(time, { seconds: true })]),
     ]);
+    if (systemTimeZone() === "UTC") assertEquals(lines[1]![1], "2100-03-01 00:00:00");
     const historySection = element.querySelector("[data-bina-key=history-section]")!;
-    assertEquals(historySection.textContent!.match(/UTC/g)?.length, 1);
-    assertEquals(historySection.querySelector("[data-bina-key=history-title]")!.nextElementSibling!.textContent, "UTC");
+    assertEquals(historySection.querySelector("[data-bina-key=history-zone]")!.textContent, systemTimeZone());
+    await openSettingsPage(element, "open-time");
+    await waitFor(() => element.querySelector("[data-bina-key=time-zone-value]") !== null);
+    assertEquals(element.querySelector("[data-bina-key=time-zone-value]")!.textContent, systemTimeZone());
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 

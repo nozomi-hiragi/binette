@@ -3,6 +3,7 @@ import { createProviderLists, type InstallConfirmation, type ProviderLists, type
 import { BinetteError, normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
 import { launchApp } from "./launch.ts";
+import { formatDate } from "./time.ts";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
@@ -728,7 +729,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       const owner = async () => await backend.appOwner(app.parentKey ?? app.key, app.source, app.manifest.name);
       const base64 = (bytes: Uint8Array) => { let result = ""; for (const byte of bytes) result += String.fromCharCode(byte); return btoa(result); };
       switch (operation) {
-        case "ownList": return (await backend.filerShareList(app.key, await owner(), ownPath(id))).map(({ path, row }) => ({ ...row, path, ...( "share" in row ? { share: row.share, sharePath: row.path } : {}), modified: new Date(row.modified).toLocaleDateString("ja-JP") }));
+        case "ownList": return (await backend.filerShareList(app.key, await owner(), ownPath(id))).map(({ path, row }) => ({ ...row, path, ...( "share" in row ? { share: row.share, sharePath: row.path } : {}), modified: formatDate(row.modified) }));
         case "ownShareOn": return await backend.filerShareOn(app.key, await owner(), ownPath(id), path);
         case "ownShareOff": await backend.filerShareOff(app.key, await owner(), ownPath(id)); return;
         case "ownReference": await backend.filerShareReference(app.key, await owner(), ownPath(id), path, value); return;
@@ -756,7 +757,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         case "write": await shares.shareFiles(id, app.key).write(path, new TextEncoder().encode(value)); return;
         case "remove": await shares.shareFiles(id, app.key).delete(path); return;
         case "files": return await shares.shareFiles(id, app.key).list(path);
-        case "fileInfo": { const metadata = await shares.shareFiles(id, app.key).metadata(path); return metadata ? { ...metadata, modified: new Date(metadata.modified).toLocaleDateString("ja-JP") } : null; }
+        case "fileInfo": { const metadata = await shares.shareFiles(id, app.key).metadata(path); return metadata ? { ...metadata, modified: formatDate(metadata.modified) } : null; }
         default: throw new Error("共有の操作が不明です。");
       }
     };

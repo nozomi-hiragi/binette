@@ -3,6 +3,7 @@ import { createUiDiffer } from "@binette/decor";
 import { BinetteError, type DomOp } from "@binette/core";
 import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
+import { formatTime, systemTimeZone } from "./time.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -173,13 +174,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   };
   const managerActions = ["addRepo", "removeRepo", "checkUpdates", "install", "reinstall", "uninstall", "cancel", "apply", "details", "setAutoUpdate"];
 
-  const pad = (value: number) => String(value).padStart(2, "0");
-  // 端末の時刻帯で「YYYY-MM-DD HH:MM」。0 は空
-  const localTime = (time: number) => {
-    if (!time) return "";
-    const date = new Date(time);
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
+  // System time zone, "YYYY-MM-DD HH:MM". 0 gives ""
+  const localTime = (time: number) => time ? formatTime(time) : "";
   const dayNames: Record<string, string> = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金", sat: "土", sun: "日" };
   const duration = (seconds: number) =>
     seconds % 86400 === 0 ? `${seconds / 86400} 日` : seconds % 3600 === 0 ? `${seconds / 3600} 時間` : seconds % 60 === 0 ? `${seconds / 60} 分` : `${seconds} 秒`;
@@ -393,6 +389,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "launchCount": () => system().launches.length,
       "launchTime": (i: number) => launchAt(i).time,
       "launchName": (i: number) => writeString(launchAt(i).name),
+      "launchText": (i: number) => writeString(formatTime(launchAt(i).time, { seconds: true })),
+      "timeZone": () => { system(); return writeString(systemTimeZone()); },
     },
     [HOST_ABI.cadre.module]: {
       "notificationCount": () => cadreState().notifications?.length ?? 0,
