@@ -1550,11 +1550,6 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
-      "catalog/designer": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
       "catalog/docs": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"

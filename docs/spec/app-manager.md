@@ -123,13 +123,27 @@ Cadre のサブアプリとして `apps/cadre/app.json` の `sub` に宣言し�
 
 ## Binette の既定の提供リスト
 
-- ブランチごとに GitHub Pages に置く（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）。そのブランチの `system/boot.json` の `lists` に書く
-- OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため（API ドキュメントの `api/<ブランチ>/` と同じ）
+この節は決定事項です。
+
+- GitHub Pages の `system/boot.json` の `lists` は、ブランチの Binette のリスト（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）、`https://nozomi-hiragi.github.io/binette-apps/` の順にする
+- ローカルの `build:system` は `BINETTE_LISTS` 未指定なら空配列にする。ローカルで提供リストは生成しないため、公開済みの特定ブランチを暗黙に選ばない。必要なリストは `BINETTE_LISTS` にカンマ区切りの https の URL で指定するか、アプリ管理から追加する
+- どちらのリストも OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため（API ドキュメントの `api/<ブランチ>/` と同じ）
+
+### Binette のリスト
+
+- 載せるのはドキュメントアプリ（`catalog/docs/`、ID `docs`）だけ。Filer は役割 `files` の既定なので同梱のまま
 - ページ（HTML と `apps.json`）だけを、Docs の workflow で生成する。アプリのコードは写さない
-- `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/catalog/designer/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
+- `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/catalog/docs/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
 - `requires` は同じビルドの WASM imports から自動生成する。`env` は含めず、機能名順で安定させる
 - `version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`。`integrity` の `"/"` は CI が Régie の CLI で計算する
-- 載せるのは designer とドキュメントアプリ（`docs`）。Filer は役割 `files` の既定なので同梱のまま
+
+### binette-apps のリスト
+
+- デザイナーのソースは [binette-apps](https://github.com/nozomi-hiragi/binette-apps) に置き、`https://nozomi-hiragi.github.io/binette-apps/` で配布する
+- リストにはタグ済みの版だけを載せる。タグは `<app id>/v<version>` 形式とし、一度公開したタグは移動・削除しない
+- `version` はタグの版（`designer/v0.1.0` なら `0.1.0`）。ブランチや `app.json` の未タグの変更では更新しない
+- `source` はタグが指すコミットを固定した raw.githubusercontent.com の URL にする（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette-apps/<タグのコミット>/<アプリのフォルダ>/`）。`integrity` もそのコミットのソースから求める
+- デザイナーの完全な ID は `https://nozomi-hiragi.github.io/binette-apps/#designer`。Binette の従来のリストとは ID が変わるため、保存データは引き継がない
 
 ## あとで足すもの
 

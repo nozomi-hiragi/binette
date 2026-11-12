@@ -58,7 +58,7 @@ interface AppStore {
 }
 ```
 
-- `appId(source, id)` が返す `key` は完全なアプリ ID。埋め込みは生の ID、提供リストからのものは正規化したリスト URL ＋ `#` ＋識別子を使う。`binette:system`・`binette:bundled` はいずれも生の ID を使い、既定は `cadre`・`designer`。サブアプリの ID は `cadre.home`・`cadre.settings` だが、AppStore には親のパッケージだけを保存する。旧 `[source, id]` キーは移行しない
+- `appId(source, id)` が返す `key` は完全なアプリ ID。埋め込みは生の ID、提供リストからのものは正規化したリスト URL ＋ `#` ＋識別子を使う。`binette:system`・`binette:bundled` はいずれも生の ID を使い、既定は `cadre`・`filer`。サブアプリの ID は `cadre.home`・`cadre.settings` だが、AppStore には親のパッケージだけを保存する。旧 `[source, id]` キーは移行しない
 - `icon` は SVG の文字列。無ければ `undefined`
 - `installedAt` は `Date.now()` の値。Unix epoch からのミリ秒を `number` で持つ。`listVersion` は提供リストの版を `manifest.version` と別に保存する
 - `put` は同じ key の記録を置き換える。`get` は無ければ `undefined`
