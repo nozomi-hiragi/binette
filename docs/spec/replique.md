@@ -219,6 +219,7 @@ export class AppsApi {
 | `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
 | `shares` | `SharesApi` | すべてのアプリ | 共有の作成・一覧・承認・退出とファイル操作（[file-sharing.md](file-sharing.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
+| `net` | `NetApi` | `permissions` に `net` を書いたアプリ | 外の HTTP のサーバーとの通信。標準の fetch に寄せた形（[net.md](net.md)、決定 2026-11-12、未実装） |
 | `fs` | `FsApi` | 誰にも届かない（案） | `from(api)` だけを持つ。範囲の決め方が未決なので、キーだけ用意している |
 
 ```ts
@@ -292,7 +293,7 @@ class Home extends App {
 
 - async / await、Promise は無い
 - クロージャ（外の変数を使う無名関数）は使えない。コールバックにはトップレベルの関数を渡す
-- アプリから DOM、ネットワーク、`console` などには直接触れない。使えるのは Réplique の呼び出しだけ（Régie がほかの import を渡さないので、使うと起動できない）
+- アプリから DOM、ネットワーク、`console` などには直接触れない。ネットワークは `NetApi` を通して OS に頼む（[net.md](net.md)）。使えるのは Réplique の呼び出しだけ（Régie がほかの import を渡さないので、使うと起動できない）
 - 例外（`throw`）は、その呼び出しを止め、アプリを終了する。Régie はそれを受けてインスタンスを片付け、Scene に見せ方を知らせる（[regie/run.md](regie/run.md#メッセージ実装済み)、[regie/system.md](regie/system.md#落ちたとき)）
 
 ## 配布（実装済み）

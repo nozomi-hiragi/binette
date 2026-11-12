@@ -129,11 +129,12 @@ override build(): View {
 | `storage` | アプリ自身の領域のデータ（`/data/…`。`StorageApi`） | すべてのアプリ | 実装済み（読む・書く・一覧・削除） |
 | `scheduler` | すべての予定の一覧と変更（`SchedulerApi`、[scheduler.md](scheduler.md)） | 設定アプリ | 実装済み |
 | `schedule` | 自分の予定の登録・変更（`ScheduleApi`） | `permissions` に `schedule` を書いたアプリ | 実装済み |
+| `net` | 外の HTTP のサーバーとの通信（`NetApi`、[net.md](net.md)） | `permissions` に `net` を書いたアプリ | 決定 2026-11-12。未実装 |
 
 ## 未決のこと
 
 - 役割とキーの名前、一覧
-- ユーザーに許可を聞く流れ。`permissions` は名前 → `{ reason }` の辞書。権限による NotGranted は `fs` だけが使う
+- ユーザーに許可を聞く流れ。`permissions` は名前 → `{ reason }` の辞書。権限による NotGranted は `fs`・`schedule`・`net` が使う
 - `fs` の範囲の決め方（どのパスを読める・書けるか）
 - `storage` の容量の上限と、ほかのタブや窓との同時書き込み
 - 知らないキーの `api.why`（今は NotAssigned）
