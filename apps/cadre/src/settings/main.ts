@@ -76,6 +76,26 @@ function toggleNotification(index: i32): void {
   const os = osApi;
   if (os != null) os.setNotificationMuted(index, !os.notificationMuted(index));
 }
+function showLetter(id: i32): void {
+  const os = osApi;
+  if (os != null) os.showLetter(id);
+}
+function openLetter(id: i32): void {
+  const os = osApi;
+  if (os != null) os.openLetter(id);
+}
+function deleteLetter(id: i32): void {
+  const os = osApi;
+  if (os != null) os.deleteLetter(id);
+}
+function openAllLetters(): void {
+  const os = osApi;
+  if (os != null) os.openAllLetters();
+}
+function deleteAllLetters(): void {
+  const os = osApi;
+  if (os != null) os.deleteAllLetters();
+}
 function change(change: i32): void {
   const os = osApi;
   if (os == null) return;
@@ -173,6 +193,30 @@ export class Settings extends App {
     else if (checking) status = "確認しています…";
     else if (downloading) status = "ダウンロード中…";
     else if (available) status = "Binette の新しい版があります。";
+    const letters: View[] = [];
+    let unopened: i32 = 0;
+    for (let i: i32 = 0; i < os.letterCount(); i++) {
+      const id = os.letterId(i);
+      const opened = os.letterOpened(i);
+      const title = os.letterTitle(i);
+      const body = os.letterBody(i);
+      if (!opened) unopened++;
+      const actions: View[] = [];
+      if (!opened) actions.push(button("開封にする", openLetter).arg(id).variant("subtle").label(title + "を開封にする").key("letter-open"));
+      actions.push(button("消す", deleteLetter).arg(id).variant("ghost").label(title + "を消す").key("letter-delete"));
+      letters.push(column([
+        row([
+          text(opened ? "" : "●").small().tone("accent").label(opened ? "" : "未開封").key("letter-mark"),
+          text(os.letterName(i)).small().tone("muted").grow().key("letter-from"),
+          text(os.letterTime(i)).small().tone("muted").key("letter-time"),
+        ]).key("letter-head"),
+        buttonOf([
+          show(title.length > 0, text(title).heading(3).key("letter-title")),
+          show(body.length > 0, text(body).key("letter-body")),
+        ], showLetter).arg(id).label((title.length > 0 ? title : body) + "の差出人を開く").key("letter-show"),
+        row(actions).key("letter-actions"),
+      ]).key("letter-" + id.toString()));
+    }
     const homes: View[] = [];
     for (let i: i32 = 0; i < os.candidateCount("home"); i++) {
       const selected = os.candidateId("home", i) == os.role("home");
@@ -225,7 +269,7 @@ export class Settings extends App {
     const links: View[] = [
       pageLink(0, "テーマ・アクセント色・壁紙", current),
       pageLink(1, "ホーム: " + roleName(os, "home") + "・Cadre: " + roleName(os, "cadre"), current),
-      pageLink(2, "アプリごとの許可", current),
+      pageLink(2, unopened > 0 ? "未開封 " + unopened.toString() + " 件" : "届いた通知とアプリごとの許可", current),
     ];
     if (scheduler != null) links.push(pageLink(3, schedules.length == 0 ? "予定はありません" : schedules.length.toString() + " 件の予定", current));
     const zone = os.timeZone();
@@ -246,6 +290,19 @@ export class Settings extends App {
       sections.push(column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"));
     } else if (current == 2) {
       sections.push(column([
+        row([
+          text("届いた通知").heading(2).grow().key("letters-title"),
+          show(unopened > 0, button("すべて開封にする", openAllLetters).variant("subtle").key("letters-open-all")),
+          show(letters.length > 0, button("すべて消す", deleteAllLetters).variant("ghost").key("letters-delete-all")),
+        ]).wrap().key("letters-head"),
+        column([
+          show(letters.length == 0, text("届いた通知はありません。").tone("muted").key("letters-empty")),
+          column(letters).key("letters-list"),
+        ]).surface("card").key("letters-card"),
+        text("時刻は " + zone + " です。新しい方から 100 通まで残します。").small().tone("muted").key("letters-note"),
+      ]).key("letters-section"));
+      sections.push(column([
+        text("アプリごとの許可").heading(2).key("notifications-title"),
         column([
           show(notifications.length == 0, text("通知を出すアプリはありません。").tone("muted").key("notifications-empty")),
           column(notifications).key("notifications-list"),

@@ -58,6 +58,33 @@ namespace hostOs {
   @external("binette:os@0.1", "timeZone")
   export declare function timeZone(): string;
   // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterCount")
+  export declare function letterCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterId")
+  export declare function letterId(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterFrom")
+  export declare function letterFrom(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterName")
+  export declare function letterName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterTitle")
+  export declare function letterTitle(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterBody")
+  export declare function letterBody(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterTime")
+  export declare function letterTime(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterOpened")
+  export declare function letterOpened(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterDo")
+  export declare function letterDo(action: string, id: i32): void;
+  // @ts-ignore: decorator
   @external("binette:os@0.1", "updatePhase")
   export declare function updatePhase(): string;
   // @ts-ignore: decorator
@@ -112,6 +139,25 @@ export class OsApi {
   launchText(i: i32): string { return hostOs.launchText(i); }
   /** OS が時刻の表示に使うタイムゾーン（例 `Asia/Tokyo`）。今はブラウザの設定に従う */
   timeZone(): string { return hostOs.timeZone(); }
+  /** Letters sent to the user, newest first. Pass letterId to the operations rather than the list index. */
+  letterCount(): i32 { return hostOs.letterCount(); }
+  letterId(i: i32): i32 { return hostOs.letterId(i); }
+  /** The sender's app ID. */
+  letterFrom(i: i32): string { return hostOs.letterFrom(i); }
+  /** The sender's app name, or its ID when the app is gone. */
+  letterName(i: i32): string { return hostOs.letterName(i); }
+  letterTitle(i: i32): string { return hostOs.letterTitle(i); }
+  letterBody(i: i32): string { return hostOs.letterBody(i); }
+  /** Arrival time as "YYYY-MM-DD HH:MM" in the system time zone. */
+  letterTime(i: i32): string { return hostOs.letterTime(i); }
+  letterOpened(i: i32): bool { return hostOs.letterOpened(i); }
+  /** Opens the sender's app. Pressing the letter counts as opening it. */
+  showLetter(id: i32): void { hostOs.letterDo("show", id); }
+  /** Forces a letter open, for one that stays unopened. */
+  openLetter(id: i32): void { hostOs.letterDo("open", id); }
+  openAllLetters(): void { hostOs.letterDo("openAll", 0); }
+  deleteLetter(id: i32): void { hostOs.letterDo("delete", id); }
+  deleteAllLetters(): void { hostOs.letterDo("deleteAll", 0); }
   /** 新しい版の `/system` があるか */
   updatePhase(): string { return hostOs.updatePhase(); }
   updateCurrent(): string { return hostOs.updateCurrent(); }

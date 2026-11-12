@@ -32,6 +32,6 @@ export { createProviderLists } from "./lists.ts";
 export type { AppDetails, AppUpdate, AutoUpdateSettings, InstallConfirmation, InstallPhase, InstallState, ProviderLists, ProviderListsOptions } from "./lists.ts";
 export type { ProviderListRegistration } from "./store.ts";
 
-export type { PigeonLetter, PigeonSnapshot, PigeonSend } from "./launch.ts";
+export type { LetterAction, PigeonLetter, PigeonSnapshot, PigeonSend, UserLetter } from "./launch.ts";
 export type { PigeonStore } from "./pigeon.ts";
-export { createMemoryPigeonStore, createIndexedDbPigeonStore, PIGEON_INBOX_LIMIT } from "./pigeon.ts";
+export { createMemoryPigeonStore, createIndexedDbPigeonStore, PIGEON_HISTORY_LIMIT, PIGEON_INBOX_LIMIT } from "./pigeon.ts";

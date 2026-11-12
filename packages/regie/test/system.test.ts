@@ -792,6 +792,115 @@ launch(new Settings());`);
   } finally { system.stop(); }
 });
 
+Deno.test("ユーザー宛ての手紙は時刻つきで残り、押す・閉じる・アプリ・設定で開封になり、アイコンから開いても開封にならない", async () => {
+  const senderId = "https://example.test/letters/#sender";
+  const sending = await build(`import { Api, App, Last, PigeonApi, launch } from "jsr:@binette/replique";
+let pigeon: PigeonApi | null = null;
+class Sender extends App { onCreate(last: Last, api: Api): void { pigeon = PigeonApi.from(api); } }
+export function mail(): void { pigeon!.send("user", "mail", "メール", "本文"); }
+export function chat(): void { pigeon!.send("user", "chat", "チャット", "本文"); }
+export function readMail(): void { pigeon!.opened("mail"); }
+export function readAll(): void { pigeon!.opened(); }
+launch(new Sender());`);
+  const cadre = await build(`import { Api, App, Last, CadreApi, StorageApi, launch } from "jsr:@binette/replique";
+let storage: StorageApi | null = null;
+let api: CadreApi | null = null;
+class Frame extends App { onCreate(last: Last, dictionary: Api): void { api = CadreApi.from(dictionary); storage = StorageApi.from(dictionary); } }
+export function inspect(): void { storage!.write("shown", api!.notificationCount().toString()); }
+export function dismiss(): void { api!.notificationDismiss(api!.notificationId(0)); }
+export function press(): void { api!.notificationOpen(api!.notificationId(0)); }
+launch(new Frame());`);
+  const settings = await build(`import { Api, App, Last, OsApi, document, launch } from "jsr:@binette/replique";
+let api: OsApi | null = null;
+class Settings extends App { onCreate(last: Last, dictionary: Api): void { api = OsApi.from(dictionary); } }
+export function inspect(): void {
+  let line = "";
+  for (let i = 0; i < api!.letterCount(); i++) line += api!.letterTitle(i) + (api!.letterOpened(i) ? ":opened" : ":new") + (api!.letterTime(i).length == 16 ? "" : ":no-time") + " ";
+  document.getElementById("result").textContent = line + api!.letterName(0);
+}
+export function force(): void { api!.openLetter(api!.letterId(0)); }
+export function show(): void { api!.showLetter(api!.letterId(0)); }
+export function remove(): void { api!.deleteLetter(api!.letterId(0)); }
+export function forceAll(): void { api!.openAllLetters(); }
+export function removeAll(): void { api!.deleteAllLetters(); }
+launch(new Settings());`);
+  const store = createMemoryAppStore();
+  const apps = [homeApp,
+    { source: "https://example.test/letters/", prebuilt: { ...sending, manifest: { ...sending.manifest, id: "sender", name: "差出人", permissions: { notify: { reason: "通知" } } } } },
+    { source: "binette:system", prebuilt: { ...cadre, manifest: { ...cadre.manifest, id: "cadre", roles: ["cadre"] } } },
+    { source: "binette:system", prebuilt: { ...settings, manifest: { ...settings.manifest, id: "settings", roles: ["settings"] } } },
+  ];
+  const mount = async () => {
+    const element = output();
+    const frames: Process[] = [];
+    const originalPresent = element.ui.present;
+    element.ui.present = (instance, process) => { if (instance.cadre) frames.push(process); return originalPresent(instance, process); };
+    const system = await mountSystem(element, { apps, store, createWorker, stackSize: 10 });
+    const shown = async (count: number) => { await frames.at(-1)!.app.call("inspect"); await waitForAsync(async () => (await store.data.read("cadre")).get("shown") === String(count)); };
+    return { element, system, shown, frame: () => frames.at(-1)! };
+  };
+  const state = async () => (await store.pigeon.history()).map(letter => `${letter.kind}:${letter.opened ? "opened" : "new"}`);
+  const settle = async (expected: string[]) => { await waitForAsync(async () => JSON.stringify(await state()) === JSON.stringify(expected)); };
+  let first = await mount();
+  try {
+    const before = Date.now();
+    await first.system.open(senderId); const sender = first.element.active.process;
+    await sender.app.call("mail");
+    await settle(["mail:new"]);
+    const saved = (await store.pigeon.history())[0]!;
+    assertEquals([saved.from, saved.title, saved.time >= before && saved.time <= Date.now()], [senderId, "メール", true]);
+    await first.shown(1);
+    // Opening the app from its icon is not opening the letter.
+    await first.system.open("settings");
+    await first.system.open(senderId);
+    await settle(["mail:new"]);
+    await first.shown(1);
+    // Closing keeps the letter and marks it opened.
+    await first.frame().app.call("dismiss");
+    await settle(["mail:opened"]);
+    await first.shown(0);
+    // The app opens its own letters by kind once it has dealt with them.
+    await sender.app.call("mail"); await sender.app.call("chat");
+    await settle(["mail:opened", "mail:new", "chat:new"]);
+    await first.shown(2);
+    await sender.app.call("readMail");
+    await settle(["mail:opened", "mail:opened", "chat:new"]);
+    await first.shown(1);
+    // Pressing the notification opens it and shows the sender, even while another app is in front.
+    await first.system.open("settings");
+    await first.frame().app.call("press");
+    await settle(["mail:opened", "mail:opened", "chat:opened"]);
+    await waitFor(() => { const instance = first.element.view.instances.find(instance => instance.key === senderId); return instance !== undefined && instance.id === first.element.active?.id; });
+    await sender.app.call("mail"); await sender.app.call("chat");
+    await settle(["mail:opened", "mail:opened", "chat:opened", "mail:new", "chat:new"]);
+    assertEquals(first.element.errors, []);
+  } finally { first.system.stop(); }
+  // After a reload the unopened letters stay in settings, and Cadre does not show them again.
+  first = await mount();
+  try {
+    await first.shown(0);
+    await first.system.open("settings"); const panel = first.element.active;
+    await panel.process.app.call("inspect");
+    assertEquals(panel.text.get("result"), "チャット:new メール:new チャット:opened メール:opened メール:opened 差出人");
+    await panel.process.app.call("force");
+    await settle(["mail:opened", "mail:opened", "chat:opened", "mail:new", "chat:opened"]);
+    await panel.process.app.call("remove");
+    await settle(["mail:opened", "mail:opened", "chat:opened", "mail:new"]);
+    await waitForAsync(async () => { await panel.process.app.call("inspect"); return panel.text.get("result") === "メール:new チャット:opened メール:opened メール:opened 差出人"; });
+    await panel.process.app.call("show");
+    await settle(["mail:opened", "mail:opened", "chat:opened", "mail:opened"]);
+    await waitFor(() => { const instance = first.element.view.instances.find(instance => instance.key === senderId); return instance !== undefined && instance.id === first.element.active?.id; });
+    await first.element.active.process.app.call("mail");
+    await settle(["mail:opened", "mail:opened", "chat:opened", "mail:opened", "mail:new"]);
+    await panel.process.app.call("forceAll");
+    await settle(["mail:opened", "mail:opened", "chat:opened", "mail:opened", "mail:opened"]);
+    await first.shown(0);
+    await panel.process.app.call("removeAll");
+    await settle([]);
+    assertEquals(first.element.errors, []);
+  } finally { first.system.stop(); }
+});
+
 Deno.test("共有添付は招待になり、承認とバイナリと失効を OS が毎回検査する", async () => {
   const source = "https://example.test/shares/";
   const senderId = source + "#sender", receiverId = source + "#receiver";

@@ -19,6 +19,11 @@
 - 設定に「日付と時刻」の項目を足し、OS のタイムゾーンを表示する。今はブラウザの設定に従い、変更はできない
 - 画面に出す日時を OS のタイムゾーンにそろえる。設定の起動の履歴は UTC の表示をやめ、定期実行の「次回」「前回」と Filer の更新日も同じ入口（`@binette/regie` の `systemTimeZone()`・`formatTime()`・`formatDate()`）を通す
 - `OsApi` に `timeZone()`（例 `Asia/Tokyo`）と `launchText(i)`（「YYYY-MM-DD HH:MM:SS」）を足す。`launchTime(i)` は残す
+- ユーザー宛ての手紙（通知）を、届いた時刻と開封の印つきで保存する。新しい方から 100 通（`PIGEON_HISTORY_LIMIT`）で、再読み込みしても残る。`PigeonStore` に `history()`・`record(letter, time)`・`open(ids)`・`forget(ids?)` が増え、IndexedDB の `…-pigeon` は版 3 になる（表 `history` を足すだけで、受信欄はそのまま）。`@binette/regie` から `UserLetter`・`LetterAction`・`PIGEON_HISTORY_LIMIT` を公開する
+- 通知の開封: 通知を押す・返事をする・閉じる、差出人のアプリが `PigeonApi.opened(kind = "")` を呼ぶ、設定から開封にする、のどれかで開封になる。アプリをアイコンから開いただけでは開封にならない。閉じた通知は消えず、開封の印が付く。通知を止めたアプリの未開封の手紙も開封にする
+- Cadre に出す通知は、いまの起動中に届いた未開封の手紙だけにする。再読み込みの前の未開封の手紙は出し直さない。通知の ID は保存した手紙の ID になる
+- 設定の「通知」に「届いた通知」を足す。新しい順に、差出人・題・本文・届いた時刻（OS のタイムゾーン）・未開封の印を出す。手紙を押すと差出人のアプリを開く。「開封にする」「すべて開封にする」（強制の開封）、「消す」「すべて消す」を置く。項目の一覧には未開封の件数を出す
+- `OsApi` に `letterCount()`・`letterId(i)`・`letterFrom(i)`・`letterName(i)`・`letterTitle(i)`・`letterBody(i)`・`letterTime(i)`・`letterOpened(i)` と `showLetter(id)`・`openLetter(id)`・`openAllLetters()`・`deleteLetter(id)`・`deleteAllLetters()` を足す。`binette:os@0.1` に `letter*` の 9 関数、`binette:pigeon@0.1` に `opened` が増える
 
 ## v0.2.0 (2026-11-11)
 

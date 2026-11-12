@@ -4,11 +4,12 @@ import { BinetteError, normalizeAppIdentifier, DestroyCause, DestroyKind, parseA
 import { createScheduler, type Scheduler } from "./scheduler.ts";
 import { launchApp } from "./launch.ts";
 import { formatDate } from "./time.ts";
+import { PIGEON_HISTORY_LIMIT } from "./pigeon.ts";
 import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, LetterAction, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot, UserLetter } from "./launch.ts";
 import { APPEARANCE_LIMITS, type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -625,6 +626,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onShare(operation, args) { return shareRequest(app, operation, args); },
         onPigeonSend(letter) { routePigeon(app, letter); },
         onPigeonDone(id) { donePigeon(app, id); },
+        onPigeonOpened(kind) { openLetters(letter => letter.from === app.key && (kind === "" || letter.kind === kind)); },
         onSchedule(action, slot, rule, label) { scheduleAction(app, action, slot, rule, label); },
         onExit(error) { exit = error; },
       });
@@ -691,7 +693,40 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const muted = new Map<string, boolean>();
   for (const app of available.values()) muted.set(app.key, await options.store.pigeon.muted(app.parentKey ?? app.key));
   let nextLetter = 0;
-  const notifications: PigeonLetter[] = [];
+  // Letters to the user, oldest first. The store keeps them across reloads with the arrival time and the opened mark.
+  const history: UserLetter[] = await options.store.pigeon.history();
+  // Cadre shows only unopened letters that arrived in this session. Older unopened ones stay in settings (and the badge later).
+  const arrived = new Set<number>();
+  const shownLetters = () => history.filter(letter => arrived.has(letter.id) && !letter.opened);
+  const syncOs = () => { for (const session of sessions) if (apiOf(session.installed).keys.has("os")) session.mounted?.syncOs?.(osSnapshot([])); };
+  /** The single place that opens letters: Cadre, the sending app and settings all end up here. */
+  const openLetters = (pick: (letter: UserLetter) => boolean) => {
+    const ids: number[] = [];
+    for (const letter of history) if (!letter.opened && pick(letter)) { letter.opened = true; arrived.delete(letter.id); ids.push(letter.id); }
+    if (!ids.length) return;
+    saving = saving.then(() => options.store.pigeon.open(ids)).catch(report);
+    renderBar();
+    syncOs();
+  };
+  const forgetLetters = (pick: (letter: UserLetter) => boolean) => {
+    const ids = history.filter(pick).map(letter => letter.id);
+    if (!ids.length) return;
+    for (const id of ids) { history.splice(history.findIndex(letter => letter.id === id), 1); arrived.delete(id); }
+    saving = saving.then(() => options.store.pigeon.forget(ids)).catch(report);
+    renderBar();
+    syncOs();
+  };
+  const letterAction = (action: LetterAction, id: number) => {
+    if (action === "openAll") openLetters(() => true);
+    else if (action === "deleteAll") forgetLetters(() => true);
+    else if (action === "delete") forgetLetters(letter => letter.id === id);
+    else {
+      // "show" is the user pressing the letter itself, so it also counts as opening it.
+      const target = action === "show" ? available.get(history.find(letter => letter.id === id)?.from ?? "") : undefined;
+      openLetters(letter => letter.id === id);
+      if (target) void show(target, target.key === home?.key).catch(report);
+    }
+  };
   const canNotify = (app: InstalledApp) => Object.hasOwn(app.manifest.permissions ?? {}, "notify");
   const pigeonSnapshot = async (app: InstalledApp) => ({ letters: await options.store.pigeon.read(app.key), notify: canNotify(app) });
   const syncInbox = async (key: string) => {
@@ -706,7 +741,20 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     if (request.to !== "user" && !target) return;
     if (!Array.isArray(request.shares ?? []) || (request.to === "user" && request.shares?.length) || request.shares?.some(share => !share || typeof share.id !== "string" || !["read", "write"].includes(share.access))) return;
     const letter: PigeonLetter = { ...structuredClone(request), from: sender.key, id: ++nextLetter };
-    if (request.to === "user") { notifications.push(letter); if (notifications.length > 100) notifications.shift(); renderBar(); return; }
+    if (request.to === "user") {
+      saving = saving.then(async () => {
+        const saved = await options.store.pigeon.record(letter, Date.now());
+        if (stopped) return;
+        history.push(saved);
+        for (const old of history.splice(0, Math.max(0, history.length - PIGEON_HISTORY_LIMIT))) arrived.delete(old.id);
+        // Muted while the letter was being saved: keep it in the history, but never show it.
+        if (muted.get(sender.key)) { openLetters(old => old.id === saved.id); return; }
+        arrived.add(saved.id);
+        renderBar();
+        syncOs();
+      }).catch(report);
+      return;
+    }
     saving = saving.then(async () => {
       const deliver = () => options.store.pigeon.append(request.to, letter);
       if (request.shares?.length) await options.store.shares.inviteSharesWithDelivery(sender.key, request.to, request.shares, deliver);
@@ -768,15 +816,14 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const donePigeon = (app: InstalledApp, id: number) => {
     saving = saving.then(async () => { await options.store.pigeon.done(app.key, id); }).catch(report);
   };
-  const dismissNotification = (id: number) => {
-    const i = notifications.findIndex(letter => letter.id === id);
-    if (i >= 0) { notifications.splice(i, 1); renderBar(); }
-  };
+  /** Closing a notification keeps the letter in the history and marks it opened. */
+  const dismissNotification = (id: number) => openLetters(letter => letter.id === id);
   const osSnapshot = (launches: { time: number; name: string }[]) => {
     const { roles: _roles, allowHttpLists: _allowHttpLists, ...numeric } = settings;
     return {
       settings: numeric,
       notifications: [...available.values()].filter(canNotify).map(app => ({ id: app.key, name: app.manifest.name, muted: muted.get(app.key) ?? false })),
+      letters: history.map(letter => ({ id: letter.id, from: letter.from, name: available.get(letter.from)?.manifest.name ?? letter.from, title: letter.title, body: letter.body, time: letter.time, opened: letter.opened })).reverse(),
       roles: Object.fromEntries(Object.entries(assigned).flatMap(([role, app]) => app ? [[role, app.key]] : [])),
       candidates: Object.fromEntries(ASSIGNABLE_ROLES.map(role => [role, candidates(role).map(app => ({ id: app.key, name: app.manifest.name }))])),
       launches,
@@ -793,7 +840,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       hasIcon: s.installed.icon !== undefined,
     }));
     const homeFront = active !== undefined && active.home;
-    return { instances, homeFront, installed, installBusy, notifications: structuredClone(notifications) };
+    return { instances, homeFront, installed, installBusy, notifications: structuredClone(shownLetters()) };
   };
 
   function renderBar(clearError = false) {
@@ -964,6 +1011,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onSchedule(action, slot, rule, label) { scheduleAction(installed, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(installed, letter); },
         onPigeonDone(id) { donePigeon(installed, id); },
+        onPigeonOpened(kind) { openLetters(letter => letter.from === installed.key && (kind === "" || letter.kind === kind)); },
+        onLetter(action, id) { if (api.keys.has("os")) letterAction(action, id); },
         onNotificationMuted(i, value) {
           if (!api.keys.has("os")) return;
           const target = osSnapshot([]).notifications[i];
@@ -971,8 +1020,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           const owner = available.get(target.id)?.parentKey ?? target.id;
           for (const app of available.values()) if ((app.parentKey ?? app.key) === owner) muted.set(app.key, value);
           saving = saving.then(() => options.store.pigeon.mute(owner, value)).catch(report);
-          if (value) for (const letter of [...notifications]) if (muted.get(letter.from)) dismissNotification(letter.id);
-          for (const session of sessions) if (apiOf(session.installed).keys.has("os")) session.mounted?.syncOs?.(osSnapshot([]));
+          if (value) openLetters(letter => !!muted.get(letter.from));
+          syncOs();
         },
         onSet(name: string, value: number) { if (api.keys.has("os")) setSetting(name, value); },
         onAssign(role: string, i: number) { if (api.keys.has("os")) void selectRole(role, i).catch(report); },
@@ -1107,16 +1156,17 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onSchedule(action, slot, rule, label) { scheduleAction(selectedCadre, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
         onPigeonDone(id) { donePigeon(selectedCadre, id); },
+        onPigeonOpened(kind) { openLetters(letter => letter.from === selectedCadre.key && (kind === "" || letter.kind === kind)); },
         onNotificationDismiss: dismissNotification,
         onNotificationOpen(id) {
-          const letter = notifications.find(letter => letter.id === id);
+          const letter = shownLetters().find(letter => letter.id === id);
           if (!letter || letter.actions?.length) return;
           const target = available.get(letter.from);
           dismissNotification(id);
           if (target) void show(target, target.key === home?.key).catch(report);
         },
         onNotificationReply(id, action, body) {
-          const letter = notifications.find(letter => letter.id === id);
+          const letter = shownLetters().find(letter => letter.id === id);
           const button = letter?.actions?.find(button => button.id === action);
           if (!letter || !button) return;
           const reply: PigeonLetter = { id: ++nextLetter, from: "user", to: letter.from, kind: action, title: letter.title, body: button.input ? body : "" };

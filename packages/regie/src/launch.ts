@@ -13,12 +13,19 @@ export interface PigeonLetter {
   shares?: { id: string; access: "read" | "write" }[];
   actions?: { id: string; label: string; input?: boolean; placeholder?: string }[];
 }
+/** A letter to the user as kept in the history: when it arrived and whether it was opened. */
+export interface UserLetter extends PigeonLetter { time: number; opened: boolean }
 export interface PigeonSnapshot { letters: PigeonLetter[]; notify: boolean }
+/** What settings can do to the history: show the sender, force a letter open, or delete it. */
+export const LETTER_ACTIONS = ["show", "open", "openAll", "delete", "deleteAll"] as const;
+export type LetterAction = typeof LETTER_ACTIONS[number];
 export type PigeonSend = Omit<PigeonLetter, "id" | "from">;
 
 /** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
   notifications?: { id: string; name: string; muted: boolean }[];
+  /** ユーザー宛てに届いた手紙。新しい順。`name` は差出人のアプリ名（もう無いアプリは ID） */
+  letters?: { id: number; from: string; name: string; title: string; body: string; time: number; opened: boolean }[];
   settings: Omit<SystemSettings, "roles" | "allowHttpLists">;
   /** 役割に割り当てたアプリ */
   roles: Record<string, string>;
@@ -214,6 +221,10 @@ export interface LaunchOptions {
   pigeon?: PigeonSnapshot;
   onPigeonSend?: (letter: PigeonSend) => void;
   onPigeonDone?: (id: number) => void;
+  /** The app says the cause of its letters to the user is settled. An empty kind means all of its letters. */
+  onPigeonOpened?: (kind: string) => void;
+  /** Settings acts on the history of letters to the user. `id` is ignored by openAll and deleteAll. */
+  onLetter?: (action: LetterAction, id: number) => void;
   onNotificationMuted?: (i: number, muted: boolean) => void;
   onNotificationOpen?: (id: number) => void;
   onNotificationDismiss?: (id: number) => void;
@@ -323,7 +334,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string; operation?: string; args?: string[] };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; kind?: string; body?: string; operation?: string; args?: string[] };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -405,6 +416,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "pigeon.send": options.onPigeonSend?.(data.letter!); break;
         case "pigeon.done": options.onPigeonDone?.(data.i!); break;
+        case "pigeon.opened": options.onPigeonOpened?.(String(data.kind ?? "")); break;
+        case "os.letter": if ((LETTER_ACTIONS as readonly string[]).includes(data.action!)) options.onLetter?.(data.action as LetterAction, Number(data.i)); break;
         case "os.notificationMuted": options.onNotificationMuted?.(data.i!, data.muted!); break;
         case "cadre.notificationOpen": options.onNotificationOpen?.(data.i!); break;
         case "cadre.notificationDismiss": options.onNotificationDismiss?.(data.i!); break;
