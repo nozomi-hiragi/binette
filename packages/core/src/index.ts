@@ -9,7 +9,7 @@ export type {
   BinetteSettingsRow, BinetteSettingsSection, BinetteSettingsSectionBase,
 } from "./types.ts";
 export type { AppEntry, AppManifest, AppPermission, AppSubManifest, ParseAppManifestOptions } from "./app.ts";
-export { parseAppManifest } from "./app.ts";
+export { isNetUrlPrefix, parseAppManifest } from "./app.ts";
 export { BinetteError, parseBinette } from "./parse.ts";
 export { BINETTE_VERSION } from "./schema.ts";
 export { DestroyCause, DestroyKind, State } from "./lifecycle.ts";

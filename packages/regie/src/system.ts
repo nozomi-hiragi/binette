@@ -1,6 +1,6 @@
 import { appCompatibility, validateAppAbi, validateAppRequirements } from "./abi.ts";
 import { createProviderLists, type InstallConfirmation, type ProviderLists, type ProviderListsOptions } from "./lists.ts";
-import { BinetteError, normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
+import { BinetteError, isNetUrlPrefix, normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
 import { launchApp } from "./launch.ts";
 import { createNetService, type NetRequest } from "./net.ts";
@@ -179,7 +179,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   let shown = 0;
   const sessions = new Set<Session>();
   // 画面なしで起こして予定を実行しているアプリ。キーは完全なアプリ ID
-  const headless = new Map<string, { owner: string; controller: AbortController; done: Promise<void> }>();
+  const headless = new Map<string, { owner: string; controller: AbortController; done: Promise<void>; app?: InstalledApp; worker?: Awaited<ReturnType<typeof launchApp>> }>();
   let active: Session | undefined;
   let hiding: Session | undefined;
   const report = (error: unknown) => {
@@ -410,11 +410,17 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }
     renderBar();
   };
+  const netLists = await options.store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} };
+  const netOwner = (app: InstalledApp) => app.parentKey ?? app.key;
+  const ownNet = (app: InstalledApp) => netLists.apps[netOwner(app)] ??= { allow: [], added: [], deny: [] };
+  const netSnapshot = (app: InstalledApp) => ({ tools: [...(app.manifest.permissions?.net?.tools ?? [])], added: [...(netLists.apps[netOwner(app)]?.added ?? [])] });
   const netService = createNetService();
   const netRequest = async (app: InstalledApp, request: NetRequest, signal: AbortSignal) => {
-    const saved = await options.store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} };
-    const own = saved.apps[app.parentKey ?? app.key];
-    return netService(app.parentKey ?? app.key, request, { request: app.manifest.permissions?.net?.request ?? [], appAllow: own?.allow ?? [], appDeny: own?.deny ?? [], commonAllow: saved.commonAllow, commonDeny: saved.commonDeny }, signal);
+    await saving;
+    const saved = await options.store.system.getNetLists?.() ?? netLists;
+    const own = saved.apps[netOwner(app)];
+    if (!Object.hasOwn(app.manifest.permissions ?? {}, "net")) return { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "blocked" };
+    return netService(netOwner(app), request, { request: app.manifest.permissions?.net?.request ?? [], appAllow: own?.allow ?? [], appAdded: own?.added ?? [], appDeny: own?.deny ?? [], commonAllow: saved.commonAllow, commonDeny: saved.commonDeny }, signal);
   };
   /** アプリに届く辞書のキーと、届かないキーの理由 */
   const apiOf = (installed: InstalledApp) => {
@@ -629,6 +635,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         pigeon,
         shares: api.keys.has("shares"),
         net: api.keys.has("net"),
+        netState: netSnapshot(app),
         ...(storage ? { storage } : {}),
         ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(app) } : {}),
         onStorage(name, value) {
@@ -637,12 +644,15 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         onShare(operation, args) { return shareRequest(app, operation, args); },
         onNet(request, signal) { return netRequest(app, request, signal); },
+        onNetAllow(action, url) { netAllow(app, action, url); },
         onPigeonSend(letter) { routePigeon(app, letter); },
         onPigeonDone(id) { donePigeon(app, id); },
         onPigeonOpened(kind) { openLetters(letter => letter.from === app.key && (kind === "" || letter.kind === kind)); },
         onSchedule(action, slot, rule, label) { scheduleAction(app, action, slot, rule, label); },
         onExit(error) { exit = error; },
       });
+      Object.assign(headless.get(app.key)!, { app, worker });
+      if (api.keys.has("net")) worker.syncNet?.(netSnapshot(app));
       await worker.callWithin(SCHEDULE_TIMEOUT, "__bina_schedule", slot);
       if (exit) throw exit;
     } finally {
@@ -740,6 +750,79 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (target) void show(target, target.key === home?.key).catch(report);
     }
   };
+  const saveNet = () => {
+    const snapshot = structuredClone(netLists);
+    saving = saving.then(() => options.store.system.putNetLists?.(snapshot)).catch(report);
+    syncOs();
+  };
+  /** Worker の同期判定に加え、保存前にも権限・形・上限を確かめる。 */
+  const netAllow = (app: InstalledApp, action: string, url: string) => {
+    try {
+      if (stopped || !app.manifest.permissions?.net?.tools?.includes("addAllow") || !isNetUrlPrefix(url) || !["add", "remove"].includes(action)) return;
+      const own = ownNet(app);
+      const added = own.added ?? [];
+      if (action === "add") {
+        if (added.includes(url) || added.length >= 100) return;
+        own.added = [...added, url];
+      } else {
+        if (!added.includes(url)) return;
+        own.added = added.filter(value => value !== url);
+      }
+      const quiet = own.quiet ?? false;
+      saveNet();
+      if (action !== "add" || !assigned.settings) return;
+      const letter: PigeonLetter = { id: 0, from: assigned.settings.key, to: "user", kind: "net.allow", title: "通信先が追加されました", body: `${app.manifest.name}が ${url} を通信先に足しました` };
+      saving = saving.then(async () => {
+        const saved = await options.store.pigeon.record(letter, Date.now());
+        if (quiet) { await options.store.pigeon.open([saved.id]); saved.opened = true; }
+        if (stopped) return;
+        history.push(saved);
+        for (const old of history.splice(0, Math.max(0, history.length - PIGEON_HISTORY_LIMIT))) arrived.delete(old.id);
+        if (!saved.opened) arrived.add(saved.id);
+        renderBar();
+        syncOs();
+      }).catch(report);
+    } finally {
+      // 変更が無い・上限で拒否した場合も、送信元の楽観的な写しを確定する。
+      syncNet(netOwner(app));
+    }
+  };
+  /** 同じ保存 owner を持つ Worker に、処理済みの通信先の写しを送る。 */
+  const syncNet = (owner: string) => {
+    for (const session of [...sessions, ...(cadreSession ? [cadreSession] : [])]) if (netOwner(session.installed) === owner && apiOf(session.installed).keys.has("net")) session.mounted?.syncNet?.(netSnapshot(session.installed));
+    for (const run of headless.values()) if (run.worker && run.app && netOwner(run.app) === owner) run.worker.syncNet?.(netSnapshot(run.app));
+  };
+  const netDo = (action: string, appId: string, url: string) => {
+    if (!["addAllow", "removeAllow", "addDeny", "removeDeny"].includes(action)) return;
+    const app = appId === "" ? undefined : available.get(appId);
+    if (appId !== "" && (!app || !apiOf(app).keys.has("net"))) return;
+    if (!isNetUrlPrefix(url)) { report(new Error("通信先は正しい https の URL で指定してください。パスは / で終えてください。")); return; }
+    const own = app ? ownNet(app) : undefined;
+    const allow = action.endsWith("Allow");
+    const list = own ? (allow ? own.allow : own.deny) : allow ? netLists.commonAllow : netLists.commonDeny;
+    if (action.startsWith("add")) { if (!list.includes(url)) list.push(url); }
+    else {
+      for (let i = list.length - 1; i >= 0; i--) if (list[i] === url) list.splice(i, 1);
+      if (own && allow) own.added = (own.added ?? []).filter(value => value !== url);
+    }
+    saveNet();
+    if (app) syncNet(netOwner(app));
+  };
+  const netQuiet = (appId: string, on: boolean) => {
+    const app = available.get(appId);
+    if (!app || !apiOf(app).keys.has("net") || typeof on !== "boolean") return;
+    ownNet(app).quiet = on;
+    saveNet();
+  };
+  const setAppMuted = (appId: string, value: boolean) => {
+    const app = available.get(appId);
+    if (!app || !canNotify(app) || typeof value !== "boolean") return;
+    const owner = app.parentKey ?? app.key;
+    for (const entry of available.values()) if ((entry.parentKey ?? entry.key) === owner) muted.set(entry.key, value);
+    saving = saving.then(() => options.store.pigeon.mute(owner, value)).catch(report);
+    if (value) openLetters(letter => !!muted.get(letter.from));
+    syncOs();
+  };
   const canNotify = (app: InstalledApp) => Object.hasOwn(app.manifest.permissions ?? {}, "notify");
   const pigeonSnapshot = async (app: InstalledApp) => ({ letters: await options.store.pigeon.read(app.key), notify: canNotify(app) });
   const syncInbox = async (key: string) => {
@@ -835,6 +918,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const { roles: _roles, allowHttpLists: _allowHttpLists, ...numeric } = settings;
     return {
       settings: numeric,
+      net: { allow: [...netLists.commonAllow], deny: [...netLists.commonDeny] },
+      apps: [...available.values()].map(app => {
+        const own = netLists.apps[netOwner(app)];
+        return { id: app.key, name: app.manifest.name, notify: canNotify(app), muted: muted.get(app.key) ?? false, net: apiOf(app).keys.has("net"), request: [...(app.manifest.permissions?.net?.request ?? [])], allow: [...(own?.allow ?? [])], added: [...(own?.added ?? [])], deny: [...(own?.deny ?? [])], quiet: own?.quiet ?? false };
+      }),
       notifications: [...available.values()].filter(canNotify).map(app => ({ id: app.key, name: app.manifest.name, muted: muted.get(app.key) ?? false })),
       letters: history.map(letter => ({ id: letter.id, from: letter.from, name: available.get(letter.from)?.manifest.name ?? letter.from, title: letter.title, body: letter.body, time: letter.time, opened: letter.opened })).reverse(),
       roles: Object.fromEntries(Object.entries(assigned).flatMap(([role, app]) => app ? [[role, app.key]] : [])),
@@ -975,7 +1063,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (api.keys.has("storage") && !storage) { api.keys.delete("storage"); api.denied.storage = "NotGranted"; }
       if (!sessions.has(started) || stopped) return;
       const pigeon = await saving.then(() => pigeonSnapshot(installed));
-      const updateAtStart = options.update?.snapshot?.();
+      const osAtStart = api.keys.has("os") ? osSnapshot(launches) : undefined;
       const mounting = startProcess(installed.wasm, {
         sub: installed.sub,
         declarative: installed.manifest.entry.html === undefined,
@@ -1009,8 +1097,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           pigeon,
           shares: api.keys.has("shares"),
           net: api.keys.has("net"),
+          netState: netSnapshot(installed),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
-          ...(api.keys.has("os") ? { os: osSnapshot(launches) } : {}),
+          ...(osAtStart ? { os: osAtStart } : {}),
           ...(manager ? { manager } : {}),
           ...(api.keys.has("scheduler") ? { scheduler: schedulerSnapshot() } : {}),
           ...(api.keys.has("schedule") ? { schedule: scheduleSnapshot(installed) } : {}),
@@ -1022,6 +1111,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         onShare(operation, args) { return shareRequest(installed, operation, args); },
         onNet(request, signal) { return netRequest(installed, request, signal); },
+        onNetAllow(action, url) { netAllow(installed, action, url); },
         onManager(action, args) { if (api.keys.has("manager")) managerAction(action, args); },
         onScheduler(action, id, value, on) { if (api.keys.has("scheduler")) schedulerAction(action, id, value, on); },
         onSchedule(action, slot, rule, label) { scheduleAction(installed, action, slot, rule, label); },
@@ -1029,15 +1119,14 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onPigeonDone(id) { donePigeon(installed, id); },
         onPigeonOpened(kind) { openLetters(letter => letter.from === installed.key && (kind === "" || letter.kind === kind)); },
         onLetter(action, id) { if (api.keys.has("os")) letterAction(action, id); },
+        onNetDo(action, appId, url) { if (api.keys.has("os")) netDo(action, appId, url); },
+        onNetQuiet(appId, on) { if (api.keys.has("os")) netQuiet(appId, on); },
+        onAppNotificationMuted(appId, value) { if (api.keys.has("os")) setAppMuted(appId, value); },
         onNotificationMuted(i, value) {
           if (!api.keys.has("os")) return;
           const target = osSnapshot([]).notifications[i];
           if (!target) return;
-          const owner = available.get(target.id)?.parentKey ?? target.id;
-          for (const app of available.values()) if ((app.parentKey ?? app.key) === owner) muted.set(app.key, value);
-          saving = saving.then(() => options.store.pigeon.mute(owner, value)).catch(report);
-          if (value) openLetters(letter => !!muted.get(letter.from));
-          syncOs();
+          setAppMuted(target.id, value);
         },
         onSet(name: string, value: number) { if (api.keys.has("os")) setSetting(name, value); },
         onAssign(role: string, i: number) { if (api.keys.has("os")) void selectRole(role, i).catch(report); },
@@ -1060,11 +1149,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (!sessions.has(started) || stopped) { mounted.stop(); started.view.remove(); return; }
       started.mounted = mounted;
       await saving;
+      if (api.keys.has("net")) mounted.syncNet?.(netSnapshot(installed));
       const latestPigeon = await pigeonSnapshot(installed);
       if (JSON.stringify(latestPigeon) !== JSON.stringify(pigeon)) mounted.syncPigeon?.(latestPigeon);
       // 起動の途中に変わったアプリ管理の写し（届いたアイコンなど）は、mounted が無いので届いていない
       if (api.keys.has("manager")) syncManager();
-      if (api.keys.has("os") && JSON.stringify(updateAtStart) !== JSON.stringify(options.update?.snapshot?.())) mounted.syncOs?.(osSnapshot(launches));
+      if (osAtStart && JSON.stringify(osAtStart) !== JSON.stringify(osSnapshot(launches))) mounted.syncOs?.(osSnapshot(launches));
       mounted.setStopDelay(settings.stopDelay);
       started.startedAt = performance.now();
       mounted.setFrozen(frozen);
@@ -1163,6 +1253,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           pigeon,
           shares: api.keys.has("shares"),
           net: api.keys.has("net"),
+          netState: netSnapshot(selectedCadre),
           ...(storage ? { storage } : {}),
           ...(api.keys.has("apps") ? { apps: apps.map(({ key, manifest, icon }) => ({ id: key, name: manifest.name, icon })) } : {}),
         },
@@ -1172,6 +1263,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         },
         onShare(operation, args) { return shareRequest(selectedCadre, operation, args); },
         onNet(request, signal) { return netRequest(selectedCadre, request, signal); },
+        onNetAllow(action, url) { netAllow(selectedCadre, action, url); },
         onSchedule(action, slot, rule, label) { scheduleAction(selectedCadre, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
         onPigeonDone(id) { donePigeon(selectedCadre, id); },
@@ -1226,6 +1318,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (cadreSession !== session || stopped) { mounted.stop(); session.view.remove(); return; }
       session.mounted = mounted;
       await saving;
+      if (api.keys.has("net")) mounted.syncNet?.(netSnapshot(selectedCadre));
       const latestPigeon = await pigeonSnapshot(selectedCadre);
       if (JSON.stringify(latestPigeon) !== JSON.stringify(pigeon)) mounted.syncPigeon?.(latestPigeon);
       if (api.keys.has("manager")) syncManager();

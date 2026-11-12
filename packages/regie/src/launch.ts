@@ -21,8 +21,13 @@ export const LETTER_ACTIONS = ["show", "open", "openAll", "delete", "deleteAll"]
 export type LetterAction = typeof LETTER_ACTIONS[number];
 export type PigeonSend = Omit<PigeonLetter, "id" | "from">;
 
+/** アプリが操作できる、自分の通信先の写し。 */
+export interface NetSnapshot { tools: string[]; added: string[] }
+
 /** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
+  apps?: { id: string; name: string; notify: boolean; muted: boolean; net: boolean; request: string[]; allow: string[]; added: string[]; deny: string[]; quiet: boolean }[];
+  net?: { allow: string[]; deny: string[] };
   notifications?: { id: string; name: string; muted: boolean }[];
   /** ユーザー宛てに届いた手紙。新しい順。`name` は差出人のアプリ名（もう無いアプリは ID） */
   letters?: { id: number; from: string; name: string; title: string; body: string; time: number; opened: boolean }[];
@@ -165,6 +170,11 @@ export interface RegieWorker {
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
   net?: boolean;
+  netState?: NetSnapshot;
+  onNetAllow?: (action: string, url: string) => void;
+  onNetDo?: (action: string, appId: string, url: string) => void;
+  onNetQuiet?: (appId: string, on: boolean) => void;
+  onAppNotificationMuted?: (appId: string, muted: boolean) => void;
   onNet?: (request: import("./net.ts").NetRequest, signal: AbortSignal) => Promise<import("./net.ts").NetResponse>;
   /** 起動中の OS のビルド情報 */
   osBuild?: { ref: string; commit: string };
@@ -258,6 +268,7 @@ export interface RegieApp {
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncNet?(snapshot: NetSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
@@ -292,6 +303,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   let nextId = 1;
   let stopped = false;
   const netRequests = new Map<number, AbortController>();
+  // この Worker の net.allow をカーネルが処理したところまで、写しと一緒に返す。
+  let netAcknowledged = 0;
   let rejectLaunch: ((error: Error) => void) | undefined;
 
   const finish = (error: Error, notify: boolean) => {
@@ -341,7 +354,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; kind?: string; body?: string; operation?: string; args?: string[] };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; kind?: string; body?: string; operation?: string; args?: string[]; url?: string; appId?: string; on?: boolean; seq?: number };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -356,6 +369,11 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               const id = nextId++;
               pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
               try { worker.postMessage({ type: "pigeon.sync", id, pigeon: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
+            syncNet(snapshot) {
+              if (stopped) return;
+              try { worker.postMessage({ type: "net.sync", netState: snapshot, netAck: netAcknowledged }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             syncOs(snapshot) {
@@ -416,6 +434,15 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "scheduler.do": { const args = (data as { schedulerArgs?: [string, string, boolean] }).schedulerArgs ?? ["", "", false]; options.onScheduler?.(data.action!, args[0], args[1], args[2]); break; }
         case "schedule.do": { const args = (data as { scheduleArgs?: [number, string, string] }).scheduleArgs ?? [-1, "", ""]; options.onSchedule?.(data.action!, args[0], args[1], args[2]); break; }
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
+        case "net.allow":
+          if (options.net) {
+            if (Number.isSafeInteger(data.seq) && data.seq! > netAcknowledged) netAcknowledged = data.seq!;
+            options.onNetAllow?.(data.action!, data.url!);
+          }
+          break;
+        case "os.netDo": if (options.os) options.onNetDo?.(data.action!, data.appId!, data.url!); break;
+        case "os.netQuiet": if (options.os) options.onNetQuiet?.(data.appId!, data.on!); break;
+        case "os.appNotificationMuted": if (options.os) options.onAppNotificationMuted?.(data.appId!, data.muted!); break;
         case "net.request": {
           const message = data as typeof data & { request: import("./net.ts").NetRequest };
           if (!options.net || !options.onNet || !Number.isInteger(data.id) || netRequests.has(data.id!)) break;
@@ -473,7 +500,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", net: options.net, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", net: options.net, netState: options.netState, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

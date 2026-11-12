@@ -829,3 +829,75 @@ export function go(): void { const net = NetApi.from(new Api()); if (net !== nul
   try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "4194304" }]); }
   finally { app.stop(); }
 });
+
+Deno.test("NetApi の addAllow/removeAllow は同期で判定し、追加元と 100 件の上限を守る", async () => {
+  const values = ["https://example.com/docs/", "https://user-added.test/", "bad", "http://example.com/", "https://a:b@example.com/", "https://example.com/a", "https://example.com/#", "https://*.example.com/", ...Array.from({ length: 100 }, (_, i) => `https://example.com/${i}/`)];
+  const wasm = await build(`const values = ${JSON.stringify(values)};
+import { NetApi } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function add(i: i32): void { text(1, new NetApi().addAllow(values[i]).toString()); }
+export function remove(i: i32): void { text(1, new NetApi().removeAllow(values[i]).toString()); }`, true);
+  const url = "https://example.com/docs/";
+  for (const options of [{ net: false, tools: ["addAllow"] }, { net: true, tools: [] }, { net: true, tools: undefined }]) {
+    let result = ""; const changes: unknown[] = [];
+    const app = await launchApp(wasm, { createWorker, net: options.net, ...(options.tools ? { netState: { tools: options.tools, added: [url] } } : {}), onNetAllow: (...args) => changes.push(args), onDom: ops => { for (const op of ops) if (op.op === "text") result = op.value; } });
+    try {
+      await app.call("add", values.indexOf(url)); assertEquals(result, "false");
+      await app.call("remove", values.indexOf(url)); assertEquals(result, "false");
+      assertEquals(changes, []);
+    } finally { app.stop(); }
+  }
+  let result = ""; const changes: unknown[] = [];
+  const app = await launchApp(wasm, { createWorker, net: true, netState: { tools: ["addAllow"], added: [] }, onNetAllow: (...args) => changes.push(args), onDom: ops => { for (const op of ops) if (op.op === "text") result = op.value; } });
+  const check = async (action: string, value: string, expected: boolean) => { await app.call(action, values.indexOf(value)); assertEquals(result, String(expected), action + ": " + value); };
+  try {
+    for (const invalid of ["bad", "http://example.com/", "https://a:b@example.com/", "https://example.com/a", "https://example.com/#", "https://*.example.com/"]) await check("add", invalid, false);
+    await check("remove", url, false);
+    await check("add", url, true);
+    await check("add", url, true);
+    assertEquals(changes, [["add", url]]);
+    await check("remove", "https://user-added.test/", false);
+    await check("remove", url, true);
+    await check("remove", url, false);
+    assertEquals(changes, [["add", url], ["remove", url]]);
+    for (let i = 0; i < 100; i++) await check("add", `https://example.com/${i}/`, true);
+    await check("add", "https://example.com/0/", true);
+    await check("add", url, false);
+    await check("remove", "https://example.com/0/", true);
+    await check("add", url, true);
+    app.syncNet!({ tools: ["addAllow"], added: [] });
+    await check("remove", url, false);
+    await check("add", url, true);
+  } finally { app.stop(); }
+});
+
+Deno.test("net.sync は処理済みの操作だけを確定し、連続した同期 API の未処理操作を消さない", async () => {
+  const wasm = await build(`import { NetApi } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+const net = new NetApi();
+export function batch(): void { net.addAllow("https://first.test/"); net.addAllow("https://second.test/"); net.removeAllow("https://first.test/"); }
+export function probe(): void { text(1, net.removeAllow("https://first.test/").toString()); text(1, net.removeAllow("https://second.test/").toString()); }
+export function removeSecond(): void { text(1, net.removeAllow("https://second.test/").toString()); }`, true);
+  const added = new Set<string>();
+  const replies: string[] = [];
+  let probe: Promise<void> | undefined;
+  let changes = 0;
+  const app = await launchApp(wasm, {
+    createWorker, net: true, netState: { tools: ["addAllow"], added: [] },
+    onNetAllow(action, url) {
+      if (action === "add") added.add(url); else added.delete(url);
+      app.syncNet!({ tools: ["addAllow"], added: [...added] });
+      // 最初の追加の写しの直後、残りの操作を反映した写しが届く前に照会する。
+      if (++changes === 1) probe = app.call("probe");
+    },
+    onDom: ops => { for (const op of ops) if (op.op === "text") replies.push(op.value); },
+  });
+  try {
+    await app.call("batch");
+    await probe;
+    await app.call("removeSecond");
+    assertEquals(replies, ["false", "true", "false"]);
+    assertEquals([...added], []);
+    assertEquals(changes, 4);
+  } finally { app.stop(); }
+});

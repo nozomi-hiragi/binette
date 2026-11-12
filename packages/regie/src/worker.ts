@@ -1,7 +1,7 @@
 import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
 import { createUiDiffer } from "@binette/decor";
-import { BinetteError, type DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { BinetteError, isNetUrlPrefix, type DomOp } from "@binette/core";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
 import { formatTime, systemTimeZone } from "./time.ts";
 
@@ -27,6 +27,10 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
   let net = false;
+  let netState: NetSnapshot = { tools: [], added: [] };
+  let nextNetChange = 0;
+  // OS の写しにまだ含まれない、自分の同期 API による変更。
+  const pendingNetChanges = new Map<number, { action: string; url: string }>();
   let nextNetRequest = 0;
   const netResults = new Map<number, import("./net.ts").NetResponse>();
   let shares = false;
@@ -66,6 +70,29 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     const list = candidates(role);
     if (!Number.isInteger(i) || i < 0 || i >= list.length) throw new Error("候補の番号が範囲外です。");
     return list[i]!;
+  };
+  const settingApp = (i: number) => at(system().apps ?? [], i, "アプリ");
+  const netList = (list: string, appId: string): string[] => {
+    const state = system();
+    if (appId === "") return list === "allow" ? state.net?.allow ?? [] : list === "deny" ? state.net?.deny ?? [] : [];
+    const app = state.apps?.find(app => app.id === appId);
+    return app && (list === "request" || list === "allow" || list === "added" || list === "deny") ? app[list] : [];
+  };
+  const netAllow = (action: string, url: string): boolean => {
+    if (!net || !netState.tools.includes("addAllow") || !isNetUrlPrefix(url)) return false;
+    const i = netState.added.indexOf(url);
+    if (action === "add") {
+      if (i >= 0) return true;
+      if (netState.added.length >= 100) return false;
+      netState.added.push(url);
+    } else {
+      if (i < 0) return false;
+      netState.added.splice(i, 1);
+    }
+    const seq = ++nextNetChange;
+    pendingNetChanges.set(seq, { action, url });
+    scope.postMessage({ type: "net.allow", action, url, seq });
+    return true;
   };
   const files = () => {
     if (storage === undefined) throw new Error("この呼び出しは storage が届いたアプリだけが使えます。");
@@ -307,6 +334,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       },
     },
     [HOST_ABI.net.module]: {
+      "addAllow": (url: number) => netAllow("add", readString(url)),
+      "removeAllow": (url: number) => netAllow("remove", readString(url)),
       "request": (url: number, method: number, headers: number, redirect: number) => {
         if (!net) throw new Error("net API は許可されていません。");
         if (nextNetRequest >= 2147483647) throw new Error("net の要求番号を使い切りました。");
@@ -374,6 +403,18 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "body": (i: number) => writeString(letterAt(i).body),
     },
     [HOST_ABI.os.module]: {
+      "appCount": () => system().apps?.length ?? 0,
+      "appName": (i: number) => writeString(settingApp(i).name),
+      "appId": (i: number) => writeString(settingApp(i).id),
+      "appNotify": (i: number) => settingApp(i).notify,
+      "appNet": (i: number) => settingApp(i).net,
+      "appMuted": (i: number) => settingApp(i).muted,
+      "setAppMuted": (appId: number, muted: number) => { system(); scope.postMessage({ type: "os.appNotificationMuted", appId: readString(appId), muted: !!muted }); },
+      "netCount": (list: number, appId: number) => netList(readString(list), readString(appId)).length,
+      "netUrl": (list: number, appId: number, i: number) => writeString(at(netList(readString(list), readString(appId)), i, "通信先")),
+      "netIsQuiet": (appId: number) => system().apps?.find(app => app.id === readString(appId))?.quiet ?? false,
+      "netDo": (action: number, appId: number, url: number) => { system(); scope.postMessage({ type: "os.netDo", action: readString(action), appId: readString(appId), url: readString(url) }); },
+      "netQuiet": (appId: number, on: number) => { system(); scope.postMessage({ type: "os.netQuiet", appId: readString(appId), on: !!on }); },
       "notificationCount": () => system().notifications?.length ?? 0,
       "notificationName": (i: number) => writeString(notificationSetting(i).name),
       "notificationId": (i: number) => writeString(notificationSetting(i).id),
@@ -582,7 +623,18 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; netState?: NetSnapshot; netAck?: number; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
+    if (data.type === "net.sync") {
+      netState = data.netState ?? { tools: [], added: [] };
+      // 古い写しが届いても、その後の add/remove の同期判定を巻き戻さない。
+      for (const [seq, change] of pendingNetChanges) {
+        if (seq <= (data.netAck ?? 0)) { pendingNetChanges.delete(seq); continue; }
+        if (change.action === "add") {
+          if (!netState.added.includes(change.url)) netState.added.push(change.url);
+        } else netState.added = netState.added.filter(url => url !== change.url);
+      }
+      return;
+    }
     if (data.type === "net.result") {
       netResults.set(data.id!, data.result as import("./net.ts").NetResponse);
       const callback = instance?.exports.__bina_net;
@@ -609,6 +661,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         pigeon = data.pigeon;
         shares = data.shares === true;
         net = data.net === true;
+        netState = data.netState ?? { tools: [], added: [] };
         denied = data.denied ?? {};
         page = data.page ?? "";
         sub = data.sub ?? "";

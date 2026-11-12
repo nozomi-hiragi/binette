@@ -95,3 +95,16 @@ Deno.test("通信の既定の制限時間は 30 秒", async () => {
     assertEquals(duration, 30_000);
   } finally { globalThis.setTimeout = original; }
 });
+
+Deno.test("アプリが足した通信先も許し、アプリ別・共通の deny が優先する", () => {
+  const url = "https://example.com/docs/a";
+  const lists = { request: [], appAllow: [], appAdded: ["https://example.com/docs/"], appDeny: [] as string[], commonAllow: [], commonDeny: [] as string[] };
+  assertEquals(allowsNetUrl(url, lists), true);
+  lists.appDeny.push("https://example.com/");
+  assertEquals(allowsNetUrl(url, lists), false);
+  lists.appDeny = [];
+  lists.commonDeny.push("https://example.com/");
+  assertEquals(allowsNetUrl(url, lists), false);
+  lists.commonDeny = []; lists.appAdded = [];
+  assertEquals(allowsNetUrl(url, lists), false);
+});

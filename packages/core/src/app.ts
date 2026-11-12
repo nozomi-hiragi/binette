@@ -150,12 +150,7 @@ export function parseAppManifest(text: string, options: ParseAppManifestOptions 
     if (!net || typeof net !== "object" || Array.isArray(net) || typeof net.reason !== "string") invalid("permissions の net の reason は文字列で指定してください。");
     if (net.request !== undefined) {
       if (!Array.isArray(net.request) || !net.request.every((url) => typeof url === "string")) invalid("permissions の net の request は文字列の配列で指定してください。");
-      for (const value of net.request) {
-        try {
-          const url = new URL(value);
-          if (url.protocol !== "https:" || url.username || url.password || value.includes("#") || value.includes("*") || !url.pathname.endsWith("/")) throw new Error();
-        } catch { invalid("permissions の net の request は正しい https の URL で指定してください。"); }
-      }
+      if (!net.request.every(isNetUrlPrefix)) invalid("permissions の net の request は正しい https の URL で指定してください。");
     }
     if (net.tools !== undefined && (!Array.isArray(net.tools) || !net.tools.every((tool) => tool === "addAllow"))) invalid("permissions の net の tools は addAllow の配列で指定してください。");
   }
@@ -167,4 +162,13 @@ export function parseAppManifest(text: string, options: ParseAppManifestOptions 
     }
   }
   return manifest;
+}
+
+/** manifest と通信先リストで共有する URL の検査。origin か / で終わるパスだけを許す。 */
+export function isNetUrlPrefix(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !value.includes("#") && !value.includes("*") && url.pathname.endsWith("/");
+  } catch { return false; }
 }

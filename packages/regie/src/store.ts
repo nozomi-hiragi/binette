@@ -119,8 +119,20 @@ export const DEFAULT_SYSTEM_SETTINGS: Readonly<SystemSettings> = Object.freeze({
 /** 登録した提供リスト。boot は削除できない既定リストの元の URL */
 export interface ProviderListRegistration { url: string; boot?: string }
 
-/** ネットのユーザー設定。アプリのキーごとに allow と deny を保存する。 */
-export interface SavedNetLists { commonAllow: string[]; commonDeny: string[]; apps: Record<string, { allow: string[]; deny: string[] }> }
+/** ネットのユーザー設定。allow はユーザー、added はアプリが足した通信先。 */
+export interface SavedNetLists {
+  commonAllow: string[];
+  commonDeny: string[];
+  apps: Record<string, {
+    allow: string[];
+    /** 第 1 段の保存には無い。無ければ空として読む */
+    added?: string[];
+    deny: string[];
+    quiet?: boolean;
+    /** 更新時の確認で使う。リストの操作では変えない */
+    approved?: string[];
+  }>;
+}
 
 /** アプリの記録と OS の設定。アプリのキーは完全な ID を使う */
 export interface SystemStore {

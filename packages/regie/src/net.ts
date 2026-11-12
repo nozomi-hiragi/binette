@@ -2,6 +2,7 @@
 export interface NetLists {
   request: readonly string[];
   appAllow: readonly string[];
+  appAdded?: readonly string[];
   appDeny: readonly string[];
   commonAllow: readonly string[];
   commonDeny: readonly string[];
@@ -22,7 +23,7 @@ export function matchesNetUrl(target: string, prefix: string): boolean {
 export function allowsNetUrl(url: string, lists: NetLists): boolean {
   const matches = (entries: readonly string[]) => entries.some(entry => matchesNetUrl(url, entry));
   return !matches(lists.commonDeny) && !matches(lists.appDeny) &&
-    (matches(lists.request) || matches(lists.appAllow) || matches(lists.commonAllow));
+    (matches(lists.request) || matches(lists.appAdded ?? []) || matches(lists.appAllow) || matches(lists.commonAllow));
 }
 
 /** アプリから受け取る通信の設定。 */
