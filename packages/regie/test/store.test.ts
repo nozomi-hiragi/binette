@@ -77,7 +77,7 @@ Deno.test("OS の設定は知らない名前と範囲外を拒み、保存済み
   const store = createMemoryAppStore().system;
   await store.putSettings({ stackSize: 2 });
   for (const value of [{ unknown: 1 }, { stackSize: 0 }, { stackSize: 1.5 }, { historyLimit: -1 }, { historyLimit: 0.5 },
-    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { home: "旧名" }, { roles: "home" }, { roles: { home: 1 } }, { roles: ["home"] }, { roles: null }]) {
+    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { theme: 3 }, { accent: 1.5 }, { wallpaper: 256 }, { home: "旧名" }, { roles: "home" }, { roles: { home: 1 } }, { roles: ["home"] }, { roles: null }]) {
     const settings = value as Partial<SystemSettings>;
     assertThrows(() => validateSystemSettings(settings));
     assertThrows(() => store.putSettings(settings));

@@ -153,12 +153,15 @@ const lookCss: string = `
 :where(.bina-ui-button.bina-ui-variant-ghost:has(> *), .bina-ui-button.bina-ui-variant-subtle:has(> *)) { align-items: stretch; text-align: start; }
 :where(.bina-ui-button.bina-ui-variant-primary) { background: ${colors.accent}; border-color: ${colors.accent}; color: ${colors.accentContent}; }
 :where(.bina-ui-button.bina-ui-variant-primary:not(:disabled):hover) { background: color-mix(in srgb, ${colors.accent} 86%, #000); }
+:where(.bina-ui-button.bina-ui-variant-primary:not(:disabled):active) { background: color-mix(in srgb, ${colors.accent} 76%, #000); }
 :where(.bina-ui-button.bina-ui-variant-ghost, .bina-ui-button.bina-ui-variant-danger) { background: transparent; border-color: transparent; color: ${colors.muted}; }
 :where(.bina-ui-button.bina-ui-variant-ghost:not(:disabled):hover) { background: ${colors.subtle}; color: inherit; }
+:where(.bina-ui-button.bina-ui-variant-ghost:not(:disabled):active) { background: color-mix(in srgb, ${colors.subtle} 86%, currentColor); color: inherit; }
 :where(.bina-ui-button.bina-ui-variant-danger) { color: ${colors.danger}; }
 :where(.bina-ui-button.bina-ui-variant-danger:not(:disabled):hover) { background: color-mix(in srgb, ${colors.danger} 12%, transparent); }
 :where(.bina-ui-button.bina-ui-variant-subtle) { background: ${colors.subtle}; border-color: transparent; }
 :where(.bina-ui-button.bina-ui-variant-subtle:not(:disabled):hover) { background: color-mix(in srgb, ${colors.subtle} 90%, currentColor); }
+:where(.bina-ui-button.bina-ui-variant-subtle:not(:disabled):active) { background: color-mix(in srgb, ${colors.subtle} 82%, currentColor); }
 :where(.bina-ui-button.bina-ui-variant-dashed) { background: transparent; border: 1px dashed color-mix(in srgb, ${colors.muted} 50%, transparent); }
 :where(.bina-ui-button.bina-ui-variant-dashed:not(:disabled):hover) { background: ${colors.subtle}; border-color: ${colors.accent}; }
 :where(.bina-ui-text.bina-ui-tone-muted) { color: ${colors.muted}; }
@@ -250,11 +253,19 @@ export const uiCss = `
 :where(.bina-ui-grow) { flex-grow: 1; }
 :where(.bina-ui-button) { font: inherit; font-size: ${componentLength("button", "font-size", "font-size", "1em")}; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: ${componentLength("button", "radius", "radius", "var(--bina-ui-button-radius, 8px)")}; cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
 :where(.bina-ui-button:has(> *)) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-ui-gap, 0px); }
+/* 既定のボタンは hover と押下で文字色を薄く重ねる。variant や面を持つボタンは後ろの background で自分の見た目にする */
+:where(.bina-ui-button) { transition: background-color 0.12s, border-color 0.12s, color 0.12s; -webkit-tap-highlight-color: transparent; }
+:where(.bina-ui-button:not(:disabled):hover) { background-image: linear-gradient(color-mix(in srgb, currentColor 6%, transparent), color-mix(in srgb, currentColor 6%, transparent)); }
+:where(.bina-ui-button:not(:disabled):active) { background-image: linear-gradient(color-mix(in srgb, currentColor 11%, transparent), color-mix(in srgb, currentColor 11%, transparent)); }
+@media (prefers-reduced-motion: reduce) { :where(.bina-ui-button, .bina-ui-input, .bina-ui-option, .bina-ui-menuItem) { transition: none; } }
 :where(.bina-ui-button):focus-visible { outline: 2px solid var(--bina-ui-focus, #3273b9); outline-offset: 2px; }
 :where(.bina-ui-button):disabled { cursor: default; opacity: var(--bina-ui-disabled-opacity, 0.5); }
-:where(.bina-ui-heading-1) { font-size: 2em; font-weight: bold; }
-:where(.bina-ui-heading-2) { font-size: 1.5em; font-weight: bold; }
-:where(.bina-ui-heading-3) { font-size: 1.17em; font-weight: bold; }
+:where(.bina-ui-heading-1) { font-size: 2em; font-weight: bold; line-height: 1.25; letter-spacing: -0.02em; }
+:where(.bina-ui-heading-2) { font-size: 1.5em; font-weight: bold; line-height: 1.3; letter-spacing: -0.01em; }
+:where(.bina-ui-heading-3) { font-size: 1.17em; font-weight: bold; line-height: 1.35; }
+:where(.bina-ui-input)::placeholder { color: var(--bina-ui-muted, #6b7280); opacity: 0.8; }
+:where(.bina-ui-input) { transition: border-color 0.12s; }
+:where(.bina-ui-option, .bina-ui-menuItem) { transition: background-color 0.12s, color 0.12s; }
 :where(.bina-ui-list) { padding-inline-start: 1.5em; }
 :where(.bina-ui-listitem) { display: list-item; list-style: disc; }
 ${partCss}

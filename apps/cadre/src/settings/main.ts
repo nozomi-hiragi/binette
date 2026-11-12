@@ -1,35 +1,11 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, OsApi, SchedulerApi } from "jsr:@binette/replique";
-import { View, button, buttonOf, column, listTile, row, show, text } from "jsr:@binette/replique-ui@^0.1";
+import { View, button, buttonOf, column, listTile, row, segmented, show, text } from "jsr:@binette/replique-ui@^0.1";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
 const labels = ["スタックできるアプリの数", "Stop までの時間", "起動の履歴の最大の行数", "呼び出しの時間切れ", "onDestroy の時間切れ", "Apps を出すまでの時間"];
 const steps: i32[] = [1, 1000, 10, 1000, 1000, 1000];
 const minimums: i32[] = [1, 0, 0, 1000, 1000, 0];
-
-function pad(value: i64, width: i32 = 2): string {
-  let result = value.toString();
-  while (result.length < width) result = "0" + result;
-  return result;
-}
-
-// Unix epoch の日数をグレゴリオ暦に直す。負の日時とうるう年も扱う
-function utc(time: f64): string {
-  const seconds = <i64>Math.floor(time / 1000);
-  const days = <i64>Math.floor(<f64>seconds / 86400);
-  const within = seconds - days * 86400;
-  const z = days + 719468;
-  const era = (z >= 0 ? z : z - 146096) / 146097;
-  const doe = z - era * 146097;
-  const yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-  let year = yoe + era * 400;
-  const doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-  const mp = (5 * doy + 2) / 153;
-  const day = doy - (153 * mp + 2) / 5 + 1;
-  const month = mp + (mp < 10 ? 3 : -9);
-  if (month <= 2) year++;
-  return pad(year, 4) + "-" + pad(month) + "-" + pad(day) + " " + pad(within / 3600) + ":" + pad(within / 60 % 60) + ":" + pad(within % 60);
-}
 
 // 辞書から取った API。ボタンのコールバックは関数なので、グローバルで持つ
 let osApi: OsApi | null = null;
@@ -37,8 +13,42 @@ let schedulerApi: SchedulerApi | null = null;
 // 間隔の予定の − ＋ で選べる値（秒）
 const intervals: i32[] = [60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
 let details = false;
+// 開いている項目。-1 は未選択で、広い幅では先頭の項目を見せ、狭い幅では項目の一覧だけを見せる
+let page: i32 = -1;
+const pageTitles = ["見た目", "既定のアプリ", "通知", "定期実行", "Binette について", "デバッグ", "日付と時刻"];
+const pageKeys = ["open-appearance", "open-defaults", "open-notifications", "open-schedules", "open-about", "open-debug", "open-time"];
+function openPage(next: i32): void { page = next; }
+function backToTop(): void { page = -1; }
+/** 項目の一覧の 1 行 */
+function pageLink(index: i32, detail: string, current: i32): View {
+  return buttonOf([listTile(pageTitles[index], detail, null, text("›").tone("muted").key("page-mark")).grow()], openPage)
+    .arg(index).selected(index == current).label(pageTitles[index] + "を開く").key(pageKeys[index]);
+}
+
+// 見た目の番号と名前。色と絵は OS の入口のページが番号から決める
+const accentNames = ["青", "緑", "紫", "桃", "橙", "灰"];
+const wallpaperNames = ["なし", "そら", "あさやけ", "もり", "すみれ", "すな"];
 
 function showDetails(): void { details = true; }
+function chooseTheme(index: i32): void {
+  const os = osApi;
+  if (os != null) os.set("theme", index);
+}
+function chooseAccent(index: i32): void {
+  const os = osApi;
+  if (os != null) os.set("accent", index);
+}
+function chooseWallpaper(index: i32): void {
+  const os = osApi;
+  if (os != null) os.set("wallpaper", index);
+}
+function swatches(names: string[], current: i32, prefix: string, title: string, f: (index: i32) => void): View {
+  const views: View[] = [];
+  for (let i: i32 = 0; i < names.length; i++) {
+    views.push(button("", f).arg(i).selected(i == current).label(title + " " + names[i] + (i == current ? "（使用中）" : "")).tip(names[i]).key(prefix + "-" + i.toString()));
+  }
+  return row(views).wrap().key(prefix + "-swatches");
+}
 function chooseHome(index: i32): void {
   const os = osApi;
   if (os == null) return;
@@ -124,13 +134,20 @@ function scheduleView(s: SchedulerApi, i: i32): View {
     text(s.description(i)).key("schedule-every"),
     button("＋", changeEvery).arg(i * 2 + 1).enabled(stepEvery(every, owner, 1) > 0).label(title + "の間隔を長くする"),
   ]).key("stepper"));
-  controls.push(button(enabled ? "止める" : "再開する", toggleSchedule).arg(i).variant("ghost").label(title + "を" + (enabled ? "止める" : "再開する")).key("schedule-toggle"));
-  controls.push(button("今すぐ実行", runSchedule).arg(i).variant("ghost").enabled(!running).label(title + "を今すぐ実行する").key("schedule-run"));
+  controls.push(button(enabled ? "止める" : "再開する", toggleSchedule).arg(i).variant("subtle").label(title + "を" + (enabled ? "止める" : "再開する")).key("schedule-toggle"));
+  controls.push(button("今すぐ実行", runSchedule).arg(i).variant("subtle").enabled(!running).label(title + "を今すぐ実行する").key("schedule-run"));
   return column([
     listTile(title, detail).key("schedule-summary"),
     text(lastLine).small().tone(result.startsWith("error") ? "danger" : "muted").key("schedule-last"),
     row(controls).key("schedule-controls"),
   ]).key("schedule-" + s.id(i));
+}
+
+/** 役割に割り当てているアプリの名前。候補に無ければ空 */
+function roleName(os: OsApi, role: string): string {
+  const current = os.role(role);
+  for (let i: i32 = 0; i < os.candidateCount(role); i++) if (os.candidateId(role, i) == current) return os.candidateName(role, i);
+  return "";
 }
 
 export class Settings extends App {
@@ -177,7 +194,7 @@ export class Settings extends App {
       const name = os.notificationName(i);
       const muted = os.notificationMuted(i);
       notifications.push(listTile(name, muted ? "通知を停止中" : "通知を許可", null,
-        button(muted ? "許可する" : "停止する", toggleNotification).arg(i)
+        button(muted ? "許可する" : "停止する", toggleNotification).arg(i).variant("subtle")
           .label(name + "の通知を" + (muted ? "許可する" : "停止する")),
       ).key("notification-setting-" + os.notificationId(i)));
     }
@@ -201,49 +218,97 @@ export class Settings extends App {
     if (scheduler != null) for (let i: i32 = 0; i < scheduler.count(); i++) schedules.push(scheduleView(scheduler, i));
     const history: View[] = [];
     for (let i: i32 = 0; i < os.launchCount(); i++) {
-      history.push(listTile(os.launchName(i), utc(os.launchTime(i))).key("launch-" + i.toString()));
+      history.push(listTile(os.launchName(i), os.launchText(i)).key("launch-" + i.toString()));
     }
-    return column([
-      column([
-        text("設定").heading(1).key("settings-title"),
-      ]).key("settings-header"),
-      column([
-        text("Binette について").heading(2).key("about-title"),
+    // 定期実行が届いていないときは、その項目を出さない
+    const current = page < 0 || (page == 3 && scheduler == null) ? 0 : page;
+    const links: View[] = [
+      pageLink(0, "テーマ・アクセント色・壁紙", current),
+      pageLink(1, "ホーム: " + roleName(os, "home") + "・Cadre: " + roleName(os, "cadre"), current),
+      pageLink(2, "アプリごとの許可", current),
+    ];
+    if (scheduler != null) links.push(pageLink(3, schedules.length == 0 ? "予定はありません" : schedules.length.toString() + " 件の予定", current));
+    const zone = os.timeZone();
+    links.push(pageLink(6, zone, current));
+    links.push(pageLink(4, status, current));
+    links.push(pageLink(5, "動作の値と起動の履歴", current));
+    const sections: View[] = [];
+    if (current == 0) {
+      sections.push(column([
         column([
-          listTile("Binette", "仕様の版 0.2", text("B").key("about-icon"), button("詳しく", showDetails).variant("ghost").enabled(!details).key("details")),
+          row([text("テーマ").grow(), segmented(["OS に合わせる", "ライト", "ダーク"], os.get("theme"), chooseTheme).label("テーマ").key("appearance-theme")]).wrap().key("appearance-theme-row"),
+          row([text("アクセント色").grow(), swatches(accentNames, os.get("accent"), "accent", "アクセント色", chooseAccent)]).wrap().key("appearance-accent-row"),
+          row([text("壁紙").grow(), swatches(wallpaperNames, os.get("wallpaper"), "wallpaper", "壁紙", chooseWallpaper)]).wrap().key("appearance-wallpaper-row"),
+        ]).surface("card").key("appearance-card"),
+      ]).key("appearance-section"));
+    } else if (current == 1) {
+      sections.push(column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"));
+      sections.push(column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"));
+    } else if (current == 2) {
+      sections.push(column([
+        column([
+          show(notifications.length == 0, text("通知を出すアプリはありません。").tone("muted").key("notifications-empty")),
+          column(notifications).key("notifications-list"),
+        ]).surface("card").key("notifications-card"),
+      ]).key("notifications-section"));
+    } else if (current == 3) {
+      sections.push(column([
+        column([
+          show(schedules.length == 0, text("予定はありません。").tone("muted").key("schedules-empty")),
+          column(schedules).key("schedules"),
+        ]).surface("card").key("schedules-card"),
+      ]).key("schedules-section"));
+    } else if (current == 4) {
+      sections.push(column([
+        column([
+          listTile("Binette", "仕様の版 0.2", text("B").key("about-icon"), button("詳しく", showDetails).variant("subtle").enabled(!details).key("details")),
           show(details, text("ブラウザだけで動く、アプリの土台です。").tone("muted").key("description")),
         ]).surface("card").key("about-card"),
-      ]).key("about-section"),
-      column([
+      ]).key("about-section"));
+      sections.push(column([
         text("更新").heading(2).key("update-title"),
         column([
           listTile("ソフトウェア・アップデート", status).key("update-status"),
           text(os.updateCurrent() + (next.length > 0 ? " → " + next : "")).small().tone("muted").key("update-version"),
           row([
             show(available || updating, button(updating ? "更新中…" : "更新", update).variant("primary").enabled(available && !updating).key("update")),
-            button(phase == "download-failed" ? "再試行" : "今すぐ確認", checkUpdate).variant("ghost").enabled(!checking && !downloading && !updating).key("check-update"),
+            button(phase == "download-failed" ? "再試行" : "今すぐ確認", checkUpdate).variant("subtle").enabled(!checking && !downloading && !updating).key("check-update"),
+            button("復旧画面を開く", openRecovery).variant("subtle").key("open-recovery"),
           ]).key("update-actions"),
-          button("復旧画面を開く", openRecovery).variant("ghost").key("open-recovery"),
         ]).surface("card").key("update-card"),
-      ]).key("update-section"),
-      column([text("ホーム").heading(2).key("home-title"), column(homes).surface("card").key("homes")]).key("home-section"),
-      column([text("Cadre").heading(2).key("cadre-title"), column(cadres).surface("card").key("cadres")]).key("cadre-section"),
-      column([text("通知").heading(2), column(notifications).surface("card").key("notifications-card")]).key("notifications-section"),
-      show(scheduler != null, column([
-        text("定期実行").heading(2).key("schedules-title"),
+      ]).key("update-section"));
+    } else if (current == 6) {
+      sections.push(column([
         column([
-          show(schedules.length == 0, text("予定はありません。").tone("muted").key("schedules-empty")),
-          column(schedules).key("schedules"),
-        ]).surface("card").key("schedules-card"),
-      ]).key("schedules-section")),
-      column([text("デバッグ").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"),
-      column([
-        row([text("起動の履歴").heading(2).grow().key("history-title"), text("UTC").small().tone("muted")]),
+          listTile("タイムゾーン", "ブラウザの設定に合わせています。画面に出る日時は、すべてこのタイムゾーンで表します。", null, text(zone).key("time-zone-value")).key("time-zone"),
+        ]).surface("card").key("time-card"),
+      ]).key("time-section"));
+    } else {
+      sections.push(column([text("動作の値").heading(2).key("debug-title"), column(debug).surface("card").key("debug")]).key("debug-section"));
+      sections.push(column([
+        row([text("起動の履歴").heading(2).grow().key("history-title"), text(zone).small().tone("muted").key("history-zone")]),
         column([
           show(history.length == 0, text("起動の履歴はありません。").tone("muted").key("history-empty")),
           column(history).list().key("history"),
         ]).surface("card").key("history-card"),
-      ]).key("history-section"),
+      ]).key("history-section"));
+    }
+    const detail: View[] = [
+      column([
+        button("‹ 設定", backToTop).variant("ghost").label("設定の項目に戻る").key("settings-back"),
+        text(pageTitles[current]).heading(1).key("settings-page-title"),
+      ]).key("settings-page-header"),
+    ];
+    for (let i = 0; i < sections.length; i++) detail.push(sections[i]);
+    // 広い幅は左に項目、右に中身。狭い幅は style.css が、未選択なら項目だけ、選んだあとは中身だけを見せる
+    return column([
+      row([
+        column([
+          column([text("設定").heading(1).key("settings-title")]).key("settings-header"),
+          column(links).surface("card").label("設定の項目").key("settings-links-card"),
+        ]).key("settings-menu"),
+        column(detail).grow().key(page < 0 ? "settings-detail-idle" : "settings-detail"),
+      ]).key("settings-split"),
     ]).key("settings-root");
   }
 }

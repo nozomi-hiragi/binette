@@ -52,6 +52,12 @@ namespace hostOs {
   @external("binette:os@0.1", "launchName")
   export declare function launchName(i: i32): string;
   // @ts-ignore: decorator
+  @external("binette:os@0.1", "launchText")
+  export declare function launchText(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "timeZone")
+  export declare function timeZone(): string;
+  // @ts-ignore: decorator
   @external("binette:os@0.1", "updatePhase")
   export declare function updatePhase(): string;
   // @ts-ignore: decorator
@@ -102,6 +108,10 @@ export class OsApi {
   launchCount(): i32 { return hostOs.launchCount(); }
   launchTime(i: i32): f64 { return hostOs.launchTime(i); }
   launchName(i: i32): string { return hostOs.launchName(i); }
+  /** 起動の日時を、OS のタイムゾーンで「YYYY-MM-DD HH:MM:SS」にした文字列 */
+  launchText(i: i32): string { return hostOs.launchText(i); }
+  /** OS が時刻の表示に使うタイムゾーン（例 `Asia/Tokyo`）。今はブラウザの設定に従う */
+  timeZone(): string { return hostOs.timeZone(); }
   /** 新しい版の `/system` があるか */
   updatePhase(): string { return hostOs.updatePhase(); }
   updateCurrent(): string { return hostOs.updateCurrent(); }

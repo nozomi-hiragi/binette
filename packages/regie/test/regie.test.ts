@@ -459,11 +459,13 @@ export function ranges(): void {
   assert(!os().set("homeRetryWindow", -1)); assert(os().set("homeRetryWindow", 0));
   assert(!os().set("callTimeout", 999)); assert(os().set("callTimeout", 1000));
   assert(!os().set("destroyTimeout", 999)); assert(os().set("destroyTimeout", 1000));
+  assert(os().get("theme") == 0); assert(!os().set("theme", 3)); assert(os().set("theme", 2)); assert(os().get("theme") == 2);
+  assert(!os().set("accent", 256)); assert(os().set("accent", 5)); assert(!os().set("wallpaper", -1)); assert(os().set("wallpaper", 255));
 }
 `;
 
 const snapshot = (): OsSnapshot => ({
-  settings: { stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 },
+  settings: { stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000, theme: 0, accent: 0, wallpaper: 0 },
   roles: { home: "key" }, candidates: { home: [] }, launches: [], updateAvailable: false,
 });
 
@@ -488,7 +490,7 @@ Deno.test("os の写し、同期の set、範囲の検査、役割の割り当�
     await app.call("get"); await app.call("set", 0); await app.call("unknown"); await app.call("set", 1); await app.call("get");
     assertEquals(texts.splice(0), ["3", "false:3", "false", "true:1", "1"]); assertEquals(changes.splice(0), [["stackSize", 1]]);
     await app.call("ranges");
-    assertEquals(changes, [["historyLimit", 0], ["stopDelay", 0], ["homeRetryWindow", 0], ["callTimeout", 1000], ["destroyTimeout", 1000]]);
+    assertEquals(changes, [["historyLimit", 0], ["stopDelay", 0], ["homeRetryWindow", 0], ["callTimeout", 1000], ["destroyTimeout", 1000], ["theme", 2], ["accent", 5], ["wallpaper", 255]]);
     await app.call("role"); await app.call("candidateCount", 0); await app.call("candidateCount", 1); await app.call("candidateCount", 2);
     await app.call("candidateName", 0); await app.call("candidateId", 1); await app.call("assign", 1);
     await app.call("launchCount"); await app.call("launchTime", 0); await app.call("launchName", 0); await app.call("launchName", 1);

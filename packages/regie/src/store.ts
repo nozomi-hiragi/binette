@@ -99,12 +99,21 @@ export interface SystemSettings {
   destroyTimeout: number;
   historyLimit: number;
   homeRetryWindow: number;
+  /** 見た目。0 は OS に合わせる、1 はライト、2 はダーク */
+  theme: number;
+  /** アクセント色の番号。0 が既定で、色は表示する側が決める */
+  accent: number;
+  /** 壁紙の番号。0 は壁紙なしで、絵は表示する側が決める */
+  wallpaper: number;
 }
+
+/** 見た目の設定の名前と、番号の上限 */
+export const APPEARANCE_LIMITS: Readonly<Record<"theme" | "accent" | "wallpaper", number>> = Object.freeze({ theme: 2, accent: 255, wallpaper: 255 });
 
 /** 保存が無いときの OS の既定値 */
 export const DEFAULT_SYSTEM_SETTINGS: Readonly<SystemSettings> = Object.freeze({
   roles: {}, allowHttpLists: false, stackSize: 3, stopDelay: 10000, callTimeout: 5000,
-  destroyTimeout: 5000, historyLimit: 100, homeRetryWindow: 5000,
+  destroyTimeout: 5000, historyLimit: 100, homeRetryWindow: 5000, theme: 0, accent: 0, wallpaper: 0,
 });
 
 /** 登録した提供リスト。boot は削除できない既定リストの元の URL */
@@ -160,6 +169,10 @@ export function validateSystemSettings(settings: Partial<SystemSettings>): void 
       }
     } else if (key === "allowHttpLists") {
       if (typeof value !== "boolean") throw new Error("allowHttpLists は真偽値にしてください。");
+    } else if (Object.hasOwn(APPEARANCE_LIMITS, key)) {
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > APPEARANCE_LIMITS[key as keyof typeof APPEARANCE_LIMITS]) {
+        throw new Error(`OS の設定が範囲外です: ${key}`);
+      }
     } else if (!["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(key) ||
       typeof value !== "number" || !Number.isFinite(value) || value < 0 ||
       ((key === "stackSize" || key === "historyLimit") && !Number.isInteger(value)) ||

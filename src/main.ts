@@ -5,9 +5,16 @@ import { bootAppStore, loadBootApps } from "./boot.ts";
 import { browserKernels, createUpdater, kernelIdentity } from "./update.ts";
 import { showRecovery } from "./recovery.ts";
 import { setBootProgress, setBootStage } from "./boot-screen.ts";
+import { applyAppearance, recallAppearance, rememberAppearance } from "./appearance.ts";
 
 const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
+// 設定を読む前から、前回の見た目で起動画面を出す
+// サイトのデータを止めているブラウザでは localStorage に触るだけで例外になる
+let storage: Pick<Storage, "getItem" | "setItem"> = { getItem: () => null, setItem: () => {} };
+try { storage = localStorage; } catch { /* 覚えずに続ける */ }
+const remembered = recallAppearance(storage);
+if (remembered) applyAppearance(document.documentElement, remembered);
 const tree = createIndexedDbFileTree();
 const distribution = createSystemDistribution(tree, { manifestUrl: new URL("./manifest.json", document.baseURI), origin: location.origin });
 const store = bootAppStore(createAppStore(tree));
@@ -73,6 +80,7 @@ try {
     update: { ...updater, openRecovery() { location.assign("?recovery"); } },
     store,
     scheduler,
+    onAppearance(appearance) { applyAppearance(document.documentElement, appearance); rememberAppearance(storage, appearance); },
     onError(error) { console.error(error); if (booting) errors.push(error); },
   });
   booting = false;
