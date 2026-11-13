@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import verbatim-module-syntax
 import { View, UiCallback } from "jsr:@binette/decor/as";
 import { application, jsonString, setRebuild } from "jsr:@binette/replique-app@^0.1";
-export { View, column, row, text, button, buttonOf, input, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
+export { View, column, row, text, button, buttonOf, input, markdown, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
   spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/decor/as";
 
 /** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
@@ -36,7 +36,7 @@ function serializeView(view: View): string {
   }
   children += "]";
   return '{"kind":' + jsonString(view.kind) + ',"children":' + children +
-    ',"text":' + jsonString(view.value) + ',"padding":' + (view.paddingValue == -100 ? "null" : view.paddingValue.toString()) +
+    ',"base":' + jsonString(view.baseValue) + ',"anchor":' + jsonString(view.anchorValue) + ',"text":' + jsonString(view.value) + ',"padding":' + (view.paddingValue == -100 ? "null" : view.paddingValue.toString()) +
     ',"theme":' + jsonString(view.themeValue) + ',"gap":' + view.gapValue.toString() + ',"grow":' + (view.growValue ? "true" : "false") +
     ',"key":' + jsonString(view.keyValue) + ',"label":' + jsonString(view.labelValue) +
     ',"minWidth":' + view.minWidthValue.toString() + ',"heading":' + view.headingValue.toString() + ',"list":' + (view.listValue ? "true" : "false") + ',"shown":' + (view.shownValue ? "true" : "false") + ',"multiline":' + (view.multilineValue ? "true" : "false") + ',"app":' + view.appValue.toString() + ',"enabled":' + (view.enabledValue ? "true" : "false") + ',"handler":' + handler.toString() +

@@ -18,6 +18,41 @@ function realWorker(): RegieWorker {
   return new Worker(new URL("../../regie/src/worker-entry.ts", import.meta.url), { type: "module" });
 }
 
+Deno.test("AS Markdown preserves source, base and anchor through the Worker and delivers string callbacks", async () => {
+  const code = `import { App, launch } from "jsr:@binette/replique";
+import { View, column, markdown, text } from "jsr:@binette/replique/ui";
+let visited = "";
+function follow(url: string): void { visited = url; }
+class Demo extends App {
+  build(): View {
+    return column([markdown("# Guide\\n\\n[Next](next.md)", follow).base("https://example.com/docs/").anchor("guide"), text(visited).key("visited")]);
+  }
+}
+launch(new Demo());`;
+  const files: Record<string, string> = {
+    "app.json": JSON.stringify({ id: "markdown", name: "Markdown", entry: { as: "main.ts" } }), "main.ts": code,
+  };
+  const built = await buildApp(path => Promise.resolve(files[path]!), { libraries });
+  const window = new Window();
+  const host = window.document.createElement("div") as unknown as HTMLElement;
+  window.document.body.append(host as never);
+  const process = await startProcess(built.wasm, { createWorker: realWorker });
+  const dom = createUiDom(host, process);
+  const batches: DomOp[][] = [];
+  try {
+    process.attach(ops => { batches.push(ops); dom.apply(ops); }); await process.begin();
+    const heading = host.querySelector("h1")!;
+    assertEquals(heading.id, "guide");
+    const update = batches.flat().find(op => op.op === "ui-update" && op.text.startsWith("# Guide"));
+    assert(update?.op === "ui-update"); assertEquals([update.base, update.anchor], ["https://example.com/docs/", "guide"]);
+    assertEquals(host.querySelector("a")!.getAttribute("href"), "https://example.com/docs/next.md");
+    batches.length = 0; host.querySelector("a")!.click();
+    await waitFor(() => host.querySelector('[data-bina-key="visited"]')?.textContent === "https://example.com/docs/next.md");
+    assertEquals(host.querySelector("h1"), heading);
+    assertEquals(batches.flat().some(op => op.op === "ui-update" && op.text.startsWith("# Guide")), false);
+  } finally { process.stop(); dom.stop(); await window.happyDOM.close(); }
+});
+
 Deno.test("AS の見た目の修飾は Worker を経てクラスと属性になり、状態の変化で付け外しされる", async () => {
   const code = `import { App, launch } from "jsr:@binette/replique";
 import { View, button, column, input, row, text } from "jsr:@binette/replique-ui@^0.1";

@@ -1,5 +1,6 @@
 import type { DomOp } from "@binette/core";
 import { alignments, dividerSides, surfaces, tones, variants } from "./parts.ts";
+import { createMarkdown } from "./markdown.ts";
 import { createOverlay } from "./overlay.ts";
 /** DOM からアプリに届くイベント。 */
 export interface UiEvents {
@@ -68,6 +69,32 @@ const alignCss: string = alignments.map(name => {
 const checkMark = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`;
 /** よくある部品の見た目。どれも OS の役割の色を使い、ライトとダークで同じ規則にする */
 const partCss: string = `
+:where(.bina-ui-surface-dark .bina-ui-markdown, .bina-ui-markdown.bina-ui-surface-dark) { --bina-ui-sunken: var(--bina-ui-dark-sunken, #101216); }
+:where(.bina-ui-markdown) { min-width: 0; overflow-wrap: anywhere; line-height: 1.65; }
+:where(.bina-ui-markdown > :first-child) { margin-top: 0; }
+:where(.bina-ui-markdown > :last-child) { margin-bottom: 0; }
+:where(.bina-ui-markdown h1, .bina-ui-markdown h2, .bina-ui-markdown h3, .bina-ui-markdown h4, .bina-ui-markdown h5, .bina-ui-markdown h6) { line-height: 1.3; margin: 1.4em 0 0.6em; font-weight: 650; }
+:where(.bina-ui-markdown h1) { font-size: 2em; }
+:where(.bina-ui-markdown h2) { font-size: 1.5em; }
+:where(.bina-ui-markdown h3) { font-size: 1.25em; }
+:where(.bina-ui-markdown h4, .bina-ui-markdown h5, .bina-ui-markdown h6) { font-size: 1em; }
+:where(.bina-ui-markdown p, .bina-ui-markdown ul, .bina-ui-markdown ol, .bina-ui-markdown pre, .bina-ui-markdown blockquote, .bina-ui-markdown-table) { margin: 0.8em 0; }
+:where(.bina-ui-markdown ul, .bina-ui-markdown ol) { padding-inline-start: 1.6em; }
+:where(.bina-ui-markdown li > ul, .bina-ui-markdown li > ol) { margin: 0.2em 0; }
+:where(.bina-ui-markdown code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; padding: 0.15em 0.35em; border-radius: 4px; background: ${colors.sunken}; }
+:where(.bina-ui-markdown pre) { padding: 12px 16px; border-radius: 6px; background: ${colors.sunken}; overflow-x: auto; }
+:where(.bina-ui-markdown pre code) { padding: 0; background: transparent; }
+:where(.bina-ui-markdown blockquote) { padding: 0.1em 1em; margin-inline: 0; border-inline-start: 3px solid ${colors.line}; color: ${colors.muted}; }
+:where(.bina-ui-markdown-alert-title) { font-weight: bold; }
+:where(.bina-ui-markdown-table) { overflow-x: auto; }
+:where(.bina-ui-markdown table) { border-collapse: collapse; }
+:where(.bina-ui-markdown th, .bina-ui-markdown td) { border: 1px solid ${colors.line}; padding: 6px 12px; }
+:where(.bina-ui-markdown th) { background: ${colors.sunken}; }
+:where(.bina-ui-markdown hr) { border: 0; border-top: 1px solid ${colors.line}; margin: 1.2em 0; }
+:where(.bina-ui-markdown a) { color: ${colors.accentText}; text-decoration: underline; cursor: pointer; }
+:where(.bina-ui-markdown a:focus-visible) { outline: 2px solid ${colors.focus}; outline-offset: 2px; }
+:where(.bina-ui-markdown input[type="checkbox"]) { accent-color: ${colors.accent}; }
+
 :where(.bina-ui-spacer) { flex: 1 1 0; min-width: 0; min-height: 0; }
 :where(.bina-ui-separator) { box-sizing: border-box; flex: none; align-self: stretch; height: 1px; margin: 0; border: 0; background: ${colors.line}; }
 :where(.bina-ui-row > .bina-ui-separator) { width: 1px; height: auto; min-height: 1em; }
@@ -340,9 +367,11 @@ export interface UiDom {
 export function createUiDom(element: HTMLElement, process: UiEvents, options: UiDomOptions = {}): UiDom {
   // 宣言 UI は document API のハンドルと独立して管理する。
   type Entry = { node: HTMLElement; kind: string; clickable: boolean; enabled: boolean; textNode: Text | null; inputVersion: number; composing: boolean; theme: string[]; lastText: string | null;
+    markdown?: ReturnType<typeof createMarkdown>; anchor?: string;
     pending: { text: string; version: number } | null; options: string[] | null; index: number; remove: () => void;
     /** 吹き出しの文字 */ tip: string | undefined; /** メニューの項目（menuItem）の番号。画面には出さず、メニューを開いたときだけ重ね表示に移す */ items: number[]; /** メニューの項目の持ち主 */ owner: Entry | undefined };
   const uiNodes = new Map<number, Entry>();
+  const scrolls = new Map<Entry, string>();
   const byNode = new WeakMap<HTMLElement, Entry>();
   let uiStyle: HTMLStyleElement | undefined;
   const overlay = createOverlay(element, {
@@ -361,6 +390,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
     for (const [handle, entry] of [...uiNodes]) {
       if (root === entry.node || root.contains(entry.node)) {
         entry.remove();
+        scrolls.delete(entry);
         uiNodes.delete(handle);
         forgetItem(entry);
         // 項目は木の外にあるので、持ち主と一緒に片付ける
@@ -430,6 +460,10 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         /** 値を返す部品の操作を送る。版を進め、古い描き直しで DOM の値を戻さないようにする */
         const send = (value: number) => { process.dispatchUiValue?.(op.handle, value, ++entry.inputVersion); };
         if (tag === "button" && kind !== "filePick") listen("click", () => { if (entry.clickable) process.dispatchUi(op.handle); });
+        if (kind === "markdown") {
+          entry.markdown = createMarkdown(node, url => { if (entry.clickable && entry.enabled) process.dispatchUiText(op.handle, url, 0); });
+          entry.remove = () => entry.markdown?.stop();
+        }
         if (kind === "filePick") {
           const field = element.ownerDocument.createElement("input");
           field.type = "file";
@@ -517,6 +551,12 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         if (!entry) continue;
         const node = entry.node;
         const kind = entry.kind;
+        if (entry.markdown) {
+          const changed = entry.markdown.update(op.text, op.base ?? "");
+          const anchor = op.anchor ?? "";
+          if (anchor && (changed || entry.anchor !== anchor)) scrolls.set(entry, anchor);
+          entry.anchor = anchor;
+        }
         const version = op.inputVersion ?? 0;
         // 値を返す部品は、利用者の新しい操作より古い描き直しでは値を戻さない
         const current = version >= entry.inputVersion;
@@ -672,8 +712,9 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
         continue;
       }
     }
+    for (const [entry, anchor] of scrolls) if (entry.node.isConnected) { entry.markdown?.scroll(anchor); scrolls.delete(entry); }
     overlay.sync(); },
-    stop(): void { overlay.stop(); for (const entry of uiNodes.values()) entry.remove(); uiNodes.clear(); },
+    stop(): void { overlay.stop(); for (const entry of uiNodes.values()) entry.remove(); uiNodes.clear(); scrolls.clear(); },
     clear(): void { for (const entry of [...uiNodes.values()]) removeUi(entry.node); uiStyle?.remove(); uiStyle = undefined; },
   };
 }

@@ -207,7 +207,7 @@ export function mount(element: HTMLElement, options: UiDomOptions = {}): Root {
     for (const child of previous) if (!used.has(child)) dispose(child);
     fiber.children = children.map(child => child.next);
     const handler = view.callback || view.textCallback || view.numberCallback || view.checkCallback ? handlers.push(view) - 1 : -1;
-    return [{ kind: view.kind as UiNode["kind"], children: children.map(child => child.result), text: view.value,
+    return [{ kind: view.kind as UiNode["kind"], children: children.map(child => child.result), text: view.value, base: view.baseValue, anchor: view.anchorValue,
       theme: view.themeValue, padding: view.paddingValue === -100 ? null : view.paddingValue, gap: view.gapValue, grow: view.growValue,
       key: view.keyValue, label: view.labelValue, enabled: view.enabledValue,
       handler, minWidth: view.minWidthValue, heading: view.headingValue,
