@@ -22,6 +22,7 @@ export interface ProcessOptions {
   persistence?: { store: SystemStore; key: string; historyLimit?: number };
   /** 今の呼び出しが終わってから、自分を閉じる */
   onFinish?: () => void;
+  onOpenUrl?: LaunchOptions["onOpenUrl"];
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
   /** startProcess の完了後にアプリが終了したとき */
@@ -228,6 +229,9 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     },
     ...(options.grants?.apps === undefined ? {} : { apps: options.grants?.apps.map(({ id, name }) => ({ id, name })) }),
     onOpen(i) { openings.push(i); notifyRequests(); },
+    onOpenUrl(url) {
+      if (state === State.Resume && !closing && !finishRequested) options.onOpenUrl?.(url);
+    },
     onFinish() { accepting = false; finishRequested = true; notifyRequests(); },
     onDom(ops) { if (sink) sink(ops); else initialOps.push(...ops); },
   });

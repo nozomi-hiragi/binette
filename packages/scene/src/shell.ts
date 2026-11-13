@@ -1,6 +1,7 @@
 import { startSystem, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "@binette/regie";
 import { mountApp } from "./mount.ts";
 import { mountLiveMode } from "./live.ts";
+import { mountOpenUrl } from "./open-url.ts";
 import { mountNetConfirm } from "./confirm-net.ts";
 import { mountInstallConfirm } from "./confirm.ts";
 
@@ -94,6 +95,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   });
   const confirm = mountInstallConfirm(root);
   const netConfirm = mountNetConfirm(root);
+  const openUrl = mountOpenUrl(root);
   root.append(style, cadreHost, fallback, appsHost, status, progress);
   element.replaceChildren(root);
 
@@ -123,6 +125,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     install() { void live.install(); },
     confirmInstall: request => confirm.confirm(request),
     confirmNet: request => netConfirm.confirm(request),
+    openUrl: request => openUrl.show(request),
     present(instance, process) {
       if (instance.cadre) {
         cadreMounted?.stop();
@@ -209,6 +212,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       live.stop();
       confirm.stop();
       netConfirm.stop();
+      openUrl.stop();
       root.remove();
     },
   };

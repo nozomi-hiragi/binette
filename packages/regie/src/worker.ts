@@ -575,6 +575,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "sub": () => writeString(sub),
       "osRef": () => writeString(osBuild.ref),
       "osCommit": () => writeString(osBuild.commit),
+      "openUrl": (url: number) => scope.postMessage({ type: "app.openUrl", url: readString(url) }),
       "why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;

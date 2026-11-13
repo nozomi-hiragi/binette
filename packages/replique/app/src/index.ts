@@ -74,6 +74,9 @@ export function jsonString(value: string): string {
 @external("binette:app@0.1", "osRef")
 declare function osRefImport(): string;
 // @ts-ignore: decorator
+@external("binette:app@0.1", "openUrl")
+declare function openUrlImport(url: string): void;
+// @ts-ignore: decorator
 @external("binette:app@0.1", "osCommit")
 declare function osCommitImport(): string;
 
@@ -135,6 +138,8 @@ export class Response {
 
 /** アプリの大本。必要な知らせだけ上書きする */
 export class App {
+  /** Ask the OS to confirm opening an external HTTPS page. */
+  openUrl(url: string): void { openUrlImport(url); }
   osRef(): string { return osRefImport(); }
   osCommit(): string { return osCommitImport(); }
   build(): View | null { return null; }

@@ -62,6 +62,8 @@ export interface SystemUi {
   /** アプリのインストールと、権限が増える更新の前に権限を確かめる。省くと確かめずに入れる */
   confirmInstall?(request: InstallConfirmation): Promise<boolean>;
   /** 更新で増えた通信先をまとめて確認する。閉じたときは later */
+  /** Show an external-page confirmation; check isActive again in the user's click handler. */
+  openUrl?(request: { name: string; url: string; isActive: () => boolean }): void;
   confirmNet?(request: { name: string; source: string; urls: string[] }): Promise<"allow" | "deny" | "later">;
 }
 
@@ -1190,6 +1192,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
             else if (!mayRestartHome(started.startedAt)) { showApps(); report(error); }
             else { report(error); restartHome(generation); }
           } else report(error);
+        },
+        onOpenUrl(url) {
+          const isActive = () => !stopped && visible && !frozen && sessions.has(started) && active === started && !started.closing && !started.finish;
+          if (isActive()) options.ui.openUrl?.({ name: installed.manifest.name, url, isActive });
         },
         onFinish() {
           if (!sessions.has(started)) return;
