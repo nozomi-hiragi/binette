@@ -25,6 +25,8 @@ Deno.test("minute ticks and popup expiry follow the injected clock", () => {
   clock.arrive(2, false); clock.arrive(3, true); advance(20_000);
   assertEquals([clock.isPopup(2), clock.isPopup(3)], [false, true]);
   advance(7_656); assertEquals(changes, 2); // popup expiry and the tick at 60,000
+  clock.arrive(4, false); assertEquals(clock.isPopup(3), false);
+  advance(5_000); assertEquals(clock.isPopup(3), true);
   clock.remove(3); assertEquals(clock.isPopup(3), false);
   clock.stop(); assertEquals(timers.size, 0);
 });

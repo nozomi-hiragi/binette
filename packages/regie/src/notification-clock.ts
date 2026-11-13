@@ -4,6 +4,7 @@ export class NotificationClock {
   private popupTimer: ReturnType<typeof setTimeout> | undefined;
   private popupId: number | undefined;
   private urgent = false;
+  private urgentIds: number[] = [];
   private kept = false;
 
   constructor(
@@ -27,7 +28,9 @@ export class NotificationClock {
     this.popupTimer = undefined;
     if (this.popupId === undefined || this.urgent || this.kept) return;
     this.popupTimer = this.later(() => {
-      this.popupId = undefined;
+      this.popupId = this.urgentIds.at(-1);
+      this.urgent = this.popupId !== undefined;
+      this.kept = false;
       this.popupTimer = undefined;
       this.changed();
     }, 5_000);
@@ -35,6 +38,7 @@ export class NotificationClock {
 
   arrive(id: number, urgent: boolean): void {
     this.popupId = id;
+    if (urgent) this.urgentIds.push(id);
     this.urgent = urgent;
     this.kept = false;
     this.schedulePopup();
@@ -47,10 +51,12 @@ export class NotificationClock {
   }
 
   remove(id: number): void {
+    this.urgentIds = this.urgentIds.filter(candidate => candidate !== id);
     if (this.popupId !== id) return;
     this.cancel(this.popupTimer);
     this.popupTimer = undefined;
-    this.popupId = undefined;
+    this.popupId = this.urgentIds.at(-1);
+    this.urgent = this.popupId !== undefined;
     this.kept = false;
   }
 
@@ -60,5 +66,6 @@ export class NotificationClock {
     this.cancel(this.minuteTimer);
     this.cancel(this.popupTimer);
     this.popupId = undefined;
+    this.urgentIds = [];
   }
 }
