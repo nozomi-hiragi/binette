@@ -86,7 +86,7 @@ export const bodies: string[] = [
     "r\u001fc@binette/scene\u001fc@binette/core\u001dt、\u001dc@binette/decor\u001dt、\u001dc@binette/regie\u001e" +
     "r\u001fc@binette/coulisses\u001fc@binette/core\u001dt、\u001dc@std/path\u001e" +
     "r\u001fc@binette/replique\u001fc@binette/decor\u001dt（AS）\u001e" +
-    "p\u001ftテストだけで使うもの: \u001dc@std/assert\u001dt、\u001dchappy-dom@21.0.4\u001dt（描画とクリックのテスト）。\u001dchappy-dom\u001dt は MIT です。\u001e" +
+    "p\u001ftテストだけで使うもの: \u001dc@std/assert\u001dt、\u001dchappy-dom@21.0.4\u001dt（描画とクリックのテスト）。どれも MIT です。\u001dcmarked\u001dt も MIT です。\u001e" +
     "u\u001f0\u001ft全パッケージは同じ版にする（\u001dxhttps://github.com/nozomi-hiragi/binette/blob/v0.2.0/CONTRIBUTING.md\u001cCONTRIBUTING.md\u001dt）。v0.2 の公開で \u001dc0.2.0\u001dt にした。OS 内の機能ごとの \u001dc@binette/replique-<機能>\u001dt は別に版を持ち、JSR には集約した \u001dc@binette/replique\u001dt のみを公開する\u001e" +
     "u\u001f0\u001ft配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。TypeScript（replique は AS）のソースを配る\u001e" +
     "u\u001f0\u001ft開発は Deno だけで行う（決定 2026-10-26）。npm と Node は使わない\u001e" +
