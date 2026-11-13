@@ -69,6 +69,7 @@ try {
         imports: {
           "@binette/core": "../packages/core/src/index.ts",
           "@binette/decor": "../packages/decor/src/index.ts",
+          "@binette/decor/diff": "../packages/decor/src/diff.ts",
           "@binette/decor/as": "../packages/decor/src/as.ts",
           "@binette/decor/parts": "../packages/decor/src/parts.ts",
           "@binette/regie": "../packages/regie/src/index.ts",

@@ -81,12 +81,12 @@ export const bodies: string[] = [
     "h\u001f3\u001f今の依存実装済み\u001ft今の依存（実装済み）\u001e" +
     "t\u001f166,320\u001ftパッケージ\u001ft依存\u001e" +
     "r\u001fc@binette/core\u001fcvalibot@1.5.0\u001dt（npm）\u001e" +
-    "r\u001fc@binette/decor\u001fc@binette/core\u001e" +
+    "r\u001fc@binette/decor\u001fc@binette/core\u001dt、\u001dcmarked@18.1.2\u001dt（npm）\u001e" +
     "r\u001fc@binette/regie\u001fc@binette/core\u001dt、\u001dc@binette/decor\u001dt、\u001dcassemblyscript@0.28.20\u001dt（ビルドのみ）、\u001dc@std/path\u001dt（CLI のみ）\u001e" +
     "r\u001fc@binette/scene\u001fc@binette/core\u001dt、\u001dc@binette/decor\u001dt、\u001dc@binette/regie\u001e" +
     "r\u001fc@binette/coulisses\u001fc@binette/core\u001dt、\u001dc@std/path\u001e" +
     "r\u001fc@binette/replique\u001fc@binette/decor\u001dt（AS）\u001e" +
-    "p\u001ftテストだけで使うもの: \u001dc@std/assert\u001dt、\u001dchappy-dom@21.0.4\u001dt（描画とクリックのテスト）。どれも MIT です。\u001e" +
+    "p\u001ftテストだけで使うもの: \u001dc@std/assert\u001dt、\u001dchappy-dom@21.0.4\u001dt（描画とクリックのテスト）。どれも MIT です。\u001dcmarked\u001dt も MIT です。\u001e" +
     "u\u001f0\u001ft全パッケージは同じ版にする（\u001dxhttps://github.com/nozomi-hiragi/binette/blob/v0.2.0/CONTRIBUTING.md\u001cCONTRIBUTING.md\u001dt）。v0.2 の公開で \u001dc0.2.0\u001dt にした。OS 内の機能ごとの \u001dc@binette/replique-<機能>\u001dt は別に版を持ち、JSR には集約した \u001dc@binette/replique\u001dt のみを公開する\u001e" +
     "u\u001f0\u001ft配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。TypeScript（replique は AS）のソースを配る\u001e" +
     "u\u001f0\u001ft開発は Deno だけで行う（決定 2026-10-26）。npm と Node は使わない\u001e" +
@@ -1091,6 +1091,7 @@ export const bodies: string[] = [
     "p\u001ftアプリが、開いている OS と同じ版のデータを取れるように、OS のビルドの ref と commit を読めるようにします。権限は要りません。\u001e" +
     "u\u001f0\u001fcApp.osRef()\u001dt: ビルドしたブランチかタグ（例 \u001dcv0.2.1\u001dt）\u001e" +
     "u\u001f0\u001fcApp.osCommit()\u001dt: ビルドした commit（40 桁の SHA）\u001e" +
+    "u\u001f0\u001fcApp.openUrl(url)\u001dt: HTTPS の外部ページを開く。前面のアプリからの要求に限り、アプリ名と URL を示す確認を出し、「開く」で新しいタブを開く。「やめる」では開かない。無効な URL、HTTPS 以外、確認中の追加要求は無視する\u001e" +
     "u\u001f0\u001ft値は Pages を作るときに書き込み、カーネルが Worker に渡す。開発の起動（\u001dcdeno task start\u001dt）では ref を \u001dcdev\u001dt、commit を空にする（案）\u001e" +
     "h\u001f2\u001fのちに足すもの\u001ftのちに足すもの\u001e" +
     "u\u001f0\u001fcGET\u001dt 以外のメソッド、\u001dcAuthorization\u001dt とトークンの置き場所\u001e" +
@@ -1576,6 +1577,7 @@ export const bodies: string[] = [
     "r\u001fcprogress(value)\u001ft割合 0〜1。負なら不定\u001fcdiv role=progressbar\u001dt（\u001dcaria-valuemin=0\u001dt・\u001dcaria-valuemax=100\u001dt・\u001dcaria-valuenow\u001dt。不定では valuenow なし）\u001ftなし\u001fclabel\u001dt、\u001dcwidth\u001dt・\u001dcgrow\u001e" +
     "r\u001fcspinner()\u001ftなし\u001fcdiv role=progressbar\u001dt（valuenow なし）\u001ftなし\u001fclabel\u001dt、\u001dcwidth\u001dt（直径）\u001e" +
     "r\u001fcimage(src)\u001ftdata URL\u001fcimg\u001dt（\u001dcalt\u001dt は \u001dclabel\u001dt、無ければ空で飾り）\u001ftなし\u001fclabel\u001dt、\u001dcwidth\u001dt・\u001dcheight\u001e" +
+    "r\u001fcmarkdown(source, onLink)\u001ftMarkdown の文字列、\u001dc(url: string) => void\u001ft見出し・段落などの DOM\u001ftリンクを選ぶ\u001fcbase(url)\u001dt、\u001dcanchor(id)\u001e" +
     "r\u001fclistTile(title, subtitle?, leading?, trailing?)\u001ft題・副題（省略は \"\"）・先頭と末尾の View（省略は null）\u001fcdiv\u001dt。中は先頭・題と副題の column・末尾\u001ft中の部品による\u001fcgap\u001dt（既定 \u001dcspace.md\u001dt）、\u001dcpadding\u001dt（既定 上下 \u001dcspace.sm\u001dt・左右 \u001dcspace.md\u001dt）\u001e" +
     "r\u001fcchip(label)\u001ft文字\u001fcspan\u001ftなし\u001fctone(name)\u001dt、\u001dclabel\u001dt、\u001dcpadding\u001e" +
     "r\u001fcbadge(value)\u001ft文字（数など）\u001fcspan\u001ftなし\u001fctone(name)\u001dt、\u001dclabel\u001dt（例「未読 3 件」）\u001e" +
@@ -1587,6 +1589,8 @@ export const bodies: string[] = [
     "u\u001f0\u001fclistTile\u001dt は先頭・末尾に任意の View を置く（画像・checkbox・chip など）。押せる行は \u001dcbuttonOf([listTile(...)], f).variant(\"ghost\")\u001dt で作る。listTile の中の checkbox などには \u001dclabel\u001dt で名前を付ける\u001e" +
     "u\u001f0\u001fcstack\u001dt の子の既定の位置は左上（\u001dctopStart\u001dt）。\u001dcstack(...).center()\u001dt は全体を中央に、子の \u001dcalign(name)\u001dt はその子だけを置く。\u001dcalign(name)\u001dt の名前は \u001dc\"topStart\"\u001dt・\u001dc\"top\"\u001dt・\u001dc\"topEnd\"\u001dt・\u001dc\"start\"\u001dt・\u001dc\"center\"\u001dt・\u001dc\"end\"\u001dt・\u001dc\"bottomStart\"\u001dt・\u001dc\"bottom\"\u001dt・\u001dc\"bottomEnd\"\u001dt。column の子では横、row の子では縦の成分だけが効く。知らない名前は既定に戻す。クラスは \u001dcbina-ui-align-<name>\u001e" +
     "u\u001f0\u001fcimage\u001dt は PNG・JPEG・GIF・WebP の base64 の data URL と、\u001dcdata:image/svg+xml;charset=utf-8,\u001dt に \u001dcencodeURIComponent\u001dt した SVG だけを描く。外部 URL・ほかの形式は \u001dcsrc\u001dt を付けない。SVG は \u001dcimg\u001dt で描くのでスクリプトや外部の読み込みは動かない（アプリ管理が提供リストのアイコンを出すために足した）。ラスターの許可は Scene が document 方式の HTML を描く前の検査（sanitize）と同じ。アプリのパッケージ（\u001dc.binapp\u001dt）は manifest・HTML・アイコン・WASM だけを持ち、画像などのファイルを持たないので、アプリ内のファイルを指す形は今の仕組みでは成り立たない。ファイルを同梱する仕組みができたら足す\u001e" +
+    "u\u001f0\u001fcmarkdown\u001dt は GFM の見出し、段落、強調、打ち消し、コード、リスト、タスクリスト、引用、表、水平線、リンク、改行を描く。生の HTML は文字として出し、画像は代替テキストだけを出す。引用の先頭の GitHub alert（NOTE・TIP・IMPORTANT・WARNING・CAUTION）はそれぞれ「メモ」「ヒント」「重要」「注意」「警告」を題にする。見出しの ID は GitHub と同じ規則で作り、重複には \u001dc-1\u001dt、\u001dc-2\u001dt を付ける\u001e" +
+    "u\u001f0\u001fcmarkdown\u001dt の \u001dc#\u001dt だけで始まるリンクは部品内の見出しにスクロールし、それ以外は \u001dcbase(url)\u001dt を基準に解決して \u001dconLink\u001dt に渡す。基準がないか解決できない場合は元の文字列を渡す。\u001dcanchor(id)\u001dt は描画時にその見出しをスクロール領域の上端に置く。同じ本文と anchor の再描画ではスクロールを動かさない。本文が変わったときだけ内容を作り直す\u001e" +
     "u\u001f0\u001fccard\u001dt は作らない。\u001dccolumn(...).surface(\"card\")\u001dt で足りる\u001e" +
     "u\u001f0\u001ft見た目はどれも OS の役割の変数（\u001dc--bina-ui-accent\u001dt・\u001dc--bina-ui-accent-soft\u001dt・\u001dc--bina-ui-line\u001dt・\u001dc--bina-ui-surface\u001dt・\u001dc--bina-ui-subtle\u001dt・\u001dc--bina-ui-muted\u001dt など）で描き、ライト・ダーク・\u001dcsurface(\"dark\")\u001dt の中で同じ規則になる。\u001dcsurface\u001dt は column・row・grid の面の修飾なので、新しい部品は自分の CSS で面を描く。checkbox・radio・slider はネイティブの要素の見た目を消して OS の色で描く。progress の不定の動きと spinner の回転は、\u001dcprefers-reduced-motion\u001dt で遅くする\u001e" +
     "u\u001f0\u001ftcolumn の中の chip・badge・segmented・image は左に寄せ、横に伸ばさない（\u001dcgrow()\u001dt を付けたものを除く）。row の中の progress は残りの幅に伸びる\u001e" +

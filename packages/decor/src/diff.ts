@@ -4,7 +4,7 @@ import type { DomOp } from "@binette/core";
 export type UiOp = Extract<DomOp, { op: `ui-${string}` }>;
 
 /** 描画する木。操作の kind は core の型を使う。 */
-export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number; multiline: boolean } & UiLook & UiValue;
+export type UiNode = { kind: Extract<UiOp, { op: "ui-create" }>["kind"]; children: UiNode[]; text: string; base?: string; anchor?: string; theme?: string; padding: number | null; gap: number; grow: boolean; key: string; label: string; enabled: boolean; handler: number; minWidth: number; heading: number; list: boolean; shown: boolean; app: number; multiline: boolean } & UiLook & UiValue;
 /** 部品の値と位置。古いアプリは送らないので省略でき、省略は既定を表す */
 export type UiValue = { checked?: boolean; value?: number; min?: number; max?: number; step?: number; options?: string[]; index?: number; align?: string };
 /** 見た目の修飾。古いアプリは送らないので省略でき、省略は既定を表す。selected と toggle は -1 が指定なし、0 が偽、1 が真 */
@@ -24,7 +24,7 @@ export interface UiDiffer {
 export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: number) => void = () => {}): UiDiffer {
   // Worker には関数の本文だけを送るので、補助も関数の中に置く
   const looks = ["variant", "tone", "surface", "divider", "mono", "small", "bold", "truncate", "width", "center", "selected", "toggle", "scroll", "fill", "collapse", "placeholder", "height", "minHeight", "wrap", "highlight", "tip",
-    "checked", "value", "min", "max", "step", "index", "align"] as const;
+    "base", "anchor", "checked", "value", "min", "max", "step", "index", "align"] as const;
   /** 利用者が値を変える部品。入力欄と同じく、描き直しのたびにアプリの値と入力の版を送り、受け付けなかった操作を DOM で戻せるようにする */
   const controlled = ["input", "checkbox", "radio", "slider", "picker", "segmented", "tabs"];
   const sameOptions = (a: string[] | undefined, b: string[] | undefined): boolean =>
@@ -41,6 +41,7 @@ export function createUiDiffer(emit: (op: DomOp) => void, validateApp: (index: n
     if (node.selected !== undefined && node.selected >= 0) fields.selected = node.selected > 0;
     if (node.toggle !== undefined && node.toggle >= 0) fields.toggle = node.toggle > 0;
     if (node.align) fields.align = node.align;
+    if (node.kind === "markdown") { fields.base = node.base ?? ""; fields.anchor = node.anchor ?? ""; }
     // 値はその部品のときだけ載せる
     if (node.kind === "checkbox" || node.kind === "radio") fields.checked = node.checked === true;
     if (node.kind === "slider" || node.kind === "progress") fields.value = node.value ?? 0;

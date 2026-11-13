@@ -1,5 +1,5 @@
 import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
-import { createUiDiffer } from "@binette/decor";
+import { createUiDiffer } from "@binette/decor/diff";
 import { BinetteError, isNetUrlPrefix, type DomOp } from "@binette/core";
 import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
@@ -575,6 +575,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "sub": () => writeString(sub),
       "osRef": () => writeString(osBuild.ref),
       "osCommit": () => writeString(osBuild.commit),
+      "openUrl": (url: number) => scope.postMessage({ type: "app.openUrl", url: readString(url) }),
       "why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;
@@ -732,7 +733,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         if (["picker", "segmented", "tabs"].includes(node.kind) && !(Number.isInteger(value) && value >= 0 && value < (node.options ?? []).length)) value = NaN;
       }
       if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown ||
-        (uiText ? target.node.kind !== "input" && target.node.kind !== "filePick" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button" && target.node.kind !== "menuItem"))) {
+        (uiText ? target.node.kind !== "input" && target.node.kind !== "filePick" && target.node.kind !== "markdown" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button" && target.node.kind !== "menuItem"))) {
         // 捨てた入力にも版を進めた値を返し、Scene の表示をアプリの値に戻す
         if ((uiText && target?.node.kind === "input") || valueTarget) {
           ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));

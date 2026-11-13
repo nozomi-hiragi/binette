@@ -192,6 +192,8 @@ export interface LaunchOptions {
   last?: LifecycleRecord;
   /** アプリが自分を閉じたとき。今の呼び出しの完了後に届く */
   onFinish?: () => void;
+  /** Request an external HTTPS page; the host still confirms the action. */
+  onOpenUrl?: (url: string) => void;
   /** _start または一回の call で溜めた操作。完了通知より先に届く */
   onDom?: (ops: DomOp[]) => void;
   /** 辞書の `apps`。ホームと Cadre に渡すアプリ。省略時は apps.* を使えない */
@@ -478,6 +480,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "cadre.settings": options.onCadreSettings?.(); break;
         case "cadre.notify": options.onCadreNotify?.(data.text!); break;
         case "cadre.install": options.onCadreInstall?.(); break;
+        case "app.openUrl": {
+          try {
+            const url = new URL(data.url!);
+            if (url.protocol === "https:") options.onOpenUrl?.(url.href);
+          } catch { /* Invalid URLs are ignored. */ }
+          break;
+        }
         case "finish": finishing = true; break;
         case "done": {
           clearTimeout(pending.get(data.id!)?.timer);

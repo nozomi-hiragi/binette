@@ -187,6 +187,7 @@ class Docs extends App {
 
 - `App.osRef()`: ビルドしたブランチかタグ（例 `v0.2.1`）
 - `App.osCommit()`: ビルドした commit（40 桁の SHA）
+- `App.openUrl(url)`: HTTPS の外部ページを開く。前面のアプリからの要求に限り、アプリ名と URL を示す確認を出し、「開く」で新しいタブを開く。「やめる」では開かない。無効な URL、HTTPS 以外、確認中の追加要求は無視する
 - 値は Pages を作るときに書き込み、カーネルが Worker に渡す。開発の起動（`deno task start`）では ref を `dev`、commit を空にする（案）
 
 ## のちに足すもの
