@@ -114,13 +114,13 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | パッケージ | 依存 |
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0`（npm） |
-| `@binette/decor` | `@binette/core` |
+| `@binette/decor` | `@binette/core`、`marked@18.1.2`（npm） |
 | `@binette/regie` | `@binette/core`、`@binette/decor`、`assemblyscript@0.28.20`（ビルドのみ）、`@std/path`（CLI のみ） |
 | `@binette/scene` | `@binette/core`、`@binette/decor`、`@binette/regie` |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | `@binette/decor`（AS） |
 
-テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
+テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。`happy-dom` は MIT です。
 
 - 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。v0.2 の公開で `0.2.0` にした。OS 内の機能ごとの `@binette/replique-<機能>` は別に版を持ち、JSR には集約した `@binette/replique` のみを公開する
 - 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。TypeScript（replique は AS）のソースを配る

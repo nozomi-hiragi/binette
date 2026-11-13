@@ -80,6 +80,7 @@ Flutter・Jetpack Compose・SwiftUI に共通する考え方の部品を、Déco
 | `progress(value)` | 割合 0〜1。負なら不定 | `div role=progressbar`（`aria-valuemin=0`・`aria-valuemax=100`・`aria-valuenow`。不定では valuenow なし） | なし | `label`、`width`・`grow` |
 | `spinner()` | なし | `div role=progressbar`（valuenow なし） | なし | `label`、`width`（直径） |
 | `image(src)` | data URL | `img`（`alt` は `label`、無ければ空で飾り） | なし | `label`、`width`・`height` |
+| `markdown(source, onLink)` | Markdown の文字列、`(url: string) => void` | 見出し・段落などの DOM | リンクを選ぶ | `base(url)`、`anchor(id)` |
 | `listTile(title, subtitle?, leading?, trailing?)` | 題・副題（省略は ""）・先頭と末尾の View（省略は null） | `div`。中は先頭・題と副題の column・末尾 | 中の部品による | `gap`（既定 `space.md`）、`padding`（既定 上下 `space.sm`・左右 `space.md`） |
 | `chip(label)` | 文字 | `span` | なし | `tone(name)`、`label`、`padding` |
 | `badge(value)` | 文字（数など） | `span` | なし | `tone(name)`、`label`（例「未読 3 件」） |
@@ -92,6 +93,8 @@ Flutter・Jetpack Compose・SwiftUI に共通する考え方の部品を、Déco
 - `listTile` は先頭・末尾に任意の View を置く（画像・checkbox・chip など）。押せる行は `buttonOf([listTile(...)], f).variant("ghost")` で作る。listTile の中の checkbox などには `label` で名前を付ける
 - `stack` の子の既定の位置は左上（`topStart`）。`stack(...).center()` は全体を中央に、子の `align(name)` はその子だけを置く。`align(name)` の名前は `"topStart"`・`"top"`・`"topEnd"`・`"start"`・`"center"`・`"end"`・`"bottomStart"`・`"bottom"`・`"bottomEnd"`。column の子では横、row の子では縦の成分だけが効く。知らない名前は既定に戻す。クラスは `bina-ui-align-<name>`
 - `image` は PNG・JPEG・GIF・WebP の base64 の data URL と、`data:image/svg+xml;charset=utf-8,` に `encodeURIComponent` した SVG だけを描く。外部 URL・ほかの形式は `src` を付けない。SVG は `img` で描くのでスクリプトや外部の読み込みは動かない（アプリ管理が提供リストのアイコンを出すために足した）。ラスターの許可は Scene が document 方式の HTML を描く前の検査（sanitize）と同じ。アプリのパッケージ（`.binapp`）は manifest・HTML・アイコン・WASM だけを持ち、画像などのファイルを持たないので、アプリ内のファイルを指す形は今の仕組みでは成り立たない。ファイルを同梱する仕組みができたら足す
+- `markdown` は GFM の見出し、段落、強調、打ち消し、コード、リスト、タスクリスト、引用、表、水平線、リンク、改行を描く。生の HTML は文字として出し、画像は代替テキストだけを出す。引用の先頭の GitHub alert（NOTE・TIP・IMPORTANT・WARNING・CAUTION）はそれぞれ「メモ」「ヒント」「重要」「注意」「警告」を題にする。見出しの ID は GitHub と同じ規則で作り、重複には `-1`、`-2` を付ける
+- `markdown` の `#` だけで始まるリンクは部品内の見出しにスクロールし、それ以外は `base(url)` を基準に解決して `onLink` に渡す。基準がないか解決できない場合は元の文字列を渡す。`anchor(id)` は描画時にその見出しをスクロール領域の上端に置く。同じ本文と anchor の再描画ではスクロールを動かさない。本文が変わったときだけ内容を作り直す
 - `card` は作らない。`column(...).surface("card")` で足りる
 - 見た目はどれも OS の役割の変数（`--bina-ui-accent`・`--bina-ui-accent-soft`・`--bina-ui-line`・`--bina-ui-surface`・`--bina-ui-subtle`・`--bina-ui-muted` など）で描き、ライト・ダーク・`surface("dark")` の中で同じ規則になる。`surface` は column・row・grid の面の修飾なので、新しい部品は自分の CSS で面を描く。checkbox・radio・slider はネイティブの要素の見た目を消して OS の色で描く。progress の不定の動きと spinner の回転は、`prefers-reduced-motion` で遅くする
 - column の中の chip・badge・segmented・image は左に寄せ、横に伸ばさない（`grow()` を付けたものを除く）。row の中の progress は残りの幅に伸びる
