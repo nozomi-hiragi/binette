@@ -1649,3 +1649,108 @@ Deno.test("設定で拒否して取り消した後も古いダイアログは判
     assertEquals((await store.system.getNetLists!()).apps[id].approved, []);
   } finally { answer.resolve("later"); system.stop(); }
 });
+
+Deno.test("通知の開封・削除・停止は Cadre とホームの未開封数を更新する", async () => {
+  const sender = "https://example.test/unread/#sender";
+  const other = "https://example.test/unread/#other";
+  const app = await build();
+  const frame = await build(`import { Api, App, Last, CadreApi, launch } from "jsr:@binette/replique";
+let api: CadreApi | null = null;
+class Frame extends App { onCreate(_last: Last, dictionary: Api): void { api = CadreApi.from(dictionary); } }
+export function dismiss(): void { api!.notificationDismiss(api!.notificationId(0)); }
+launch(new Frame());`);
+  const settings = await build(`import { Api, App, Last, OsApi, launch } from "jsr:@binette/replique";
+let api: OsApi | null = null;
+class Settings extends App { onCreate(_last: Last, dictionary: Api): void { api = OsApi.from(dictionary); } }
+export function remove(): void { for (let i = 0; i < api!.letterCount(); i++) if (!api!.letterOpened(i)) { api!.deleteLetter(api!.letterId(i)); return; } }
+export function mute(): void { for (let i = 0; i < api!.notificationCount(); i++) if (api!.notificationId(i) == "${sender}") api!.setNotificationMuted(i, true); }
+launch(new Settings());`);
+  const store = createMemoryAppStore();
+  for (const from of [other, sender, sender, sender]) await store.pigeon.record({ id: 0, from, to: "user", kind: "test", title: "題", body: "本文" }, Date.now());
+  const element = output(); let frameProcess: Process | undefined;
+  const present = element.ui.present;
+  element.ui.present = (instance, process) => { if (instance.cadre) frameProcess = process; return present(instance, process); };
+  let cadre: import("../src/launch.ts").CadreSnapshot | undefined;
+  let appsInfo: import("../src/launch.ts").AppsInfo | undefined;
+  let appIds: string[] = [];
+  const system = await mountSystem(element, {
+    apps: [homeApp,
+      ...["sender", "other"].map(id => ({ source: "https://example.test/unread/", prebuilt: { ...app, manifest: { ...app.manifest, id, name: id, permissions: { notify: { reason: "通知" } } } } })),
+      { source: "binette:system", prebuilt: { ...frame, manifest: { ...frame.manifest, id: "frame", roles: ["cadre"] } } },
+      { source: "binette:system", prebuilt: { ...settings, manifest: { ...settings.manifest, id: "settings", roles: ["settings"] } } },
+    ], store, stackSize: 10,
+    createWorker() {
+      const worker = createWorker();
+      return { ...worker, postMessage(message, transfer) {
+        const data = message as { cadre?: typeof cadre; appsInfo?: typeof appsInfo; apps?: { id: string }[] };
+        if (data.cadre) cadre = data.cadre;
+        if (data.appsInfo?.canInstall) { appsInfo = data.appsInfo; if (data.apps) appIds = data.apps.map(app => app.id); }
+        worker.postMessage(message, transfer);
+      } };
+    },
+  });
+  const counts = async (total: number, own: number) => {
+    await waitFor(() => cadre?.notifications?.length === total && appsInfo?.unread[appIds.indexOf(sender)] === own);
+  };
+  try {
+    await waitFor(() => !!frameProcess && appIds.includes(sender));
+    await counts(4, 3);
+    await system.open(sender);
+    await waitFor(() => cadre?.instances.some(instance => instance.name === "sender" && instance.unread === 3) === true);
+    await frameProcess!.app.call("dismiss"); await counts(3, 2);
+    await system.open("settings"); const panel = element.active;
+    await panel.process.app.call("remove"); await counts(2, 1);
+    await panel.process.app.call("mute"); await counts(1, 0);
+    assertEquals((await store.pigeon.history()).filter(letter => !letter.opened).map(letter => letter.from), [other]);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("通知の最新 1 通、返信中の保持と urgent を Cadre に同期する", async () => {
+  const id = "https://example.test/popup/#sender";
+  const sending = await build(`import { Api, App, Last, PigeonApi, document, launch } from "jsr:@binette/replique";
+let pigeon: PigeonApi | null = null;
+class Sender extends App { onCreate(_last: Last, api: Api): void { pigeon = PigeonApi.from(api); document.getElementById("ready").textContent = "yes"; } }
+export function normal(): void { pigeon!.send("user", "normal", "題", "本文"); }
+export function urgent(): void { pigeon!.send("user", "urgent", "題", "本文", true); }
+launch(new Sender());`);
+  const frame = await build(`import { Api, App, Last, CadreApi, launch } from "jsr:@binette/replique";
+let api: CadreApi | null = null;
+class Frame extends App { onCreate(_last: Last, dictionary: Api): void { api = CadreApi.from(dictionary); } }
+export function keep(): void { api!.notificationKeep(api!.notificationId(0), true); }
+export function release(): void { api!.notificationKeep(api!.notificationId(0), false); }
+launch(new Frame());`);
+  const store = createMemoryAppStore(); const element = output(); let frameProcess: Process | undefined;
+  const present = element.ui.present;
+  element.ui.present = (instance, process) => { if (instance.cadre) frameProcess = process; return present(instance, process); };
+  let snapshot: import("../src/launch.ts").CadreSnapshot | undefined;
+  const system = await mountSystem(element, {
+    apps: [homeApp,
+      { source: "https://example.test/popup/", prebuilt: { ...sending, manifest: { ...sending.manifest, id: "sender", permissions: { notify: { reason: "通知" } } } } },
+      { source: "binette:system", prebuilt: { ...frame, manifest: { ...frame.manifest, id: "frame", roles: ["cadre"] } } },
+    ], store, stackSize: 10,
+    createWorker() {
+      const worker = createWorker();
+      return { ...worker, postMessage(message, transfer) {
+        const data = message as { cadre?: typeof snapshot };
+        if (data.cadre) snapshot = data.cadre;
+        worker.postMessage(message, transfer);
+      } };
+    },
+  });
+  try {
+    await system.open(id); const process = element.active;
+    await waitFor(() => process.text.get("ready") === "yes" && !!frameProcess);
+    await process.process.app.call("normal"); await waitFor(() => snapshot?.notifications?.length === 1);
+    await process.process.app.call("normal"); await waitFor(() => snapshot?.notifications?.length === 2);
+    assertEquals(snapshot!.notifications!.map(letter => letter.popup), [true, false]);
+    await frameProcess!.app.call("keep");
+    await sleep(5_200); assertEquals(snapshot!.notifications![0]!.popup, true);
+    await frameProcess!.app.call("release");
+    await waitFor(() => snapshot?.notifications?.[0]?.popup === false);
+    assertEquals(snapshot!.notifications!.length, 2);
+    await process.process.app.call("urgent"); await waitFor(() => snapshot?.notifications?.length === 3);
+    await sleep(5_200); assertEquals(snapshot!.notifications![0]!.popup, true);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});

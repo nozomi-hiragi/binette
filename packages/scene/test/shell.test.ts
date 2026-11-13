@@ -985,3 +985,26 @@ Deno.test("ライブのホームにインストールタイルを出し、案内
     await waitFor(() => element.querySelector<HTMLDialogElement>(".bina-shell-install-dialog")!.open);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("100 件以上は 99+ と表示し、インストール確認中はタイルを無効にする", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  for (let i = 0; i < 100; i++) await store.pigeon.record({ id: 0, from: "cadre.settings", to: "user", kind: "test", title: "題", body: "本文" }, Date.now());
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home" }, store, libraries, createWorker: worker.createWorker,
+  });
+  try {
+    await waitFor(() => element.querySelector('[data-bina-key="clock-badge"]')?.textContent === "99+");
+    assertEquals(element.querySelector('[data-bina-key="home-badge"]')?.textContent, "99+");
+    await waitForResumed(store, "cadre.home");
+    const event = new window.Event("beforeinstallprompt", { cancelable: true }) as unknown as Event & { prompt: () => Promise<void> };
+    event.prompt = () => pending;
+    window.dispatchEvent(event as never);
+    element.querySelector<HTMLButtonElement>('[data-bina-key="install-tile"]')!.click();
+    await waitFor(() => element.querySelector<HTMLButtonElement>('[data-bina-key="install-tile"]')?.disabled === true);
+    window.dispatchEvent(new window.Event("appinstalled"));
+    await waitFor(() => element.querySelector('[data-bina-key="install-tile"]') === null);
+  } finally { finish(); shell.stop(); await window.happyDOM.close(); }
+});

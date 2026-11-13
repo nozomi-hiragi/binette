@@ -9,8 +9,8 @@ export class NotificationClock {
   constructor(
     private readonly changed: () => void,
     private readonly now: () => number = Date.now,
-    private readonly later: typeof setTimeout = setTimeout,
-    private readonly cancel: typeof clearTimeout = clearTimeout,
+    private readonly later: typeof setTimeout = setTimeout.bind(globalThis),
+    private readonly cancel: typeof clearTimeout = clearTimeout.bind(globalThis),
   ) {
     this.scheduleMinute();
   }

@@ -127,9 +127,7 @@ export class CadreApp extends App {
           text(api.notificationName(i)).small().tone("muted").grow(),
           text(api.notificationTime(i)).small().tone("muted"),
         ]).key("notification-header"),
-        actionCount == 0
-          ? buttonOf([text(title).heading(2), text(body)], openNotification).arg(id).label(title + "を開く").key("notification-open")
-          : column([text(title).heading(2), text(body)]),
+        buttonOf([text(title).heading(2), text(body)], openNotification).arg(id).label(title + "を開く").key("notification-open"),
       ];
       const actions: View[] = [];
       for (let a: i32 = 0; a < actionCount; a++) {

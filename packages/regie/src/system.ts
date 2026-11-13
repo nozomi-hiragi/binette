@@ -1399,7 +1399,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
         onNotificationKeep(id, keep) { notificationClock.keep(id, keep); },
         onNotificationOpen(id) {
           const letter = shownLetters().find(letter => letter.id === id);
-          if (!letter || letter.actions?.length) return;
+          if (!letter) return;
           const target = available.get(letter.from);
           dismissNotification(id);
           if (showNetLetter(letter)) return;
