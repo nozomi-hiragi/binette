@@ -803,9 +803,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   let nextLetter = 0;
   // Letters to the user, oldest first. The store keeps them across reloads with the arrival time and the opened mark.
   const history: UserLetter[] = await options.store.pigeon.history();
-  // Cadre shows only unopened letters that arrived in this session. Older unopened ones stay in settings (and the badge later).
+  // Track arrivals separately for the current session's notification popup.
   const arrived = new Set<number>();
-  const shownLetters = () => history.filter(letter => arrived.has(letter.id) && !letter.opened);
+  const shownLetters = () => history.filter(letter => !letter.opened).reverse();
   const syncOs = () => { for (const session of sessions) if (apiOf(session.installed).keys.has("os")) session.mounted?.syncOs?.(osSnapshot([])); };
   /** The single place that opens letters: Cadre, the sending app and settings all end up here. */
   const openLetters = (pick: (letter: UserLetter) => boolean) => {
