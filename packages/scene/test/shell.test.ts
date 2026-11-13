@@ -997,7 +997,8 @@ Deno.test("100 件以上は 99+ と表示し、インストール確認中はタ
   });
   try {
     await waitFor(() => element.querySelector('[data-bina-key="clock-badge"]')?.textContent === "99+");
-    assertEquals(element.querySelector('[data-bina-key="home-badge"]')?.textContent, "99+");
+    // Home runs in its own Worker, so its first render can land after Cadre's.
+    await waitFor(() => element.querySelector('[data-bina-key="home-badge"]')?.textContent === "99+");
     await waitForResumed(store, "cadre.home");
     const event = new window.Event("beforeinstallprompt", { cancelable: true }) as unknown as Event & { prompt: () => Promise<void> };
     event.prompt = () => pending;
