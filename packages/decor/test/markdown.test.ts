@@ -127,6 +127,8 @@ Deno.test("Markdown resolves links and changes the base without rebuilding the s
     assertEquals(p.querySelectorAll("a")[3]!.getAttribute("href"), "https://example.com/another/plain.md");
     draw(""); first.click(); assertEquals(events.at(-1), "../next.md");
     draw("invalid base"); first.click(); assertEquals(events.at(-1), "../next.md");
+    root.render(markdown("[raw](https://EXAMPLE.com)", url => events.push(url)));
+    host.querySelector("a")!.click(); assertEquals(events.at(-1), "https://EXAMPLE.com");
     root.render(markdown("Changed", () => {}));
     assert(host.querySelector("p") !== p);
   } finally { await stop(); }

@@ -32,6 +32,7 @@ export default defineConfig({
     alias: {
       "@binette/decor/as": `${here}/packages/decor/src/as.ts?raw`,
       "@binette/decor/parts": `${here}/packages/decor/src/parts.ts?raw`,
+      "@binette/decor/diff": `${here}/packages/decor/src/diff.ts`,
       "@binette/decor": `${here}/packages/decor/src/index.ts`,
       "@binette/core": `${here}/packages/core/src/index.ts`,
       "@binette/regie/build": `${here}/packages/regie/src/build.ts`,

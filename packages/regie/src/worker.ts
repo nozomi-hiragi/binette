@@ -1,5 +1,5 @@
 import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
-import { createUiDiffer } from "@binette/decor";
+import { createUiDiffer } from "@binette/decor/diff";
 import { BinetteError, isNetUrlPrefix, type DomOp } from "@binette/core";
 import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";

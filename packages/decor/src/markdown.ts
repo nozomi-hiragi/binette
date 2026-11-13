@@ -16,7 +16,8 @@ export function createMarkdown(root: HTMLElement, onLink: (url: string) => void)
     return parser.parseFromString("<body>" + value.replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</body>", "text/html").body.textContent ?? "";
   };
   const resolve = (href: string): string => {
-    try { return new URL(href, base || undefined).href; } catch { return href; }
+    if (!base) return href;
+    try { return new URL(href, base).href; } catch { return href; }
   };
   const scroll = (id: string): void => {
     const heading = headings.get(id);

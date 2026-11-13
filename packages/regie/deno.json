@@ -10,7 +10,8 @@
     "@binette/core": "jsr:@binette/core@0.2.0",
     "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
     "@std/path": "jsr:@std/path@^1.1.6",
-    "@binette/decor": "jsr:@binette/decor@0.2.0"
+    "@binette/decor": "jsr:@binette/decor@0.2.0",
+    "@binette/decor/diff": "jsr:@binette/decor@0.2.0/diff"
   },
   "publish": {
     "include": [

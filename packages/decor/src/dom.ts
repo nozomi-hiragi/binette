@@ -71,8 +71,6 @@ const checkMark = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 const partCss: string = `
 :where(.bina-ui-surface-dark .bina-ui-markdown, .bina-ui-markdown.bina-ui-surface-dark) { --bina-ui-sunken: var(--bina-ui-dark-sunken, #101216); }
 :where(.bina-ui-markdown) { min-width: 0; overflow-wrap: anywhere; line-height: 1.65; }
-:where(.bina-ui-markdown > :first-child) { margin-top: 0; }
-:where(.bina-ui-markdown > :last-child) { margin-bottom: 0; }
 :where(.bina-ui-markdown h1, .bina-ui-markdown h2, .bina-ui-markdown h3, .bina-ui-markdown h4, .bina-ui-markdown h5, .bina-ui-markdown h6) { line-height: 1.3; margin: 1.4em 0 0.6em; font-weight: 650; }
 :where(.bina-ui-markdown h1) { font-size: 2em; }
 :where(.bina-ui-markdown h2) { font-size: 1.5em; }
@@ -87,13 +85,15 @@ const partCss: string = `
 :where(.bina-ui-markdown blockquote) { padding: 0.1em 1em; margin-inline: 0; border-inline-start: 3px solid ${colors.line}; color: ${colors.muted}; }
 :where(.bina-ui-markdown-alert-title) { font-weight: bold; }
 :where(.bina-ui-markdown-table) { overflow-x: auto; }
-:where(.bina-ui-markdown table) { border-collapse: collapse; }
+:where(.bina-ui-markdown table) { border-collapse: collapse; width: max-content; max-width: none; }
 :where(.bina-ui-markdown th, .bina-ui-markdown td) { border: 1px solid ${colors.line}; padding: 6px 12px; }
 :where(.bina-ui-markdown th) { background: ${colors.sunken}; }
 :where(.bina-ui-markdown hr) { border: 0; border-top: 1px solid ${colors.line}; margin: 1.2em 0; }
 :where(.bina-ui-markdown a) { color: ${colors.accentText}; text-decoration: underline; cursor: pointer; }
 :where(.bina-ui-markdown a:focus-visible) { outline: 2px solid ${colors.focus}; outline-offset: 2px; }
 :where(.bina-ui-markdown input[type="checkbox"]) { accent-color: ${colors.accent}; }
+:where(.bina-ui-markdown > :first-child) { margin-top: 0; }
+:where(.bina-ui-markdown > :last-child) { margin-bottom: 0; }
 
 :where(.bina-ui-spacer) { flex: 1 1 0; min-width: 0; min-height: 0; }
 :where(.bina-ui-separator) { box-sizing: border-box; flex: none; align-self: stretch; height: 1px; margin: 0; border: 0; background: ${colors.line}; }
@@ -555,6 +555,7 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           const changed = entry.markdown.update(op.text, op.base ?? "");
           const anchor = op.anchor ?? "";
           if (anchor && (changed || entry.anchor !== anchor)) scrolls.set(entry, anchor);
+          else if (!anchor) scrolls.delete(entry);
           entry.anchor = anchor;
         }
         const version = op.inputVersion ?? 0;
