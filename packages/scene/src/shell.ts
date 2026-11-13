@@ -1,6 +1,7 @@
 import { startSystem, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "@binette/regie";
 import { mountApp } from "./mount.ts";
 import { mountLiveMode } from "./live.ts";
+import { mountNetConfirm } from "./confirm-net.ts";
 import { mountInstallConfirm } from "./confirm.ts";
 
 /** 表示の設定 */
@@ -92,6 +93,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     system?.setInstallState?.(live.installed, live.busy);
   });
   const confirm = mountInstallConfirm(root);
+  const netConfirm = mountNetConfirm(root);
   root.append(style, cadreHost, fallback, appsHost, status, progress);
   element.replaceChildren(root);
 
@@ -120,6 +122,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     bind(value) { if (!stopped) { system = value; system.setInstallState?.(live.installed, live.busy); setPage(); } },
     install() { void live.install(); },
     confirmInstall: request => confirm.confirm(request),
+    confirmNet: request => netConfirm.confirm(request),
     present(instance, process) {
       if (instance.cadre) {
         cadreMounted?.stop();
@@ -205,6 +208,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       document.removeEventListener("resume", resume);
       live.stop();
       confirm.stop();
+      netConfirm.stop();
       root.remove();
     },
   };

@@ -3,7 +3,7 @@ import { createProviderLists, type InstallConfirmation, type ProviderLists, type
 import { BinetteError, isNetUrlPrefix, normalizeAppIdentifier, DestroyCause, DestroyKind, parseAppId, parseAppManifest } from "@binette/core";
 import { createScheduler, type Scheduler } from "./scheduler.ts";
 import { launchApp } from "./launch.ts";
-import { createNetService, type NetRequest } from "./net.ts";
+import { allowsNetUrl, matchesNetUrl, createNetService, type NetRequest } from "./net.ts";
 import { formatDate } from "./time.ts";
 import { PIGEON_HISTORY_LIMIT } from "./pigeon.ts";
 import type { BuildOptions } from "./build.ts";
@@ -61,6 +61,8 @@ export interface SystemUi {
   install?(): void;
   /** アプリのインストールと、権限が増える更新の前に権限を確かめる。省くと確かめずに入れる */
   confirmInstall?(request: InstallConfirmation): Promise<boolean>;
+  /** 更新で増えた通信先をまとめて確認する。閉じたときは later */
+  confirmNet?(request: { name: string; source: string; urls: string[] }): Promise<"allow" | "deny" | "later">;
 }
 
 /** ホームバーと前面と Apps に見せる状態 */
@@ -208,6 +210,17 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     session.view?.remove();
     renderBar();
   };
+  const netLists = await options.store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} };
+  const netOwner = (app: InstalledApp) => app.parentKey ?? app.key;
+  const ownNet = (app: InstalledApp) => netLists.apps[netOwner(app)] ??= { allow: [], added: [], deny: [] };
+  const reconcileNet = (app: InstalledApp) => {
+    const request = app.manifest.permissions?.net?.request ?? [];
+    if (!app.manifest.permissions?.net && !netLists.apps[netOwner(app)]) return;
+    const own = ownNet(app);
+    own.approved = own.approved === undefined ? [...request] : own.approved.filter(url => request.includes(url));
+  };
+  // 旧版の要求を記録してから、配布物で manifest を入れ替える。
+  for (const app of await options.store.list()) reconcileNet(app);
   const installedApps: InstalledApp[] = [];
   const seen = new Set<string>();
   const attempted = new Set<string>();
@@ -410,17 +423,83 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     }
     renderBar();
   };
-  const netLists = await options.store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} };
-  const netOwner = (app: InstalledApp) => app.parentKey ?? app.key;
-  const ownNet = (app: InstalledApp) => netLists.apps[netOwner(app)] ??= { allow: [], added: [], deny: [] };
+  for (const app of available.values()) reconcileNet(app);
+  await options.store.system.putNetLists?.(structuredClone(netLists));
   const netSnapshot = (app: InstalledApp) => ({ tools: [...(app.manifest.permissions?.net?.tools ?? [])], added: [...(netLists.apps[netOwner(app)]?.added ?? [])] });
   const netService = createNetService();
-  const netRequest = async (app: InstalledApp, request: NetRequest, signal: AbortSignal) => {
-    await saving;
-    const saved = await options.store.system.getNetLists?.() ?? netLists;
-    const own = saved.apps[netOwner(app)];
-    if (!Object.hasOwn(app.manifest.permissions ?? {}, "net")) return { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "blocked" };
-    return netService(netOwner(app), request, { request: app.manifest.permissions?.net?.request ?? [], appAllow: own?.allow ?? [], appAdded: own?.added ?? [], appDeny: own?.deny ?? [], commonAllow: saved.commonAllow, commonDeny: saved.commonDeny }, signal);
+  type NetRun = { later?: boolean; notified?: boolean; headless?: boolean; signal: AbortSignal };
+  const confirmations = new Map<string, Promise<void>>();
+  const pendingNet = (app: InstalledApp) => (app.manifest.permissions?.net?.request ?? []).filter(url => !netLists.apps[netOwner(app)]?.approved?.includes(url));
+  // 拒否後も pending には残るので、承認状態とは別に判断の世代を owner ごとに持つ。
+  const netDecisions = new Map<string, Map<string, number>>();
+  const decisionsOf = (app: InstalledApp) => {
+    const owner = netOwner(app);
+    let decisions = netDecisions.get(owner);
+    if (!decisions) { decisions = new Map(); netDecisions.set(owner, decisions); }
+    return decisions;
+  };
+  const decideNet = (app: InstalledApp, answer: string, urls = pendingNet(app), expected?: ReadonlyMap<string, number>) => {
+    const own = ownNet(app);
+    // 設定で先に解決した URL は、遅れて届いたダイアログの答えで上書きしない。
+    const pending = pendingNet(app);
+    const decisions = decisionsOf(app);
+    const selected = urls.filter(url => pending.includes(url) && (!expected || expected.get(url) === (decisions.get(url) ?? 0)));
+    if (!selected.length) return;
+    if (answer === "allow") own.approved = [...new Set([...(own.approved ?? []), ...selected])];
+    else if (answer === "deny") own.deny = [...new Set([...own.deny, ...selected])];
+    else return;
+    for (const url of selected) decisions.set(url, (decisions.get(url) ?? 0) + 1);
+    saveNet();
+  };
+  const confirmNet = (app: InstalledApp, run: NetRun) => {
+    const key = app.key;
+    let waiting = confirmations.get(key);
+    if (!waiting) {
+      const urls = pendingNet(app);
+      const decisions = new Map(urls.map(url => [url, decisionsOf(app).get(url) ?? 0]));
+      waiting = Promise.resolve().then(() => options.ui.confirmNet?.({ name: app.manifest.name, source: app.source, urls }) ?? "later").then(answer => {
+        if (stopped || run.signal.aborted) return;
+        if (answer === "later") run.later = true;
+        else decideNet(app, answer, urls, decisions);
+      }).catch(error => { run.later = true; report(error); }).finally(() => { if (confirmations.get(key) === waiting) confirmations.delete(key); });
+      confirmations.set(key, waiting);
+      run.signal.addEventListener("abort", () => { if (confirmations.get(key) === waiting) confirmations.delete(key); }, { once: true });
+    }
+    return waiting;
+  };
+  const netRequest = async (app: InstalledApp, request: NetRequest, signal: AbortSignal, run: NetRun) => {
+    const failure = (reason: string) => ({ status: 0, statusText: "", url: "", type: "error", headers: [] as [string, string][], body: new Uint8Array(0), reason });
+    if (!apiOf(app).keys.has("net")) return failure("blocked");
+    const lists = () => ({ request: ownNet(app).approved ?? [], appAllow: ownNet(app).allow, appAdded: ownNet(app).added ?? [], appDeny: ownNet(app).deny, commonAllow: netLists.commonAllow, commonDeny: netLists.commonDeny });
+    return await netService(netOwner(app), request, lists(), signal, async () => {
+      // onSchedule が返ると Worker は止まるので、確認待ちの通知は保存待ちより先に決める。
+      if (!run.headless) {
+        const before = saving;
+        await before;
+        const saved = await options.store.system.getNetLists?.();
+        // 読み取り中の設定操作や確認の回答を、古い保存値で巻き戻さない。
+        if (saved && saving === before) Object.assign(netLists, saved);
+        else await saving;
+        reconcileNet(app);
+      }
+      if (signal.aborted || run.signal.aborted) return "aborted";
+      if (allowsNetUrl(request.url, lists())) return lists();
+      if ([...netLists.commonDeny, ...ownNet(app).deny].some(url => matchesNetUrl(request.url, url)) || !pendingNet(app).some(url => matchesNetUrl(request.url, url))) return "blocked";
+      if (run.headless) {
+        if (!run.notified) { run.notified = true; notifyPending(app); }
+        return "pending";
+      }
+      if (run.later) return "pending";
+      await new Promise<void>(resolve => {
+        const abort = () => { signal.removeEventListener("abort", abort); run.signal.removeEventListener("abort", abort); resolve(); };
+        signal.addEventListener("abort", abort, { once: true });
+        run.signal.addEventListener("abort", abort, { once: true });
+        void confirmNet(app, run).then(abort);
+      });
+      if (signal.aborted || run.signal.aborted) return "aborted";
+      if (allowsNetUrl(request.url, lists())) return lists();
+      return [...netLists.commonDeny, ...ownNet(app).deny].some(url => matchesNetUrl(request.url, url)) ? "blocked" : "pending";
+    });
   };
   /** アプリに届く辞書のキーと、届かないキーの理由 */
   const apiOf = (installed: InstalledApp) => {
@@ -613,6 +692,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     let finished = () => {};
     const done = new Promise<void>(resolve => { finished = resolve; });
     headless.set(app.key, { owner, controller, done });
+    const netRun: NetRun = { headless: true, signal: controller.signal };
     let worker: Awaited<ReturnType<typeof launchApp>> | undefined;
     try {
       app = await readyApp(app);
@@ -643,7 +723,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           saving = saving.then(() => options.store.data.write(owner, name, value)).catch(report);
         },
         onShare(operation, args) { return shareRequest(app, operation, args); },
-        onNet(request, signal) { return netRequest(app, request, signal); },
+        onNet(request, signal) { return netRequest(app, request, signal, netRun); },
         onNetAllow(action, url) { netAllow(app, action, url); },
         onPigeonSend(letter) { routePigeon(app, letter); },
         onPigeonDone(id) { donePigeon(app, id); },
@@ -747,6 +827,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       // "show" is the user pressing the letter itself, so it also counts as opening it.
       const target = action === "show" ? available.get(history.find(letter => letter.id === id)?.from ?? "") : undefined;
       openLetters(letter => letter.id === id);
+      if (action === "show" && showNetLetter(history.find(letter => letter.id === id))) return;
       if (target) void show(target, target.key === home?.key).catch(report);
     }
   };
@@ -754,6 +835,24 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     const snapshot = structuredClone(netLists);
     saving = saving.then(() => options.store.system.putNetLists?.(snapshot)).catch(report);
     syncOs();
+  };
+  const showNetLetter = (letter: PigeonLetter | undefined) => {
+    if (letter?.kind !== "net.pending" || letter.from !== assigned.settings?.key || !letter.netApp) return false;
+    const app = available.get(letter.netApp);
+    if (app && apiOf(app).keys.has("net") && pendingNet(app).length) void confirmNet(app, { signal: rebuildController.signal });
+    return true;
+  };
+  const notifyPending = (app: InstalledApp) => {
+    if (!assigned.settings) return;
+    const letter: PigeonLetter = { id: 0, from: assigned.settings.key, to: "user", kind: "net.pending", netApp: app.key, title: "確認待ちの通信先があります", body: `${app.manifest.name}に確認待ちの通信先があります` };
+    saving = saving.then(async () => {
+      const saved = await options.store.pigeon.record(letter, Date.now());
+      if (stopped) return;
+      history.push(saved);
+      for (const old of history.splice(0, Math.max(0, history.length - PIGEON_HISTORY_LIMIT))) arrived.delete(old.id);
+      arrived.add(saved.id);
+      renderBar(); syncOs();
+    }).catch(report);
   };
   /** Worker の同期判定に加え、保存前にも権限・形・上限を確かめる。 */
   const netAllow = (app: InstalledApp, action: string, url: string) => {
@@ -793,9 +892,10 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     for (const run of headless.values()) if (run.worker && run.app && netOwner(run.app) === owner) run.worker.syncNet?.(netSnapshot(run.app));
   };
   const netDo = (action: string, appId: string, url: string) => {
-    if (!["addAllow", "removeAllow", "addDeny", "removeDeny"].includes(action)) return;
+    if (!["addAllow", "removeAllow", "addDeny", "removeDeny", "approvePending", "denyPending"].includes(action)) return;
     const app = appId === "" ? undefined : available.get(appId);
     if (appId !== "" && (!app || !apiOf(app).keys.has("net"))) return;
+    if (action === "approvePending" || action === "denyPending") { if (app) decideNet(app, action === "approvePending" ? "allow" : "deny"); return; }
     if (!isNetUrlPrefix(url)) { report(new Error("通信先は正しい https の URL で指定してください。パスは / で終えてください。")); return; }
     const own = app ? ownNet(app) : undefined;
     const allow = action.endsWith("Allow");
@@ -921,7 +1021,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       net: { allow: [...netLists.commonAllow], deny: [...netLists.commonDeny] },
       apps: [...available.values()].map(app => {
         const own = netLists.apps[netOwner(app)];
-        return { id: app.key, name: app.manifest.name, notify: canNotify(app), muted: muted.get(app.key) ?? false, net: apiOf(app).keys.has("net"), request: [...(app.manifest.permissions?.net?.request ?? [])], allow: [...(own?.allow ?? [])], added: [...(own?.added ?? [])], deny: [...(own?.deny ?? [])], quiet: own?.quiet ?? false };
+        return { id: app.key, name: app.manifest.name, notify: canNotify(app), muted: muted.get(app.key) ?? false, net: apiOf(app).keys.has("net"), request: [...(app.manifest.permissions?.net?.request ?? [])], pending: pendingNet(app), allow: [...(own?.allow ?? [])], added: [...(own?.added ?? [])], deny: [...(own?.deny ?? [])], quiet: own?.quiet ?? false };
       }),
       notifications: [...available.values()].filter(canNotify).map(app => ({ id: app.key, name: app.manifest.name, muted: muted.get(app.key) ?? false })),
       letters: history.map(letter => ({ id: letter.id, from: letter.from, name: available.get(letter.from)?.manifest.name ?? letter.from, title: letter.title, body: letter.body, time: letter.time, opened: letter.opened })).reverse(),
@@ -1043,6 +1143,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       return;
     }
     session = { controller: new AbortController(), id: ++nextId, installed, home: atHome, finish: false, closing: false, lastShown: ++shown };
+    const netRun: NetRun = { signal: session.controller.signal };
     const started = session;
     sessions.add(started);
     active = started;
@@ -1110,7 +1211,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           void show(apps[i]!, false);
         },
         onShare(operation, args) { return shareRequest(installed, operation, args); },
-        onNet(request, signal) { return netRequest(installed, request, signal); },
+        onNet(request, signal) { return netRequest(installed, request, signal, netRun); },
         onNetAllow(action, url) { netAllow(installed, action, url); },
         onManager(action, args) { if (api.keys.has("manager")) managerAction(action, args); },
         onScheduler(action, id, value, on) { if (api.keys.has("scheduler")) schedulerAction(action, id, value, on); },
@@ -1202,6 +1303,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     clearTimeout(cadreRestartTimer);
     if (cadreSession) cutCadre();
     const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedCadre, home: false, finish: false, closing: false, lastShown: ++shown };
+    const netRun: NetRun = { signal: session.controller.signal };
     cadreSession = session;
     try {
       selectedCadre = await readyApp(selectedCadre);
@@ -1262,7 +1364,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           saving = saving.then(() => options.store.data.write(selectedCadre.parentKey ?? selectedCadre.key, name, value)).catch(report);
         },
         onShare(operation, args) { return shareRequest(selectedCadre, operation, args); },
-        onNet(request, signal) { return netRequest(selectedCadre, request, signal); },
+        onNet(request, signal) { return netRequest(selectedCadre, request, signal, netRun); },
         onNetAllow(action, url) { netAllow(selectedCadre, action, url); },
         onSchedule(action, slot, rule, label) { scheduleAction(selectedCadre, action, slot, rule, label); },
         onPigeonSend(letter) { routePigeon(selectedCadre, letter); },
@@ -1274,6 +1376,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           if (!letter || letter.actions?.length) return;
           const target = available.get(letter.from);
           dismissNotification(id);
+          if (showNetLetter(letter)) return;
           if (target) void show(target, target.key === home?.key).catch(report);
         },
         onNotificationReply(id, action, body) {
@@ -1370,6 +1473,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     for (const app of await options.store.list()) if (app.source !== SYSTEM_SOURCE && app.source !== "binette:bundled") for (const entry of entries(app)) available.set(entry.key, entry);
     // bootAppStore は埋め込みを隠すので、今回の配布物を戻す。
     for (const app of installedApps) if (!available.has(app.key)) for (const entry of entries(app)) available.set(entry.key, entry);
+    for (const app of available.values()) reconcileNet(app);
+    saveNet();
+    await saving;
     for (const role of ["home", "settings", "cadre", "apps-manager"]) assigned[role] = assign(role);
     await syncAppSchedules().catch(report);
     home = assigned.home;

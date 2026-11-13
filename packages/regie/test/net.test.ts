@@ -108,3 +108,15 @@ Deno.test("アプリが足した通信先も許し、アプリ別・共通の de
   lists.commonDeny = []; lists.appAdded = [];
   assertEquals(allowsNetUrl(url, lists), false);
 });
+
+Deno.test("通信の確認を待つ時間はタイムアウトに数えず、不正な要求では確認しない", async () => {
+  const { createNetService } = await import("../src/net.ts");
+  const lists = { request: ["https://example.com/"], appAllow: [], appDeny: [], commonAllow: [], commonDeny: [] };
+  let calls = 0; let confirmed = 0;
+  const service = createNetService(() => { calls++; return Promise.resolve(new Response("ok")); }, 5);
+  const authorize = async () => { confirmed++; await new Promise(resolve => setTimeout(resolve, 30)); return lists; };
+  assertEquals((await service("app", { url: "https://example.com/" }, lists, new AbortController().signal, authorize)).status, 200);
+  assertEquals([calls, confirmed], [1, 1]);
+  assertEquals((await service("app", { url: "https://example.com/", method: "POST" }, lists, new AbortController().signal, authorize)).reason, "invalid");
+  assertEquals(confirmed, 1);
+});

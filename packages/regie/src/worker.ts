@@ -76,7 +76,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     const state = system();
     if (appId === "") return list === "allow" ? state.net?.allow ?? [] : list === "deny" ? state.net?.deny ?? [] : [];
     const app = state.apps?.find(app => app.id === appId);
-    return app && (list === "request" || list === "allow" || list === "added" || list === "deny") ? app[list] : [];
+    return app && (list === "pending" || list === "request" || list === "allow" || list === "added" || list === "deny") ? app[list] ?? [] : [];
   };
   const netAllow = (action: string, url: string): boolean => {
     if (!net || !netState.tools.includes("addAllow") || !isNetUrlPrefix(url)) return false;

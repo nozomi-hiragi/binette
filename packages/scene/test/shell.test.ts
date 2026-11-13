@@ -878,6 +878,15 @@ Deno.test("設定のアプリ詳細と共通ネットは通知スイッチと通
     assertEquals(query("apps-back")!.textContent, "‹ アプリ");
     assert(query("app-summary")!.textContent!.includes(id));
     assertEquals(query("net-request-0")!.textContent, "https://request.test/");
+    assertEquals(query("net-pending-0")!.textContent, "https://request.test/");
+    await press("net-deny-pending");
+    await waitFor(() => query("net-deny-1")?.textContent?.includes("https://request.test/") ?? false);
+    assertEquals((await store.system.getNetLists!()).apps[id].approved, []);
+    await press("net-remove-deny-1");
+    await waitFor(() => query("net-deny-1") === null);
+    await press("net-approve-pending");
+    await waitFor(() => query("net-pending-section")!.hidden === true);
+    assertEquals((await store.system.getNetLists!()).apps[id].approved, ["https://request.test/"]);
     assert(query("net-allow-0")!.textContent!.includes("ユーザーが追加"));
     assert(query("net-added-0")!.textContent!.includes("アプリが追加"));
     assertEquals(query("app-notify")!.getAttribute("aria-checked"), "true");
@@ -901,7 +910,7 @@ Deno.test("設定のアプリ詳細と共通ネットは通知スイッチと通
     type("net-deny-input", "https://new-deny.test/");
     await press("net-add-deny");
     await waitFor(() => query("net-deny-0")?.textContent?.includes("https://new-deny.test/") ?? false);
-    assertEquals((await store.system.getNetLists!()).apps[id], { allow: ["https://new-user.test/"], added: [], deny: ["https://new-deny.test/"], quiet: true, approved: ["https://approved.test/"] });
+    assertEquals((await store.system.getNetLists!()).apps[id], { allow: ["https://new-user.test/"], added: [], deny: ["https://new-deny.test/"], quiet: true, approved: ["https://request.test/"] });
     await press("apps-back"); await waitFor(() => query("settings-apps") !== null);
     await press("app-settings-0"); await waitFor(() => query("app-summary") !== null);
     assert(query("app-notify") !== null); assert(query("net-allow-section") === null);

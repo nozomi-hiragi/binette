@@ -164,7 +164,7 @@ export class OsApi {
   netUrl(list: string, appId: string, i: i32): string { return hostOs.netUrl(list, appId, i); }
   netIsQuiet(appId: string): bool { return hostOs.netIsQuiet(appId); }
   /** addAllow・removeAllow・addDeny・removeDeny。URL の誤りは OS に表示する */
-  netDo(action: string, appId: string, url: string): void { hostOs.netDo(action, appId, url); }
+  netDo(action: string, appId: string, url: string = ""): void { hostOs.netDo(action, appId, url); }
   netQuiet(appId: string, on: bool): void { hostOs.netQuiet(appId, on); }
 
   /** Per-app notification settings, indexed by the notificationCount list. */

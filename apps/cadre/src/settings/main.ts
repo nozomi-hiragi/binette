@@ -87,6 +87,8 @@ function backToApps(): void { selectedApp = ""; }
 function editAllow(value: string): void { allowDraft = value; }
 function editDeny(value: string): void { denyDraft = value; }
 function netTarget(): string { return page == 8 ? "" : selectedApp; }
+function approvePending(): void { if (osApi != null) osApi!.netDo("approvePending", selectedApp); }
+function denyPending(): void { if (osApi != null) osApi!.netDo("denyPending", selectedApp); }
 function addAllow(): void { const os = osApi; if (os != null) os.netDo("addAllow", netTarget(), allowDraft); }
 function addDeny(): void { const os = osApi; if (os != null) os.netDo("addDeny", netTarget(), denyDraft); }
 function removeAllow(i: i32): void {
@@ -108,6 +110,9 @@ function toggleNetQuiet(): void {
 function netViews(os: OsApi, id: string): View[] {
   const views: View[] = [];
   if (id.length > 0) {
+    const pending: View[] = [];
+    for (let i: i32 = 0; i < os.netCount("pending", id); i++) pending.push(text(os.netUrl("pending", id, i)).key("net-pending-" + i.toString()));
+    views.push(show(pending.length > 0, column([text("確認待ちの要求 URL").heading(2), column(pending).surface("card").key("net-pending-list"), row([button("許可", approvePending).key("net-approve-pending"), button("拒否", denyPending).key("net-deny-pending")])]).key("net-pending-section")));
     const requests: View[] = [];
     for (let i: i32 = 0; i < os.netCount("request", id); i++) requests.push(text(os.netUrl("request", id, i)).key("net-request-" + i.toString()));
     views.push(column([text("要求 URL").heading(2), column(requests).surface("card").key("net-requests")]).key("net-request-section"));

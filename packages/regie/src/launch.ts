@@ -10,6 +10,8 @@ export interface PigeonLetter {
   title: string;
   body: string;
   urgent?: boolean;
+  /** OS が送る確認待ち通知の対象。差出人が設定の手紙だけで使う */
+  netApp?: string;
   shares?: { id: string; access: "read" | "write" }[];
   actions?: { id: string; label: string; input?: boolean; placeholder?: string }[];
 }
@@ -26,7 +28,7 @@ export interface NetSnapshot { tools: string[]; added: string[] }
 
 /** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
-  apps?: { id: string; name: string; notify: boolean; muted: boolean; net: boolean; request: string[]; allow: string[]; added: string[]; deny: string[]; quiet: boolean }[];
+  apps?: { id: string; name: string; notify: boolean; muted: boolean; net: boolean; request: string[]; pending?: string[]; allow: string[]; added: string[]; deny: string[]; quiet: boolean }[];
   net?: { allow: string[]; deny: string[] };
   notifications?: { id: string; name: string; muted: boolean }[];
   /** ユーザー宛てに届いた手紙。新しい順。`name` は差出人のアプリ名（もう無いアプリは ID） */
