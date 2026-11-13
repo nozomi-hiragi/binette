@@ -1171,6 +1171,13 @@ export function act(action: i32, appId: i32, url: i32): void { os!.netDo(values[
 export function quiet(appId: i32, on: bool): void { os!.netQuiet(values[appId], on); }
 export function mute(appId: i32, on: bool): void { os!.setAppMuted(values[appId], on); }
 export function press(id: i32): void { os!.showLetter(id); }
+export function inspectPending(index: i32): void {
+  const appId = values[index]; let value = "";
+  for (let i = 0; i < os!.netCount("pending", appId); i++) value += os!.netUrl("pending", appId, i) + ",";
+  value += ";";
+  for (let i = 0; i < os!.netCount("deny", appId); i++) value += os!.netUrl("deny", appId, i) + ",";
+  document.getElementById("pending").textContent = value;
+}
 export function inspect(index: i32): void {
   const appId = values[index];
   const api = os!; let value = "";
@@ -1576,4 +1583,67 @@ Deno.test("設定の先行した許可・拒否を表示中ダイアログの逆
       } finally { answer.resolve("later"); system.stop(); }
     }
   } finally { globalThis.fetch = originalFetch; }
+});
+
+Deno.test("拒否した要求は確認待ちから外れ、deny の削除で戻る", async () => {
+  const id = "https://example.test/net/#client"; const url = "https://example.com/docs/";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = () => Promise.resolve(new Response("ok"));
+  try {
+    for (const via of ["dialog", "settings"] as const) {
+      const store = createMemoryAppStore(); const element = output();
+      await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [] } } });
+      let confirms = 0;
+      element.ui.confirmNet = request => { confirms++; assertEquals(request.urls, [url]); return Promise.resolve("deny"); };
+      const system = await mountSystem(element, { apps: [homeApp,
+        { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: [url] } } } } },
+        { source: "binette:system", prebuilt: { ...netSettings, manifest: { ...netSettings.manifest, id: "config", roles: ["settings"] } } },
+      ], store, createWorker, stackSize: 10 });
+      try {
+        await system.open("config"); const panel = element.active;
+        await system.open(id); const client = element.active;
+        const snapshot = async () => { await panel.process.app.call("inspectPending", netTestStrings.indexOf(id)); return panel.text.get("pending"); };
+        assertEquals(await snapshot(), `${url},;`);
+        if (via === "dialog") {
+          await client.process.app.call("request", 3);
+          await waitFor(() => client.text.get("response") === "error:blocked");
+        } else {
+          await panel.process.app.call("act", netTestStrings.indexOf("denyPending"), netTestStrings.indexOf(id), 0);
+        }
+        await waitForAsync(async () => await snapshot() === `;${url},`);
+        assertEquals((await store.system.getNetLists!()).apps[id].approved, []);
+        await client.process.app.call("request", 3);
+        await waitFor(() => client.text.get("response") === "error:blocked");
+        assertEquals(confirms, via === "dialog" ? 1 : 0);
+        await panel.process.app.call("act", netTestStrings.indexOf("removeDeny"), netTestStrings.indexOf(id), netTestStrings.indexOf(url));
+        await waitForAsync(async () => await snapshot() === `${url},;`);
+        assertEquals((await store.system.getNetLists!()).apps[id].deny, []);
+      } finally { system.stop(); }
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+Deno.test("設定で拒否して取り消した後も古いダイアログは判断を上書きしない", async () => {
+  const id = "https://example.test/net/#client"; const url = "https://example.com/docs/";
+  const store = createMemoryAppStore(); const element = output();
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [] } } });
+  const answer = Promise.withResolvers<"allow" | "deny" | "later">(); let count = 0;
+  element.ui.confirmNet = () => { count++; return answer.promise; };
+  const system = await mountSystem(element, { apps: [homeApp,
+    { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: [url] } } } } },
+    { source: "binette:system", prebuilt: { ...netSettings, manifest: { ...netSettings.manifest, id: "config", roles: ["settings"] } } },
+  ], store, createWorker, stackSize: 10 });
+  try {
+    await system.open("config"); const panel = element.active;
+    await system.open(id); const client = element.active;
+    await client.process.app.call("request", 3); await waitFor(() => count === 1);
+    await panel.process.app.call("act", netTestStrings.indexOf("denyPending"), netTestStrings.indexOf(id), 0);
+    await waitForAsync(async () => (await store.system.getNetLists!()).apps[id].deny.includes(url));
+    await panel.process.app.call("act", netTestStrings.indexOf("removeDeny"), netTestStrings.indexOf(id), netTestStrings.indexOf(url));
+    await waitForAsync(async () => !(await store.system.getNetLists!()).apps[id].deny.includes(url));
+    answer.resolve("allow"); await waitFor(() => client.text.get("response") === "error:pending");
+    await panel.process.app.call("inspectPending", netTestStrings.indexOf(id));
+    assertEquals(panel.text.get("pending"), `${url},;`);
+    assertEquals((await store.system.getNetLists!()).apps[id].approved, []);
+  } finally { answer.resolve("later"); system.stop(); }
 });
