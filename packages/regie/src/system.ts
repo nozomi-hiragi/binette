@@ -429,8 +429,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const netService = createNetService();
   type NetRun = { later?: boolean; notified?: boolean; headless?: boolean; signal: AbortSignal };
   const confirmations = new Map<string, Promise<void>>();
-  const pendingNet = (app: InstalledApp) => (app.manifest.permissions?.net?.request ?? []).filter(url => !netLists.apps[netOwner(app)]?.approved?.includes(url));
-  // 拒否後も pending には残るので、承認状態とは別に判断の世代を owner ごとに持つ。
+  const pendingNet = (app: InstalledApp) => (app.manifest.permissions?.net?.request ?? []).filter(url => {
+    const own = netLists.apps[netOwner(app)];
+    return !own?.approved?.includes(url) && !own?.deny.includes(url);
+  });
+  // 拒否を取り消して確認待ちに戻した URL も、古いダイアログで上書きしない。
   const netDecisions = new Map<string, Map<string, number>>();
   const decisionsOf = (app: InstalledApp) => {
     const owner = netOwner(app);
