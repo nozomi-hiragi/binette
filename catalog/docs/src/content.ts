@@ -1115,7 +1115,7 @@ export const bodies: string[] = [
     "u\u001f0\u001fb宛先がアプリ（受信欄）\u001dt：手紙は受信欄（IndexedDB）に入る。起動時に受信欄を写して \u001dcpigeon.count()\u001dt・\u001dcpigeon.kind(i)\u001dt などで同期で読み、動いている間に届いたら \u001dconPigeon()\u001dt が来る。読んだら \u001dcpigeon.done(i)\u001dt で消す。\u001dcurgent\u001dt なら OS が宛先を起動して渡す。受信欄の上限は 100 通（値は実装で見直してよい）\u001e" +
     "u\u001f0\u001fb宛先を種類で選ぶ\u001dt：\u001dcapp.json\u001dt に受け取れる種類（例 \u001dc\"pigeon\": [\"open-image\"]\u001dt）を書き、OS が候補を出してユーザーが選ぶ形（「このアプリで開く」）。後から足す\u001e" +
     "h\u001f2\u001f届いた通知と開封\u001ft届いた通知と開封\u001e" +
-    "q\u001fメモ\u001ft開封の規則は 2026-11-12 にのぞみが決めました。上限の数、再読み込みのあとの扱い、「閉じる」の扱い、\u001dcopened(kind)\u001dt の形は案です。\u001e" +
+    "q\u001fメモ\u001ft開封の規則は 2026-11-12 にのぞみが決めました。時計をホームバー右端に置き、押すと通知センターがすべり出ること、インストールをホームのタイルに移すこと、v0.2.1 に入れることは 2026-11-13 にのぞみが決めました。上限の数、「閉じる」の扱い、\u001dcopened(kind)\u001dt の形などは案です。\u001e" +
     "p\u001ftユーザー宛ての手紙は、届いた時刻と「開封」の印を付けて保存します（IndexedDB）。閉じても再読み込みしても消えず、設定の「通知」の「届いた通知」に新しい順で並びます。時刻は OS のタイムゾーンで出します。\u001e" +
     "p\u001fb開封になるとき\u001e" +
     "u\u001f0\u001ft通知を押したとき。ほかのアプリや差出人のアプリを開いている間でも同じ\u001e" +
@@ -1129,10 +1129,12 @@ export const bodies: string[] = [
     "u\u001f0\u001ft差出人のアプリを、アイコンから開いただけのとき\u001e" +
     "p\u001fbそのほか（案）\u001e" +
     "u\u001f0\u001ft残すのは新しい方から 100 通。超えた分は、未開封でも古い方から消す\u001e" +
-    "u\u001f0\u001ftCadre が通知として出すのは、いまの起動中に届いた未開封の手紙だけ。再読み込みの前に届いた未開封の手紙は Cadre に出し直さず、設定の一覧で見る\u001e" +
+    "u\u001f0\u001ftCadre の通知センターには、再読み込み前に届いたものも含め、すべての未開封を新しい順に並べる。設定の履歴には開封済みも残る\u001e" +
+    "u\u001f0\u001ftいまの起動中に届いた通知は最新 1 通だけポップアップにし、5 秒で引っ込める。返信入力中は待ち、入力を閉じたらそこから 5 秒、urgent は開封まで待つ。引っ込んでも未開封のまま残る\u001e" +
+    "u\u001f0\u001ftセンターを開いている間はポップアップを表示しない。センターの「すべて閉じる」は全件を開封する\u001e" +
     "u\u001f0\u001ft設定からは 1 通ずつと、すべてを消せる。消した手紙は戻らない\u001e" +
     "u\u001f0\u001fcpigeon.opened(kind)\u001dt は、自分が送ったユーザー宛ての手紙のうち、その \u001dckind\u001dt のものを開封にする。\u001dckind\u001dt を省くと全部。1 件ずつ分けたいアプリは、\u001dckind\u001dt に件ごとの名前を入れる（例 \u001dcmail:123\u001dt）\u001e" +
-    "u\u001f0\u001ft未読の数（バッジ）は、この「未開封」の数を使う（今後）\u001e" +
+    "u\u001f0\u001ft未読の数（バッジ）は、この「未開封」の数を使う\u001e" +
     "h\u001f2\u001f実装の形\u001ft実装の形\u001e" +
     "u\u001f0\u001ftアプリ宛ての手紙には共有 ID と \u001dcread\u001dt・\u001dcwrite\u001dt 権限を添付できます。配送時に招待し、受け手は別途承認します（\u001dlspec/file-sharing#\u001cアプリ間のファイル共有\u001dt）。ユーザー宛ての通知には添付できません。\u001e" +
     "u\u001f0\u001fcsend(to, kind, title, body, urgent = false, actions = \"[]\")\u001dt は同期的な受付結果を bool で返し、保存完了は待ちません。保存に失敗した場合は OS がエラーを表示します。差出人は呼び出し元の完全なアプリ ID です\u001e" +
@@ -1637,9 +1639,11 @@ export const bodies: string[] = [
     "p\u001ft役割 \u001dccadre\u001dt に割り当てられた、最初に起動する常駐アプリです。ほかのアプリと同じ Worker の WASM で動き、AS の Décor で OS の大枠を描きます（実装済み、形は案。名前は決定）。\u001e" +
     "p\u001ftID は \u001dccadre\u001dt です。\u001dcapps/cadre/app.json\u001dt の \u001dcsub\u001dt にホーム（\u001dccadre.home\u001dt）と設定（\u001dccadre.settings\u001dt）を持ち、AS の入口と CSS は 1 つです。\u001dcapi.sub()\u001dt が空文字列なら Cadre、\u001dchome\u001dt・\u001dcsettings\u001dt なら各サブアプリとして起動します。保存領域と権限は親と共有し、それぞれ別の Worker で動きます。\u001e" +
     "p\u001fconCreate(last, api)\u001dt で \u001dcCadreApi\u001dt を取り、\u001dcCadreApi.openHome()\u001dt を呼びます。\u001dcbuild()\u001dt は上に \u001dcappArea().grow()\u001dt、下にホームバーを置きます。Scene がその領域へホームとアプリを配置します。Cadre 自身はスタック・ホームの一覧・起動中アプリの一覧に数えません。\u001e" +
-    "p\u001ftバーの左にホーム、中央の台に起動中アプリのアイコン（無ければ頭文字）、右にライブモードのインストールを並べます。前面のアプリには点を付け、名前はマウスを載せるかキーボードでフォーカスすると吹き出しに出します。右クリック・長押し・メニューキー・Shift+F10 のメニューからアプリを開くか閉じます。設定はホームから開きます。起動中の一覧と前面の変化は Régie が Worker に知らせ、再描画します。切り替え・終了の判断は Régie が行います。\u001e" +
-    "p\u001fcCadreApi\u001dt は \u001dccount()\u001dt（別名 \u001dcrunning()\u001dt）、\u001dcname(i)\u001dt、\u001dcisFront(i)\u001dt、\u001dcisHome()\u001dt、\u001dchasIcon(i)\u001dt、\u001dcappIndex(i)\u001dt（\u001dcappIcon\u001dt に渡す番号）、\u001dcisInstalled()\u001dt、\u001dcinstallBusy()\u001dt、\u001dcinstall()\u001dt、\u001dcopen(i)\u001dt、\u001dcclose(i)\u001dt、\u001dcopenHome()\u001dt（別名 \u001dchome()\u001dt）、\u001dcback()\u001dt、\u001dcopenSettings()\u001dt（設定の役割に割り当てたアプリを開く）を持ちます。番号は起動中の一覧の番号で、\u001dcAppsApi\u001dt のインストール済み一覧とは別です。Pigeon のユーザー宛ての手紙は通知として表示し、操作の結果を差出人に届けます。通知を押す・返事をする・閉じると、その手紙は開封になり、設定の「届いた通知」に残ります。\u001e" +
-    "p\u001ftライブモードではインストールボタンを表示し、確認を待つ間は押せなくします。吹き出しとメニューは Décor の部品、見た目はアプリの CSS で指定します。通知の見た目の細部は案です。Cadre の差し替えはブートと保存設定で選べますが、設定画面からも変更できます。\u001e" +
+    "p\u001ftバーの左にホーム、中央の台に起動中アプリ、右端に OS のタイムゾーンの時計を並べます。時計を押すと通知センターが下からすべり出ます。時計の位置と動き、インストールをホーム画面のタイルに移すこと、v0.2.1 に入れることは決定です。以下の細部は案です。\u001e" +
+    "p\u001ft時計は 24 時間の「時:分」で、未開封があると合計のバッジを出します。0 は出さず、100 以上は \u001dc99+\u001dt です。ドックにも差出人アプリごとの未開封数を出します。Régie は分の頭で写しを送り、時計と通知時刻を描き直します。前面のアプリには点を付け、名前は吹き出しに出し、メニューから開くか閉じます。\u001e" +
+    "p\u001ft通知センターは広い画面ではバーの右上、狭い画面では幅いっぱいのシートです。再読み込み前を含む全未開封を新しい順に並べ、差出人、アイコン、題、本文、相対時刻、操作と「閉じる」を出します。「すべて閉じる」は全件を開封し、「履歴」は設定を開きます。空なら「新しい通知はありません」と表示します。時計の再押下または外側を押すと閉じます。動きを減らす設定ではアニメーションを止めます。\u001e" +
+    "p\u001ft起動中に届いた最新の 1 通だけを 5 秒ポップアップにします。返信入力中は待ち、閉じてから 5 秒で消します。urgent は自動で消しません。通知センター表示中はポップアップを隠します。開封した通知は設定の履歴に残ります。\u001e" +
+    "p\u001fcCadreApi\u001dt は \u001dcclock()\u001dt、\u001dcnotificationCount()\u001dt・\u001dcnotificationId(i)\u001dt・\u001dcnotificationFrom(i)\u001dt・\u001dcnotificationName(i)\u001dt・\u001dcnotificationAppIndex(i)\u001dt・\u001dcnotificationTitle(i)\u001dt・\u001dcnotificationBody(i)\u001dt・\u001dcnotificationTime(i)\u001dt・\u001dcnotificationPopup(i)\u001dt、通知の action 取得、\u001dcnotificationOpen(id)\u001dt・\u001dcnotificationDismiss(id)\u001dt・\u001dcnotificationReply(id, action, body)\u001dt・\u001dcnotificationKeep(id, keep)\u001dt、\u001dcunread(i)\u001dt・\u001dcunreadTotal()\u001dt を持ちます。起動中アプリ向けに \u001dccount()\u001dt（別名 \u001dcrunning()\u001dt）、\u001dcname(i)\u001dt、\u001dcisFront(i)\u001dt、\u001dcisHome()\u001dt、\u001dchasIcon(i)\u001dt、\u001dcappIndex(i)\u001dt、\u001dcopen(i)\u001dt、\u001dcclose(i)\u001dt、\u001dcopenHome()\u001dt（別名 \u001dchome()\u001dt）、\u001dcback()\u001dt、\u001dcopenSettings()\u001dt を持ちます。\u001dcisInstalled()\u001dt・\u001dcinstallBusy()\u001dt・\u001dcinstall()\u001dt も互換のため残します。起動中の番号は \u001dcAppsApi\u001dt のインストール済み一覧とは別です。\u001e" +
     "p\u001ft落ちたときは Régie が待ちを入れて再起動し、\u001dchomeRetryWindow\u001dt を過ぎても落ち続ければ、Scene がアプリの表示領域とホームボタンだけを出します（\u001dlspec/lifecycle#落ちたとき決定\u001clifecycle.md\u001dt）。",
   "h\u001f1\u001ffilerfiler\u001ftFiler（\u001dcfiler\u001dt）\u001e" +
     "p\u001flspec/apps/#\u001cアプリの目次\u001e" +
@@ -1668,9 +1672,11 @@ export const bodies: string[] = [
     "u\u001f0\u001ftアプリごとに、アイコンと名前のタイルを 1 つ並べる\u001e" +
     "u\u001f0\u001ft並べるのは、OS から渡されたアプリ。ホーム自身は並べない（OS が一覧から外して渡す）\u001e" +
     "u\u001f0\u001ft並び順は OS が渡した順。システムアプリはフォルダ名の順（\u001dlspec/apps/#配り方実装済み\u001cREADME.md\u001dt）\u001e" +
+    "u\u001f0\u001ft各タイルに差出人アプリの未開封数をバッジで出す。0 は表示せず、100 以上は \u001dc99+\u001dt（案）\u001e" +
+    "u\u001f0\u001ftライブモードでは一覧の最後に Binette のアイコンの「インストール」を置く（決定）。確認中は押せず、インストール後は出さない\u001e" +
     "u\u001f0\u001ftアイコンが無いアプリは、\u001dcimg\u001dt の \u001dcsrc\u001dt を空のままにする（名前は出る）\u001e" +
     "h\u001f2\u001f動き案実装済み\u001ft動き（案・実装済み）\u001e" +
-    "p\u001fcHome extends App\u001dt の \u001dcbuild()\u001dt で、OS が渡したアプリごとにアイコンと名前を含むボタンを作り、grid に並べます。\u001dconCreate(last, api)\u001dt で \u001dcAppsApi\u001dt を取り、ボタンは \u001dcarg(i)\u001dt でアプリの番号を渡して \u001dcAppsApi.open(i)\u001dt を呼びます。アイコンはホーム専用の \u001dcappIcon(i)\u001dt で表示します。実際のソースは \u001dxhttps://github.com/nozomi-hiragi/binette/blob/v0.2.0/apps/cadre/src/home/main.ts\u001cmain.ts\u001dt にあります。親の入口が \u001dcapi.sub()\u001dt の \u001dchome\u001dt を見てホームを起動します。\u001e" +
+    "p\u001fcHome extends App\u001dt の \u001dcbuild()\u001dt で、OS が渡したアプリごとにアイコンと名前を含むボタンを作り、grid に並べます。\u001dconCreate(last, api)\u001dt で \u001dcAppsApi\u001dt を取り、ボタンは \u001dcarg(i)\u001dt でアプリの番号を渡して \u001dcAppsApi.open(i)\u001dt を呼びます。アイコンはホーム専用の \u001dcappIcon(i)\u001dt で表示し、\u001dcAppsApi.unread(i)\u001dt で未開封数を取ります。\u001dcAppsApi.isInstalled()\u001dt・\u001dcinstallBusy()\u001dt・\u001dcinstall()\u001dt はホームだけがインストール状態と確認を扱います。実際のソースは \u001dxhttps://github.com/nozomi-hiragi/binette/blob/v0.2.0/apps/cadre/src/home/main.ts\u001cmain.ts\u001dt にあります。親の入口が \u001dcapi.sub()\u001dt の \u001dchome\u001dt を見てホームを起動します。\u001e" +
     "h\u001f2\u001fos-の枠との分担\u001ftOS の枠との分担\u001e" +
     "t\u001f166,320\u001ft持ち主\u001ftすること\u001e" +
     "r\u001ftホーム\u001ftタイルを並べる、見た目、どれを開くかを決める\u001e" +
