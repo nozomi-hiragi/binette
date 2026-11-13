@@ -877,10 +877,10 @@ launch(new Settings());`);
     await settle(["mail:opened", "mail:opened", "chat:opened", "mail:new", "chat:new"]);
     assertEquals(first.element.errors, []);
   } finally { first.system.stop(); }
-  // After a reload the unopened letters stay in settings, and Cadre does not show them again.
+  // After a reload the unopened letters remain visible in Cadre.
   first = await mount();
   try {
-    await first.shown(0);
+    await first.shown(2);
     await first.system.open("settings"); const panel = first.element.active;
     await panel.process.app.call("inspect");
     assertEquals(panel.text.get("result"), "チャット:new メール:new チャット:opened メール:opened メール:opened 差出人");
