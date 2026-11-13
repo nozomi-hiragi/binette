@@ -155,7 +155,7 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 
 ## 常駐 Cadre（実装済み、形は案）
 
-Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。Cadre に渡すのは、いまの起動中に届いた未開封の手紙だけです（[Pigeon](../pigeon.md#届いた通知と開封)）。
+Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。Cadre には、再読み込み前を含むすべての未開封の手紙を新しい順に渡します（[Pigeon](../pigeon.md#届いた通知と開封)）。
 
 落ちたらホームと同じ待ちと `homeRetryWindow` で再起動し、落ち続けたら `cadreUnavailable` を Scene に渡します。Cadre がない場合も最低限の大枠でホームを開きます。`os.assign("cadre", i)` は保存して旧 Cadre を止め、新しい Cadre を起動します。通常のアプリのスタックは残します。
 

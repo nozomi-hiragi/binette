@@ -732,7 +732,7 @@ export const bodies: string[] = [
     "u\u001f0\u001fcdisplay-mode\u001dt はインストールの有無そのものではなく、表示のしかた。\u001dcfullscreen\u001dt は、ふつうのタブを全画面にしただけでも当てはまるので、見分けには使わない。Binette の Web アプリマニフェストの \u001dcdisplay\u001dt は \u001dcstandalone\u001dt にする（案）\u001e" +
     "u\u001f0\u001ft見分けは Scene の \u001dcisInstalled(window)\u001dt が受け持つ。\u001dcnavigator.standalone === true\u001dt か上の 3 つの \u001dcdisplay-mode\u001dt ならインストール済み。\u001dcmatchMedia\u001dt の \u001dcchange\u001dt で切り替え、\u001dcappinstalled\u001dt を受け取ったときもインストール済みの表示にする。テストなどでは \u001dcShellOptions.installed\u001dt で上書きでき、指定時は \u001dcmatchMedia\u001dt を使わない。DOM と window は表示先の element から辿り、\u001dcmatchMedia\u001dt が無い環境はライブモードにする（案・実装済み）\u001e" +
     "u\u001f0\u001ft透かしは、殻が一番上に薄く出す。\u001dcpointer-events: none\u001dt で下のアプリを押せるままにし、iPhone の角やホームバーに隠れないよう safe area を取る。Scene のルートの右下、アプリの枠の外に置くので、アプリからは消せない。飾りとして \u001dcaria-hidden=\"true\"\u001dt にする。Cadre のバーと重ならない配置は未決（形は案）\u001e" +
-    "u\u001f0\u001ftインストールを勧める表示の形は未決。最小の案として、ライブモードのときだけホームバーの右端に「インストール」を出す案がある（Cadre のボタンから Scene に案内を頼む）。Chromium の \u001dcbeforeinstallprompt\u001dt は \u001dcpreventDefault()\u001dt して保持し、ボタンで一度だけ \u001dcprompt()\u001dt を呼ぶ。受け取れない場合や失敗した場合は、OS の \u001dc<dialog>\u001dt に手順と「閉じる」を出す。iPhone などは「Safari の共有 → ホーム画面に追加」、ほかは「ブラウザのメニューから『アプリをインストール』または『ホーム画面に追加』」。\u001dcshowModal\u001dt が無い DOM では \u001dcopen\u001dt 属性で代用する。閉じたことは保存しない。インストール済みになればボタン・透かし・開いている手順を消す（案・実装済み）\u001e" +
+    "u\u001f0\u001ftライブモードのときだけホームの最後に「インストール」のタイルを出す（決定）。ホームから Scene に案内を頼む。Chromium の \u001dcbeforeinstallprompt\u001dt は \u001dcpreventDefault()\u001dt して保持し、ボタンで一度だけ \u001dcprompt()\u001dt を呼ぶ。受け取れない場合や失敗した場合は、OS の \u001dc<dialog>\u001dt に手順と「閉じる」を出す。iPhone などは「Safari の共有 → ホーム画面に追加」、ほかは「ブラウザのメニューから『アプリをインストール』または『ホーム画面に追加』」。\u001dcshowModal\u001dt が無い DOM では \u001dcopen\u001dt 属性で代用する。閉じたことは保存しない。インストール済みになればボタン・透かし・開いている手順を消す（案・実装済み）\u001e" +
     "u\u001f0\u001ftインストールが要る操作のアラートには、インストールの手順（上と同じもの）を添える。OS 用の \u001dcMountedShell.requireInstall(reason)\u001dt は、インストール済みなら何も出さず true、ライブモードなら理由と手順の枠を出して false を返す。理由は textContent で入れ、HTML として読まない。Réplique・Régie には渡さず、通知などで実際に使うのは今後の作業（案・仕組みは実装済み）\u001e" +
     "u\u001f0\u001ftブラウザによる違い（知っておくこと）:\u001e" +
     "u\u001f1\u001ftiPhone では、タブとホーム画面のアプリで保存場所が別。タブで試したものは、インストールしても見えない。Chromium では同じ保存場所なので、タブとインストール版で同じデータが見える\u001e" +
@@ -944,7 +944,7 @@ export const bodies: string[] = [
     "o\u001f0\u001f2\u001ft透かしの出し方: 殻が一番上に薄く出す、\u001dcpointer-events: none\u001dt、safe area を取る、Scene のルートの右下、アプリからは消せない\u001e" +
     "o\u001f0\u001f3\u001ftページの識別子は読まれるたびに新しく作り、保存しない（\u001dccrypto.randomUUID()\u001dt など）\u001e" +
     "o\u001f0\u001f4\u001ftインストール済みの見分けは isInstalled に置き、\u001dcdisplay-mode\u001dt の \u001dcstandalone\u001dt・\u001dcminimal-ui\u001dt・\u001dcwindow-controls-overlay\u001dt と \u001dcnavigator.standalone\u001dt。\u001dcfullscreen\u001dt は使わず、change・appinstalled に追従する。ShellOptions.installed で上書きできる。Binette のマニフェストの \u001dcdisplay\u001dt は \u001dcstandalone\u001e" +
-    "u\u001f0\u001ftインストールボタンはライブのときだけホームバーの右端に置く案。Cadre のボタンから Scene に案内を頼む。beforeinstallprompt を保持して prompt を呼び、無ければ閉じるボタン付きの dialog に手順を出す。閉じた記録は保存しない\u001e" +
+    "u\u001f0\u001ftインストールのタイルはライブのときだけホームに置く（決定）。ホームから Scene に案内を頼む。beforeinstallprompt を保持して prompt を呼び、無ければ閉じるボタン付きの dialog に手順を出す。閉じた記録は保存しない\u001e" +
     "u\u001f0\u001ftマニフェスト・自作の B の SVG・sw.js を dist 直下へ置く。本番だけ OS が相対 URL と scope ./ で SW を登録し、開発では登録しない\u001e" +
     "u\u001f0\u001ftSW の版付きキャッシュとファイルの木からの応答。別のオリジンと GET 以外には触らない\u001e" +
     "p\u001ftアプリの状態と時間\u001e" +
@@ -2103,13 +2103,13 @@ export const bodies: string[] = [
     "u\u001f0\u001ftfreeze で全インスタンスの Stop までの計時を止め、resume で残りから続ける。状態の Pause・Resume は前面だけを対象にする\u001e" +
     "u\u001f0\u001ft凍結が解けても見えていなければ Resume にしない（resume は前面に戻った知らせではないため）。Stop から戻るなら Start(Stop) → Resume。起動中にページが隠れた場合も、起動後に Pause にする\u001e" +
     "h\u001f2\u001f常駐-cadre実装済み形は案\u001ft常駐 Cadre（実装済み、形は案）\u001e" +
-    "p\u001ftCadre はホームより先に起動し、スタックとは別に保持します。\u001dcCadreSnapshot\u001dt でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に \u001dcsyncCadre\u001dt で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。Cadre に渡すのは、いまの起動中に届いた未開封の手紙だけです（\u001dlspec/pigeon#届いた通知と開封\u001cPigeon\u001dt）。\u001e" +
+    "p\u001ftCadre はホームより先に起動し、スタックとは別に保持します。\u001dcCadreSnapshot\u001dt でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に \u001dcsyncCadre\u001dt で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。Cadre には、再読み込み前を含むすべての未開封の手紙を新しい順に渡します（\u001dlspec/pigeon#届いた通知と開封\u001cPigeon\u001dt）。\u001e" +
     "p\u001ft落ちたらホームと同じ待ちと \u001dchomeRetryWindow\u001dt で再起動し、落ち続けたら \u001dccadreUnavailable\u001dt を Scene に渡します。Cadre がない場合も最低限の大枠でホームを開きます。\u001dcos.assign(\"cadre\", i)\u001dt は保存して旧 Cadre を止め、新しい Cadre を起動します。通常のアプリのスタックは残します。\u001e" +
     "p\u001ftインストール案内は \u001dcSystemUi.install()\u001dt に頼み、Scene が \u001dcsetInstallState(installed, busy)\u001dt で状態を返します。ページの非表示・凍結は常駐 Cadre にも伝えます。",
   "h\u001f1\u001fbinettescene\u001ft@binette/scene\u001e" +
     "p\u001flspec/#\u001c仕様の目次\u001e" +
     "p\u001ftScene（シーン、舞台）はシステム UI です。Binette の画面の大枠を描き、その中にアプリを置く DOM（置き場）を持ちます（のぞみ 2026-10-28）。何を見せるかは Régie が決め、Scene はそれを見せるだけです。判断は持ちません。\u001e" +
-    "c\u001fScene（システム UI）\n├── アプリの置き場（インスタンスごとに 1 つの DOM。前面以外は隠す）\n│     └── アプリの HTML を描き、アプリからの DOM 操作を反映する\n├── Apps の一覧（ホームが落ち続けたとき）\n├── エラー表示\n├── ライブモードの透かしとインストールの案内\n└── ホームバー（ホーム、開いているアプリのドック、インストール。吹き出しとメニュー）\u001e" +
+    "c\u001fScene（システム UI）\n├── アプリの置き場（インスタンスごとに 1 つの DOM。前面以外は隠す）\n│     └── アプリの HTML を描き、アプリからの DOM 操作を反映する\n├── Apps の一覧（ホームが落ち続けたとき）\n├── エラー表示\n├── ライブモードの透かしとインストールの案内\n└── ホームバー（ホーム、開いているアプリのドック、時計と通知センター。吹き出しとメニュー）\u001e" +
     "p\u001ftホームの画面もアプリの 1 つで、置き場に入ります。Scene の一部ではありません。\u001e" +
     "h\u001f2\u001f役割\u001ft役割\u001e" +
     "t\u001f320,96,166\u001ft役割\u001ft状況\u001ftファイル\u001e" +

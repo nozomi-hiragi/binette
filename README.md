@@ -49,7 +49,7 @@ http://localhost:5175/ を開くと、ホームに設定・アプリ管理・Fil
 
 `deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。GitHub Pages ではブランチごとに OS を公開します（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/`、API ドキュメントは `https://nozomi-hiragi.github.io/binette/api/v0.2.0/`）。入口はリポジトリ直下の `index.html` と `src/main.ts` です。本番のカーネルは `regie.js` と `regie-worker.js` に分かれ、入口は SRI 付きで `regie.js` を読みます。`apps/` の直下に `app.json` を持つフォルダを足すとシステムアプリ、`bundled/` に足すと通常の同梱アプリが増えます。どちらも `deno task build:system` でビルドします。同梱アプリの入手元は `binette:bundled` で、システムアプリの権限は持ちません。`catalog/` のドキュメントアプリ（`catalog/docs/`）は OS に同梱せず、Binette の既定の提供リスト（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）に載せ、「アプリ」から入れます。GitHub Pages の既定リストはブランチの Binette のリスト、`https://nozomi-hiragi.github.io/binette-apps/` の順です。ローカルの `build:system` は `BINETTE_LISTS` 未指定なら空リストにし、カンマ区切りの https の URL で上書きできます。Binette の提供リストは `deno task pages` が作り、`source` は commit 入りの raw.githubusercontent.com の URL です。ドキュメントアプリの中身は `docs/` から `deno task docs:app` で作ります。既定のシステムアプリは `apps/cadre/` で、ID `cadre` の親と `cadre.home`・`cadre.settings`・`cadre.apps` の入口を 1 つのパッケージに持ちます。
 
-ブラウザのタブでは「ライブモード」と表示し、ホームバーの「インストール」からインストールの画面か手順を開けます。iPhone の Safari では「共有 → ホーム画面に追加」を使います。ライブで試した内容は、インストール後に引き継げることを保証しません。本番では OS の Service Worker がオフライン用にキャッシュします。初回の登録後にオンラインで再読み込みしてから使ってください。開発サーバーでは登録しません。
+ブラウザのタブでは「ライブモード」と表示し、ホーム画面の「インストール」タイルからインストールの画面か手順を開けます。iPhone の Safari では「共有 → ホーム画面に追加」を使います。ライブで試した内容は、インストール後に引き継げることを保証しません。本番では OS の Service Worker がオフライン用にキャッシュします。初回の登録後にオンラインで再読み込みしてから使ってください。開発サーバーでは登録しません。
 
 ホームは [apps/cadre](apps/cadre) のサブアプリ `cadre.home` です。AS の Décor がタイルの見た目と並びを持ち、どれをホームにしてどう開くかは Régie、ホームバーとアプリの表示領域の宣言は Cadre、アプリの配置は Scene が持ちます。ホームは設定から差し替えられます（[仕様](docs/spec/apps/home.md)）。
 
