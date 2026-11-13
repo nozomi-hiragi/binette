@@ -153,9 +153,11 @@ Deno.test("インストールはライブモードだけに表示し、押すと
   for (const installed of [false, true]) {
     const f = await fixture(installed);
     try {
-      assertEquals(f.button("install")!.hidden, installed);
+      await waitFor(() => (f.button("install-tile") === null) === installed);
+      assertEquals(f.button("install"), null);
+      assert(f.button("clock") !== null);
       if (!installed) {
-        f.button("install")!.click();
+        f.button("install-tile")!.click();
         await waitFor(() => f.element.querySelector<HTMLDialogElement>("dialog")!.open);
       }
     } finally { await f.close(); }

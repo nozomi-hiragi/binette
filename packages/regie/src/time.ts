@@ -38,3 +38,17 @@ export const formatDate = (time: number, timeZone: string = systemTimeZone()): s
   const p = parts(time, timeZone);
   return `${Number(p.year)}/${Number(p.month)}/${Number(p.day)}`;
 };
+
+/** Clock text in the system time zone. */
+export const formatClock = (time: number, timeZone: string = systemTimeZone()): string =>
+  formatTime(time, { timeZone }).slice(11);
+
+/** Relative notification time, falling back to a date after one day. */
+export const formatNotificationTime = (time: number, now: number, timeZone: string = systemTimeZone()): string => {
+  if (!Number.isFinite(time) || !Number.isFinite(now)) return "";
+  const elapsed = Math.max(0, now - time);
+  if (elapsed < 60_000) return "たった今";
+  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)} 分前`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)} 時間前`;
+  return formatTime(time, { timeZone }).slice(5);
+};

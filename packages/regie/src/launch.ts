@@ -148,11 +148,15 @@ export interface CadreInstance {
   name: string;
   front: boolean;
   hasIcon: boolean;
+  unread?: number;
 }
 
 /** Cadre アプリの起動時に渡す写し */
+export interface AppsInfo { unread: number[]; installed: boolean; installBusy: boolean; canInstall: boolean }
+export interface CadreNotification extends UserLetter { name: string; appIndex: number; popup: boolean }
 export interface CadreSnapshot {
-  notifications?: PigeonLetter[];
+  notifications?: CadreNotification[];
+  now?: number;
   instances: CadreInstance[];
   homeFront: boolean;
   installed: boolean;
@@ -199,6 +203,8 @@ export interface LaunchOptions {
   /** 辞書の `apps`。ホームと Cadre に渡すアプリ。省略時は apps.* を使えない */
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
+  appsInfo?: AppsInfo;
+  onAppsInstall?: () => void;
   /** 辞書の `os`。設定アプリだけに渡す。省略時は os.* を使えない */
   os?: OsSnapshot;
   onSet?: (name: string, value: number) => void;
@@ -247,6 +253,7 @@ export interface LaunchOptions {
   onNotificationOpen?: (id: number) => void;
   onNotificationDismiss?: (id: number) => void;
   onNotificationReply?: (id: number, action: string, body: string) => void;
+  onNotificationKeep?: (id: number, keep: boolean) => void;
   /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted として扱う */
   denied?: Record<string, ApiDenial>;
   /** アプリを終了しない呼び出しの失敗 */
@@ -271,6 +278,7 @@ export interface RegieApp {
   callWithin(timeout: number, name: string, ...args: (number | string)[]): Promise<void>;
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
+  syncApps?(snapshot: AppsInfo): void;
   syncOs?(snapshot: OsSnapshot): void;
   syncNet?(snapshot: NetSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
@@ -408,6 +416,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               try { worker.postMessage({ type: "schedule.sync", id, schedule: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
+            syncApps(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "apps.sync", id, appsInfo: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
             syncCadre(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
@@ -429,6 +444,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": openings.push(data.i!); break;
+        case "apps.install": options.onAppsInstall?.(); break;
         case "os.set": options.onSet?.(data.name!, data.value as number); break;
         case "os.assign": assignments.push([data.role!, data.i!]); break;
         case "os.openRecovery": options.onOpenRecovery?.(); break;
@@ -471,6 +487,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "os.letter": if ((LETTER_ACTIONS as readonly string[]).includes(data.action!)) options.onLetter?.(data.action as LetterAction, Number(data.i)); break;
         case "os.notificationMuted": options.onNotificationMuted?.(data.i!, data.muted!); break;
         case "cadre.notificationOpen": options.onNotificationOpen?.(data.i!); break;
+        case "cadre.notificationKeep": options.onNotificationKeep?.(data.i!, !!data.on); break;
         case "cadre.notificationDismiss": options.onNotificationDismiss?.(data.i!); break;
         case "cadre.notificationReply": options.onNotificationReply?.(data.i!, data.action!, data.body!); break;
         case "cadre.open": options.onCadreOpen?.(data.i!); break;
@@ -511,7 +528,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", net: options.net, netState: options.netState, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", net: options.net, netState: options.netState, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.appsInfo === undefined ? {} : { appsInfo: options.appsInfo }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

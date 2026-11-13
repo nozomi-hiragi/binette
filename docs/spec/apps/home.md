@@ -26,11 +26,13 @@
 - アプリごとに、アイコンと名前のタイルを 1 つ並べる
 - 並べるのは、OS から渡されたアプリ。ホーム自身は並べない（OS が一覧から外して渡す）
 - 並び順は OS が渡した順。システムアプリはフォルダ名の順（[README.md](README.md#配り方実装済み)）
+- 各タイルに差出人アプリの未開封数をバッジで出す。0 は表示せず、100 以上は `99+`（案）
+- ライブモードでは一覧の最後に Binette のアイコンの「インストール」を置く（決定）。確認中は押せず、インストール後は出さない
 - アイコンが無いアプリは、`img` の `src` を空のままにする（名前は出る）
 
 ## 動き（案・実装済み）
 
-`Home extends App` の `build()` で、OS が渡したアプリごとにアイコンと名前を含むボタンを作り、grid に並べます。`onCreate(last, api)` で `AppsApi` を取り、ボタンは `arg(i)` でアプリの番号を渡して `AppsApi.open(i)` を呼びます。アイコンはホーム専用の `appIcon(i)` で表示します。実際のソースは [main.ts](../../../apps/cadre/src/home/main.ts) にあります。親の入口が `api.sub()` の `home` を見てホームを起動します。
+`Home extends App` の `build()` で、OS が渡したアプリごとにアイコンと名前を含むボタンを作り、grid に並べます。`onCreate(last, api)` で `AppsApi` を取り、ボタンは `arg(i)` でアプリの番号を渡して `AppsApi.open(i)` を呼びます。アイコンはホーム専用の `appIcon(i)` で表示し、`AppsApi.unread(i)` で未開封数を取ります。`AppsApi.isInstalled()`・`installBusy()`・`install()` はホームだけがインストール状態と確認を扱います。実際のソースは [main.ts](../../../apps/cadre/src/home/main.ts) にあります。親の入口が `api.sub()` の `home` を見てホームを起動します。
 
 ## OS の枠との分担
 

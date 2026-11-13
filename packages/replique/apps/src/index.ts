@@ -12,6 +12,18 @@ declare function iconImport(handle: i32, app: i32): void;
 // OS の呼び出しの入口。アプリは直接使わず、辞書 `Api` から取ったクラスを通す
 namespace hostApps {
   // @ts-ignore: decorator
+  @external("binette:apps@0.1", "unread")
+  export declare function unread(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette:apps@0.1", "isInstalled")
+  export declare function isInstalled(): bool;
+  // @ts-ignore: decorator
+  @external("binette:apps@0.1", "installBusy")
+  export declare function installBusy(): bool;
+  // @ts-ignore: decorator
+  @external("binette:apps@0.1", "install")
+  export declare function install(): void;
+  // @ts-ignore: decorator
   @external("binette:apps@0.1", "count")
   export declare function count(): i32;
   // @ts-ignore: decorator
@@ -34,6 +46,10 @@ export class AppsApi {
 
   /** img に OS のアプリアイコンを入れる */
   icon(img: Element, i: i32): void { iconImport(img.handle, i); }
+  unread(i: i32): i32 { return hostApps.unread(i); }
+  isInstalled(): bool { return hostApps.isInstalled(); }
+  installBusy(): bool { return hostApps.installBusy(); }
+  install(): void { hostApps.install(); }
   count(): i32 { return hostApps.count(); }
   name(i: i32): string { return hostApps.name(i); }
   id(i: i32): string { return hostApps.id(i); }
