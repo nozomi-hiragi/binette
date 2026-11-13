@@ -1149,3 +1149,431 @@ export function request(): void { net!.fetch("https://example.com/docs/a"); }
     assertEquals(calls, 1);
   } finally { system.stop(); globalThis.fetch = originalFetch; }
 });
+
+const netTestStrings = ["", "https://example.test/net/#client", "https://example.com/docs/", "https://example.com/docs/a", "https://user.example/", "https://user.example/a", "https://example.com/bad", "addAllow", "removeAllow", "addDeny", "removeDeny", "approvePending", "denyPending"];
+const netClient = await build(`const values = ${JSON.stringify(netTestStrings)};
+import { Api, App, Last, NetApi, Response, document, launch, __bina_net } from "jsr:@binette/replique";
+let net: NetApi | null = null;
+class Client extends App {
+  onCreate(_last: Last, api: Api): void { net = NetApi.from(api); }
+  onNet(_id: i32, res: Response): void { document.getElementById("response").textContent = res.type + ":" + res.reason; }
+}
+export { __bina_net };
+export function add(i: i32): void { const url = values[i]; document.getElementById("result").textContent = net!.addAllow(url).toString(); }
+export function remove(i: i32): void { const url = values[i]; document.getElementById("result").textContent = net!.removeAllow(url).toString(); }
+export function request(i: i32): void { const url = values[i]; document.getElementById("response").textContent = "waiting"; net!.fetch(url); }
+launch(new Client());`);
+const netSettings = await build(`const values = ${JSON.stringify(netTestStrings)};
+import { Api, App, Last, OsApi, document, launch } from "jsr:@binette/replique";
+let os: OsApi | null = null;
+class Panel extends App { onCreate(_last: Last, api: Api): void { os = OsApi.from(api); } }
+export function act(action: i32, appId: i32, url: i32): void { os!.netDo(values[action], values[appId], values[url]); }
+export function quiet(appId: i32, on: bool): void { os!.netQuiet(values[appId], on); }
+export function mute(appId: i32, on: bool): void { os!.setAppMuted(values[appId], on); }
+export function press(id: i32): void { os!.showLetter(id); }
+export function inspect(index: i32): void {
+  const appId = values[index];
+  const api = os!; let value = "";
+  for (let i = 0; i < api.appCount(); i++) if (api.appId(i) == appId) value += api.appName(i) + ":" + api.appId(i) + ":" + api.appNet(i).toString() + ":" + api.appNotify(i).toString() + ":" + api.appMuted(i).toString() + ";";
+  const lists = ["request", "allow", "added", "deny"];
+  for (let j = 0; j < lists.length; j++) { value += lists[j] + "="; for (let i = 0; i < api.netCount(lists[j], appId); i++) value += api.netUrl(lists[j], appId, i) + ","; value += ";"; }
+  document.getElementById("result").textContent = value + api.netIsQuiet(appId).toString();
+}
+launch(new Panel());`);
+
+Deno.test("net の追加と削除・設定の写し・手紙と quiet 履歴を保存し、旧 allow を保ち、消えた要求を approved から除く", async () => {
+  const id = "https://example.test/net/#client";
+  const url = "https://example.com/docs/";
+  const old = "https://user.example/";
+  const store = createMemoryAppStore();
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [old], deny: [], approved: ["https://approved.example/"] } } });
+  const frame = await build(`import { Api, App, Last, CadreApi, launch } from "jsr:@binette/replique";
+let cadre: CadreApi | null = null;
+class Frame extends App { onCreate(_last: Last, api: Api): void { cadre = CadreApi.from(api); } }
+export function press(): void { cadre!.notificationOpen(cadre!.notificationId(0)); }
+launch(new Frame());`);
+  const element = output(); let shown: { id: number; from: string; kind: string }[] = []; let frameProcess: Process | undefined;
+  const present = element.ui.present;
+  element.ui.present = (instance, process) => { if (instance.cadre) frameProcess = process; return present(instance, process); };
+  const originalFetch = globalThis.fetch; let calls = 0;
+  globalThis.fetch = () => { calls++; return Promise.resolve(new Response("本文")); };
+  const system = await mountSystem(element, {
+    apps: [homeApp,
+      { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", name: "資料", permissions: { net: { reason: "通信", request: ["https://request.example/"], tools: ["addAllow"] }, notify: { reason: "通知" } } } } },
+      { source: "binette:system", prebuilt: { ...netSettings, manifest: { ...netSettings.manifest, id: "config", sub: { settings: { name: "設定", roles: ["settings"] } } } } },
+      { source: "binette:system", prebuilt: { ...frame, manifest: { ...frame.manifest, id: "frame", roles: ["cadre"] } } },
+    ], store, stackSize: 10,
+    createWorker() {
+      const worker = createWorker();
+      return { ...worker, postMessage(message, transfer) {
+        const data = message as { cadre?: { notifications?: typeof shown } };
+        if (data.cadre) shown = data.cadre.notifications ?? [];
+        worker.postMessage(message, transfer);
+      } };
+    },
+  });
+  const call = (record: RecordOutput, name: string, ...args: (string | number)[]) => record.process.app.call(name, ...args.map(value => { if (typeof value !== "string") return value; const i = netTestStrings.indexOf(value); assert(i >= 0, value); return i; }));
+  const own = async () => (await store.system.getNetLists!()).apps[id];
+  try {
+    await system.open("config.settings"); const panel = element.active;
+    await call(panel, "inspect", id);
+    assertEquals(panel.text.get("result"), `資料:${id}:true:true:false;request=https://request.example/,;allow=${old},;added=;deny=;false`);
+    await system.open(id); const client = element.active;
+    const request = async (target: string, expected: string) => { await call(client, "request", target); await waitFor(() => client.text.get("response") === expected); };
+    await request(old + "a", "cors:");
+    await request(url + "a", "error:blocked");
+    await call(client, "remove", old); assertEquals(client.text.get("result"), "false");
+    await call(client, "add", url); assertEquals(client.text.get("result"), "true");
+    await request(url + "a", "cors:");
+    await waitForAsync(async () => (await store.pigeon.history()).length === 1);
+    const letter = (await store.pigeon.history())[0];
+    assertEquals([letter.from, letter.kind, letter.title, letter.body, letter.opened], ["config.settings", "net.allow", "通信先が追加されました", `資料が ${url} を通信先に足しました`, false]);
+    await waitFor(() => shown.length === 1);
+    await frameProcess!.app.call("press");
+    await waitFor(() => element.view.instances.find(item => item.id === element.view.front)?.key === "config.settings");
+    await waitFor(() => shown.length === 0);
+    await call(client, "add", url);
+    await call(client, "remove", url);
+    await request(url + "a", "error:blocked");
+    assertEquals((await store.pigeon.history()).length, 1);
+    assertEquals((await own()).allow, [old]);
+    await call(panel, "quiet", id, 1);
+    await waitForAsync(async () => (await own()).quiet === true);
+    await call(client, "add", url);
+    await waitForAsync(async () => (await store.pigeon.history()).length === 2 && (await store.pigeon.history())[1].opened);
+    assertEquals(shown.length, 0);
+    await waitForAsync(async () => { await call(panel, "inspect", id); return panel.text.get("result") === `資料:${id}:true:true:false;request=https://request.example/,;allow=${old},;added=${url},;deny=;true`; });
+    await call(panel, "act", "addDeny", id, url);
+    await request(url + "a", "error:blocked");
+    await call(panel, "act", "removeDeny", id, url);
+    await request(url + "a", "cors:");
+    await call(panel, "act", "addDeny", "", url);
+    await request(url + "a", "error:blocked");
+    await call(panel, "act", "removeDeny", "", url);
+    await call(panel, "act", "removeAllow", id, url);
+    await request(url + "a", "error:blocked");
+    await call(client, "remove", url); assertEquals(client.text.get("result"), "false");
+    await call(panel, "act", "addAllow", id, url);
+    await request(url + "a", "cors:");
+    await call(client, "remove", url); assertEquals(client.text.get("result"), "false");
+    await call(panel, "act", "removeAllow", id, url);
+    await call(panel, "act", "addAllow", "", url);
+    await request(url + "a", "cors:");
+    await call(panel, "inspect", ""); assertEquals(panel.text.get("result"), `request=;allow=${url},;added=;deny=;false`);
+    await call(panel, "act", "removeAllow", "", url);
+    await request(url + "a", "error:blocked");
+    const before = await store.system.getNetLists!();
+    await call(panel, "act", "addAllow", id, "https://example.com/bad");
+    await waitFor(() => element.errors.length === 1);
+    assertEquals(await store.system.getNetLists!(), before);
+    assert(String(element.errors[0]).includes("正しい https"));
+    await call(panel, "mute", id, 1);
+    await waitForAsync(async () => await store.pigeon.muted(id));
+    await waitForAsync(async () => { await call(panel, "inspect", id); return panel.text.get("result")?.startsWith(`資料:${id}:true:true:true;`) ?? false; });
+    await call(panel, "quiet", id, 0);
+    await waitForAsync(async () => (await own()).quiet === false);
+    assertEquals((await own()).approved, []);
+    assertEquals(calls, 5);
+  } finally { system.stop(); globalThis.fetch = originalFetch; }
+});
+
+Deno.test("カーネルは Worker の net.allow の権限・URL・操作・100 件を再検査する", async () => {
+  const id = "https://example.test/net/#client";
+  for (const mode of ["no-net", "no-tools", "url", "shape", "action", "limit"] as const) {
+    const store = createMemoryAppStore(); const element = output();
+    const added = mode === "limit" ? Array.from({ length: 100 }, (_, i) => `https://example.com/${i}/`) : [];
+    await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], added, deny: [] } } });
+    let before = await store.system.getNetLists!();
+    let emit: ((message: unknown) => void) | undefined;
+    const system = await mountSystem(element, {
+      apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: mode === "no-net" ? {} : { net: { reason: "通信", ...(mode === "no-tools" ? {} : { tools: ["addAllow"] }) } } } } }], store,
+      createWorker() {
+        const { port1, port2 } = new MessageChannel(); port1.start(); port2.start(); serveApp(port1 as never);
+        emit = message => port1.postMessage(message);
+        return { postMessage: (message, transfer) => port2.postMessage(message, transfer as never), addEventListener: (type, listener) => port2.addEventListener(type, listener as never), terminate: () => { port1.close(); port2.close(); } };
+      },
+    });
+    try {
+      await system.open(id);
+      before = await store.system.getNetLists!();
+      emit!({ type: "net.allow", action: mode === "action" ? "deny" : "add", url: mode === "shape" ? null : mode === "url" ? "https://example.com/no-slash" : "https://extra.example/" });
+      // 同じポートの call の完了まで待ち、偽の追加が処理された後の保存を読む。
+      await element.active.process.app.call("__bina_lifecycle", 3, 0, 0);
+      assertEquals(await store.system.getNetLists!(), before, mode);
+      assertEquals(await store.pigeon.history(), [], mode);
+      assertEquals(element.errors, [], mode);
+    } finally { system.stop(); }
+  }
+});
+
+Deno.test("net.allow の表示は追加時の quiet で決まり、保存待ち中の切替では変わらない", async () => {
+  const id = "https://example.test/net/#client";
+  for (const delay of ["lists", "letter"] as const) for (const quiet of [false, true]) {
+    const store = createMemoryAppStore(); const element = output();
+    await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], added: [], deny: [], quiet } } });
+    const blocked = Promise.withResolvers<void>();
+    let saving = false;
+    let started = false;
+    const put = store.system.putNetLists!.bind(store.system);
+    const record = store.pigeon.record.bind(store.pigeon);
+    store.system.putNetLists = async lists => { if (started && delay === "lists" && !saving) { saving = true; await blocked.promise; } await put(lists); };
+    store.pigeon.record = async (letter, time) => { if (delay === "letter" && !saving) { saving = true; await blocked.promise; } return await record(letter, time); };
+    let shown = 0;
+    const system = await mountSystem(element, {
+      apps: [homeApp,
+        { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "通信", tools: ["addAllow"] } } } } },
+        { source: "binette:system", prebuilt: { ...netSettings, manifest: { ...netSettings.manifest, id: "config", sub: { settings: { name: "設定", roles: ["settings"] } } } } },
+        { source: "binette:system", prebuilt: { ...builtHome, manifest: { ...builtHome.manifest, id: "frame", roles: ["cadre"] } } },
+      ], store, stackSize: 10,
+      createWorker() {
+        const worker = createWorker();
+        return { ...worker, postMessage(message, transfer) {
+          const data = message as { cadre?: { notifications?: unknown[] } };
+          if (data.cadre) shown = data.cadre.notifications?.length ?? 0;
+          worker.postMessage(message, transfer);
+        } };
+      },
+    });
+    try {
+      started = true;
+      await system.open("config.settings"); const panel = element.active;
+      await system.open(id); const client = element.active;
+      await client.process.app.call("add", netTestStrings.indexOf("https://example.com/docs/"));
+      await waitFor(() => saving);
+      await panel.process.app.call("quiet", netTestStrings.indexOf(id), quiet ? 0 : 1);
+      await waitForAsync(async () => { await panel.process.app.call("inspect", netTestStrings.indexOf(id)); return panel.text.get("result")?.endsWith(";" + String(!quiet)) ?? false; });
+      assertEquals(await store.pigeon.history(), []);
+      blocked.resolve();
+      await waitForAsync(async () => (await store.system.getNetLists!()).apps[id].quiet === !quiet);
+      const letters = await store.pigeon.history();
+      assertEquals(letters.length, 1);
+      assertEquals(letters[0].opened, quiet, `${delay}: 追加時の quiet=${quiet}`);
+      assertEquals(shown, quiet ? 0 : 1);
+      assertEquals(element.errors, []);
+    } finally { blocked.resolve(); system.stop(); }
+  }
+});
+
+Deno.test("同じ owner の親とサブ Worker は net.allow の追加・削除・上限を共有する", async () => {
+  const id = "https://example.test/net/#client";
+  const store = createMemoryAppStore(); const element = output();
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], added: Array.from({ length: 99 }, (_, i) => `https://initial.test/${i}/`), deny: [] } } });
+  const system = await mountSystem(element, {
+    apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", sub: { child: { name: "子" } }, permissions: { net: { reason: "通信", tools: ["addAllow"] } } } } }],
+    store, createWorker, stackSize: 10,
+  });
+  try {
+    await system.open(id); const parent = element.active;
+    await system.open(id + ".child"); const child = element.active;
+    const check = async (target: RecordOutput, action: string, url: string, expected: boolean) => {
+      await target.process.app.call(action, netTestStrings.indexOf(url));
+      assertEquals(target.text.get("result"), String(expected), action + ": " + url);
+    };
+    const first = "https://example.com/docs/", second = "https://user.example/";
+    await check(parent, "add", first, true);
+    await check(child, "remove", first, true);
+    await check(parent, "remove", first, false);
+    await check(child, "add", first, true);
+    await check(parent, "add", second, false);
+    await check(child, "remove", first, true);
+    await check(parent, "add", second, true);
+    await check(child, "remove", second, true);
+    await check(parent, "remove", second, false);
+    await waitForAsync(async () => (await store.system.getNetLists!()).apps[id].added?.length === 99);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});
+
+Deno.test("更新の通信先は一つの確認を共有し、許可・拒否・あとでと再起動を反映する", async () => {
+  const id = "https://example.test/net/#client";
+  const url = "https://example.com/docs/";
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const answer of ["allow", "deny", "later"] as const) {
+      const element = output(); const store = createMemoryAppStore();
+      await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [] } } });
+      let confirmCount = 0; let fetchCount = 0; let resolve!: (answer: "allow" | "deny" | "later") => void;
+      element.ui.confirmNet = request => { confirmCount++; assertEquals(request.urls, [url, "https://other.example/"]); return new Promise(done => { resolve = done; }); };
+      globalThis.fetch = () => { fetchCount++; return Promise.resolve(new Response("ok")); };
+      const system = await mountSystem(element, { apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: [url, "https://other.example/"] } } } } }], store, createWorker });
+      try {
+        await system.open(id); let client = element.active;
+        await client.process.app.call("request", 3);
+        await client.process.app.call("request", 3);
+        await waitFor(() => confirmCount === 1);
+        assertEquals(fetchCount, 0);
+        resolve(answer);
+        const expected = answer === "allow" ? "cors:" : answer === "deny" ? "error:blocked" : "error:pending";
+        await waitFor(() => client.text.get("response") === expected);
+        if (answer === "allow") await waitFor(() => fetchCount === 2);
+        await client.process.app.call("request", 3);
+        await waitFor(() => client.text.get("response") === expected);
+        assertEquals(confirmCount, 1);
+        const own = (await store.system.getNetLists!()).apps[id];
+        assertEquals(own.approved, answer === "allow" ? [url, "https://other.example/"] : []);
+        assertEquals(own.deny, answer === "deny" ? [url, "https://other.example/"] : []);
+        if (answer === "later") {
+          await system.close(element.view.instances.find(instance => instance.key === id)!.id);
+          await system.open(id); client = element.active;
+          await client.process.app.call("request", 3);
+          await waitFor(() => confirmCount === 2);
+          resolve("allow");
+          await waitFor(() => client.text.get("response") === "cors:");
+        }
+      } finally { system.stop(); }
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+Deno.test("初期承認は新規と旧アプリを記録し、更新前の要求だけを承認して削除 URL を除く", async () => {
+  const id = "https://example.test/net/#client";
+  const first = "https://user.example/"; const next = "https://example.com/docs/";
+  for (const prior of ["new", "legacy", "recorded"] as const) {
+    const store = createMemoryAppStore(); const element = output();
+    if (prior !== "new") await store.put({ key: id, source: "https://example.test/net/", icon: undefined, ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: [first, "https://removed.example/"] } } }, installedAt: Date.now() });
+    if (prior === "recorded") await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [first, "https://removed.example/"] } } });
+    const system = await mountSystem(element, { apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: [first, next] } } } } }], store, createWorker });
+    try { assertEquals((await store.system.getNetLists!()).apps[id].approved, prior === "new" ? [first, next] : [first]); }
+    finally { system.stop(); }
+  }
+});
+
+Deno.test("承認済み要求と各 allow は確認不要で、deny を最優先する", async () => {
+  const id = "https://example.test/net/#client"; const url = "https://example.com/docs/";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = () => Promise.resolve(new Response("ok"));
+  try {
+    for (const mode of ["approved", "user", "app", "common", "deny", "commonDeny"] as const) {
+      const store = createMemoryAppStore(); const element = output(); let count = 0;
+      element.ui.confirmNet = () => { count++; return Promise.resolve("later"); };
+      await store.system.putNetLists!({ commonAllow: mode === "common" || mode === "commonDeny" ? [url] : [], commonDeny: mode === "commonDeny" ? [url] : [], apps: { [id]: { allow: mode === "user" ? [url] : [], added: mode === "app" ? [url] : [], approved: mode === "approved" ? ["https://example.com/"] : [], deny: mode === "deny" ? [url] : [] } } });
+      const system = await mountSystem(element, { apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: ["https://example.com/", url] } } } } }], store, createWorker });
+      try {
+        await system.open(id); const client = element.active;
+        await client.process.app.call("request", 3);
+        await waitFor(() => client.text.get("response") === (mode === "deny" || mode === "commonDeny" ? "error:blocked" : "cors:"));
+        assertEquals(count, 0);
+      } finally { system.stop(); }
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+Deno.test("画面なしの確認待ちは pending と設定の手紙を一起動一通にし、手紙から確認できる", async () => {
+  const id = "https://example.test/net/#client";
+  const scheduled = await build(`import { Api, App, NetApi, launch } from "jsr:@binette/replique";
+class Client extends App { onSchedule(_slot: i32, api: Api): void { const net = NetApi.from(api)!; net.fetch("https://example.com/docs/a"); net.fetch("https://example.com/docs/b"); } }
+launch(new Client());`);
+  const store = createMemoryAppStore(); const element = output(); let confirmed = 0; const results: string[] = [];
+  element.ui.confirmNet = () => { confirmed++; return Promise.resolve("allow"); };
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [] } } });
+  await store.system.putSchedules!({ [`${id}/0`]: { owner: id, rule: { every: 900 }, enabled: true, registered: Date.now() } });
+  const system = await mountSystem(element, {
+    apps: [homeApp,
+      { source: "https://example.test/net/", prebuilt: { ...scheduled, manifest: { ...scheduled.manifest, id: "client", name: "資料", permissions: { net: { reason: "資料", request: ["https://example.com/docs/"] }, schedule: { reason: "確認" } } } } },
+      { source: "binette:system", prebuilt: { ...netSettings, manifest: { ...netSettings.manifest, id: "config", roles: ["settings"] } } },
+    ], store,
+    createWorker() {
+      const worker = createWorker();
+      return { ...worker, postMessage(message, transfer) {
+        const data = message as { type: string; result?: { reason: string } };
+        if (data.type === "net.result") results.push(data.result!.reason);
+        worker.postMessage(message, transfer);
+      } };
+    },
+  });
+  try {
+    for (let i = 1; i <= 2; i++) {
+      await system.scheduler.runNow(`${id}/0`);
+      await waitForAsync(async () => (await store.pigeon.history()).length === i);
+      assertEquals(confirmed, 0);
+    }
+    const letters = await store.pigeon.history();
+    assertEquals(letters.map(letter => [letter.from, letter.kind, letter.title, letter.body]), Array.from({ length: 2 }, () => ["config", "net.pending", "確認待ちの通信先があります", "資料に確認待ちの通信先があります"]));
+    // onSchedule の終了後の返事は仕様どおり破棄される。届いたものは pending だけ。
+    assert(results.every(reason => reason === "pending"));
+    await system.open("config");
+    await element.active.process.app.call("press", letters[0].id);
+    await waitFor(() => confirmed === 1);
+    await waitForAsync(async () => (await store.system.getNetLists!()).apps[id].approved?.length === 1);
+  } finally { system.stop(); }
+});
+
+Deno.test("確認待ちの要求を中断しても同時要求を巻き込まず、終了後の回答を保存しない", async () => {
+  const id = "https://example.test/net/#client";
+  const app = await build(`import { Api, App, Last, NetApi, Response, document, launch, __bina_net } from "jsr:@binette/replique";
+let net: NetApi | null = null; let first: i32 = 0;
+class Client extends App {
+ onCreate(_last: Last, api: Api): void { net = NetApi.from(api); }
+ onNet(id: i32, res: Response): void { document.getElementById(id.toString()).textContent = res.type + ":" + res.reason; }
+}
+export { __bina_net };
+export function request(): void { first = net!.fetch("https://example.com/docs/a"); net!.fetch("https://example.com/docs/b"); }
+export function abort(): void { net!.abort(first); }
+launch(new Client());`);
+  const store = createMemoryAppStore(); const element = output(); let count = 0;
+  const answers: ((answer: "allow" | "deny" | "later") => void)[] = [];
+  element.ui.confirmNet = () => { count++; return new Promise(resolve => answers.push(resolve)); };
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [] } } });
+  const originalFetch = globalThis.fetch; let calls = 0;
+  globalThis.fetch = () => { calls++; return Promise.resolve(new Response("ok")); };
+  const system = await mountSystem(element, { apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...app, manifest: { ...app.manifest, id: "client", permissions: { net: { reason: "資料", request: ["https://example.com/docs/"] } } } } }], store, createWorker });
+  try {
+    await system.open(id); const client = element.active;
+    await client.process.app.call("request"); await waitFor(() => count === 1);
+    await client.process.app.call("abort"); await waitFor(() => client.text.get("1") === "error:aborted");
+    answers[0]("later"); await waitFor(() => client.text.get("2") === "error:pending");
+    assertEquals(calls, 0);
+    await system.close(element.view.instances.find(instance => instance.key === id)!.id);
+    await system.open(id); await element.active.process.app.call("request"); await waitFor(() => count === 2);
+    await system.close(element.view.instances.find(instance => instance.key === id)!.id);
+    answers[1]("allow"); await sleep(10);
+    assertEquals((await store.system.getNetLists!()).apps[id].approved, []);
+    assertEquals(calls, 0);
+  } finally { system.stop(); globalThis.fetch = originalFetch; }
+});
+
+
+Deno.test("設定の先行した許可・拒否を表示中ダイアログの逆の回答で上書きしない", async () => {
+  const id = "https://example.test/net/#client";
+  const url = "https://example.com/docs/";
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const first of ["allow", "deny"] as const) {
+      const store = createMemoryAppStore(); const element = output();
+      await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], deny: [], approved: [] } } });
+      let count = 0; let calls = 0;
+      const answer = Promise.withResolvers<"allow" | "deny" | "later">();
+      element.ui.confirmNet = () => { count++; return answer.promise; };
+      globalThis.fetch = () => { calls++; return Promise.resolve(new Response("ok")); };
+      const system = await mountSystem(element, { apps: [homeApp,
+        { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", permissions: { net: { reason: "資料", request: [url] } } } } },
+        { source: "binette:system", prebuilt: { ...netSettings, manifest: { ...netSettings.manifest, id: "config", roles: ["settings"] } } },
+      ], store, createWorker, stackSize: 10 });
+      try {
+        await system.open("config"); const panel = element.active;
+        await system.open(id); const client = element.active;
+        await client.process.app.call("request", 3);
+        await client.process.app.call("request", 3);
+        await waitFor(() => count === 1);
+        assertEquals(calls, 0);
+        await panel.process.app.call("act", netTestStrings.indexOf(first === "allow" ? "approvePending" : "denyPending"), netTestStrings.indexOf(id), 0);
+        await waitForAsync(async () => {
+          const own = (await store.system.getNetLists!()).apps[id];
+          return first === "allow" ? own.approved!.includes(url) : own.deny.includes(url);
+        });
+        answer.resolve(first === "allow" ? "deny" : "allow");
+        const expected = first === "allow" ? "cors:" : "error:blocked";
+        await waitFor(() => client.text.get("response") === expected);
+        if (first === "allow") await waitFor(() => calls === 2);
+        // 後続要求も設定の判断に従い、拒否した URL は未承認のまま残る。
+        await client.process.app.call("request", 3);
+        await waitFor(() => client.text.get("response") === expected);
+        const own = (await store.system.getNetLists!()).apps[id];
+        assertEquals(own.approved, first === "allow" ? [url] : []);
+        assertEquals(own.deny, first === "deny" ? [url] : []);
+        assertEquals(count, 1);
+        assertEquals(calls, first === "allow" ? 3 : 0);
+      } finally { answer.resolve("later"); system.stop(); }
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});

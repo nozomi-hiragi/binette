@@ -2,6 +2,7 @@
 export interface NetLists {
   request: readonly string[];
   appAllow: readonly string[];
+  appAdded?: readonly string[];
   appDeny: readonly string[];
   commonAllow: readonly string[];
   commonDeny: readonly string[];
@@ -22,7 +23,7 @@ export function matchesNetUrl(target: string, prefix: string): boolean {
 export function allowsNetUrl(url: string, lists: NetLists): boolean {
   const matches = (entries: readonly string[]) => entries.some(entry => matchesNetUrl(url, entry));
   return !matches(lists.commonDeny) && !matches(lists.appDeny) &&
-    (matches(lists.request) || matches(lists.appAllow) || matches(lists.commonAllow));
+    (matches(lists.request) || matches(lists.appAdded ?? []) || matches(lists.appAllow) || matches(lists.commonAllow));
 }
 
 /** アプリから受け取る通信の設定。 */
@@ -53,7 +54,7 @@ const maxBytes = 4 * 1024 * 1024;
 /** アプリごとの同時数を管理し、要求の検査と通信を行う。 */
 export function createNetService(fetcher: typeof fetch = fetch, timeout = 30_000) {
   const queues = new Map<string, { active: number; waiting: (() => void)[] }>();
-  return async (app: string, request: NetRequest, lists: NetLists, signal: AbortSignal): Promise<NetResponse> => {
+  return async (app: string, request: NetRequest, lists: NetLists, signal: AbortSignal, authorize?: () => Promise<NetLists | string>): Promise<NetResponse> => {
     let url: URL;
     try {
       url = new URL(request.url);
@@ -67,6 +68,7 @@ export function createNetService(fetcher: typeof fetch = fetch, timeout = 30_000
         headers.append(name, value);
       }
     } catch { return failure("invalid"); }
+    if (authorize) { const result = await authorize(); if (typeof result === "string") return failure(result); lists = result; }
     if (!allowsNetUrl(url.href, lists)) return failure("blocked");
     if (typeof navigator !== "undefined" && navigator.onLine === false) return failure("offline");
     const queue = queues.get(app) ?? { active: 0, waiting: [] };

@@ -6,6 +6,43 @@ export const ABI_VERSION = "0.1";
 
 namespace hostOs {
   // @ts-ignore: decorator
+  @external("binette:os@0.1", "appCount")
+  export declare function appCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appName")
+  export declare function appName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appId")
+  export declare function appId(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appNotify")
+  export declare function appNotify(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appNet")
+  export declare function appNet(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appMuted")
+  export declare function appMuted(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "setAppMuted")
+  export declare function setAppMuted(appId: string, muted: bool): void;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netCount")
+  export declare function netCount(list: string, appId: string): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netUrl")
+  export declare function netUrl(list: string, appId: string, i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netIsQuiet")
+  export declare function netIsQuiet(appId: string): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netDo")
+  export declare function netDo(action: string, appId: string, url: string): void;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netQuiet")
+  export declare function netQuiet(appId: string, on: bool): void;
+
+  // @ts-ignore: decorator
   @external("binette:os@0.1", "notificationCount")
   export declare function notificationCount(): i32;
   // @ts-ignore: decorator
@@ -113,6 +150,22 @@ export class OsApi {
   static from(api: Api): OsApi | null {
     return api.why("os") == Why.Granted ? new OsApi() : null;
   }
+
+  /** 入っているアプリ。ID はサブアプリも含む完全な ID */
+  appCount(): i32 { return hostOs.appCount(); }
+  appName(i: i32): string { return hostOs.appName(i); }
+  appId(i: i32): string { return hostOs.appId(i); }
+  appNotify(i: i32): bool { return hostOs.appNotify(i); }
+  appNet(i: i32): bool { return hostOs.appNet(i); }
+  appMuted(i: i32): bool { return hostOs.appMuted(i); }
+  setAppMuted(appId: string, muted: bool): void { hostOs.setAppMuted(appId, muted); }
+  /** list は request・allow・added・deny。空の appId は全アプリ共通 */
+  netCount(list: string, appId: string): i32 { return hostOs.netCount(list, appId); }
+  netUrl(list: string, appId: string, i: i32): string { return hostOs.netUrl(list, appId, i); }
+  netIsQuiet(appId: string): bool { return hostOs.netIsQuiet(appId); }
+  /** addAllow・removeAllow・addDeny・removeDeny。URL の誤りは OS に表示する */
+  netDo(action: string, appId: string, url: string = ""): void { hostOs.netDo(action, appId, url); }
+  netQuiet(appId: string, on: bool): void { hostOs.netQuiet(appId, on); }
 
   /** Per-app notification settings, indexed by the notificationCount list. */
   notificationCount(): i32 { return hostOs.notificationCount(); }

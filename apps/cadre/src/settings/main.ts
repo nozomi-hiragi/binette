@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, OsApi, SchedulerApi } from "jsr:@binette/replique";
-import { View, button, buttonOf, column, listTile, row, segmented, show, text } from "jsr:@binette/replique-ui@^0.1";
+import { View, button, buttonOf, column, input, listTile, row, segmented, show, text } from "jsr:@binette/replique-ui@^0.1";
 
 const names = ["stackSize", "stopDelay", "historyLimit", "callTimeout", "destroyTimeout", "homeRetryWindow"];
 const labels = ["スタックできるアプリの数", "Stop までの時間", "起動の履歴の最大の行数", "呼び出しの時間切れ", "onDestroy の時間切れ", "Apps を出すまでの時間"];
@@ -15,9 +15,12 @@ const intervals: i32[] = [60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 432
 let details = false;
 // 開いている項目。-1 は未選択で、広い幅では先頭の項目を見せ、狭い幅では項目の一覧だけを見せる
 let page: i32 = -1;
-const pageTitles = ["見た目", "既定のアプリ", "通知", "定期実行", "Binette について", "デバッグ", "日付と時刻"];
-const pageKeys = ["open-appearance", "open-defaults", "open-notifications", "open-schedules", "open-about", "open-debug", "open-time"];
-function openPage(next: i32): void { page = next; }
+const pageTitles = ["見た目", "既定のアプリ", "通知", "定期実行", "Binette について", "デバッグ", "日付と時刻", "アプリ", "ネット"];
+const pageKeys = ["open-appearance", "open-defaults", "open-notifications", "open-schedules", "open-about", "open-debug", "open-time", "open-apps", "open-net"];
+let selectedApp = "";
+let allowDraft = "";
+let denyDraft = "";
+function openPage(next: i32): void { page = next; selectedApp = ""; allowDraft = ""; denyDraft = ""; }
 function backToTop(): void { page = -1; }
 /** 項目の一覧の 1 行 */
 function pageLink(index: i32, detail: string, current: i32): View {
@@ -74,7 +77,76 @@ function checkUpdate(): void {
 }
 function toggleNotification(index: i32): void {
   const os = osApi;
-  if (os != null) os.setNotificationMuted(index, !os.notificationMuted(index));
+  if (os != null) os.setAppMuted(os.appId(index), !os.appMuted(index));
+}
+function openApp(index: i32): void {
+  const os = osApi;
+  if (os != null) { selectedApp = os.appId(index); allowDraft = ""; denyDraft = ""; }
+}
+function backToApps(): void { selectedApp = ""; }
+function editAllow(value: string): void { allowDraft = value; }
+function editDeny(value: string): void { denyDraft = value; }
+function netTarget(): string { return page == 8 ? "" : selectedApp; }
+function approvePending(): void { if (osApi != null) osApi!.netDo("approvePending", selectedApp); }
+function denyPending(): void { if (osApi != null) osApi!.netDo("denyPending", selectedApp); }
+function addAllow(): void { const os = osApi; if (os != null) os.netDo("addAllow", netTarget(), allowDraft); }
+function addDeny(): void { const os = osApi; if (os != null) os.netDo("addDeny", netTarget(), denyDraft); }
+function removeAllow(i: i32): void {
+  const os = osApi;
+  if (os == null) return;
+  const id = netTarget();
+  const count = os.netCount("allow", id);
+  os.netDo("removeAllow", id, i < count ? os.netUrl("allow", id, i) : os.netUrl("added", id, i - count));
+}
+function removeDeny(i: i32): void {
+  const os = osApi;
+  if (os != null) os.netDo("removeDeny", netTarget(), os.netUrl("deny", netTarget(), i));
+}
+function toggleNetQuiet(): void {
+  const os = osApi;
+  if (os != null) os.netQuiet(selectedApp, !os.netIsQuiet(selectedApp));
+}
+/** 通信先の一覧。アプリが足したものも allow の中で消せる。 */
+function netViews(os: OsApi, id: string): View[] {
+  const views: View[] = [];
+  if (id.length > 0) {
+    const pending: View[] = [];
+    for (let i: i32 = 0; i < os.netCount("pending", id); i++) pending.push(text(os.netUrl("pending", id, i)).key("net-pending-" + i.toString()));
+    views.push(show(pending.length > 0, column([text("確認待ちの要求 URL").heading(2), column(pending).surface("card").key("net-pending-list"), row([button("許可", approvePending).key("net-approve-pending"), button("拒否", denyPending).key("net-deny-pending")])]).key("net-pending-section")));
+    const requests: View[] = [];
+    for (let i: i32 = 0; i < os.netCount("request", id); i++) requests.push(text(os.netUrl("request", id, i)).key("net-request-" + i.toString()));
+    views.push(column([text("要求 URL").heading(2), column(requests).surface("card").key("net-requests")]).key("net-request-section"));
+  }
+  const allow: View[] = [];
+  const ownCount = os.netCount("allow", id);
+  for (let i: i32 = 0; i < ownCount; i++) {
+    const url = os.netUrl("allow", id, i);
+    allow.push(listTile(url, "ユーザーが追加", null, button("消す", removeAllow).arg(i).variant("ghost").label(url + "を allow から消す").key("net-remove-allow-" + i.toString())).key("net-allow-" + i.toString()));
+  }
+  for (let i: i32 = 0; i < os.netCount("added", id); i++) {
+    const url = os.netUrl("added", id, i);
+    allow.push(listTile(url, "アプリが追加", null, button("消す", removeAllow).arg(ownCount + i).variant("ghost").label(url + "を allow から消す").key("net-remove-added-" + i.toString())).key("net-added-" + i.toString()));
+  }
+  views.push(column([
+    text("allow").heading(2).key("net-allow-title"),
+    show(id.length == 0, text("すべてのネットのアプリに許します").tone("muted").key("net-common-note")),
+    column(allow).surface("card").key("net-allow-list"),
+    row([input(allowDraft, editAllow).placeholder("https://…").label("allow に足す URL").grow().key("net-allow-input"), button("追加", addAllow).variant("subtle").label("allow に追加").key("net-add-allow")]).wrap(),
+  ]).key("net-allow-section"));
+  const deny: View[] = [];
+  for (let i: i32 = 0; i < os.netCount("deny", id); i++) {
+    const url = os.netUrl("deny", id, i);
+    deny.push(listTile(url, "", null, button("消す", removeDeny).arg(i).variant("ghost").label(url + "を deny から消す").key("net-remove-deny-" + i.toString())).key("net-deny-" + i.toString()));
+  }
+  views.push(column([
+    text("deny").heading(2).key("net-deny-title"),
+    column(deny).surface("card").key("net-deny-list"),
+    row([input(denyDraft, editDeny).placeholder("https://…").label("deny に足す URL").grow().key("net-deny-input"), button("追加", addDeny).variant("subtle").label("deny に追加").key("net-add-deny")]).wrap(),
+  ]).key("net-deny-section"));
+  if (id.length > 0) views.push(listTile("追加の通知を表に出す", "", null,
+    button("追加の通知を表に出す", toggleNetQuiet).toggle(!os.netIsQuiet(id)).key("net-notify"),
+  ).key("net-notify-row"));
+  return views;
 }
 function showLetter(id: i32): void {
   const os = osApi;
@@ -233,15 +305,6 @@ export class Settings extends App {
         text(selected ? "✓" : "").tone("accent").key("selection-mark"),
       ], chooseCadre).arg(i).selected(selected).label(os.candidateName("cadre", i) + (selected ? "（使用中）" : "を Cadre にする")).key("cadre-" + i.toString()));
     }
-    const notifications: View[] = [];
-    for (let i: i32 = 0; i < os.notificationCount(); i++) {
-      const name = os.notificationName(i);
-      const muted = os.notificationMuted(i);
-      notifications.push(listTile(name, muted ? "通知を停止中" : "通知を許可", null,
-        button(muted ? "許可する" : "停止する", toggleNotification).arg(i).variant("subtle")
-          .label(name + "の通知を" + (muted ? "許可する" : "停止する")),
-      ).key("notification-setting-" + os.notificationId(i)));
-    }
     const debug: View[] = [];
     for (let i: i32 = 0; i < names.length; i++) {
       const value = os.get(names[i]);
@@ -269,8 +332,10 @@ export class Settings extends App {
     const links: View[] = [
       pageLink(0, "テーマ・アクセント色・壁紙", current),
       pageLink(1, "ホーム: " + roleName(os, "home") + "・Cadre: " + roleName(os, "cadre"), current),
-      pageLink(2, unopened > 0 ? "未開封 " + unopened.toString() + " 件" : "届いた通知とアプリごとの許可", current),
+      pageLink(2, unopened > 0 ? "未開封 " + unopened.toString() + " 件" : "届いた通知", current),
     ];
+    links.push(pageLink(7, "アプリごとの通知と通信先", current));
+    links.push(pageLink(8, "全アプリ共通の通信先", current));
     if (scheduler != null) links.push(pageLink(3, schedules.length == 0 ? "予定はありません" : schedules.length.toString() + " 件の予定", current));
     const zone = os.timeZone();
     links.push(pageLink(6, zone, current));
@@ -301,13 +366,6 @@ export class Settings extends App {
         ]).surface("card").key("letters-card"),
         text("時刻は " + zone + " です。新しい方から 100 通まで残します。").small().tone("muted").key("letters-note"),
       ]).key("letters-section"));
-      sections.push(column([
-        text("アプリごとの許可").heading(2).key("notifications-title"),
-        column([
-          show(notifications.length == 0, text("通知を出すアプリはありません。").tone("muted").key("notifications-empty")),
-          column(notifications).key("notifications-list"),
-        ]).surface("card").key("notifications-card"),
-      ]).key("notifications-section"));
     } else if (current == 3) {
       sections.push(column([
         column([
@@ -334,6 +392,26 @@ export class Settings extends App {
           ]).key("update-actions"),
         ]).surface("card").key("update-card"),
       ]).key("update-section"));
+    } else if (current == 7) {
+      if (selectedApp.length == 0) {
+        const entries: View[] = [];
+        for (let i: i32 = 0; i < os.appCount(); i++) entries.push(buttonOf([listTile(os.appName(i), os.appId(i)).grow()], openApp).arg(i).label(os.appName(i) + "の詳細を開く").key("app-" + os.appId(i)));
+        sections.push(column(entries).surface("card").key("settings-apps"));
+      } else {
+        for (let i: i32 = 0; i < os.appCount(); i++) if (os.appId(i) == selectedApp) {
+          sections.push(listTile(os.appName(i), selectedApp).key("app-summary"));
+          if (os.appNotify(i)) sections.push(listTile("通知を許可", "", null,
+            button("通知を許可", toggleNotification).arg(i).toggle(!os.appMuted(i)).key("app-notify"),
+          ).key("app-notify-row"));
+          if (os.appNet(i)) {
+            const net = netViews(os, selectedApp);
+            for (let j = 0; j < net.length; j++) sections.push(net[j]);
+          }
+        }
+      }
+    } else if (current == 8) {
+      const net = netViews(os, "");
+      for (let j = 0; j < net.length; j++) sections.push(net[j]);
     } else if (current == 6) {
       sections.push(column([
         column([
@@ -352,7 +430,9 @@ export class Settings extends App {
     }
     const detail: View[] = [
       column([
-        button("‹ 設定", backToTop).variant("ghost").label("設定の項目に戻る").key("settings-back"),
+        current == 7 && selectedApp.length > 0
+          ? button("‹ アプリ", backToApps).variant("ghost").label("アプリの一覧に戻る").key("apps-back")
+          : button("‹ 設定", backToTop).variant("ghost").label("設定の項目に戻る").key("settings-back"),
         text(pageTitles[current]).heading(1).key("settings-page-title"),
       ]).key("settings-page-header"),
     ];

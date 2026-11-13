@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -44,6 +44,7 @@ export interface ProcessOptions {
     pigeon?: LaunchOptions["pigeon"];
     shares?: boolean;
     net?: boolean;
+    netState?: NetSnapshot;
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
@@ -66,6 +67,10 @@ export interface ProcessOptions {
   onCadreInstall?: LaunchOptions["onCadreInstall"];
   onShare?: LaunchOptions["onShare"];
   onNet?: LaunchOptions["onNet"];
+  onNetAllow?: LaunchOptions["onNetAllow"];
+  onNetDo?: LaunchOptions["onNetDo"];
+  onNetQuiet?: LaunchOptions["onNetQuiet"];
+  onAppNotificationMuted?: LaunchOptions["onAppNotificationMuted"];
   onPigeonSend?: LaunchOptions["onPigeonSend"];
   onPigeonDone?: LaunchOptions["onPigeonDone"];
   onPigeonOpened?: LaunchOptions["onPigeonOpened"];
@@ -95,6 +100,7 @@ export interface Process {
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncNet?(snapshot: NetSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
   syncSchedule?(snapshot: ScheduleSnapshot): void;
@@ -184,6 +190,11 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     shares: options.grants?.shares,
     net: options.grants?.net,
     onNet: options.onNet,
+    netState: options.grants?.netState,
+    onNetAllow: options.onNetAllow,
+    onNetDo: options.onNetDo,
+    onNetQuiet: options.onNetQuiet,
+    onAppNotificationMuted: options.onAppNotificationMuted,
     onShare: options.onShare,
     denied: options.grants?.denied,
     onSet: options.onSet,
@@ -384,6 +395,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       else armTimer();
     },
     syncPigeon(snapshot) { running?.syncPigeon?.(snapshot); },
+    syncNet(snapshot) { running?.syncNet?.(snapshot); },
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
     syncManager(snapshot) { running?.syncManager?.(snapshot); },
     syncScheduler(snapshot) { running?.syncScheduler?.(snapshot); },
