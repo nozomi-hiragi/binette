@@ -1152,7 +1152,7 @@ export function request(): void { net!.fetch("https://example.com/docs/a"); }
   } finally { system.stop(); globalThis.fetch = originalFetch; }
 });
 
-const netTestStrings = ["", "https://example.test/net/#client", "https://example.com/docs/", "https://example.com/docs/a", "https://user.example/", "https://user.example/a", "https://example.com/bad", "addAllow", "removeAllow", "addDeny", "removeDeny", "approvePending", "denyPending"];
+const netTestStrings = ["", "https://example.test/net/#client", "https://example.com/docs/", "https://example.com/docs/a", "https://user.example/", "https://user.example/a", "https://example.com/bad", "addAllow", "removeAllow", "addDeny", "removeDeny", "approvePending", "denyPending", "https://last.example/"];
 const netClient = await build(`const values = ${JSON.stringify(netTestStrings)};
 import { Api, App, Last, NetApi, Response, document, launch, __bina_net } from "jsr:@binette/replique";
 let net: NetApi | null = null;
@@ -1366,7 +1366,8 @@ Deno.test("net.allow の表示は追加時の quiet で決まり、保存待ち�
 Deno.test("同じ owner の親とサブ Worker は net.allow の追加・削除・上限を共有する", async () => {
   const id = "https://example.test/net/#client";
   const store = createMemoryAppStore(); const element = output();
-  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], added: Array.from({ length: 99 }, (_, i) => `https://initial.test/${i}/`), deny: [] } } });
+  const initial = Array.from({ length: 99 }, (_, i) => `https://initial.test/${i}/`);
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: [], added: [...initial], deny: [] } } });
   const system = await mountSystem(element, {
     apps: [homeApp, { source: "https://example.test/net/", prebuilt: { ...netClient, manifest: { ...netClient.manifest, id: "client", sub: { child: { name: "子" } }, permissions: { net: { reason: "通信", tools: ["addAllow"] } } } } }],
     store, createWorker, stackSize: 10,
@@ -1388,7 +1389,11 @@ Deno.test("同じ owner の親とサブ Worker は net.allow の追加・削除�
     await check(parent, "add", second, true);
     await check(child, "remove", second, true);
     await check(parent, "remove", second, false);
-    await waitForAsync(async () => (await store.system.getNetLists!()).apps[id].added?.length === 99);
+    // The saved lists pass through the same 99 entries several times, so wait for a state that only the last change makes.
+    const last = "https://last.example/";
+    await check(child, "add", last, true);
+    await waitForAsync(async () => (await store.system.getNetLists!()).apps[id].added?.includes(last) ?? false);
+    assertEquals((await store.system.getNetLists!()).apps[id].added, [...initial, last]);
     assertEquals(element.errors, []);
   } finally { system.stop(); }
 });
