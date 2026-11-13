@@ -109,3 +109,9 @@ Deno.test("他アプリと名前を共有する keyframes と layer を拒む", 
     "@supports (display: grid) { @layer shared { p { color: red } } }",
   ]) assertEquals(scopeCss(css, "1"), null, css);
 });
+
+Deno.test("starting-style remains scoped while external CSS remains rejected", () => {
+  const css = '@starting-style { [data-bina-key="panel"] { opacity: 0 } }';
+  assertEquals(scopeCss(css, "1"), `@scope ([data-bina-scope="1"]) to (.bina-ui-appArea) {\n${css}\n}`);
+  assertEquals(scopeCss('@starting-style { p { background: url(https://example.test/x) } }', "1"), null);
+});

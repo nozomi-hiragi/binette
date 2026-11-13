@@ -70,7 +70,7 @@ function safeCss(css: string): boolean {
   }
   if (depth !== 0 || /image-set\s*\(|expression\s*\(|<\/style/i.test(code)) return false;
   // 大域へ影響する @font-face・@property なども受け付けない
-  if ([...code.matchAll(/@([\w-]+)/g)].some(match => !["media", "supports", "container", "scope"].includes(match[1]!.toLowerCase()))) return false;
+  if ([...code.matchAll(/@([\w-]+)/g)].some(match => !["media", "supports", "container", "scope", "starting-style"].includes(match[1]!.toLowerCase()))) return false;
   // url() は data: だけ。引用符の中のエスケープも読み込み先には使わせない
   return [...code.matchAll(/url\(\s*(["']?)\s*([^)"']*)/gi)].every(match => /^data:/i.test(match[2]!) && !match[2]!.includes("\\"));
 }

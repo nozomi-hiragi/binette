@@ -1,9 +1,9 @@
 import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
 import { createUiDiffer } from "@binette/decor/diff";
 import { BinetteError, isNetUrlPrefix, type DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
-import { formatTime, systemTimeZone } from "./time.ts";
+import { formatTime, formatClock, formatNotificationTime, systemTimeZone } from "./time.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -26,6 +26,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let ownSchedule: ScheduleSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
+  let appsInfo: AppsInfo | undefined;
   let net = false;
   let netState: NetSnapshot = { tools: [], added: [] };
   let nextNetChange = 0;
@@ -476,6 +477,14 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "letterDo": (action: number, id: number) => { system(); scope.postMessage({ type: "os.letter", action: readString(action), i: id }); },
     },
     [HOST_ABI.cadre.module]: {
+      "clock": () => writeString(formatClock(cadreState().now ?? Date.now())),
+      "notificationTime": (i: number) => writeString(formatNotificationTime(notificationAt(i).time, cadreState().now ?? Date.now())),
+      "notificationPopup": (i: number) => notificationAt(i).popup,
+      "notificationAppIndex": (i: number) => notificationAt(i).appIndex,
+      "notificationName": (i: number) => writeString(notificationAt(i).name),
+      "notificationKeep": (i: number, on: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationKeep", i, on: !!on }); },
+      "unreadTotal": () => cadreState().notifications?.length ?? 0,
+      "unread": (i: number) => { const value = cadreState().instances[i]; if (!Number.isInteger(i) || !value) throw new Error("アプリの番号が範囲外です。"); return value.unread ?? 0; },
       "notificationCount": () => cadreState().notifications?.length ?? 0,
       "notificationId": (i: number) => notificationAt(i).id,
       "notificationActionCount": (i: number) => notificationAt(i).actions?.length ?? 0,
@@ -603,6 +612,10 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     },
     [HOST_ABI.apps.module]: {
       "icon": (handle: number, app: number) => { appAt(app); ops.push({ op: "icon", handle, app }); },
+      "unread": (i: number) => { appAt(i); return appsInfo?.unread[i] ?? 0; },
+      "isInstalled": () => { homeApps(); return appsInfo?.canInstall ? appsInfo.installed : true; },
+      "installBusy": () => { homeApps(); return appsInfo?.canInstall ? appsInfo.installBusy : false; },
+      "install": () => { homeApps(); if (!appsInfo?.canInstall) throw new Error("ホームだけが使えます。"); scope.postMessage({ type: "apps.install" }); },
       "count": () => homeApps().length,
       "name": (i: number) => writeString(appAt(i).name),
       "id": (i: number) => writeString(appAt(i).id),
@@ -624,7 +637,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; netState?: NetSnapshot; netAck?: number; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; appsInfo?: AppsInfo; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; netState?: NetSnapshot; netAck?: number; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
     if (data.type === "net.sync") {
       netState = data.netState ?? { tools: [], added: [] };
       // 古い写しが届いても、その後の add/remove の同期判定を巻き戻さない。
@@ -653,6 +666,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       try {
         osBuild = data.osBuild ?? osBuild;
         apps = data.apps;
+        appsInfo = data.appsInfo;
         os = data.os;
         manager = data.manager;
         scheduler = data.scheduler;
@@ -683,8 +697,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
           ? error.message : `アプリを起動できません: ${messageOf(error)}`;
         scope.postMessage({ type: "failed", message, ...(error instanceof BinetteError ? { code: error.code } : {}) });
       }
-    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync" || data.type === "scheduler.sync" || data.type === "schedule.sync") {
-      if (data.type === "manager.sync") manager = data.manager;
+    } else if (data.type === "apps.sync" || data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync" || data.type === "scheduler.sync" || data.type === "schedule.sync") {
+      if (data.type === "apps.sync") appsInfo = data.appsInfo;
+      else if (data.type === "manager.sync") manager = data.manager;
       else if (data.type === "schedule.sync") ownSchedule = data.schedule;
       else if (data.type === "scheduler.sync") scheduler = data.scheduler;
       else if (data.type === "pigeon.sync") { pigeon = data.pigeon; if (pigeon) pigeon.letters = pigeon.letters.filter(letter => !acknowledgedLetters.has(letter.id)); }

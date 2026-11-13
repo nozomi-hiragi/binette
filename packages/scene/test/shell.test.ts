@@ -939,3 +939,49 @@ Deno.test("設定のアプリ詳細と共通ネットは通知スイッチと通
     assert(query("open-schedules") !== null);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
+
+Deno.test("通知センターは復元した未開封とバッジを表示し、すべて閉じられる", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const store = createMemoryAppStore(); const errors: unknown[] = [];
+  for (let i = 0; i < 2; i++) await store.pigeon.record({ id: 0, from: "cadre.settings", to: "user", kind: "test", title: `題${i}`, body: "本文" }, Date.now() - i * 60_000);
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home", settings: "cadre.settings" },
+    store, libraries, createWorker: worker.createWorker, installed: true, onError: error => errors.push(error),
+  });
+  const query = (key: string) => element.querySelector<HTMLElement>(`[data-bina-key="${key}"]`);
+  try {
+    await waitFor(() => query("clock") !== null && query("home-badge")?.textContent === "2");
+    assertEquals(query("clock-badge")?.textContent, "2");
+    assertEquals(query("install"), null);
+    await waitFor(() => query("install-tile") === null);
+    assertEquals(query("clock")?.getAttribute("aria-label"), "通知を開く");
+    query("clock")!.click();
+    await waitFor(() => query("notifications-center")?.hidden === false);
+    assertEquals(query("clock")?.getAttribute("aria-label"), "通知を閉じる");
+    assert(query("notifications-center")!.textContent!.includes("題0"));
+    assert(query("notifications-center")!.textContent!.includes("題1"));
+    query("notifications-dismiss-all")!.click();
+    await waitFor(() => query("notifications-empty")?.textContent === "新しい通知はありません");
+    await waitFor(() => query("clock-badge")?.hidden === true || !query("clock-badge"));
+    assertEquals((await store.pigeon.history()).filter(letter => !letter.opened).length, 0);
+    query("notifications-backdrop")!.click();
+    await waitFor(() => query("notifications-center")?.hidden === true);
+    assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ライブのホームにインストールタイルを出し、案内を開く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const store = createMemoryAppStore();
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home" }, store, libraries, createWorker: worker.createWorker, installed: false,
+  });
+  try {
+    await waitFor(() => element.querySelector("[data-bina-key=install-tile]") !== null);
+    await waitForResumed(store, "cadre.home");
+    element.querySelector<HTMLButtonElement>("[data-bina-key=install-tile]")!.click();
+    await waitFor(() => element.querySelector<HTMLDialogElement>(".bina-shell-install-dialog")!.open);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});

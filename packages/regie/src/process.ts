@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -36,6 +36,7 @@ export interface ProcessOptions {
   /** アプリに渡す API の辞書。載せたキーだけが届き、載せなかったキーの理由は denied に書く */
   grants?: {
     apps?: { id: string; name: string; icon?: string }[];
+    appsInfo?: AppsInfo;
     os?: LaunchOptions["os"];
     manager?: LaunchOptions["manager"];
     scheduler?: LaunchOptions["scheduler"];
@@ -50,6 +51,7 @@ export interface ProcessOptions {
   };
   /** ホームが指定した番号のアプリを開く */
   onOpen?: (i: number) => void;
+  onAppsInstall?: LaunchOptions["onAppsInstall"];
   onSet?: LaunchOptions["onSet"];
   onAssign?: LaunchOptions["onAssign"];
   onUpdate?: LaunchOptions["onUpdate"];
@@ -80,6 +82,7 @@ export interface ProcessOptions {
   onNotificationOpen?: LaunchOptions["onNotificationOpen"];
   onNotificationDismiss?: LaunchOptions["onNotificationDismiss"];
   onNotificationReply?: LaunchOptions["onNotificationReply"];
+  onNotificationKeep?: LaunchOptions["onNotificationKeep"];
 }
 
 /** 状態を進めるアプリ */
@@ -100,6 +103,7 @@ export interface Process {
   dispatchUiValue(handle: number, value: number, version?: number): void;
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
+  syncApps?(snapshot: AppsInfo): void;
   syncOs?(snapshot: OsSnapshot): void;
   syncNet?(snapshot: NetSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
@@ -187,6 +191,8 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onSchedule: options.onSchedule,
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
+    appsInfo: options.grants?.appsInfo,
+    onAppsInstall: options.onAppsInstall,
     pigeon: options.grants?.pigeon,
     shares: options.grants?.shares,
     net: options.grants?.net,
@@ -219,6 +225,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onNotificationOpen: options.onNotificationOpen,
     onNotificationDismiss: options.onNotificationDismiss,
     onNotificationReply: options.onNotificationReply,
+    onNotificationKeep: options.onNotificationKeep,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -412,6 +419,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       });
     },
     syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
+    syncApps(snapshot) { running?.syncApps?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,
   };
