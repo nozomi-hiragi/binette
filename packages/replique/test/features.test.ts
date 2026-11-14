@@ -104,7 +104,7 @@ Deno.test("Feature imports retain class identity with the aggregate SDK and feat
     }
   }
   assertEquals(WebAssembly.Module.exports(module).filter(entry => entry.name.startsWith("__bina_")).map(entry => entry.name).sort(), [
-    "__bina_cadre_sync", "__bina_event", "__bina_lifecycle", "__bina_net", "__bina_pigeon", "__bina_schedule", "__bina_share", "__bina_ui_event", "__bina_ui_text", "__bina_ui_value",
+    "__bina_cadre_sync", "__bina_event", "__bina_lifecycle", "__bina_net", "__bina_pigeon", "__bina_safe_area", "__bina_schedule", "__bina_share", "__bina_ui_event", "__bina_ui_text", "__bina_ui_value",
   ]);
 });
 

@@ -48,7 +48,7 @@ function serializeView(view: View): string {
     ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + ',"highlight":' + (view.highlightValue ? "true" : "false") + ',"tip":' + jsonString(view.tipValue) +
     ',"checked":' + (view.checkedValue ? "true" : "false") + ',"value":' + view.numberValue.toString() + ',"min":' + view.minValue.toString() +
     ',"max":' + view.maxValue.toString() + ',"step":' + view.stepValue.toString() + ',"options":' + options + ',"index":' + view.indexValue.toString() +
-    ',"align":' + jsonString(view.alignValue) + '}';
+    ',"align":' + jsonString(view.alignValue) + ',"reserve":' + jsonString(view.reserveValue) + ',"safeArea":' + (view.safeAreaValue ? "true" : "false") + '}';
 }
 
 export function rebuild(): void {

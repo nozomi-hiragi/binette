@@ -218,7 +218,7 @@ export function mount(element: HTMLElement, options: UiDomOptions = {}): Root {
       scroll: view.scrollValue, fill: view.fillValue, collapse: view.collapseValue,
       placeholder: view.placeholderValue, height: view.heightValue, minHeight: view.minHeightValue, wrap: view.wrapValue, highlight: view.highlightValue, tip: view.tipValue,
       checked: view.checkedValue, value: view.numberValue, min: view.minValue, max: view.maxValue, step: view.stepValue,
-      options: view.optionsValue.slice(), index: view.indexValue, align: view.alignValue }, fiber];
+      options: view.optionsValue.slice(), index: view.indexValue, align: view.alignValue, reserve: view.reserveValue, safeArea: view.safeAreaValue }, fiber];
   }
   function draw(view: View): void {
     const drawRevision = ++revision;

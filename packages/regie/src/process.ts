@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type SafeArea, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -23,6 +23,9 @@ export interface ProcessOptions {
   /** 今の呼び出しが終わってから、自分を閉じる */
   onFinish?: () => void;
   onOpenUrl?: LaunchOptions["onOpenUrl"];
+  onFullscreen?: LaunchOptions["onFullscreen"];
+  /** 起動時のセーフエリア */
+  safeArea?: SafeArea;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
   /** startProcess の完了後にアプリが終了したとき */
@@ -112,6 +115,7 @@ export interface Process {
   /** 予定の実行（onSchedule）を、どの状態でも届ける。timeout を過ぎたら `時間切れ` でアプリを終了する */
   schedule(slot: number, timeout: number): Promise<void>;
   syncPigeon?(snapshot: PigeonSnapshot): void;
+  setSafeArea?(area: SafeArea): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -190,6 +194,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     schedule: options.grants?.schedule,
     onSchedule: options.onSchedule,
     storage: options.grants?.storage,
+    safeArea: options.safeArea,
     cadre: options.grants?.cadre,
     appsInfo: options.grants?.appsInfo,
     onAppsInstall: options.onAppsInstall,
@@ -239,6 +244,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onOpenUrl(url) {
       if (state === State.Resume && !closing && !finishRequested) options.onOpenUrl?.(url);
     },
+    onFullscreen: options.onFullscreen,
     onFinish() { accepting = false; finishRequested = true; notifyRequests(); },
     onDom(ops) { if (sink) sink(ops); else initialOps.push(...ops); },
   });
@@ -318,6 +324,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   const process: Process = {
     app,
     get state() { return state; },
+    setSafeArea(area) { app.setSafeArea?.(area); },
     attach(receiver) {
       sink = receiver;
       receiver(initialOps.splice(0));
