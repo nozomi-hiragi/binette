@@ -1,5 +1,5 @@
 # main と v で始まるブランチを GitHub Pages にまとめて出す。
-# 直下に紹介ページ（landing/）、main の動く OS を main/ に、
+# 直下に紹介ページ（landing/）、main の動く OS を live/ に、
 # 全ブランチの API ドキュメントを docs/api/<ブランチ>/ に、ドキュメントの入口を docs/ に出す。
 # 開発中のブランチの OS は出さない。同じオリジンの OS は保存領域と Service Worker のキャッシュを共有するので、
 # カーネルの版が違う OS を並べると互いに壊す。
@@ -54,7 +54,7 @@ jobs:
               (
                 cd "$dir"
                 if grep -q '"pages":' deno.json && [ "$branch" = main ]; then
-                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/docs/api/$branch" \
+                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/live" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/docs/api/$branch" \
                     BINETTE_PAGES_BRANCH="$branch" deno task pages
                 elif grep -q '"pages":' deno.json; then
                   # 開発中のブランチは API ドキュメントだけ作る
