@@ -6,7 +6,7 @@
 /** @type {ServiceWorkerGlobalScope} */
 const worker = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
 const CACHE = "binette-v0.2.0-6";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./regie.js", "./regie-worker.js", "./build-worker.js"];
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./regie.js", "./regie-worker.js", "./build-worker.js"];
 
 worker.addEventListener("install", event => {
   event.waitUntil((async () => {

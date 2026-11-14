@@ -3,6 +3,9 @@
 ## 未リリース
 
 - `v*` に向けた PR の CI では、変更に関係するテストだけを走らせる（`scripts/affected-tests.ts`）。文書と Pages だけの変更ではテストを走らせない。`main` に向けた PR と手動実行では全テストを走らせる
+- 旧 URL /binette/main/ に移動の案内を置く（`landing/main/`）。古い場所で登録された SW は、自分を登録解除する `sw.js` に置き換わり、案内のページを開き直す
+- manifest に `id: "./"` を足し、`background_color`・`theme_color` を起動画面と同じ `#f3f5f8` にする（白から灰色に変わるちらつきをなくす）
+- アイコンを、回した B を幕に見立てた舞台の絵に変える（`public/icon.svg`・`landing/icon.svg`・起動画面）。PNG の `icon-192.png`・`icon-512.png`・maskable の `icon-maskable-512.png` を manifest に、iOS 向けの `apple-touch-icon.png` を index.html に足し、SW のキャッシュとカーネルの版の対象に入れる
 
 ## v0.2.2 (2026-11-14)
 

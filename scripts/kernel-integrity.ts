@@ -44,7 +44,7 @@ export function kernelIntegrity(): Plugin {
       }
       // SW がキャッシュから返す固定物（入口・カーネル・アイコンなど）のどれかが変わったら版を変える。
       const parts: Uint8Array[] = [];
-      for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js", "build-worker.js"]) {
+      for (const name of ["index.html", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png", "regie.js", "regie-worker.js", "build-worker.js"]) {
         let data: Uint8Array;
         try {
           data = await Deno.readFile(`${outDir}/${name}`);
