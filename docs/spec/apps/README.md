@@ -32,7 +32,8 @@
 | `apps/cadre` の `sub.settings`（`cadre.settings`） | 設定 | `roles: ["settings"]`。ホームの選択、更新、デバッグ値、履歴 | [settings.md](settings.md) |
 | `apps/cadre` の `sub.apps`（`cadre.apps`） | アプリ | `roles: ["apps-manager"]`。提供リストとアプリの管理 | [app-manager.md](../app-manager.md) |
 
-[Filer](filer.md) は `bundled/filer/` に置く同梱のファイル管理アプリです。ドキュメントアプリ（`catalog/docs/`、ID `docs`。この `docs/` の仕様書を読む）は、同梱せず Binette の提供リストに載せます。デザイナーは [binette-apps](https://github.com/nozomi-hiragi/binette-apps) へ移し、`https://nozomi-hiragi.github.io/binette-apps/` で配布します（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。`catalog/` のアプリもルートの Deno workspace と `deno task check` の入口に含めます。提供リストのアプリなので、システムアプリの権限は持ちません。
+[Filer](filer.md) は `bundled/filer/` に置く同梱のファイル管理アプリです。デザイナーとドキュメントアプリ（ID `docs`。OS と同じ版の文書を GitHub から読む）は [binette-apps](https://github.com/nozomi-hiragi/binette-apps) に置き、固定 URL `https://nozomi-hiragi.github.io/binette-apps/` で配布します（[app-manager.md](../app-manager.md#binette-の既定の提供リスト)）。提供リストのアプリなので、システムアプリの権限は持ちません。
+
 ## 未決のこと
 
 - システムアプリに、ふつうのアプリより強い権限を持たせるか。今は、ホームと Cadre が `apps` を、Cadre が `cadre` を、設定アプリが `os` を受け取る（役割の割り当てで判断する）。ユーザーに許可を聞く権限の仕組みそのものが未決

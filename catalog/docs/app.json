@@ -1,8 +1,0 @@
-{
-  "id": "docs",
-  "version": "0.1.1",
-  "binette": "0.2",
-  "name": "ドキュメント",
-  "icon": "icon.svg",
-  "entry": { "css": "src/style.css", "as": "src/main.ts" }
-}

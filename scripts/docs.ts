@@ -1,5 +1,5 @@
 // Builds the Lume site of docs/ and the API reference at api/ for local reading.
-// GitHub Pages serves the OS instead (scripts/pages.ts); the docs are read in the bundled docs app.
+// GitHub Pages serves the OS instead (scripts/pages.ts); the docs app is distributed by binette-apps.
 
 /** Entry points of the API reference. */
 export const API_ENTRIES = [
