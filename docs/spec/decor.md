@@ -47,6 +47,15 @@ TS と AS のボタンに `.tip("名前")` と `.menu([menuItem("開く", open).
 - `.reserve(slot)` は、その部品が OS の枠だと宣言します（Cadre 用）。`slot` は置き場の名前 `tl`・`tc`・`tr`・`ml`・`mr`・`bl`・`bc`・`br`（`t`・`m`・`b` は上・中・下、`l`・`c`・`r` は左・中・右）です。知らない名前は指定なしにします。DOM では `data-bina-reserve` 属性になり、Scene がこの要素を測ってセーフエリアを決め、フルスクリーンのときに画面の外へすべらせます（[scene/shell.md](scene/shell.md#セーフエリアとフルスクリーン決定実装済み)）
 - `.safeArea()` は、その部品の内側に、CSS の変数 `--bina-safe-top`・`--bina-safe-right`・`--bina-safe-bottom`・`--bina-safe-left` の分の余白を `padding` に足します（クラス `bina-ui-safeArea`）。変数は Scene がアプリの表示先に置き、無ければ 0 です。いちばん外側の部品に付けると、中身が OS の枠に被りません。付けなければ UI がアプリの上に被ります（それで良い）
 
+### ドラッグ（決定。名前は案）
+
+`dropArea(children, onDrop)` は、中の部品をドラッグで動かせる入れ物です（子は縦に並ぶ）。中で `.draggable(name)` を付けた部品を押して 4px 以上動かすとドラッグになり、`.dropZone(name)` を付けた置き場のうちポインタにいちばん近いもの（中でなくてもよい）に吸い付きます。置き場の直下の子の draggable がその置き場の並びです。
+
+- ドラッグ中、部品はポインタについて動き（`translate`、クラス `bina-ui-dragging`）、吸い付く置き場に `bina-ui-drop-target`、入る位置の相手に `bina-ui-drop-before`（その前）か、並びの終わりなら最後の部品に `bina-ui-drop-after` を付けます。置き場の flex の向きが縦なら縦、ほかは横の位置で並びの何番目かを決めます
+- 離すと `onDrop` に `{"type":"drop","item":部品の名前,"zone":置き場の名前,"index":番号}` の JSON を渡します。番号は、その置き場の並び（動かした部品を除く）の何番目に入るかです。並べ直すのはアプリです。ドラッグの終わりのクリックは、部品を押したことにしません
+- ドラッグ中の Escape はドラッグをやめます。ドラッグしていないときの Escape は、置き場があるときだけ `{"type":"escape"}` を渡します（編集モードを抜けるのに使う）
+- DOM では `data-bina-drag`・`data-bina-drop` 属性です。マウスは主ボタンだけ、タッチとペンはそのまま使えます（ドラッグできる部品は `touch-action: none`）
+
 ### 端末のファイル選択
 
 `filePick(label, handler)` は端末のファイル選択ボタンです。Scene は直接のクリックから複数選択可能な `<input type="file" multiple>` を開き、選ばれたファイルを `{ "name": 名前, "data": Base64 }` の配列を表す JSON 文字列としてハンドラーに渡します。TS と AS の両方で使えます。

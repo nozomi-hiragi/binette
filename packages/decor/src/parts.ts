@@ -80,6 +80,10 @@ export class View {
   reserveValue: string = "";
   /** セーフエリアの余白を内側に足すか */
   safeAreaValue: boolean = false;
+  /** dropArea の中でドラッグできる部品の名前。"" はドラッグできない */
+  draggableValue: string = "";
+  /** dropArea の中で部品を落とせる置き場の名前。"" は置き場でない */
+  dropZoneValue: string = "";
   /** slider の値を受け取る */
   numberCallback: ((value: number) => void) | null = null;
   /** checkbox の新しい状態を受け取る */
@@ -171,6 +175,10 @@ export class View {
   reserve(slot: string): View { this.reserveValue = reserveSlots.includes(slot) ? slot : ""; return this; }
   /** 内側に OS のセーフエリアの分の余白を足す。いちばん外側の部品に付けると、OS の枠に被らない */
   safeArea(): View { this.safeAreaValue = true; return this; }
+  /** dropArea の中で、この部品をドラッグで動かせるようにする。name は落としたときにハンドラーへ届く名前 */
+  draggable(name: string): View { this.draggableValue = name; return this; }
+  /** dropArea の中で、この部品を、ドラッグした部品を落とせる置き場にする。直下の子の draggable が並びになる */
+  dropZone(name: string): View { this.dropZoneValue = name; return this; }
 }
 /** reserve に使える置き場の名前。t・m・b は上・中・下、l・c・r は左・中・右 */
 export const reserveSlots: Array<string> = ["tl", "tc", "tr", "ml", "mr", "bl", "bc", "br"];
@@ -199,6 +207,10 @@ export function markdown(source: string, onLink: (url: string) => void): View { 
 export function filePick(label: string, handler: (value: string) => void): View { const v = new View("filePick"); v.value = label; v.textCallback = handler; return v; }
 /** アプリのアイコンを描く。 */
 export function appIcon(index: number): View { const v = new View("appIcon"); v.appValue = index; return v; }
+/** 中の draggable の部品を、dropZone の置き場へドラッグで動かせる入れ物。子は縦に並ぶ。
+ * 落とすと onDrop に `{"type":"drop","item":名前,"zone":置き場,"index":番号}` の JSON を渡す。番号は、その置き場の並び（動かした部品を除く）の何番目に入るか。
+ * ドラッグ中でないときに Escape を押すと `{"type":"escape"}` を渡す */
+export function dropArea(children: Array<View>, onDrop: (value: string) => void): View { const v = new View("dropArea"); v.children = children; v.textCallback = onDrop; return v; }
 /** アプリの表示領域。カーネルがホームやほかのアプリをこの中に出す */
 export function appArea(): View { return new View("appArea"); }
 /** 部品の表示を切り替える。 */

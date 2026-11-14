@@ -1,8 +1,8 @@
 /** 宣言的 UI の部品と修飾（AssemblyScript）。共通の部品は parts.ts にあり、ここはハンドラーの包み方だけを持つ。 */
 import { View, UiCallback, column, row, grid, text, input, markdown, filePick, appIcon, appArea, show, Scale, space, radius, fontSize, Theme, ComponentTheme, theme, intString,
-  spacer, separator, stack, checkbox, slider, progress, spinner, image, listTile, chip, badge, choice } from "./parts.ts";
+  spacer, separator, stack, checkbox, slider, progress, spinner, image, listTile, chip, badge, choice, dropArea } from "./parts.ts";
 export { View, UiCallback, column, row, grid, text, input, markdown, filePick, appIcon, appArea, show, Scale, space, radius, fontSize, Theme, ComponentTheme, theme, intString,
-  spacer, separator, stack, checkbox, slider, progress, spinner, image, listTile, chip, badge };
+  spacer, separator, stack, checkbox, slider, progress, spinner, image, listTile, chip, badge, dropArea };
 
 class TypedUiCallback<T> extends UiCallback {
   constructor(private f: T) {

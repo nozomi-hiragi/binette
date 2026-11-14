@@ -2,7 +2,7 @@
 import { View, UiCallback } from "jsr:@binette/decor/as";
 import { application, jsonString, setRebuild } from "jsr:@binette/replique-app@^0.1";
 export { View, column, row, text, button, buttonOf, input, markdown, filePick, grid, appIcon, appArea, show, theme, space, radius, fontSize, Theme, Scale, ComponentTheme,
-  spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem } from "jsr:@binette/decor/as";
+  spacer, separator, stack, checkbox, radio, slider, picker, segmented, tabs, progress, spinner, image, listTile, chip, badge, menuItem, dropArea } from "jsr:@binette/decor/as";
 
 /** この機能が要求するホスト ABI の版。各 external の module 名とテストで一致を確かめる */
 export const ABI_VERSION = "0.1";
@@ -48,7 +48,8 @@ function serializeView(view: View): string {
     ',"height":' + view.heightValue.toString() + ',"minHeight":' + view.minHeightValue.toString() + ',"wrap":' + (view.wrapValue ? "true" : "false") + ',"highlight":' + (view.highlightValue ? "true" : "false") + ',"tip":' + jsonString(view.tipValue) +
     ',"checked":' + (view.checkedValue ? "true" : "false") + ',"value":' + view.numberValue.toString() + ',"min":' + view.minValue.toString() +
     ',"max":' + view.maxValue.toString() + ',"step":' + view.stepValue.toString() + ',"options":' + options + ',"index":' + view.indexValue.toString() +
-    ',"align":' + jsonString(view.alignValue) + ',"reserve":' + jsonString(view.reserveValue) + ',"safeArea":' + (view.safeAreaValue ? "true" : "false") + '}';
+    ',"align":' + jsonString(view.alignValue) + ',"reserve":' + jsonString(view.reserveValue) + ',"safeArea":' + (view.safeAreaValue ? "true" : "false") +
+    ',"draggable":' + jsonString(view.draggableValue) + ',"dropZone":' + jsonString(view.dropZoneValue) + '}';
 }
 
 export function rebuild(): void {

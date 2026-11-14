@@ -278,6 +278,14 @@ export const uiCss = `
 :where(.bina-ui-fill) { flex: 1 1 0; min-height: 0; align-self: stretch; }
 :where(.bina-ui-row > .bina-ui-fill) { flex: 0 1 auto; }
 /* OS の枠の分の余白。部品の padding に足す。変数は Scene が表示先に置き、無ければ 0 */
+:where(.bina-ui-dropArea) { display: flex; flex-direction: column; position: relative; min-height: 0; }
+:where(.bina-ui-dropArea [data-bina-drag]) { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+:where(.bina-ui-dragging) { position: relative; z-index: 10; cursor: grabbing; opacity: 0.85; pointer-events: none; }
+:where(.bina-ui-drop-target) { outline: 2px solid ${colors.accent}; outline-offset: 2px; }
+:where(.bina-ui-drop-before) { box-shadow: -3px 0 0 0 ${colors.accent}; }
+:where(.bina-ui-drop-after) { box-shadow: 3px 0 0 0 ${colors.accent}; }
+:where([data-bina-drop-axis="vertical"] > .bina-ui-drop-before) { box-shadow: 0 -3px 0 0 ${colors.accent}; }
+:where([data-bina-drop-axis="vertical"] > .bina-ui-drop-after) { box-shadow: 0 3px 0 0 ${colors.accent}; }
 :where(.bina-ui-safeArea) { box-sizing: border-box; padding: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-top, 0px)) calc(var(--bina-ui-padding, 0px) + var(--bina-safe-right, 0px)) calc(var(--bina-ui-padding, 0px) + var(--bina-safe-bottom, 0px)) calc(var(--bina-ui-padding, 0px) + var(--bina-safe-left, 0px)); }
 :where(.bina-ui-grow) { flex-grow: 1; }
 :where(.bina-ui-button) { font: inherit; font-size: ${componentLength("button", "font-size", "font-size", "1em")}; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: ${componentLength("button", "radius", "radius", "var(--bina-ui-button-radius, 8px)")}; cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
@@ -353,6 +361,122 @@ function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: b
   // 枠の置き場は Scene が測ってセーフエリアにする。知らない名前は枠にしない
   setAttribute(node, "data-bina-reserve", op.reserve !== undefined && reserveSlots.includes(op.reserve) ? op.reserve : null);
   setClass(node, "bina-ui-safeArea", op.safeArea === true);
+  setAttribute(node, "data-bina-drag", op.draggable ? op.draggable : null);
+  setAttribute(node, "data-bina-drop", op.dropZone ? op.dropZone : null);
+}
+
+/** ポインタを動かしたと見なす距離（px）。これより短ければ押しただけ */
+const DRAG_THRESHOLD = 4;
+/** 点から箱までの距離。中なら 0 */
+function boxDistance(box: DOMRect, x: number, y: number): number {
+  const dx = x < box.left ? box.left - x : x > box.right ? x - box.right : 0;
+  const dy = y < box.top ? box.top - y : y > box.bottom ? y - box.bottom : 0;
+  return Math.hypot(dx, dy);
+}
+/**
+ * dropArea のドラッグ。中の [data-bina-drag] を押して動かすと、ポインタにいちばん近い [data-bina-drop] を強調し、入る位置（前か後ろか）に印を付ける。
+ * 離すと {type:"drop", item, zone, index} を、ドラッグ中でないときの Escape は（置き場があるときだけ）{type:"escape"} を send に渡す。戻り値は片付け
+ */
+function mountDrag(area: HTMLElement, send: (value: string) => void): () => void {
+  const document = area.ownerDocument;
+  const window = document.defaultView!;
+  type Drag = { item: HTMLElement; name: string; pointer: number; x: number; y: number; active: boolean; zone: HTMLElement | undefined; index: number };
+  let drag: Drag | undefined;
+  let suppressClick = false;
+  const own = (node: Element) => node.closest(".bina-ui-dropArea") === area;
+  const zones = () => [...area.querySelectorAll<HTMLElement>("[data-bina-drop]")].filter(zone => own(zone) && !zone.closest("[hidden]"));
+  const itemsOf = (zone: HTMLElement, except: HTMLElement) =>
+    ([...zone.children] as HTMLElement[]).filter(child => child !== except && child.hasAttribute("data-bina-drag") && !child.hidden);
+  const marks = ["bina-ui-drop-target", "bina-ui-drop-before", "bina-ui-drop-after"];
+  const unmark = () => {
+    for (const name of marks) for (const node of [...area.querySelectorAll(`.${name}`)]) node.classList.remove(name);
+    for (const node of [...area.querySelectorAll("[data-bina-drop-index]")]) { node.removeAttribute("data-bina-drop-index"); node.removeAttribute("data-bina-drop-axis"); }
+  };
+  /** ポインタの位置から、吸い付く置き場と、その並びの何番目に入るかを決めて印を付ける */
+  const target = (current: Drag, x: number, y: number) => {
+    let best: HTMLElement | undefined;
+    let bestDistance = Infinity;
+    for (const zone of zones()) {
+      const distance = boxDistance(zone.getBoundingClientRect(), x, y);
+      if (distance < bestDistance) { best = zone; bestDistance = distance; }
+    }
+    unmark();
+    current.zone = best;
+    current.index = 0;
+    if (!best) return;
+    const vertical = (window.getComputedStyle(best).flexDirection ?? "").startsWith("column");
+    const items = itemsOf(best, current.item);
+    current.index = items.filter(item => { const box = item.getBoundingClientRect(); return vertical ? (box.top + box.bottom) / 2 < y : (box.left + box.right) / 2 < x; }).length;
+    best.classList.add("bina-ui-drop-target");
+    best.setAttribute("data-bina-drop-index", String(current.index));
+    best.setAttribute("data-bina-drop-axis", vertical ? "vertical" : "horizontal");
+    if (current.index < items.length) items[current.index]!.classList.add("bina-ui-drop-before");
+    else if (items.length > 0) items[items.length - 1]!.classList.add("bina-ui-drop-after");
+  };
+  const finish = () => {
+    if (!drag) return;
+    drag.item.classList.remove("bina-ui-dragging");
+    drag.item.style.removeProperty("translate");
+    area.classList.remove("bina-ui-dragging-within");
+    unmark();
+    drag = undefined;
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.removeEventListener("pointercancel", cancel);
+  };
+  function move(event: PointerEvent): void {
+    const current = drag;
+    if (!current || event.pointerId !== current.pointer) return;
+    const dx = event.clientX - current.x, dy = event.clientY - current.y;
+    if (!current.active) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      current.active = true;
+      current.item.classList.add("bina-ui-dragging");
+      area.classList.add("bina-ui-dragging-within");
+    }
+    event.preventDefault();
+    current.item.style.setProperty("translate", `${dx}px ${dy}px`);
+    target(current, event.clientX, event.clientY);
+  }
+  function up(event: PointerEvent): void {
+    const current = drag;
+    if (!current || event.pointerId !== current.pointer) return;
+    if (current.active) {
+      target(current, event.clientX, event.clientY);
+      const zone = current.zone?.getAttribute("data-bina-drop");
+      // 押しただけでないので、続くクリックで部品を押したことにしない
+      suppressClick = true;
+      window.setTimeout(() => { suppressClick = false; }, 0);
+      if (zone !== undefined && zone !== null) send(JSON.stringify({ type: "drop", item: current.name, zone, index: current.index }));
+    }
+    finish();
+  }
+  function cancel(event: PointerEvent): void { if (drag && event.pointerId === drag.pointer) finish(); }
+  const down = (event: PointerEvent) => {
+    suppressClick = false;
+    if (drag || (event.pointerType === "mouse" && event.button !== 0)) return;
+    const item = (event.target as Element | null)?.closest?.("[data-bina-drag]") as HTMLElement | null | undefined;
+    if (!item || !own(item) || !area.contains(item)) return;
+    drag = { item, name: item.getAttribute("data-bina-drag") ?? "", pointer: event.pointerId, x: event.clientX, y: event.clientY, active: false, zone: undefined, index: 0 };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", cancel);
+  };
+  const click = (event: Event) => { if (suppressClick) { suppressClick = false; event.preventDefault(); event.stopPropagation(); } };
+  const key = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || !area.isConnected) return;
+    if (drag) { const active = drag.active; finish(); if (active) { event.preventDefault(); return; } }
+    if (zones().length > 0) send(JSON.stringify({ type: "escape" }));
+  };
+  area.addEventListener("pointerdown", down);
+  area.addEventListener("click", click, true);
+  document.addEventListener("keydown", key);
+  return () => {
+    finish();
+    area.removeEventListener("pointerdown", down);
+    area.removeEventListener("click", click, true);
+    document.removeEventListener("keydown", key);
+  };
 }
 
 /** スライダーの塗る長さ。WebKit 系の track は進んだ部分を持たないので、割合を変数で渡す */
@@ -492,6 +616,11 @@ export function createUiDom(element: HTMLElement, process: UiEvents, options: Ui
           });
         }
         if (tag === "img") node.setAttribute("alt", "");
+        if (kind === "dropArea") {
+          const stopDrag = mountDrag(node, value => { if (uiNodes.get(op.handle) === entry && entry.clickable && entry.enabled) process.dispatchUiText(op.handle, value, 0); });
+          const previous = entry.remove;
+          entry.remove = () => { previous(); stopDrag(); };
+        }
         if (kind === "checkbox" || kind === "radio" || kind === "slider") {
           const field = node as HTMLInputElement;
           field.setAttribute("type", kind === "slider" ? "range" : kind);
