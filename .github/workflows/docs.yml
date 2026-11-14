@@ -1,7 +1,7 @@
 # main と v で始まるブランチを GitHub Pages にまとめて出す。
-# pages タスクのあるブランチは動く OS を <ブランチ>/ に、API ドキュメントを api/<ブランチ>/ に、
-# 既定の提供リストを apps/<ブランチ>/ に出す（どちらも OS の Service Worker の範囲の外）。
-# それ以外のブランチは API ドキュメントを <ブランチ>/ に出す。
+# 直下に紹介ページ（landing/）、pages タスクのあるブランチは動く OS を <ブランチ>/ に、
+# 全ブランチの API ドキュメントを docs/api/<ブランチ>/ に、ドキュメントの入口を docs/ に出す。
+# （API ドキュメントは OS の Service Worker の範囲の外）。
 # どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
 name: Docs
 
@@ -41,49 +41,48 @@ jobs:
       - name: Build docs for each branch
         run: |
           mkdir -p "$RUNNER_TEMP/site"
-          links=""
+          doc_links=""
+          other_pages_branches=""
           for branch in $(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -E '^(main|v.*)$' | sort -r); do
             dir="$RUNNER_TEMP/src/$branch"
             git worktree add --detach "$dir" "origin/$branch"
             if [ -f "$dir/typedoc.json" ]; then
-              (cd "$dir" && npm ci && npm run docs -- --out "$RUNNER_TEMP/site/$branch")
-              label="$branch"
-              [ "$branch" = main ] && label="main（現行）"
-              links="$links<li><a href=\"./$branch/\">$label</a></li>"
+              mkdir -p "$RUNNER_TEMP/site/docs/api/$branch"
+              (cd "$dir" && npm ci && npm run docs -- --out "$RUNNER_TEMP/site/docs/api/$branch")
             elif [ -f "$dir/deno.json" ]; then
               (
                 cd "$dir"
                 if grep -q '"pages":' deno.json; then
-                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/api/$branch" \
-                    BINETTE_PAGES_APPS_OUT="$RUNNER_TEMP/site/apps/$branch" BINETTE_PAGES_BRANCH="$branch" deno task pages
+                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/docs/api/$branch" \
+                    BINETTE_PAGES_BRANCH="$branch" deno task pages
                 elif [ -f _config.ts ]; then
-                  BINETTE_DOCS_OUT="$RUNNER_TEMP/site/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
+                  BINETTE_DOCS_OUT="$RUNNER_TEMP/site/docs/api/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
                 else
                   entries=(packages/core/src/index.ts packages/regie/src/index.ts packages/scene/src/index.ts packages/coulisses/src/index.ts)
                   [ ! -f packages/decor/src/index.ts ] || entries+=(packages/decor/src/index.ts)
                   [ ! -f packages/regie/src/build.ts ] || entries+=(packages/regie/src/build.ts)
                   [ ! -f packages/regie/src/cli.ts ] || entries+=(packages/regie/src/cli.ts)
-                  deno doc --html --name=Binette --output="$RUNNER_TEMP/site/$branch" "${entries[@]}"
+                  deno doc --html --name=Binette --output="$RUNNER_TEMP/site/docs/api/$branch" "${entries[@]}"
                 fi
               )
-              label="$branch"
-              [ "$branch" = main ] && label="main（現行）"
               if grep -q '"pages":' "$dir/deno.json" 2>/dev/null; then
-                apps=""
-                [ ! -f "$RUNNER_TEMP/site/apps/$branch/apps.json" ] || apps=" · <a href=\"./apps/$branch/\">提供リスト</a>"
-                links="$links<li><a href=\"./$branch/\">$label（Binette を開く）</a> · <a href=\"./api/$branch/\">API</a>$apps</li>"
-              else
-                links="$links<li><a href=\"./$branch/\">$label（API ドキュメント）</a></li>"
+                if [ "$branch" != main ]; then
+                  other_pages_branches="$other_pages_branches $branch"
+                fi
               fi
             fi
+            label="$branch の API"
+            [ "$branch" = main ] && label="main（リリース版）の API"
+            doc_links="$doc_links<li><a href=\"./api/$branch/\">$label</a></li>"
           done
-          cat > "$RUNNER_TEMP/site/index.html" <<HTML
+          mkdir -p "$RUNNER_TEMP/site/docs"
+          cat > "$RUNNER_TEMP/site/docs/index.html" <<HTML
           <!doctype html>
           <html lang="ja">
           <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
-          <title>Binette</title>
+          <title>Binette ドキュメント</title>
           <style>
           :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
           body { max-width: 40rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.6; }
@@ -92,13 +91,41 @@ jobs:
           </style>
           </head>
           <body>
-          <h1>Binette</h1>
-          <p>ブランチごとの Binette と API ドキュメントです。v0.2 からは、仕様書は Binette の中の「ドキュメント」アプリで読めます。</p>
-          <ul>$links</ul>
-          <p><a href="https://github.com/nozomi-hiragi/binette">GitHub</a></p>
+          <h1>Binette ドキュメント</h1>
+          <p>ブランチごとの API ドキュメントです。</p>
+          <ul>$doc_links</ul>
+          <p><a href="../">トップへ</a> · <a href="https://github.com/nozomi-hiragi/binette">GitHub</a></p>
           </body>
           </html>
           HTML
+          landing_branch=""
+          if [ -d "$RUNNER_TEMP/src/main/landing" ]; then
+            landing_branch="main"
+          else
+            for d in $(ls -d "$RUNNER_TEMP"/src/v*/landing 2>/dev/null | sort -V); do
+              landing_branch=$(basename "$(dirname "$d")")
+            done
+          fi
+          if [ -n "$landing_branch" ]; then
+            cp -R "$RUNNER_TEMP/src/$landing_branch/landing/"* "$RUNNER_TEMP/site/"
+            version="v$(jq -r .version "$RUNNER_TEMP/src/$landing_branch/packages/core/deno.json")"
+            version_links=""
+            for b in $(echo "$other_pages_branches" | tr ' ' '\n' | sort -rV); do
+              [ -n "$b" ] || continue
+              version_links="$version_links<li><a href=\"./$b/\">$b（開発版）</a></li>"
+            done
+            deno eval '
+              const file = Deno.args[0];
+              const ver = Deno.args[1];
+              const versions = Deno.args[2];
+              let content = Deno.readTextFileSync(file);
+              content = content.replaceAll("{{version}}", ver);
+              content = content.replace("<!-- versions -->", versions);
+              Deno.writeTextFileSync(file, content);
+            ' "$RUNNER_TEMP/site/index.html" "$version" "$version_links"
+          else
+            echo "::warning::landing/ が見つかりませんでした。紹介ページは配置しません。"
+          fi
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: ${{ runner.temp }}/site
