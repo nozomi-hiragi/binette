@@ -42,6 +42,13 @@ deno run -A packages/regie/src/cli.ts build bundled/filer --out .binapp/filer.bi
 deno run -A packages/regie/src/cli.ts integrity bundled/filer --replique packages/replique
 ```
 
+## CI（`.github/workflows/ci.yml`）
+
+- CI は `main` か `v*` に向けた PR のときだけ動きます。`main` や `v*` へのマージ後の push では、同じ確認を繰り返さないために動かしません。手で動かすときは Actions の画面から実行します（`workflow_dispatch`）
+- リリースでは、`v*` から `main` への PR で CI が動き、マージ後に公開ワークフローが同じ確認をもう一度してから公開します
+- それ以外のブランチに向けた PR では動きません。小さい直しが続くときは、まとめ用のブランチに集め（ここへの PR では CI は動きません）、まとめて `v*` に入れる PR で 1 回だけ CI を通します
+- PR の向き先をあとから `v*` に変えただけでは CI は動きません。push するか、Actions の画面から PR のブランチで実行してください
+
 ## バージョンの決め方
 
 パッケージのバージョン `X.Y.Z` は仕様書の版と揃えます。
