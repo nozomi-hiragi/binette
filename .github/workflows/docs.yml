@@ -71,9 +71,9 @@ jobs:
                 fi
               fi
             fi
-            label="$branch の API"
+            label="${branch} の API"
             [ "$branch" = main ] && label="main（リリース版）の API"
-            doc_links="$doc_links<li><a href=\"./api/$branch/\">$label</a></li>"
+            doc_links="$doc_links<li><a href=\"./api/${branch}/\">${label}</a></li>"
           done
           mkdir -p "$RUNNER_TEMP/site/docs"
           cat > "$RUNNER_TEMP/site/docs/index.html" <<HTML
@@ -112,7 +112,7 @@ jobs:
             version_links=""
             for b in $(echo "$other_pages_branches" | tr ' ' '\n' | sort -rV); do
               [ -n "$b" ] || continue
-              version_links="$version_links<li><a href=\"./$b/\">$b（開発版）</a></li>"
+              version_links="$version_links<li><a href=\"./${b}/\">${b}（開発版）</a></li>"
             done
             deno eval '
               const file = Deno.args[0];
