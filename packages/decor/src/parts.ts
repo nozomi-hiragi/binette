@@ -76,6 +76,10 @@ export class View {
   indexValue: number = -1;
   /** stack などの中での自分の位置の名前。"" は既定 */
   alignValue: string = "";
+  /** 枠の宣言。"" は指定なし */
+  reserveValue: string = "";
+  /** セーフエリアの余白を内側に足すか */
+  safeAreaValue: boolean = false;
   /** slider の値を受け取る */
   numberCallback: ((value: number) => void) | null = null;
   /** checkbox の新しい状態を受け取る */
@@ -162,6 +166,10 @@ export class View {
   /** stack の中での位置を選ぶ（"topStart"・"top"・"topEnd"・"start"・"center"・"end"・"bottomStart"・"bottom"・"bottomEnd"）。
    * column の中では横、row の中では縦の成分だけが効く。知らない名前は既定に戻す */
   align(name: string): View { this.alignValue = alignments.includes(name) ? name : ""; return this; }
+  /** 枠であることを宣言する */
+  reserve(sideOrSlot: string): View { this.reserveValue = sideOrSlot; return this; }
+  /** OS のセーフエリア分の余白を内側に足す */
+  safeArea(): View { this.safeAreaValue = true; return this; }
 }
 /** align に使える名前（位置） */
 export const alignments: Array<string> = ["topStart", "top", "topEnd", "start", "center", "end", "bottomStart", "bottom", "bottomEnd"];

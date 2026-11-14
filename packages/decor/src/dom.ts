@@ -273,6 +273,7 @@ export const uiCss = `
 :where(textarea.bina-ui-input) { resize: vertical; }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-grid, .bina-ui-listTile) { gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input, .bina-ui-stack, .bina-ui-listTile, .bina-ui-chip, .bina-ui-badge) { padding: var(--bina-ui-padding, 0px); }
+:where(.bina-ui-safe-area) { padding-top: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-top, 0px)); padding-right: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-right, 0px)); padding-bottom: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-bottom, 0px)); padding-left: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-left, 0px)); }
 :where(.bina-ui-button) { padding: var(--bina-ui-padding, ${componentLength("button", "padding", "space", "0px")}); }
 :where(.bina-ui-input) { padding: var(--bina-ui-padding, ${inputPadding}); }
 :where(.bina-ui-fill) { flex: 1 1 0; min-height: 0; align-self: stretch; }
@@ -348,6 +349,9 @@ function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: b
   setAttribute(node, "aria-checked", toggle ? String(op.toggle) : null);
   setAttribute(node, "placeholder", node.classList.contains("bina-ui-input") && op.placeholder ? op.placeholder : null);
   for (const name of alignments) setClass(node, `bina-ui-align-${name}`, op.align === name);
+  setClass(node, "bina-ui-reserve", Boolean(op.reserve));
+  setAttribute(node, "data-bina-reserve", op.reserve ?? null);
+  setClass(node, "bina-ui-safe-area", op.safeArea === true);
 }
 
 /** スライダーの塗る長さ。WebKit 系の track は進んだ部分を持たないので、割合を変数で渡す */

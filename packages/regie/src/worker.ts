@@ -19,6 +19,7 @@ export interface WorkerScope {
 export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = createUiDiffer): void {
   let exited = false;
   let instance: WebAssembly.Instance | undefined;
+  let safeArea = { top: 0, right: 0, bottom: 0, left: 0 };
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
   let manager: ManagerSnapshot | undefined;
@@ -596,6 +597,11 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "lastKind": () => last.reason.kind,
       "lastCause": () => last.reason.cause,
       "finish": () => scope.postMessage({ type: "finish" }),
+      "fullscreen": (on: number) => scope.postMessage({ type: "app.fullscreen", on: on !== 0 }),
+      "safeAreaTop": () => safeArea.top,
+      "safeAreaRight": () => safeArea.right,
+      "safeAreaBottom": () => safeArea.bottom,
+      "safeAreaLeft": () => safeArea.left,
     },
     [HOST_ABI.ui.module]: {
       "render": (ptr: number) => renderUi(readString(ptr)),
@@ -654,6 +660,22 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       const callback = instance?.exports.__bina_net;
       if (typeof callback === "function") { try { callback(data.id!); flush(); } catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); } }
       netResults.delete(data.id!);
+      return;
+    }
+    if (data.type === "safeArea") {
+      const area = (data as unknown as { safeArea?: { top: number; right: number; bottom: number; left: number } }).safeArea;
+      if (area) {
+        safeArea = area;
+        const callback = instance?.exports.__bina_safe_area;
+        if (typeof callback === "function") {
+          try {
+            (callback as CallableFunction)(safeArea.top, safeArea.right, safeArea.bottom, safeArea.left);
+            flush();
+          } catch (error) {
+            ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true });
+          }
+        }
+      }
       return;
     }
     if (data.type === "shares.result") {

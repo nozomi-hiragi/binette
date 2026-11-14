@@ -161,6 +161,7 @@ export interface CadreSnapshot {
   homeFront: boolean;
   installed: boolean;
   installBusy: boolean;
+  fullscreen?: boolean;
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
@@ -176,6 +177,7 @@ export interface RegieWorker {
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
   net?: boolean;
+  onFullscreen?: (on: boolean) => void;
   netState?: NetSnapshot;
   onNetAllow?: (action: string, url: string) => void;
   onNetDo?: (action: string, appId: string, url: string) => void;
@@ -285,6 +287,7 @@ export interface RegieApp {
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
   syncSchedule?(snapshot: ScheduleSnapshot): void;
+  setSafeArea?(area: { top: number; right: number; bottom: number; left: number }): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -423,6 +426,11 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               try { worker.postMessage({ type: "apps.sync", id, appsInfo: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
+            setSafeArea(area) {
+              if (stopped) return;
+              try { worker.postMessage({ type: "safeArea", safeArea: area }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
             syncCadre(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
@@ -442,6 +450,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           exit(error);
           break;
         }
+        case "app.fullscreen": options.onFullscreen?.(data.on as boolean); break;
         case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": openings.push(data.i!); break;
         case "apps.install": options.onAppsInstall?.(); break;

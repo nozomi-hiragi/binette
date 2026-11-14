@@ -14,6 +14,7 @@ export type DomOp =
   | { op: "ui-update"; base?: string; anchor?: string; theme?: string; handle: number; text: string; padding: number | null; gap: number | null; grow: boolean; label: string | null; enabled: boolean; clickable: boolean; inputVersion?: number; key?: string; minWidth?: number | null; heading?: number; list?: boolean; listItem?: boolean; shown?: boolean; app?: number | null;
       /** 見た目の修飾。省略は既定を表す */
       variant?: string; tone?: string; surface?: string; divider?: string; mono?: boolean; small?: boolean; bold?: boolean; truncate?: boolean; width?: number; center?: boolean; selected?: boolean; toggle?: boolean; scroll?: boolean; fill?: boolean; collapse?: boolean; placeholder?: string; height?: number; minHeight?: number; wrap?: boolean; highlight?: boolean; tip?: string;
+      reserve?: string; safeArea?: boolean;
       /** 部品の値。その部品のときだけ載せる。checked は checkbox・radio、value は slider・progress、min・max・step は slider、options・index は picker・segmented・tabs */
       checked?: boolean; value?: number; min?: number; max?: number; step?: number; options?: string[]; index?: number;
       /** stack などの中での位置の名前。省略は既定 */

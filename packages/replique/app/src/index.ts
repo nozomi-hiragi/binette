@@ -24,6 +24,13 @@ export class Api {
   sub(): string { return subImport(); }
   /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
   why(key: string): Why { return whyImport(key); }
+  /** フルスクリーンの切り替えを要求する */
+  fullscreen(on: bool): void { fullscreenImport(on); }
+  /** 今のセーフエリア（上下左右の余白 px）を返す */
+  safeArea(): SafeArea {
+    if (currentSafeArea !== null) return currentSafeArea!;
+    return new SafeArea(safeAreaTopImport(), safeAreaRightImport(), safeAreaBottomImport(), safeAreaLeftImport());
+  }
 }
 
 /** インスタンスの状態。None は前の記録が無いことを表す */
@@ -56,6 +63,33 @@ declare function lastCauseImport(): DestroyCause;
 // @ts-ignore: decorator
 @external("binette:app@0.1", "finish")
 declare function finishImport(): void;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "fullscreen")
+declare function fullscreenImport(on: bool): void;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaTop")
+declare function safeAreaTopImport(): i32;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaRight")
+declare function safeAreaRightImport(): i32;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaBottom")
+declare function safeAreaBottomImport(): i32;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaLeft")
+declare function safeAreaLeftImport(): i32;
+
+/** OS の表示枠を除いた安全な表示領域の余白（px） */
+export class SafeArea {
+  constructor(readonly top: i32, readonly right: i32, readonly bottom: i32, readonly left: i32) {}
+}
+
+let currentSafeArea: SafeArea | null = null;
+
+export function __bina_safe_area(top: i32, right: i32, bottom: i32, left: i32): void {
+  currentSafeArea = new SafeArea(top, right, bottom, left);
+  rebuild();
+}
 
 export function jsonString(value: string): string {
   let result = '\"';
@@ -160,6 +194,11 @@ export class App {
   onDestroy(_reason: DestroyReason): void {}
   get page(): string { return pageImport(); }
   finish(): void { finishImport(); }
+  fullscreen(on: bool): void { fullscreenImport(on); }
+  safeArea(): SafeArea {
+    if (currentSafeArea !== null) return currentSafeArea!;
+    return new SafeArea(safeAreaTopImport(), safeAreaRightImport(), safeAreaBottomImport(), safeAreaLeftImport());
+  }
 }
 
 // グローバルで持ち、アプリを GC から守る
