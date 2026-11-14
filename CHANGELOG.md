@@ -4,6 +4,7 @@
 
 - ドキュメントアプリを binette-apps に移し、`catalog/docs`・`scripts/docs-app.ts`・`deno task docs:app` を削除する
 - Binette 自身の提供リスト `apps/<ブランチ>/` と生成スクリプト `scripts/catalog.ts` を削除する。GitHub Pages の既定の提供リストは `https://nozomi-hiragi.github.io/binette-apps/` だけにする
+- ホームバーの時計の時刻がボタンの左に寄り、押せる範囲が右に広がっていたのを直す。時刻をボタンの中央に置き、未開封数のバッジは時刻の数字に重ねず右に出す
 
 ## v0.2.1 (2026-11-14)
 
