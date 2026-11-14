@@ -48,6 +48,9 @@ deno run -A packages/regie/src/cli.ts integrity bundled/filer --replique package
 - リリースでは、`v*` から `main` への PR で CI が動き、マージ後に公開ワークフローが同じ確認をもう一度してから公開します
 - それ以外のブランチに向けた PR では動きません。小さい直しが続くときは、まとめ用のブランチに集め（ここへの PR では CI は動きません）、まとめて `v*` に入れる PR で 1 回だけ CI を通します
 - PR の向き先をあとから `v*` に変えただけでは CI は動きません。push するか、Actions の画面から PR のブランチで実行してください
+- `v*` に向けた PR では、変更に関係するテストだけを走らせます（`scripts/affected-tests.ts`）。テストファイルの import の木に入っているファイルの変更はそのテストを、実行時に読まれる Réplique・アプリ・`public/` の変更はそれを読むテストを選びます。文書と Pages だけの変更ではテストを走らせません。どの規則にも当たらない変更（設定やロックファイルなど）では全テストを走らせます。型検査・lint・check-pack・公開の予行は毎回動きます
+- `main` に向けた PR（リリース）と手動実行では、全テストを走らせます
+- テストが新しく実行時にファイルを読むようになったら、`scripts/affected-tests.ts` の `RUNTIME_SOURCES` と `RUNTIME_READERS` を見直してください
 
 ## バージョンの決め方
 
