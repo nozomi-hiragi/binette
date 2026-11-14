@@ -1,6 +1,8 @@
 # main と v で始まるブランチを GitHub Pages にまとめて出す。
-# 直下に紹介ページ（landing/）、pages タスクのあるブランチは動く OS を <ブランチ>/ に、
+# 直下に紹介ページ（landing/）、main の動く OS を live/ に、
 # 全ブランチの API ドキュメントを docs/api/<ブランチ>/ に、ドキュメントの入口を docs/ に出す。
+# 開発中のブランチの OS は出さない。同じオリジンの OS は保存領域と Service Worker のキャッシュを共有するので、
+# カーネルの版が違う OS を並べると互いに壊す。
 # （API ドキュメントは OS の Service Worker の範囲の外）。
 # どのブランチから動いても全ブランチを作り直すので、ほかのブランチの分は消えない。
 name: Docs
@@ -42,7 +44,6 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/site"
           doc_links=""
-          other_pages_branches=""
           for branch in $(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | grep -E '^(main|v.*)$' | sort -r); do
             dir="$RUNNER_TEMP/src/$branch"
             git worktree add --detach "$dir" "origin/$branch"
@@ -52,9 +53,13 @@ jobs:
             elif [ -f "$dir/deno.json" ]; then
               (
                 cd "$dir"
-                if grep -q '"pages":' deno.json; then
-                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/$branch" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/docs/api/$branch" \
+                if grep -q '"pages":' deno.json && [ "$branch" = main ]; then
+                  BINETTE_PAGES_OUT="$RUNNER_TEMP/site/live" BINETTE_PAGES_API_OUT="$RUNNER_TEMP/site/docs/api/$branch" \
                     BINETTE_PAGES_BRANCH="$branch" deno task pages
+                elif grep -q '"pages":' deno.json; then
+                  # 開発中のブランチは API ドキュメントだけ作る
+                  BINETTE_API_OUT="$RUNNER_TEMP/site/docs/api/$branch" \
+                    deno eval 'const { api } = await import("./scripts/docs.ts"); await api(Deno.env.get("BINETTE_API_OUT"));'
                 elif [ -f _config.ts ]; then
                   BINETTE_DOCS_OUT="$RUNNER_TEMP/site/docs/api/$branch" BINETTE_DOCS_BRANCH="$branch" deno task docs
                 else
@@ -65,11 +70,6 @@ jobs:
                   deno doc --html --name=Binette --output="$RUNNER_TEMP/site/docs/api/$branch" "${entries[@]}"
                 fi
               )
-              if grep -q '"pages":' "$dir/deno.json" 2>/dev/null; then
-                if [ "$branch" != main ]; then
-                  other_pages_branches="$other_pages_branches $branch"
-                fi
-              fi
             fi
             label="${branch} の API"
             [ "$branch" = main ] && label="main（リリース版）の API"
@@ -109,20 +109,13 @@ jobs:
           if [ -n "$landing_branch" ]; then
             cp -R "$RUNNER_TEMP/src/$landing_branch/landing/"* "$RUNNER_TEMP/site/"
             version="v$(jq -r .version "$RUNNER_TEMP/src/$landing_branch/packages/core/deno.json")"
-            version_links=""
-            for b in $(echo "$other_pages_branches" | tr ' ' '\n' | sort -rV); do
-              [ -n "$b" ] || continue
-              version_links="$version_links<li><a href=\"./${b}/\">${b}（開発版）</a></li>"
-            done
             deno eval '
               const file = Deno.args[0];
               const ver = Deno.args[1];
-              const versions = Deno.args[2];
               let content = Deno.readTextFileSync(file);
               content = content.replaceAll("{{version}}", ver);
-              content = content.replace("<!-- versions -->", versions);
               Deno.writeTextFileSync(file, content);
-            ' "$RUNNER_TEMP/site/index.html" "$version" "$version_links"
+            ' "$RUNNER_TEMP/site/index.html" "$version"
           else
             echo "::warning::landing/ が見つかりませんでした。紹介ページは配置しません。"
           fi
