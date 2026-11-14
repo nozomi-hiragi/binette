@@ -1,5 +1,5 @@
 // Builds the OS and API reference for this branch on GitHub Pages.
-// The API reference stays outside the OS folder because the service worker serves the OS page for navigation.
+// The API reference stays in docs/api (outside the OS folder) because the service worker serves the OS page for navigation.
 // The docs app is distributed by binette-apps; `deno task docs` builds the Lume site locally.
 import { copy } from "@std/fs";
 import { api, run } from "./docs.ts";
@@ -27,7 +27,7 @@ function currentCommit(): Promise<string> {
 }
 
 const output = Deno.env.get("BINETTE_PAGES_OUT") || "pages/os";
-const apiOutput = Deno.env.get("BINETTE_PAGES_API_OUT") || "pages/api";
+const apiOutput = Deno.env.get("BINETTE_PAGES_API_OUT") || "pages/docs/api";
 const branch = await currentBranch();
 const commit = await currentCommit();
 Deno.env.set("BINETTE_BUILD_REF", branch);
