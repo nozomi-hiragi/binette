@@ -8,6 +8,11 @@ on:
     branches: [main, "v*"]
   workflow_dispatch:
 
+# A new push to the same PR cancels the run for the previous head
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
