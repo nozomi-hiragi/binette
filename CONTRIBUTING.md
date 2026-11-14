@@ -9,7 +9,7 @@ deno task check          # 全パッケージの型検査（replique は asc で
 deno task build          # dist に静的フロントを書き出す
 deno task docs           # 仕様書と API ドキュメントを site に生成
 deno task docs:serve     # 仕様書をローカルでプレビュー
-deno task pages          # GitHub Pages に出すもの（OS と API ドキュメント）を pages/os と pages/api に生成
+deno task pages          # GitHub Pages に出すもの（OS と API ドキュメント）を pages/os と pages/docs/api に生成
 deno task test           # バージョンの検査とテスト
 deno task check-pack     # JSR に出すファイルだけを写し、別の利用者として動かして試す
 deno run -A scripts/publish.ts --dry-run --allow-dirty  # JSR への公開の予行

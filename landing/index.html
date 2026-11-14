@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binette</title>
+<link rel="icon" href="icon.svg">
+<style>
+:root { color-scheme: light dark; --bg:#fff; --fg:#1b1f24; --muted:#5b6470; --line:#e3e6ea; --accent:#3273b9; --card:#f6f8fa; font-family: system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebee; --muted:#9aa3ad; --line:#2a2f36; --accent:#5b9be0; --card:#1c2026; } }
+* { box-sizing: border-box; }
+body { word-break: auto-phrase; margin:0; background:var(--bg); color:var(--fg); line-height:1.7; }
+main { max-width: 60rem; margin: 0 auto; padding: 0 16px; }
+header { text-align:center; padding: 4rem 0 2.5rem; }
+header img.logo { width: 72px; height: 72px; }
+h1 { font-size: 2.4rem; margin: .5rem 0 .25rem; letter-spacing: .02em; }
+.lead { color: var(--muted); font-size: 1.1rem; margin: 0 auto 1.75rem; max-width: 34rem; }
+.actions { display:flex; gap: .75rem; justify-content:center; flex-wrap: wrap; }
+.btn { display:inline-flex; align-items:center; min-height:44px; padding: 0 1.4rem; border-radius: 999px; text-decoration:none; font-weight:600; }
+.btn.primary { background: var(--accent); color:#fff; }
+.btn.ghost { border:1px solid var(--line); color: var(--fg); }
+.note { color: var(--muted); font-size: .85rem; margin-top: .75rem; }
+.shot { display:block; width:100%; border-radius: 14px; border:1px solid var(--line); box-shadow: 0 12px 40px rgba(0,0,0,.12); }
+.features { display:grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; margin: 3rem 0; }
+.features div { background: var(--card); border-radius: 12px; padding: 1.1rem 1.25rem; }
+.features h2 { font-size: 1.05rem; margin: 0 0 .3rem; }
+.features p { margin:0; color: var(--muted); font-size: .95rem; }
+.links { display:grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem; margin-bottom: 3rem; }
+.links a { display:block; border:1px solid var(--line); border-radius: 12px; padding: .9rem 1.1rem; text-decoration:none; color: var(--fg); }
+.links a span { display:block; color: var(--muted); font-size: .85rem; }
+footer { border-top:1px solid var(--line); padding: 1.5rem 0 2.5rem; color: var(--muted); font-size: .85rem; }
+footer ul { list-style:none; padding:0; margin:.25rem 0 0; display:flex; gap:1rem; flex-wrap:wrap; }
+footer a { color: var(--muted); }
+.nb { display:inline-block; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img class="logo" src="icon.svg" alt="">
+    <h1>Binette</h1>
+    <p class="lead"><span class="nb">ブラウザだけで動く、</span><span class="nb">スマホのような OS です。</span><span class="nb">アプリを取ってきて、</span><span class="nb">ブラウザの中でビルドして動かします。</span></p>
+    <div class="actions">
+      <a class="btn primary" href="./main/">Binette を開く</a>
+      <a class="btn ghost" href="https://github.com/nozomi-hiragi/binette">GitHub</a>
+    </div>
+    <p class="note"><span class="nb">{{version}}</span><span class="nb">（設計中のため、</span><span class="nb">仕様は変わることがあります）</span></p>
+  </header>
+
+  <img class="shot" src="screen.png" alt="Binette のホーム画面">
+
+  <section class="features">
+    <div><h2>ブラウザだけで動く</h2><p><span class="nb">インストール不要。</span><span class="nb">ホーム画面に追加すれば、</span><span class="nb">アプリのように使えます。</span><span class="nb">データはブラウザの中に保存します。</span></p></div>
+    <div><h2><span class="nb">アプリは</span> <span class="nb">HTML ＋ AssemblyScript</span></h2><p><span class="nb">アプリは Worker の中の</span> <span class="nb">WASM で動きます。</span><span class="nb">UI は宣言的に書けます。</span></p></div>
+    <div><h2>提供リストから入れる</h2><p><span class="nb">URL の提供リストから</span><span class="nb">アプリを入れて、</span><span class="nb">更新できます。</span><span class="nb">中身はハッシュで確かめます。</span></p></div>
+  </section>
+
+  <section class="links">
+    <a href="./docs/">ドキュメント<span>API リファレンスなど</span></a>
+    <a href="https://nozomi-hiragi.github.io/binette-apps/">アプリ<span>binette-apps の提供リスト</span></a>
+    <a href="https://jsr.io/@binette">JSR パッケージ<span>@binette/*</span></a>
+  </section>
+
+  <footer>
+    ほかのバージョン
+    <ul><!-- versions --></ul>
+    <p>Apache-2.0</p>
+  </footer>
+</main>
+</body>
+</html>

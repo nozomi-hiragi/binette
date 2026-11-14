@@ -2,6 +2,7 @@
 
 ## 未リリース
 
+- GitHub Pages の直下を紹介ページにし、API ドキュメントを /binette/api/ブランチ名/ から /binette/docs/api/ブランチ名/ に移す。/binette/docs/ にドキュメントの入口を置く。旧 URL は残さない
 - ドキュメントアプリを binette-apps に移し、`catalog/docs`・`scripts/docs-app.ts`・`deno task docs:app` を削除する
 - Binette 自身の提供リスト `apps/<ブランチ>/` と生成スクリプト `scripts/catalog.ts` を削除する。GitHub Pages の既定の提供リストは `https://nozomi-hiragi.github.io/binette-apps/` だけにする
 
