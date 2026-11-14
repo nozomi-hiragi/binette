@@ -238,11 +238,13 @@
 }
 
 /* Notification center and transient popup. */
-[data-bina-key="clock"] { grid-column: 3; grid-row: 1; justify-self: end; min-width: 80px; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; }
+[data-bina-key="clock"] { grid-column: 3; grid-row: 1; justify-self: end; display: inline-grid; place-items: stretch; box-sizing: border-box; min-width: 80px; min-height: 40px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; }
 [data-bina-key="clock"]:hover, [data-bina-key="clock"][aria-pressed="true"] { background: var(--cadre-accent-soft); }
-[data-bina-key="clock"] .bina-ui-stack { min-width: 56px; padding-right: 8px; }
+/* Keep the time centered in the button so what is seen matches what can be pressed. The stack fills the button, so the badge sits on the button's corner like the dock badges. */
+[data-bina-key="clock"] .bina-ui-stack { min-width: 0; padding: 0; }
+[data-bina-key="clock"] .bina-ui-stack > .bina-ui-text { place-self: center; }
 [data-bina-key="clock-badge"], [data-bina-key="dock-badge"], [data-bina-key="home-badge"] { z-index: 1; transform: translate(35%, -35%); }
-[data-bina-key="install-tile"] .bina-ui-image { width: var(--bina-ui-icon-size, 60px); height: var(--bina-ui-icon-size, 60px); }
+[data-bina-key="install-tile"] .bina-ui-image { align-self: center; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 14%)); width: var(--bina-ui-icon-size, 60px); height: var(--bina-ui-icon-size, 60px); }
 [data-bina-key="notifications-backdrop"] { position: absolute; z-index: 2; inset: 0 auto auto 0; width: 100%; height: calc(100% - 60px); padding: 0; border: 0; border-radius: 0; background: transparent; }
 [data-bina-key="notifications-center"] { position: absolute; z-index: 3; bottom: 72px; right: 12px; box-sizing: border-box; width: min(360px, calc(100% - 24px)); max-height: calc(100% - 90px); overflow-y: auto; overscroll-behavior: contain; gap: 10px; padding: 14px; border: 1px solid var(--cadre-line); border-radius: 16px; background: var(--bina-ui-surface, #fff); color: var(--bina-ui-text, var(--bina-shell-color, #16181d)); box-shadow: 0 6px 24px #0003; transition: opacity 200ms ease-out, transform 200ms ease-out; }
 [data-bina-key="notifications"] { top: auto; bottom: 72px; }

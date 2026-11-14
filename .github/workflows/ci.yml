@@ -1,9 +1,17 @@
 name: CI
 
+# Runs only on pull requests into main or v*. A push after merging would repeat the same checks,
+# and releases are re-checked by publish.yml before publishing. PRs into other branches
+# (e.g. a branch collecting small fixes) skip CI; the PR that brings them into v* runs it once.
 on:
   pull_request:
-  push:
     branches: [main, "v*"]
+  workflow_dispatch:
+
+# A new push to the same PR cancels the run for the previous head
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

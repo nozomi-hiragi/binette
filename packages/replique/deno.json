@@ -1,6 +1,6 @@
 {
   "name": "@binette/replique",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "exports": {
     ".": "./src/index.ts",
     "./app": "./src/app.ts",
@@ -36,7 +36,7 @@
     ]
   },
   "imports": {
-    "@binette/decor/as": "jsr:@binette/decor@0.2.1/as",
-    "@binette/decor/parts": "jsr:@binette/decor@0.2.1/parts"
+    "@binette/decor/as": "jsr:@binette/decor@0.2.2/as",
+    "@binette/decor/parts": "jsr:@binette/decor@0.2.2/parts"
   }
 }

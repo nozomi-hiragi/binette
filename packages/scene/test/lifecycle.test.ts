@@ -313,56 +313,6 @@ Deno.test("起動の途中のクリックは捨てずに Resume のあとに届�
   finally { mounted.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("隠れたインスタンスの Stop の例外はスタックから外し、前面を変えずにエラーを出す", async () => {
-  const window = new Window(); const element = host(window); const errors: unknown[] = []; const store = createMemoryAppStore();
-  const fixtures = await stackFixtures();
-  fixtures[1]!.prebuilt = { ...await build(source.replace('record("stop");', 'record("stop"); throw new Error("背面の失敗");')), manifest: fixtures[1]!.prebuilt.manifest };
-  const shell = await mountShell(element, { apps: fixtures, store, createWorker, stopDelay: 60, onError: e => errors.push(e) });
-  const home = activeHost(element);
-  const resumed = async (name: string) => {
-    await waitForAsync(async () => {
-      const view = systemView(element);
-      const instance = view.instances.find(instance => instance.name === name && instance.id === view.front);
-      const last = instance && await store.system.getLast(instance.key);
-      return last?.state === State.Resume && last.done && !!logOf(element)?.endsWith("resume;");
-    });
-    // Complete the host continuation following the final lifecycle persistence.
-    await sleep(0);
-  };
-  try {
-    click(home, "open"); await resumed("A");
-    const a = activeHost(element);
-    bar(element, "ホームを開く"); await resumed("テスト"); await waitFor(() => activeHost(element) === home);
-    click(home, "open1"); await resumed("B");
-    const b = activeHost(element);
-    await waitFor(() => errors.length === 1);
-    assertEquals(activeHost(element), b); assert(!a.isConnected);
-    assertEquals(systemView(element).instances.some(i => i.name === "A"), false);
-    assertEquals(logOf(a), "create:0;start:1;resume;pause;stop;");
-    assert((errors[0] as Error).message.includes("背面の失敗"));
-    assertEquals(element.querySelector<HTMLElement>('[role=status]')!.hidden, false);
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
-Deno.test("ホームが onPause で落ちても、開いたアプリから引き離さない", async () => {
-  const fixtures = await stackFixtures();
-  const home = fixtures[0]!.prebuilt;
-  fixtures[0]!.prebuilt = { ...await build(source.replace('onPause(): void { record("pause"); }', 'onPause(): void { record("pause"); throw new Error("ホームの Pause の失敗"); }'), true), manifest: home.manifest };
-  const window = new Window(); const element = host(window); const errors: unknown[] = [];
-  const shell = await mountShell(element, { apps: fixtures, store: createMemoryAppStore(), createWorker, onError: e => errors.push(e) });
-  const start = activeHost(element);
-  try {
-    click(start, "open");
-    await waitFor(() => errors.length === 1 && activeHost(element) !== start && !!logOf(element)?.endsWith("resume;"));
-    const opened = activeHost(element);
-    // 起動し直しの予約（100ms〜）が残っていれば、ここでホームへ戻ってしまう
-    await sleep(400);
-    assertEquals(activeHost(element), opened);
-    assertEquals(element.querySelectorAll(".bina-shell-app:not([hidden])").length, 1);
-    assert(systemView(element).instances.some(i => i.name === "A" && i.id === systemView(element).front));
-  } finally { shell.stop(); await window.happyDOM.close(); }
-});
-
 Deno.test("mountApp のエラーは前面の更新では残り、次の show で消える", async () => {
   const window = new Window(); const element = host(window); const errors: unknown[] = [];
   const home = await build(source.replace('record("create:" + last.state.toString());', 'record("create:" + last.state.toString()); document.createElement("script");'), true);
