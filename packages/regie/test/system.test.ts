@@ -1775,7 +1775,7 @@ Deno.test("フルスクリーンはセッションごとに覚え、前面のア
     await waitFor(() => !!logOf(home)?.includes("area:"));
     assert(logOf(home)!.endsWith("area:12,0,77,0;"), logOf(home));
     click(home, "open");
-    await waitFor(() => activeHost(element) !== home);
+    await waitFor(() => activeHost(element) !== undefined && activeHost(element) !== home);
     const app = activeHost(element);
     await waitForResumed(element, store, "テスト");
     assertEquals(element.view.fullscreen, false);
