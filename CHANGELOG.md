@@ -6,6 +6,8 @@
 - GitHub Pages の直下を紹介ページにし、API ドキュメントを /binette/api/ブランチ名/ から /binette/docs/api/ブランチ名/ に移す。/binette/docs/ にドキュメントの入口を置く。旧 URL は残さない
 - ドキュメントアプリを binette-apps に移し、`catalog/docs`・`scripts/docs-app.ts`・`deno task docs:app` を削除する
 - Binette 自身の提供リスト `apps/<ブランチ>/` と生成スクリプト `scripts/catalog.ts` を削除する。GitHub Pages の既定の提供リストは `https://nozomi-hiragi.github.io/binette-apps/` だけにする
+- GitHub Pages に開発中のブランチ（`v*`）の OS を出さず、動く OS は main の分だけを `/binette/live/` に置く（`/binette/main/` から移す。保存データはオリジン単位なので引き継がれる）。同じオリジンの OS は保存領域と Service Worker のキャッシュを共有するので、カーネルの版が違う OS を並べると互いに壊していたため。開発中のブランチは API ドキュメント（`/binette/docs/api/<ブランチ>/`）だけを出す。紹介ページの「ほかのバージョン」を外す
+- ライブモードのホームの「インストール」のタイルで、アイコンが左に寄り、ほかのアイコンより大きかったのを直す
 - ホームバーの時計の時刻がボタンの左に寄り、押せる範囲が右に広がっていたのを直す。時刻をボタンの中央に置き、未開封数のバッジはドックと同じくボタンの右上の角に出す
 
 ## v0.2.1 (2026-11-14)
