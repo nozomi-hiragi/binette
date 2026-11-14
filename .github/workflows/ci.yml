@@ -21,10 +21,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The base branch is needed to list the files this PR changes
+          fetch-depth: 0
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: 2.9.7
       - run: deno task check
-      - run: deno task test
+      # PRs into v* run only the tests related to the change. Release PRs into main and manual runs run all tests.
+      # The job itself always runs, so the required check "check" is reported even when no test is selected.
+      - name: Select tests
+        id: select
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == pull_request && "$BASE_REF" != main ]]; then
+            deno run -A scripts/affected-tests.ts "origin/$BASE_REF"
+          else
+            echo "files=all" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test
+        env:
+          FILES: ${{ steps.select.outputs.files }}
+        run: |
+          if [[ "$FILES" == all ]]; then
+            deno task test
+          elif [[ -n "$FILES" ]]; then
+            deno task check-version
+            # shellcheck disable=SC2086 # FILES is a space-separated list of test files
+            deno test -A --parallel $FILES
+          else
+            echo "No tests are related to this change"
+          fi
       - run: deno task check-pack
       - run: deno run -A scripts/publish.ts --dry-run
