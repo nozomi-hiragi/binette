@@ -2,6 +2,10 @@
 
 ## 未リリース
 
+- Décor にドラッグの入れ物 `dropArea(children, onDrop)` と、修飾の `.draggable(name)`・`.dropZone(name)` を足す。ポインタにいちばん近い置き場に吸い付き、入る位置を見せ、落とすと置き場と並びの番号を JSON で渡す。ドラッグしていないときの Escape も知らせる
+
+- セーフエリアとフルスクリーンの仕組みを足す。Décor に OS の枠を宣言する `.reserve(slot)` と、内側に `--bina-safe-*` の余白を足す `.safeArea()`、Réplique の `App` に `fullscreen(on)` と `safeArea()`、`CadreApi` に `isFullscreen()` を足す。Scene は Cadre の枠を測って各辺のセーフエリア（角は上下だけ、端末の切り欠きを下回らない）を表示先の CSS の変数とアプリに渡し、前面のアプリがフルスクリーンなら枠を画面の外へすべらせる。消えた辺の 8px の帯を押すと近い枠だけが 3 秒出る。ABI は追加だけなので版は変えない
+
 - `v*` に向けた PR の CI では、変更に関係するテストだけを走らせる（`scripts/affected-tests.ts`）。文書と Pages だけの変更ではテストを走らせない。`main` に向けた PR と手動実行では全テストを走らせる
 - 旧 URL /binette/main/ に移動の案内を置く（`landing/main/`）。古い場所で登録された SW は、自分を登録解除する `sw.js` に置き換わり、案内のページを開き直す
 - manifest に `id: "./"` を足し、`background_color`・`theme_color` を起動画面と同じ `#f3f5f8` にする（白から灰色に変わるちらつきをなくす）

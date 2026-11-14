@@ -569,12 +569,22 @@ Deno.test("Cadre の同期に応答しないアプリは、呼び出しの時間
 });
 
 Deno.test("Cadre の同期は完了を返し、時間切れにならない", async () => {
+  // Wait for the worker's reply to the sync instead of a fixed sleep, so a loaded machine does not hit the timeout
+  let replied!: () => void;
+  const reply = new Promise<void>((resolve) => { replied = resolve; });
+  let syncId: number | undefined;
+  const createWatchedWorker = (): RegieWorker => {
+    const worker = createWorker();
+    worker.addEventListener("message", (event) => { const data = event.data as { type: string; id?: number }; if (data.type === "done" && data.id === syncId) replied(); });
+    return { ...worker, postMessage: (message, transfer) => { const data = message as { type: string; id?: number }; if (data.type === "cadre.sync") syncId = data.id; worker.postMessage(message, transfer); } };
+  };
   let exited: Error | undefined;
-  const app = await launchApp(await build(source), { createWorker, callTimeout: 50, onExit: (error) => { exited = error; } });
-  app.syncCadre!({ instances: [], homeFront: true, installed: true, installBusy: false });
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  assertEquals(exited, undefined);
-  app.stop();
+  const app = await launchApp(await build(source), { createWorker: createWatchedWorker, callTimeout: 5000, onExit: (error) => { exited = error; replied(); } });
+  try {
+    app.syncCadre!({ instances: [], homeFront: true, installed: true, installBusy: false });
+    await reply;
+    assertEquals(exited, undefined);
+  } finally { app.stop(); }
 });
 
 Deno.test("Pigeon は同期受信欄を読み、安定した ID で消して通知権限を守る", async () => {

@@ -45,6 +45,8 @@ interface SystemView {
   /** show でエラー表示を消すときだけ true */
   clearError: boolean;
   cadreUnavailable?: boolean;
+  /** 前面に見えているアプリがフルスクリーンを求めているか */
+  fullscreen?: boolean;
 }
 interface BinetteSystem {
   /** ホームを開く。startSystem のあと、システム UI をつないでから呼ぶ。ホームが残っていなければ起動する */
@@ -53,6 +55,8 @@ interface BinetteSystem {
   close(id: number): Promise<void>;
   /** ページの今の様子を知らせる。システム UI が visibilityState と freeze・resume から作る */
   setPage(page: { visible: boolean; frozen: boolean }): void;
+  /** セーフエリア（px）を、動いているアプリと、これから起動するアプリに渡す。同じ値なら何もしない */
+  setSafeArea?(area: SafeArea): void;
   stop(): void;
 }
 function startSystem(options: SystemOptions): Promise<BinetteSystem>
@@ -62,6 +66,8 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 - `instances` の `key` は完全なアプリ ID です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
 - `SystemOptions` は `BuildOptions` を継承し、`compiler` と `libraries` を受け取ります。`read` のアプリをビルドするときだけビルドの入口を dynamic import します。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
+- アプリの `fullscreen(on)` はセッションごとに覚えます。`SystemView.fullscreen` と Cadre の写し（`CadreApi.isFullscreen()`）には、前面に見えているアプリ（ホームを含む。閉じかけと Apps の一覧のときは除く）の要求だけを渡します。前面が変わると、そのアプリが覚えている値に切り替わります
+- `setSafeArea` の値は起動の `init` に載せ、そのあとの変化は Worker に `safeArea` で送ります。Worker は 0 以上の整数に切り上げ、変わったときだけアプリの `__bina_safe_area` を呼んで描き直させます
 - 文字の表示は持ちません。提供リストの HTML の解析には DOMParser を使い、テストではパーサーを差し替えられます
 
 ## インストール

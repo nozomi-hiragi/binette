@@ -56,6 +56,32 @@ declare function lastCauseImport(): DestroyCause;
 // @ts-ignore: decorator
 @external("binette:app@0.1", "finish")
 declare function finishImport(): void;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "fullscreen")
+declare function fullscreenImport(on: bool): void;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaTop")
+declare function safeAreaTopImport(): i32;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaRight")
+declare function safeAreaRightImport(): i32;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaBottom")
+declare function safeAreaBottomImport(): i32;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "safeAreaLeft")
+declare function safeAreaLeftImport(): i32;
+
+/** 表示領域の上下左右のうち、OS の枠や端末の切り欠きに隠れうる幅（px）。アプリの表示領域は画面全体で、枠はその上に重なる */
+export class SafeArea {
+  constructor(readonly top: i32, readonly right: i32, readonly bottom: i32, readonly left: i32) {}
+}
+
+/** Régie がセーフエリアの変化を届ける。値が変わったときだけ描き直す */
+export function __bina_safe_area(_top: i32, _right: i32, _bottom: i32, _left: i32): void {
+  if (application === null) return;
+  rebuild();
+}
 
 export function jsonString(value: string): string {
   let result = '\"';
@@ -160,6 +186,10 @@ export class App {
   onDestroy(_reason: DestroyReason): void {}
   get page(): string { return pageImport(); }
   finish(): void { finishImport(); }
+  /** フルスクリーンにするか戻すかを OS に頼む。動いている間いつでも呼べる。OS の枠は、このアプリが前面にある間だけ画面の外へ退く */
+  fullscreen(on: bool): void { fullscreenImport(on); }
+  /** 今のセーフエリア。値が変わると描き直すので、build() の中で読めばよい */
+  safeArea(): SafeArea { return new SafeArea(safeAreaTopImport(), safeAreaRightImport(), safeAreaBottomImport(), safeAreaLeftImport()); }
 }
 
 // グローバルで持ち、アプリを GC から守る

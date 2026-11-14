@@ -88,6 +88,14 @@ export class App {
   onDestroy(reason: DestroyReason): void {}
   get page(): string;
   finish(): void;
+  fullscreen(on: bool): void;
+  safeArea(): SafeArea;
+}
+export class SafeArea {
+  readonly top: i32;
+  readonly right: i32;
+  readonly bottom: i32;
+  readonly left: i32;
 }
 export function launch(app: App): void;
 export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
@@ -95,7 +103,9 @@ export function __bina_lifecycle(kind: i32, a: i32, b: i32): void;
 
 `launch` はトップレベルで一回だけ呼びます。グローバルにインスタンスを保持して GC から守り、仮想メソッドで通知します。二回目は例外でアプリを終了します。呼ばなければ状態の通知は何もせず、document とイベントは使えます。従来の `export function start()` は呼びません。
 
-`this.page` は今のページの識別子です。`finish()` は今の呼び出しの完了後、Pause → Stop → Destroy（User・App）でホームに戻します。`onStart` の引数は Create または Stop です。Last は OS が各メソッドの前後に保存した最後の記録です。初回だけ None・done=true・page=""・reason=User/Os です。途中で落ちたメソッドは done=false が残ります。
+`this.page` は今のページの識別子です。`finish()` は今の呼び出しの完了後、Pause → Stop → Destroy（User・App）でホームに戻します。
+
+`fullscreen(on)` は、フルスクリーンにするか戻すかを OS に頼みます（決定。名前は案）。アプリが動いているあいだいつでも呼べます。Régie はセッションごとに覚え、前面のアプリの要求だけを Scene と Cadre に渡します。前面のアプリがフルスクリーンなら OS の枠は画面の外へ退き、ほかのアプリに切り替わると元に戻ります。`safeArea()` は今のセーフエリア（表示領域の上下左右のうち OS の枠や端末の切り欠きに隠れうる幅、整数の px）を返します。値が変わると OS が `build()` を呼び直すので、`build()` の中で読めば追いつきます。宣言 UI では Décor の `.safeArea()` を付ければ読まなくても済みます（[decor.md](decor.md#os-の枠とセーフエリア決定名前は案)）。どちらもアプリのクラスに置き、`Api` には置きません（`finish()` と同じく、そのアプリ自身の事柄なので）。`onStart` の引数は Create または Stop です。Last は OS が各メソッドの前後に保存した最後の記録です。初回だけ None・done=true・page=""・reason=User/Os です。途中で落ちたメソッドは done=false が残ります。
 
 `onCreate` の第 2 引数 `api` は、そのアプリに届く API の辞書です（[API の辞書](#api-の辞書実装済み形は案)）。古い `onCreate(last: Last)` の形は、AS がオーバーロードを認めないためコンパイルエラーになります。引数が 1 つの上書きは、`api: Api` を足して移行してください（決定。互換の形は用意しない）。
 
@@ -140,7 +150,7 @@ ABI の版は JSR パッケージや OS の版と独立です。既存の呼び�
 
 | module | 関数数 |
 | --- | ---: |
-| `binette:app@0.1` | 7 |
+| `binette:app@0.1` | 15 |
 | `binette:dom@0.1` | 8 |
 | `binette:ui@0.1` | 1 |
 | `binette:apps@0.1` | 5 |
@@ -148,7 +158,7 @@ ABI の版は JSR パッケージや OS の版と独立です。既存の呼び�
 | `binette:storage@0.1` | 6 |
 | `binette:pigeon@0.1` | 11 |
 | `binette:shares@0.1` | 2 |
-| `binette:cadre@0.1` | 28 |
+| `binette:cadre@0.1` | 37 |
 | `binette:manager@0.1` | 3 |
 | `binette:scheduler@0.1` | 3 |
 | `binette:schedule@0.1` | 3 |
@@ -186,6 +196,9 @@ ABI の版は JSR パッケージや OS の版と独立です。既存の呼び�
 | `app.page` / `app.lastPage` | なし（文字列ポインタを返す） |
 | `app.lastKind` / `app.lastCause` | なし（i32 を返す。今はどちらも 0） |
 | `app.finish` | なし（自分を閉じる要求） |
+| `app.fullscreen` | on（0 か 1） |
+| `app.safeAreaTop` / `app.safeAreaRight` / `app.safeAreaBottom` / `app.safeAreaLeft` | なし（i32 の px を返す） |
+| `cadre.isFullscreen` | なし（前面のアプリがフルスクリーンなら 1） |
 
 アプリは `apps.*`・`os.*`・`storage.*`・`cadre.*` の import を直接は使わず、辞書から取ったクラスを通します。辞書に載っていないキーの import を直接呼ぶと（辞書を通さない呼び出し）、権限のない呼び出しとして例外でアプリを終了します（[regie/run.md](regie/run.md#メッセージ実装済み)）。番号の範囲外も例外です。任意の URL や SVG をアプリから渡す API はありません。
 

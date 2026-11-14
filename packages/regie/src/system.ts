@@ -11,7 +11,7 @@ import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, LetterAction, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot, UserLetter } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, SafeArea, ManagerApp, ManagerDetails, ManagerSnapshot, LetterAction, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot, UserLetter } from "./launch.ts";
 import { APPEARANCE_LIMITS, type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -78,6 +78,8 @@ export interface SystemView {
   /** Cadre が落ち続けてフォールバック UI を描くべきか */
   cadreUnavailable?: boolean;
   rebuilding?: boolean;
+  /** 前面のアプリがフルスクリーンを求めているか */
+  fullscreen?: boolean;
 }
 
 /** 起動したシステム */
@@ -89,6 +91,8 @@ export interface BinetteSystem {
   close(id: number): Promise<void>;
   setPage(page: { visible: boolean; frozen: boolean }): void;
   setInstallState?(installed: boolean, busy: boolean): void;
+  /** 表示領域のセーフエリアを、動いているアプリに届ける */
+  setSafeArea?(area: SafeArea): void;
   stop(): void;
 }
 
@@ -138,6 +142,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   let installed = false;
   let installBusy = false;
   let nextId = 0;
+  let currentSafeArea: SafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
   let openedHome = false;
   let appsShown = false;
   let generation = 0;
@@ -180,7 +185,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   const rebuildController = new AbortController();
   const rebuilds = new Map<string, Promise<InstalledApp | undefined>>();
   let changingApps = false;
-  type Session = { controller: AbortController; starting?: Promise<Process>; mounted?: Process; view?: { remove(): void }; id: number; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number };
+  type Session = { controller: AbortController; starting?: Promise<Process>; mounted?: Process; view?: { remove(): void }; id: number; installed: InstalledApp; home: boolean; finish: boolean; closing: boolean; closed?: Promise<void>; lastShown: number; startedAt?: number; fullscreen: boolean };
   let shown = 0;
   const sessions = new Set<Session>();
   // 画面なしで起こして予定を実行しているアプリ。キーは完全なアプリ ID
@@ -1053,13 +1058,17 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       appIndex: apps.findIndex(app => app.key === letter.from && app.icon !== undefined),
       popup: notificationClock.isPopup(letter.id),
     }));
-    return { instances, homeFront, installed, installBusy, now: Date.now(), notifications: structuredClone(notifications) };
+    return { instances, homeFront, installed, installBusy, now: Date.now(), notifications: structuredClone(notifications), fullscreen: frontFullscreen() };
   };
 
   const appsInfo = (canInstall: boolean) => ({
     unread: apps.map(app => history.filter(letter => !letter.opened && letter.from === app.key).length),
     installed, installBusy, canInstall,
   });
+  /** 前面に見えているアプリのフルスクリーンの要求。ほかのアプリの要求は覚えておくだけで渡さない */
+  function frontFullscreen(): boolean {
+    return active !== undefined && active !== hiding && !active.closing && !appsShown && active.fullscreen;
+  }
   function renderBar(clearError = false) {
     const snapshot = cadreSnapshot();
     cadreSession?.mounted?.syncCadre?.(snapshot);
@@ -1073,6 +1082,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       clearError,
       cadreUnavailable: cadreUnavailable || !cadre,
       rebuilding: rebuilds.size > 0,
+      fullscreen: frontFullscreen(),
     });
   }
   function showApps() {
@@ -1161,7 +1171,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       } catch { /* 終了通知が片付ける */ }
       return;
     }
-    session = { controller: new AbortController(), id: ++nextId, installed, home: atHome, finish: false, closing: false, lastShown: ++shown };
+    session = { controller: new AbortController(), id: ++nextId, installed, home: atHome, finish: false, closing: false, lastShown: ++shown, fullscreen: false };
     const netRun: NetRun = { signal: session.controller.signal };
     const started = session;
     sessions.add(started);
@@ -1215,6 +1225,12 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           if (!sessions.has(started)) return;
           started.finish = true;
           if (started.mounted) void close(started, DestroyKind.User, DestroyCause.App);
+        },
+        safeArea: currentSafeArea,
+        onFullscreen(on) {
+          if (!sessions.has(started) || started.fullscreen === on) return;
+          started.fullscreen = on;
+          if (active === started) renderBar();
         },
         grants: {
           denied: api.denied,
@@ -1273,6 +1289,8 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await mounted.begin();
       if (!sessions.has(started) || stopped) { mounted.stop(); started.view.remove(); return; }
       started.mounted = mounted;
+      // 起動を待つあいだに変わった値を届ける
+      mounted.setSafeArea?.(currentSafeArea);
       if (api.keys.has("apps")) mounted.syncApps?.(appsInfo(atHome));
       await saving;
       if (api.keys.has("net")) mounted.syncNet?.(netSnapshot(installed));
@@ -1327,7 +1345,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     let selectedCadre = cadre;
     clearTimeout(cadreRestartTimer);
     if (cadreSession) cutCadre();
-    const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedCadre, home: false, finish: false, closing: false, lastShown: ++shown };
+    const session: Session = { controller: new AbortController(), id: ++nextId, installed: selectedCadre, home: false, finish: false, closing: false, lastShown: ++shown, fullscreen: false };
     const netRun: NetRun = { signal: session.controller.signal };
     cadreSession = session;
     try {
@@ -1547,6 +1565,11 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
     async close(id) {
       const session = [...sessions].find(session => session.id === id);
       if (session) await close(session, DestroyKind.User, DestroyCause.Os);
+    },
+    setSafeArea(area) {
+      if (stopped || (area.top === currentSafeArea.top && area.right === currentSafeArea.right && area.bottom === currentSafeArea.bottom && area.left === currentSafeArea.left)) return;
+      currentSafeArea = { top: area.top, right: area.right, bottom: area.bottom, left: area.left };
+      for (const session of sessions) session.mounted?.setSafeArea?.(currentSafeArea);
     },
     setInstallState(value, busy) {
       if (stopped || (installed === value && installBusy === busy)) return;
