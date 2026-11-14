@@ -134,8 +134,8 @@ async function cleanPrebuilt(root: string): Promise<void> {
 }
 
 /**
- * boot.json の既定の提供リスト。BINETTE_LISTS にカンマ区切りの https の URL で渡す（GitHub Pages ではブランチの提供リスト）。
- * 渡さなければ空
+ * Default provider lists for boot.json, supplied as comma-separated HTTPS URLs in BINETTE_LISTS.
+ * Pages uses the fixed binette-apps list; local builds default to an empty list.
  */
 export function bootLists(value = Deno.env.get("BINETTE_LISTS") ?? ""): string[] {
   const lists = value.split(",").map(url => url.trim()).filter(url => url.length > 0);

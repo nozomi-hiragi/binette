@@ -1,5 +1,5 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
-import { appNames, buildApps, buildFolder, type SystemManifest, systemManifest } from "./build-system.ts";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { appNames, bootLists, buildApps, buildFolder, type SystemManifest, systemManifest } from "./build-system.ts";
 import { systemLabel } from "./system-metadata.ts";
 
 const replique = new URL("../packages/replique/", import.meta.url).pathname;
@@ -179,4 +179,19 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     await assertRejects(() => buildApps(dir), Error, "システムアプリ「cadre」");
     assertEquals(await Deno.readTextFile(`${out}/manifest.json`), latest);
   } finally { await Deno.remove(dir, { recursive: true }); }
+});
+
+Deno.test("boot.json の提供リストは BINETTE_LISTS の https の URL だけを受け付ける", () => {
+  const previous = Deno.env.get("BINETTE_LISTS");
+  try {
+    Deno.env.delete("BINETTE_LISTS");
+    assertEquals(bootLists(), []);
+  } finally {
+    if (previous === undefined) Deno.env.delete("BINETTE_LISTS");
+    else Deno.env.set("BINETTE_LISTS", previous);
+  }
+  assertEquals(bootLists(""), []);
+  assertEquals(bootLists(" https://a.test/apps/ ,https://b.test/"), ["https://a.test/apps/", "https://b.test/"]);
+  assertThrows(() => bootLists("http://a.test/"), Error, "https");
+  assertThrows(() => bootLists("壊れた"), Error, "正しくありません");
 });

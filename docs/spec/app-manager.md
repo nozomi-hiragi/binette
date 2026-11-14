@@ -3,7 +3,7 @@
 [仕様の目次](README.md)
 
 > [!NOTE]
-> 2026-11-09 にのぞみが決めた構成です（この節の中身はすべて決定）。Régie の TS API（`system.lists`）、カタログの表示用の欄、アプリに渡す `manager`（Réplique の `AppManagerApi`）、画面 `cadre.apps`、OS の権限のダイアログ、既定の提供リスト（`deno task pages` が作る。アプリは `catalog/`）は実装済みです。カタログのアイコンは、OS（Régie の `system.lists.icon(url)`）が提供リストの取得と同じ決まり（https、制限時間）で 1 回だけ取り、SVG と PNG・JPEG・GIF・WebP（64 KiB まで）を data URL にして写しの `icon` に入れます。届くまでと取れないときは名前の頭文字で代えます。提供リストと ID の決まりは [app-id.md](app-id.md) にあります。
+> 2026-11-09 にのぞみが決めた構成です（この節の中身はすべて決定）。Régie の TS API（`system.lists`）、カタログの表示用の欄、アプリに渡す `manager`（Réplique の `AppManagerApi`）、画面 `cadre.apps`、OS の権限のダイアログ、既定の提供リスト（binette-apps が配布する）は実装済みです。カタログのアイコンは、OS（Régie の `system.lists.icon(url)`）が提供リストの取得と同じ決まり（https、制限時間）で 1 回だけ取り、SVG と PNG・JPEG・GIF・WebP（64 KiB まで）を data URL にして写しの `icon` に入れます。届くまでと取れないときは名前の頭文字で代えます。提供リストと ID の決まりは [app-id.md](app-id.md) にあります。
 
 提供リスト（操作の名前では repo）の登録、アプリのインストール・更新・削除、アプリのデータの管理を受け持つ、アプリ管理の仕様です。
 
@@ -125,25 +125,13 @@ Cadre のサブアプリとして `apps/cadre/app.json` の `sub` に宣言し�
 
 この節は決定事項です。
 
-- GitHub Pages の `system/boot.json` の `lists` は、ブランチの Binette のリスト（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）、`https://nozomi-hiragi.github.io/binette-apps/` の順にする
-- ローカルの `build:system` は `BINETTE_LISTS` 未指定なら空配列にする。ローカルで提供リストは生成しないため、公開済みの特定ブランチを暗黙に選ばない。必要なリストは `BINETTE_LISTS` にカンマ区切りの https の URL で指定するか、アプリ管理から追加する
-- どちらのリストも OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため（API ドキュメントの `api/<ブランチ>/` と同じ）
-
-### Binette のリスト
-
-- 載せるのはドキュメントアプリ（`catalog/docs/`、ID `docs`）だけ。Filer は役割 `files` の既定なので同梱のまま
-- ページ（HTML と `apps.json`）だけを、Docs の workflow で生成する。アプリのコードは写さない
-- `source` は commit 入りの raw.githubusercontent.com の URL（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette/<commit>/catalog/docs/`）。raw は 5 分間キャッシュするので、ブランチの URL だと push の直後に `integrity` が合わなくなるため。更新の判定は `version` で行う
-- `requires` は同じビルドの WASM imports から自動生成する。`env` は含めず、機能名順で安定させる
-- `version` は `app.json` の版 ＋ `+<commit の短いハッシュ>`。`integrity` の `"/"` は CI が Régie の CLI で計算する
-
-### binette-apps のリスト
-
-- デザイナーのソースは [binette-apps](https://github.com/nozomi-hiragi/binette-apps) に置き、`https://nozomi-hiragi.github.io/binette-apps/` で配布する
-- リストにはタグ済みの版だけを載せる。タグは `<app id>/v<version>` 形式とし、一度公開したタグは移動・削除しない
-- `version` はタグの版（`designer/v0.1.0` なら `0.1.0`）。ブランチや `app.json` の未タグの変更では更新しない
-- `source` はタグが指すコミットを固定した raw.githubusercontent.com の URL にする（例 `https://raw.githubusercontent.com/nozomi-hiragi/binette-apps/<タグのコミット>/<アプリのフォルダ>/`）。`integrity` もそのコミットのソースから求める
-- デザイナーの完全な ID は `https://nozomi-hiragi.github.io/binette-apps/#designer`。Binette の従来のリストとは ID が変わるため、保存データは引き継がない
+- GitHub Pages の `system/boot.json` の `lists` は、固定 URL `https://nozomi-hiragi.github.io/binette-apps/` だけにする。Binette 自身の提供リストは生成しない
+- ローカルの `build:system` は `BINETTE_LISTS` 未指定なら空配列にする。必要なリストは `BINETTE_LISTS` にカンマ区切りの https の URL で指定するか、アプリ管理から追加する
+- 提供リストは OS（`/binette/<ブランチ>/`）の Service Worker の範囲の外に置く。範囲の中だと、ID の URL を開いたときに OS のページが返り、提供リストのページが見えないため
+- [binette-apps の README](https://github.com/nozomi-hiragi/binette-apps#readme) に従い、デザイナーとドキュメントアプリを配布する。ドキュメントアプリは OS と同じ版の文書を GitHub から読む。Filer は役割 `files` の既定なので同梱のまま
+- リストにはタグ済みの版だけを載せる。タグは `<app id>/v<version>` 形式とし、一度公開したタグは移動・削除しない。各アプリの最大 SemVer を公開する
+- `version` はタグの版。`source` はタグのコミットを固定した raw.githubusercontent.com の URL にし、`integrity` と `requires` もそのリリースのソースから求める。未タグの変更では更新しない
+- 完全な ID は `https://nozomi-hiragi.github.io/binette-apps/#designer` と `https://nozomi-hiragi.github.io/binette-apps/#docs`。Binette の従来のリストとは ID が変わる。移行前のデザイナーのデータは引き継がない
 
 ## あとで足すもの
 

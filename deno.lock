@@ -1555,11 +1555,6 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
-      "catalog/docs": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
       "packages/core": {
         "dependencies": [
           "npm:valibot@1.5.0"

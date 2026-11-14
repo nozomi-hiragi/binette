@@ -81,7 +81,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 }
 ```
 
-`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。ローカルで `BINETTE_LISTS` を指定しない場合の出力は次のとおりです。GitHub Pages ではブランチの Binette の提供リスト、`https://nozomi-hiragi.github.io/binette-apps/` の順で `lists` に書きます（[app-manager.md](app-manager.md#binette-の既定の提供リスト)）。ローカルでも `BINETTE_LISTS` にカンマ区切りの https の URL を渡すと指定できます。
+`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。ローカルで `BINETTE_LISTS` を指定しない場合の出力は次のとおりです。GitHub Pages では `https://nozomi-hiragi.github.io/binette-apps/` だけを `lists` に書きます（[app-manager.md](app-manager.md#binette-の既定の提供リスト)）。ローカルでも `BINETTE_LISTS` にカンマ区切りの https の URL を渡すと指定できます。
 
 ```json
 {

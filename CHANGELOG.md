@@ -1,5 +1,10 @@
 # Changelog
 
+## 未リリース
+
+- ドキュメントアプリを binette-apps に移し、`catalog/docs`・`scripts/docs-app.ts`・`deno task docs:app` を削除する
+- Binette 自身の提供リスト `apps/<ブランチ>/` と生成スクリプト `scripts/catalog.ts` を削除する。GitHub Pages の既定の提供リストは `https://nozomi-hiragi.github.io/binette-apps/` だけにする
+
 ## v0.2.1 (2026-11-14)
 
 - ホームバー右端に未開封数を示す時計と通知センターを追加し、再読み込み前を含む未開封を新しい順に表示する。届いた最新の 1 通は 5 秒間ポップアップにし、返信中と urgent は待つ
