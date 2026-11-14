@@ -112,6 +112,8 @@ export class CadreApi {
   isFront(i: i32): boolean { return cadreIsFrontImport(i) != 0; }
   /** ホームが前面にあるか */
   isHome(): boolean { return cadreIsHomeImport() != 0; }
+  /** 前面のアプリがフルスクリーンを求めているか。枠の出し入れは OS がするので、Cadre は枠を宣言するだけでよい */
+  isFullscreen(): boolean { return cadreIsFullscreenImport() != 0; }
   /** i 番目のアプリのアイコンがあるか */
   hasIcon(i: i32): boolean { return cadreHasIconImport(i) != 0; }
   /** i 番目のアプリに対応する apps 一覧の番号。appIcon に渡す */
@@ -150,6 +152,9 @@ declare function cadreIsFrontImport(i: i32): i32;
 // @ts-ignore: decorator
 @external("binette:cadre@0.1", "isHome")
 declare function cadreIsHomeImport(): i32;
+// @ts-ignore: decorator
+@external("binette:cadre@0.1", "isFullscreen")
+declare function cadreIsFullscreenImport(): i32;
 // @ts-ignore: decorator
 @external("binette:cadre@0.1", "hasIcon")
 declare function cadreHasIconImport(i: i32): i32;

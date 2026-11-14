@@ -40,7 +40,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 - アプリは HTML ＋ AssemblyScript（AS）で書く方向で試す。TSX のような書き方（ASX）は後で考える
 - データのバックアップはサーバー側（Coulisses）に任せる
 - カーネルだけを配り、ほかの部品は HTTP で取ってきてブラウザの中に置いて動かす。目的は、アプリの上でアプリや OS の部品を作り・いじれること（決定 2026-11-01、[boot.md](boot.md)）
-- システムの部品（Cadre、ホーム、設定）は、役割を持つふつうのアプリにする。Cadre は最初に起動し、ホームバーや通知などの大枠と、アプリの表示領域を受け持つ（決定 2026-11-01、[roles.md](roles.md)）
+- システムの部品（Cadre、ホーム、設定）は、役割を持つふつうのアプリにする。Cadre は最初に起動し、ホーム・ドック・時計の枠や通知などの大枠と、アプリの表示領域を受け持つ（決定 2026-11-01、[roles.md](roles.md)）
 - 開発は binette のリポジトリだけで進める。版を固定して JSR に公開してから、EbinaStation（ebina-front・ebina-station）に入れる
 
 ## 呼び名と層（決定）
@@ -83,7 +83,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | core | 共通物。`app.json` の型と検査、ライフサイクルの番号、DOM 操作の型。動きは持たない |
 | Régie | カーネル。アプリのビルドと検証、インストール、実行（Worker ＋ WASM）、状態の移り変わり、スタック、ホームの選び方、落ちたときの扱い、権限、OS の設定、保存。画面は持たず DOM に触らない |
 | Décor | 宣言 UI の木、差分の計算、DOM への反映。Régie と Scene に依存しない（案） |
-| Scene | システム UI。大枠（ホームバー、Apps の一覧、エラー表示、ライブモード）と、その中のアプリの置き場（HTML を描き、DOM 操作を反映し、クリックを Régie に渡す） |
+| Scene | システム UI。大枠（Cadre の枠の出し入れとセーフエリア、Apps の一覧、エラー表示、ライブモード）と、その中のアプリの置き場（HTML を描き、DOM 操作を反映し、クリックを Régie に渡す） |
 | Réplique | アプリが Régie を呼ぶためのライブラリ（AS） |
 | Coulisses | サーバー側。アプリのサーバーサイド処理、バックアップの受け取り |
 | フロントの実装 | Scene を載せる入口。Régie と Coulisses の間の通信路を差し込む。設定はCadre のサブアプリ `cadre.settings` が持つ |
@@ -98,7 +98,7 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
      ルートの OS（src/main.ts）
 ```
 
-- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene のうち、アプリの UI の描画と、カーネルが直接描く Apps・復旧画面はカーネルに入る。ホームバーなどの大枠は、役割 `cadre` のシステムアプリ（Cadre）に移す（決定。[roles.md](roles.md#cadre決定-2026-11-01)）
+- [boot.md](boot.md) の構成では、Régie と Scene をまとめてカーネルとして配る。Scene のうち、アプリの UI の描画と、カーネルが直接描く Apps・復旧画面はカーネルに入る。ホーム・ドック・時計の枠などの大枠は、役割 `cadre` のシステムアプリ（Cadre）に移す（決定。[roles.md](roles.md#cadre決定-2026-11-01)）
 - 宣言 UI の共通部分は Décor に置く（[decor.md](decor.md)、案）。Décor は core だけに依存し、Régie と Scene がそれぞれ差分と DOM への反映を使う。
 - システムの依存は一直線にする。Scene は Régie の型と `startSystem` を使う。Régie は Scene を知らず、`SystemUi`（[regie/system.md](regie/system.md#api案)）という約束だけで見せ方を頼む
 - ビルドは Régie に置く（[regie/build.md](regie/build.md)）。何を動かしてよいかの判断と同じ所に置くため。asc は重いので `@binette/regie/build` という別の入口にし、ビルドしない利用者は読まない

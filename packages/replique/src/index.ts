@@ -14,4 +14,4 @@ export { CadreApi, __bina_cadre_sync } from "jsr:@binette/replique-cadre@^0.1";
 export { SchedulerApi } from "jsr:@binette/replique-scheduler@^0.1";
 export { NetApi, RequestInit, Response, __bina_net } from "jsr:@binette/replique-net@^0.1";
 export { ScheduleApi, __bina_schedule } from "jsr:@binette/replique-schedule@^0.1";
-export { Why, Api, State, DestroyKind, DestroyCause, DestroyReason, Last, App, launch, __bina_lifecycle } from "jsr:@binette/replique-app@^0.1";
+export { Why, Api, State, DestroyKind, DestroyCause, DestroyReason, Last, App, launch, __bina_lifecycle, SafeArea, __bina_safe_area } from "jsr:@binette/replique-app@^0.1";

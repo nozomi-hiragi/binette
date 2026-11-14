@@ -112,7 +112,7 @@ export async function buildApp(read: (path: string) => Promise<string>, options:
     rewritten += contents.slice(offset);
     if (library) libraries[key] = rewritten; else sources.set(key, rewritten);
   };
-  await prepare(entry, source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value, __bina_cadre_sync, __bina_pigeon, __bina_share, __bina_schedule, __bina_net } from "jsr:@binette/replique";\n', false);
+  await prepare(entry, source + '\nexport { __bina_event, __bina_lifecycle, __bina_ui_event, __bina_ui_text, __bina_ui_value, __bina_cadre_sync, __bina_pigeon, __bina_share, __bina_schedule, __bina_net, __bina_safe_area } from "jsr:@binette/replique";\n', false);
   const asc = options.compiler ?? await loadCompiler();
   const stdout = asc.createMemoryStream();
   const stderr = asc.createMemoryStream();

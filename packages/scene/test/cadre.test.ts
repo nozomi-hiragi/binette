@@ -1,7 +1,7 @@
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "@binette/regie/build";
-import { createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
+import { appId, createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
 import { mountShell } from "../src/index.ts";
 
@@ -25,14 +25,14 @@ async function waitFor(condition: () => boolean): Promise<void> {
   while (!condition() && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
   assert(condition(), "Cadre の操作が反映されませんでした");
 }
-async function fixture(installed = true) {
+async function fixture(installed = true, store = createMemoryAppStore()) {
   const window = new Window();
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
   let live = 0;
   let ready = 0;
   const errors: unknown[] = [];
-  const cadre = await mountShell(element, { apps, installed, store: createMemoryAppStore(), onError: error => errors.push(error),
+  const cadre = await mountShell(element, { apps, installed, store, onError: error => errors.push(error),
     createWorker(): RegieWorker {
       live++;
       const { port1, port2 } = new MessageChannel();
@@ -63,7 +63,7 @@ async function fixture(installed = true) {
     async close() { cadre.stop(); await window.happyDOM.close(); } };
 }
 
-Deno.test("Cadre のバーはホームと起動中だけを並べ、前面の印と切り替えを更新する", async () => {
+Deno.test("Cadre の枠はホームと起動中だけを並べ、前面の印と切り替えを更新する", async () => {
   const f = await fixture();
   try {
     assertEquals(f.button("home")!.getAttribute("aria-pressed"), "true");
@@ -174,5 +174,99 @@ Deno.test("stop は Cadre とアプリの Worker および表示を片付け、�
     assertEquals(f.live, 0);
     assertEquals(f.element.childNodes.length, 0);
     assertEquals(f.errors, []);
+  } finally { await f.close(); }
+});
+
+/** 置き場の枠ごとに、中の部品の key を並びの順に返す。狭い幅で写した分は narrow- が付く */
+function frames(element: HTMLElement): Record<string, string[]> {
+  return Object.fromEntries([...element.querySelectorAll<HTMLElement>("[data-bina-reserve]")].filter(frame => !frame.hidden).map(frame =>
+    [frame.getAttribute("data-bina-key")!, [...frame.children].map(child => child.getAttribute("data-bina-key") ?? "")]));
+}
+const cadreKey = appId("binette:system", "cadre");
+async function storeWith(layout: string) {
+  const store = createMemoryAppStore();
+  await store.data.write(cadreKey, "cadre.layout", layout);
+  return store;
+}
+
+Deno.test("Cadre の既定の並びはホームが左下、ドックが下中央、時計が右下で、通知は時計の近くから出す", async () => {
+  const f = await fixture();
+  try {
+    assertEquals(frames(f.element), { "frame-bl": ["home"], "frame-br": ["clock"] }, "開いているアプリが無いドックは枠ごと隠す");
+    assertEquals(f.element.querySelector("[data-bina-key=frame-bc]")!.getAttribute("data-bina-reserve"), "bc");
+    assert(f.element.querySelector("[data-bina-key=notice-br]") !== null);
+    // アプリの表示領域は画面全体で、枠はその上に重なる（領域の外の兄弟）
+    const area = f.element.querySelector<HTMLElement>("[data-bina-key=cadre-area]")!;
+    assert(!area.querySelector("[data-bina-reserve]"));
+    assertEquals(area.parentElement!.getAttribute("data-bina-key"), "cadre-root");
+  } finally { await f.close(); }
+});
+
+Deno.test("ホームのメニューから編集モードに入り、時計をドラッグした並びを保存して、起動し直しても同じ並びで出す", async () => {
+  const store = createMemoryAppStore();
+  const f = await fixture(true, store);
+  const window = f.window;
+  try {
+    f.button("home")!.dispatchEvent(new window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }) as unknown as Event);
+    const edit = [...f.element.querySelectorAll<HTMLElement>('.bina-ui-menu [role="menuitem"]')].find(node => node.textContent === "レイアウトを編集")!;
+    edit.click();
+    await waitFor(() => f.button("layout-done") !== null);
+    // 編集中は 8 か所の置き場をすべて出す
+    assertEquals(Object.keys(frames(f.element)), ["frame-tl", "frame-tc", "frame-tr", "frame-ml", "frame-mr", "frame-bl", "frame-bc", "frame-br"]);
+    // happy-dom の箱はすべて 0 なので、どこへ動かしても最初の置き場（左上）に吸い付く
+    const clock = f.button("clock")!;
+    const pointer = (target: EventTarget, type: string, x: number) =>
+      target.dispatchEvent(new window.PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: x, pointerId: 1, pointerType: "mouse", button: 0 }) as unknown as Event);
+    pointer(clock, "pointerdown", 0);
+    const document = window.document as unknown as EventTarget;
+    pointer(document, "pointermove", 20);
+    pointer(document, "pointerup", 20);
+    await waitFor(() => frames(f.element)["frame-tl"]?.[0] === "clock");
+    assertEquals((await store.data.read(cadreKey)).get("cadre.layout"), "tl=clock;bl=home;bc=dock");
+    f.button("layout-done")!.click();
+    await waitFor(() => f.button("layout-done") === null);
+    assertEquals(frames(f.element), { "frame-tl": ["clock"], "frame-bl": ["home"] });
+    assert(f.element.querySelector("[data-bina-key=notice-tl]") !== null, "通知は左上の時計の近くから出す");
+  } finally { await f.close(); }
+  const again = await fixture(true, store);
+  try { assertEquals(frames(again.element), { "frame-tl": ["clock"], "frame-bl": ["home"] }); }
+  finally { await again.close(); }
+});
+
+Deno.test("Cadre は壊れた並びを読み捨てて既定に戻し、最初の並びに戻すと保存も消す", async () => {
+  const store = await storeWith("bl=home;bc=home;br=clock");
+  const f = await fixture(true, store);
+  try {
+    assertEquals(frames(f.element), { "frame-bl": ["home"], "frame-br": ["clock"] });
+    assertEquals((await store.data.read(cadreKey)).has("cadre.layout"), false);
+  } finally { await f.close(); }
+  await store.data.write(cadreKey, "cadre.layout", "tr=home,clock;bl=dock");
+  const g = await fixture(true, store);
+  try {
+    assertEquals(frames(g.element), { "frame-tr": ["home", "clock"] }, "同じ置き場の部品は並びの順に横に並ぶ");
+    g.button("home")!.dispatchEvent(new g.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }) as unknown as Event);
+    [...g.element.querySelectorAll<HTMLElement>('.bina-ui-menu [role="menuitem"]')].find(node => node.textContent === "レイアウトを編集")!.click();
+    await waitFor(() => g.button("layout-reset") !== null);
+    g.button("layout-reset")!.click();
+    await waitFor(() => frames(g.element)["frame-bl"]?.[0] === "home");
+    assertEquals((await store.data.read(cadreKey)).has("cadre.layout"), false);
+    // Escape でも編集を終える
+    (g.window.document as unknown as EventTarget).dispatchEvent(new g.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }) as unknown as Event);
+    await waitFor(() => g.button("layout-done") === null);
+  } finally { await g.close(); }
+});
+
+Deno.test("ml・mr の部品は縦表示にし、狭い幅のために下中央へ横表示で写す", async () => {
+  const f = await fixture(true, await storeWith("ml=home;mr=clock;bc=dock"));
+  try {
+    const all = frames(f.element);
+    assertEquals(all["frame-ml"], ["home"]);
+    assertEquals(all["frame-mr"], ["clock"]);
+    assertEquals(f.element.querySelector("[data-bina-key=frame-ml]")!.classList.contains("bina-ui-column"), true);
+    assert(f.element.querySelector("[data-bina-key=frame-mr] [data-bina-key=clock-lines]"), "縦の時計は時と分を 2 段にする");
+    assertEquals(f.element.querySelector("[data-bina-key=narrow-clock] [data-bina-key=clock-lines]"), null);
+    // ドックは空なので、下中央は写した分だけの枠（狭い幅でだけ CSS で出す）
+    assertEquals(all["frame-bc-narrow"], ["narrow-home", "dock", "narrow-clock"]);
+    assert(f.element.querySelector("[data-bina-key=notice-mr]") !== null);
   } finally { await f.close(); }
 });

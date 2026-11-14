@@ -1759,3 +1759,34 @@ launch(new Frame());`);
     assertEquals(element.errors, []);
   } finally { system.stop(); }
 });
+
+Deno.test("フルスクリーンはセッションごとに覚え、前面のアプリの要求だけを表示と Cadre に渡す。セーフエリアは動いているアプリに届く", async () => {
+  const code = source.replace('document.getElementById("open").addEventListener("click", () => appsApi!.open(0));', `document.getElementById("open").addEventListener("click", () => appsApi!.open(0));
+    document.getElementById("full").addEventListener("click", () => test.fullscreen(true));
+    document.getElementById("area").addEventListener("click", () => { const area = test.safeArea(); record("area:" + area.top.toString() + "," + area.right.toString() + "," + area.bottom.toString() + "," + area.left.toString()); });`);
+  const builtHome = await build(code, true), built = await build(code);
+  const element = output(); const store = createMemoryAppStore();
+  const system = await mountSystem(element, { apps: [{ source: "binette:system", prebuilt: builtHome }, { source: "https://example.test/apps/", prebuilt: built }], store, createWorker });
+  try {
+    const home = activeHost(element);
+    await waitForResumed(element, store, "テスト");
+    system.setSafeArea?.({ top: 12, right: 0, bottom: 76.4, left: -3 });
+    click(home, "area");
+    await waitFor(() => !!logOf(home)?.includes("area:"));
+    assert(logOf(home)!.endsWith("area:12,0,77,0;"), logOf(home));
+    click(home, "open");
+    await waitFor(() => activeHost(element) !== undefined && activeHost(element) !== home);
+    const app = activeHost(element);
+    await waitForResumed(element, store, "テスト");
+    assertEquals(element.view.fullscreen, false);
+    click(app, "area");
+    await waitFor(() => !!logOf(app)?.endsWith("area:12,0,77,0;"));
+    click(app, "full");
+    await waitFor(() => element.view.fullscreen === true);
+    void system.openHome();
+    await waitFor(() => activeHost(element) === home && element.view.fullscreen === false);
+    void system.open(element.view.instances.find(instance => !instance.home)!.key);
+    await waitFor(() => activeHost(element) === app && element.view.fullscreen === true);
+    assertEquals(element.errors, []);
+  } finally { system.stop(); }
+});

@@ -323,16 +323,16 @@ export class Apps extends App {
 
   override build(): View {
     const m = manager;
-    if (m == null) return column([text("アプリ管理を使えません。")]).padding(16).key("apps-unavailable");
+    if (m == null) return column([text("アプリ管理を使えません。")]).padding(16).safeArea().key("apps-unavailable");
     rows = [];
     repos = [];
-    if (detail.length > 0) return column([details(m, detail)]).padding(16).key("apps-root");
+    if (detail.length > 0) return column([details(m, detail)]).padding(16).safeArea().key("apps-root");
     const body = tab == 0 ? discover(m) : tab == 1 ? installed(m) : lists(m);
     const updates = m.updateCount();
     return column([
       text("アプリ").heading(1).key("apps-title"),
       tabs(["探す", updates > 0 ? "入っている（" + updates.toString() + "）" : "入っている", "リスト"], tab, selectTab).key("apps-tabs"),
       body,
-    ]).gap(16).padding(16).key("apps-root");
+    ]).gap(16).padding(16).safeArea().key("apps-root");
   }
 }

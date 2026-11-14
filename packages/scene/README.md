@@ -24,7 +24,7 @@ await process.begin();
 - `mountApp(element, html, process, options)` は HTML を描き、document API の DOM 操作を枠内に反映します。通常の id を参照し、click はプロセスに渡します。プロセスの起動は `startProcess` と `process.begin()` で行います
 - 許可したタグだけを作り、未対応タグやイベントは onError に知らせます。無い id は何もしません。最初の HTML は描画前に許可リストで検査し、許可しないものを取り除きます
 
-ホームは `apps/cadre` のサブアプリ `cadre.home` が持ちます。`mountShell(element, options)` は Régie のシステムを起動し、保存された設定に従ってホームを開きます。ホームが別のアプリを開くとホームを隠して Pause にし、OS のホームバーで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの AS の Décor にあります。
+ホームは `apps/cadre` のサブアプリ `cadre.home` が持ちます。`mountShell(element, options)` は Régie のシステムを起動し、保存された設定に従ってホームを開きます。ホームが別のアプリを開くとホームを隠して Pause にし、Cadre のドックで切り替え・終了できます。インスタンスはホームも含め既定 3 つ残し、上限を超えたら最も長く前面に出ていないものを破棄します。`ShellOptions` は `apps`・`store` とビルド・起動の設定、戻り値 `MountedShell` は `stop()` を持ちます。タイルの見た目はホームの AS の Décor にあります。
 
 動き方の決まりは [仕様](https://github.com/nozomi-hiragi/binette/blob/main/docs/spec/scene/README.md) にあります。
 

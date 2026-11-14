@@ -1,14 +1,17 @@
-import { startSystem, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "@binette/regie";
+import { startSystem, type SafeArea, type SystemOptions, type SystemUi, type SystemView, type BinetteSystem } from "@binette/regie";
 import { mountApp } from "./mount.ts";
 import { mountLiveMode } from "./live.ts";
 import { mountOpenUrl } from "./open-url.ts";
 import { mountNetConfirm } from "./confirm-net.ts";
 import { mountInstallConfirm } from "./confirm.ts";
+import { deviceInsets, mountEdgeReveal, safeAreaOf, type RevealTimers } from "./safe-area.ts";
 
 /** 表示の設定 */
 export interface ShellUiOptions {
   installed?: boolean;
   onError?: (error: unknown) => void;
+  /** フルスクリーンで呼び出した枠を戻す時計。テストで差し替える */
+  revealTimers?: RevealTimers;
 }
 /** 枠の設定 */
 export interface ShellOptions extends Omit<SystemOptions, "ui">, ShellUiOptions {}
@@ -45,6 +48,21 @@ const css = `
 :where(.bina-shell-confirm-reason) { color: var(--bina-shell-muted, #5b6472); }
 :where(.bina-shell-confirm-actions) { display: flex; justify-content: flex-end; gap: var(--bina-shell-gap, 8px); }
 :where(.bina-shell-status) { color: var(--bina-shell-error, #b3261e); margin: var(--bina-shell-padding, 12px); }
+/* OS の枠（Décor の reserve）。フルスクリーンでは画面の外へすべらせ、辺の帯で呼び出した枠だけを戻す。Cadre の transform と重ならないよう translate で動かす */
+.bina-shell-host [data-bina-reserve] { transition: translate 200ms ease-out; }
+.bina-shell-fullscreen .bina-shell-host [data-bina-reserve]:not([data-bina-revealed]) { pointer-events: none; }
+.bina-shell-fullscreen .bina-shell-host :is([data-bina-reserve="tl"], [data-bina-reserve="tc"], [data-bina-reserve="tr"]):not([data-bina-revealed]) { translate: 0 calc(-100% - 64px); }
+.bina-shell-fullscreen .bina-shell-host :is([data-bina-reserve="bl"], [data-bina-reserve="bc"], [data-bina-reserve="br"]):not([data-bina-revealed]) { translate: 0 calc(100% + 64px); }
+.bina-shell-fullscreen .bina-shell-host [data-bina-reserve="ml"]:not([data-bina-revealed]) { translate: calc(-100% - 64px) 0; }
+.bina-shell-fullscreen .bina-shell-host [data-bina-reserve="mr"]:not([data-bina-revealed]) { translate: calc(100% + 64px) 0; }
+@media (prefers-reduced-motion: reduce) { .bina-shell-host [data-bina-reserve] { transition: none; } }
+:where(.bina-shell-edge) { position: absolute; z-index: 2147483646; touch-action: none; }
+:where(.bina-shell-edge[data-edge="top"]) { top: 0; left: 0; right: 0; height: 8px; }
+:where(.bina-shell-edge[data-edge="bottom"]) { bottom: 0; left: 0; right: 0; height: 8px; }
+:where(.bina-shell-edge[data-edge="left"]) { top: 0; bottom: 0; left: 0; width: 8px; }
+:where(.bina-shell-edge[data-edge="right"]) { top: 0; bottom: 0; right: 0; width: 8px; }
+/* 端末の切り欠きの幅を読むための見えない箱 */
+:where(.bina-shell-insets) { position: absolute; visibility: hidden; pointer-events: none; width: 0; height: 0; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
 :where(.bina-shell-progress) { color: var(--bina-shell-color, #16181d); }
 `;
 
@@ -96,8 +114,13 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   const confirm = mountInstallConfirm(root);
   const netConfirm = mountNetConfirm(root);
   const openUrl = mountOpenUrl(root);
-  root.append(style, cadreHost, fallback, appsHost, status, progress);
+  const insets = document.createElement("div");
+  insets.className = "bina-shell-insets";
+  insets.setAttribute("aria-hidden", "true");
+  root.append(style, insets, cadreHost, fallback, appsHost, status, progress);
   element.replaceChildren(root);
+  const frames = () => [...cadreHost.querySelectorAll<HTMLElement>("[data-bina-reserve]")].filter(frame => !frame.closest(".bina-ui-appArea"));
+  const edge = mountEdgeReveal(root, { frames, timers: options.revealTimers });
 
   let system: BinetteSystem | undefined;
   let stopped = false;
@@ -113,6 +136,38 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
     return area ?? cadreHost;
   }
 
+  // セーフエリア。Cadre の枠を測り、アプリの表示先の CSS の変数とアプリ（Régie 経由）に渡す
+  let safeArea: SafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
+  const safeTargets = () => [...[...hosts.values()].map(entry => entry.host), appsHost];
+  const writeSafeArea = (host: HTMLElement) => {
+    for (const side of ["top", "right", "bottom", "left"] as const) {
+      const value = `${safeArea[side]}px`;
+      if (host.style.getPropertyValue(`--bina-safe-${side}`) !== value) host.style.setProperty(`--bina-safe-${side}`, value);
+    }
+  };
+  const measure = () => {
+    if (stopped) return;
+    const area = getAppArea().getBoundingClientRect();
+    const next = safeAreaOf(area, fallback.hidden ? frames().map(frame => ({ slot: frame.getAttribute("data-bina-reserve") ?? "", box: frame.getBoundingClientRect() })) : [],
+      { device: deviceInsets(insets), fullscreen: view.fullscreen === true });
+    const changed = next.top !== safeArea.top || next.right !== safeArea.right || next.bottom !== safeArea.bottom || next.left !== safeArea.left;
+    safeArea = next;
+    for (const host of safeTargets()) writeSafeArea(host);
+    if (changed) system?.setSafeArea?.(safeArea);
+  };
+  // 枠の大きさや出入りが変わったら測り直す。ResizeObserver の無い環境では DOM 操作と画面の大きさの変化だけで測る
+  const window = document.defaultView;
+  const resizes = window && "ResizeObserver" in window ? new (window as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver(() => measure()) : undefined;
+  const observed = new Set<Element>();
+  const observe = () => {
+    if (!resizes) return;
+    const next = new Set<Element>([cadreHost, ...frames()]);
+    for (const node of observed) if (!next.has(node)) { resizes.unobserve(node); observed.delete(node); }
+    for (const node of next) if (!observed.has(node)) { resizes.observe(node); observed.add(node); }
+  };
+  const onResize = () => measure();
+  window?.addEventListener("resize", onResize);
+
   const setPage = () => system?.setPage({ visible: document.visibilityState === "visible", frozen });
   const freeze = () => { frozen = true; setPage(); };
   const resume = () => { frozen = false; setPage(); };
@@ -121,7 +176,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
   document.addEventListener("resume", resume);
 
   const ui: ShellUi = {
-    bind(value) { if (!stopped) { system = value; system.setInstallState?.(live.installed, live.busy); setPage(); } },
+    bind(value) { if (!stopped) { system = value; system.setInstallState?.(live.installed, live.busy); system.setSafeArea?.(safeArea); setPage(); } },
     install() { void live.install(); },
     confirmInstall: request => confirm.confirm(request),
     confirmNet: request => netConfirm.confirm(request),
@@ -134,7 +189,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
           apps: instance.apps,
           css: instance.app.css,
           onError: error => ui.report(error),
-          onDom: () => ui.update(view),
+          onDom: () => { ui.update(view); observe(); measure(); },
           isolateAppArea: true,
         });
         cadreMounted = mounted;
@@ -149,6 +204,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       host.className = "bina-shell-app";
       host.classList.toggle("bina-shell-content", !instance.home);
       host.hidden = view.front !== instance.id;
+      writeSafeArea(host);
       const targetArea = getAppArea();
       targetArea.append(host);
       const mounted = mountApp(host, instance.app.html, process, { apps: instance.apps, css: instance.app.css, onError: error => ui.report(error) });
@@ -165,6 +221,9 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       const useFallback = next.cadreUnavailable === true;
       fallback.hidden = !useFallback;
       cadreHost.hidden = useFallback;
+      const fullscreen = next.fullscreen === true && !useFallback;
+      root.classList.toggle("bina-shell-fullscreen", fullscreen);
+      edge.setFullscreen(fullscreen);
 
       const targetArea = getAppArea();
       live.setAppArea(targetArea);
@@ -187,6 +246,7 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
           }
         }
       }
+      measure();
     },
     report(error) {
       if (stopped) return;
@@ -213,6 +273,9 @@ export function createShellUi(element: HTMLElement, options: ShellUiOptions = {}
       confirm.stop();
       netConfirm.stop();
       openUrl.stop();
+      edge.stop();
+      resizes?.disconnect();
+      window?.removeEventListener("resize", onResize);
       root.remove();
     },
   };
