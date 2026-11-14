@@ -36,7 +36,7 @@ interface SystemUi {
   report(error: unknown): void;
 }
 interface SystemView {
-  /** スタック。並びはホームバーに出す順。icon はアプリの SVG の文字列（無ければ undefined） */
+  /** スタック。並びはドックに出す順。icon はアプリの SVG の文字列（無ければ undefined） */
   instances: { id: number; key: string; name: string; icon?: string; home: boolean; closing: boolean }[];
   /** 前面。"apps" は Apps の一覧 */
   front: number | "apps" | undefined;
@@ -63,7 +63,7 @@ function startSystem(options: SystemOptions): Promise<BinetteSystem>
 ```
 
 - `startSystem` は、インストールと設定の読み込みとホームの選択までを済ませて解決します。ホームはまだ開きません。呼ぶ側はシステム UI をつなぎ（ボタンとページの知らせ）、今のページの様子を `setPage` で渡してから `openHome()` を呼びます。ホームの起動中に押されたボタンやページの知らせも、そのまま受けられるようにするためです
-- `instances` の `key` は完全なアプリ ID です。同じアプリのインスタンスは 1 つだけなので、ホームバーの名前のボタンは `open(key)` を呼びます
+- `instances` の `key` は完全なアプリ ID です。同じアプリのインスタンスは 1 つだけなので、ドックのボタンは `open(key)` を呼びます
 - `SystemOptions` は `BuildOptions` を継承し、`compiler` と `libraries` を受け取ります。`read` のアプリをビルドするときだけビルドの入口を dynamic import します。`prebuilt` だけなら asc を読みません
 - 名前と形は案です。今の `ShellOptions` から、見た目の部分（`installed`）を除き、`ui` を足したものです
 - アプリの `fullscreen(on)` はセッションごとに覚えます。`SystemView.fullscreen` と Cadre の写し（`CadreApi.isFullscreen()`）には、前面に見えているアプリ（ホームを含む。閉じかけと Apps の一覧のときは除く）の要求だけを渡します。前面が変わると、そのアプリが覚えている値に切り替わります

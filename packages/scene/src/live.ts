@@ -20,7 +20,7 @@ interface InstallPromptEvent extends Event {
   prompt(): Promise<unknown>;
 }
 
-/** ライブモードの状態と操作。インストールのボタンはホームバーが描く */
+/** ライブモードの状態と操作。インストールのボタンはホームのタイルが描く */
 export interface LiveMode {
   /** インストール済みか。true ならボタンを出さない */
   readonly installed: boolean;

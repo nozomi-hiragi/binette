@@ -68,9 +68,9 @@ export interface SystemUi {
   confirmNet?(request: { name: string; source: string; urls: string[] }): Promise<"allow" | "deny" | "later">;
 }
 
-/** ホームバーと前面と Apps に見せる状態 */
+/** Cadre の枠と前面と Apps に見せる状態 */
 export interface SystemView {
-  /** icon はアプリの SVG の文字列。ホームバーのアイコンに使う。無いアプリは undefined */
+  /** icon はアプリの SVG の文字列。ドックのアイコンに使う。無いアプリは undefined */
   instances: { id: number; key: string; name: string; icon?: string; home: boolean; closing: boolean }[];
   front: number | "apps" | undefined;
   apps: { key: string; name: string }[];

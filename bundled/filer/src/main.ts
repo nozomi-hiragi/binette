@@ -285,7 +285,7 @@ class Filer extends App {
     if (previewImage.length > 0) previewViews.push(image(previewImage).label("選択した画像").height(100)); else previewViews.push(text(preview).small().tone("muted"));
     if (capacity.length > 0) { previewViews.push(text(capacity).small().tone("muted")); if (capacityFraction >= 0) previewViews.push(progress(capacityFraction).label("ストレージ使用量").key("filer-capacity")); }
     main.push(column(previewViews).gap(space.xs).padding(space.md).surface("surface").divider("top").key("filer-preview"));
-    return column([row([text("Filer").heading(2).grow().key("filer-title"), text(pickFrom.length > 0 ? "渡すファイルを選択" : "ファイルを整理").small().tone("muted")]).padding(space.md).surface("surface").divider("bottom"), row([placeButtons(), column(main).fill().grow()]).fill().grow().collapse()]).fill();
+    return column([row([text("Filer").heading(2).grow().key("filer-title"), text(pickFrom.length > 0 ? "渡すファイルを選択" : "ファイルを整理").small().tone("muted")]).padding(space.md).surface("surface").divider("bottom"), row([placeButtons(), column(main).fill().grow()]).fill().grow().collapse()]).fill().safeArea();
   }
 }
 launch(new Filer());

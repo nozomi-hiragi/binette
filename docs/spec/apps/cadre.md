@@ -6,16 +6,39 @@
 
 ID は `cadre` です。`apps/cadre/app.json` の `sub` にホーム（`cadre.home`）と設定（`cadre.settings`）を持ち、AS の入口と CSS は 1 つです。`api.sub()` が空文字列なら Cadre、`home`・`settings` なら各サブアプリとして起動します。保存領域と権限は親と共有し、それぞれ別の Worker で動きます。
 
-`onCreate(last, api)` で `CadreApi` を取り、`CadreApi.openHome()` を呼びます。`build()` は上に `appArea().grow()`、下にホームバーを置きます。Scene がその領域へホームとアプリを配置します。Cadre 自身はスタック・ホームの一覧・起動中アプリの一覧に数えません。
+`onCreate(last, api)` で `CadreApi` と `StorageApi` を取り、保存した並びを読んでから `CadreApi.openHome()` を呼びます。`build()` は Décor の `dropArea` を根にし、画面全体の `appArea()` と、その上に重なる枠を描きます。Scene がその領域へホームとアプリを配置します。Cadre 自身はスタック・ホームの一覧・起動中アプリの一覧に数えません。
 
-バーの左にホーム、中央の台に起動中アプリ、右端に OS のタイムゾーンの時計を並べます。時計を押すと通知センターが下からすべり出ます。時計の位置と動き、インストールをホーム画面のタイルに移すこと、v0.2.1 に入れることは決定です。以下の細部は案です。
+## 部品と置き場（決定 2026-11-14。見た目の細部は案）
+
+ホームバーはありません。部品は **ホームボタン**・**ドック**（開いているアプリ）・**時計兼通知** の 3 つで、それぞれ独立しています。3 つとも必ずどこかに置き、消す操作はありません。
+
+- 置き場は 8 か所です。左上 `tl`・上中央 `tc`・右上 `tr`・左中央 `ml`・右中央 `mr`・左下 `bl`・下中央 `bc`・右下 `br`
+- 部品のある置き場には、角丸の枠が 1 つ出てそれらを囲みます。部品が無くなった置き場は枠も出しません（枠は最大 8 個）。辺いっぱいの帯は描かず、枠と枠のあいだには壁紙（アプリの表示領域）が見えます。近い枠を 1 つにまとめることはしません
+- 枠は Décor の `.reserve(slot)` で宣言し（DOM では `data-bina-reserve`、key は `frame-<置き場>`）、アプリの表示領域（画面全体）の上に重ねます。セーフエリアとフルスクリーンの出し入れは Scene がします（[scene/shell.md](../scene/shell.md#セーフエリアとフルスクリーン決定実装済み)）
+- 同じ置き場の部品は、上下と角の置き場では横に、`ml`・`mr` では縦に並びます。表示は横勝ちで、角と上下中央の部品は横表示、`ml`・`mr` の部品だけが縦表示です。ドックは縦表示ならアイコンを縦に並べ、時計は縦表示なら時と分を 2 段にします
+- 部品の太さ（横表示なら高さ、縦表示なら幅）は全部共通で、CSS の変数 `--cadre-part-size`（既定 52px）から取ります。大中小の切り替えはまだありません
+- 既定の並びは、ホーム＝`bl`、ドック＝`bc`、時計＝`br` です。開いているアプリが無いときのドックは隠し、ドックだけの枠も出しません
+- 600px 未満の幅では、置き場の並びはそのまま、`ml`・`mr` の部品を下中央の枠へ横表示で写して見せます（key は `narrow-<部品>`。保存した並びは変えない）。下中央に見える部品が無いときは、写した分だけの枠（`frame-bc-narrow`）を狭い幅でだけ出します
+- 組み込みのアプリ（ホーム・設定・アプリ・Filer）は、いちばん外側の部品に Décor の `.safeArea()` を付け、中身が枠に被らないようにします。Cadre の CSS で余白を決めている根（`home-grid`・`settings-root`・`apps-root`）は、その余白に `--bina-safe-*` を足します
+
+## 並びの編集（決定 2026-11-14）
+
+- ホームボタンを右クリック（タッチなら長押し）するとメニュー（Décor の `menu`）が開き、「レイアウトを編集」を選ぶと編集モードです
+- 編集モードでは 8 か所の置き場を点線の枠で見せ、部品をドラッグで動かせます（Décor の `.draggable`・`.dropZone`）。ドラッグ中はポインタにいちばん近い置き場を強調し、入る位置（前か後ろか）を見せます
+- 空の置き場に落とすと、そこに枠ができて部品が入ります。部品がある置き場の近くに落とすと隣に並び、枠は両方を覆うように広がります。並び順は、落とした位置が相手のどちら側かで決まります。同じ置き場の中の並べ替えもドラッグです
+- 画面の中央に「完了」と「最初の並びに戻す」を出します。Escape でも編集を終えます。編集中は部品を押しても何もしません
+- 並びは落とすたびに Cadre の保存領域（`StorageApi`、名前 `cadre.layout`）に `bl=home;bc=dock;br=clock` の形で保存します。「最初の並びに戻す」は既定の並びにして保存を消します
+- 保存領域は起動の `init` で Worker に届いているので、`onCreate` の中で同期に読めます。最初の `build()` から保存した並びで描くので、既定の並びから跳びません。知らない置き場や部品、重なり、足りない部品のある値は読み捨てて既定に戻し、保存も消します
+- 仕様の案にあった「前回の並びを localStorage にも覚えて起動画面から同じ形で出す」は入れていません。Cadre は Worker の中で localStorage を使えず、上のとおり読むまで待つ必要もなくちらつかないためです
+
+## 時計と通知
 
 時計は 24 時間の「時:分」で、未開封があると合計のバッジを出します。0 は出さず、100 以上は `99+` です。ドックにも差出人アプリごとの未開封数を出します。Régie は分の頭で写しを送り、時計と通知時刻を描き直します。前面のアプリには点を付け、名前は吹き出しに出し、メニューから開くか閉じます。
 
-通知センターは広い画面ではバーの右上、狭い画面では幅いっぱいのシートです。再読み込み前を含む全未開封を新しい順に並べ、差出人、アイコン、題、本文、相対時刻、操作と「閉じる」を出します。「すべて閉じる」は全件を開封し、「履歴」は設定を開きます。空なら「新しい通知はありません」と表示します。時計の再押下または外側を押すと閉じます。動きを減らす設定ではアニメーションを止めます。
+通知センターとポップアップの通知は、時計を置いた置き場の近くから出します（key は `notice-<置き場>`）。時計が `tl` なら左上の枠の下から、`mr` なら右中央の枠の横から出ます。狭い画面では幅いっぱいにし、`ml`・`mr` の時計は下中央に写すので下から出します。再読み込み前を含む全未開封を新しい順に並べ、差出人、アイコン、題、本文、相対時刻、操作と「閉じる」を出します。「すべて閉じる」は全件を開封し、「履歴」は設定を開きます。空なら「新しい通知はありません」と表示します。時計の再押下または外側を押すと閉じます。前面のアプリがフルスクリーンになると、時計の枠が退くので通知センターも閉じます。動きを減らす設定ではアニメーションを止めます。
 
-起動中に届いた最新の 1 通だけを 5 秒ポップアップにします。返信入力中は待ち、閉じてから 5 秒で消します。urgent は自動で消しません。通知センター表示中はポップアップを隠します。開封した通知は設定の履歴に残ります。
+起動中に届いた最新の 1 通だけを 5 秒ポップアップにします。返信入力中は待ち、閉じてから 5 秒で消します。urgent は自動で消しません。通知センター表示中はポップアップを隠します。フルスクリーンで時計が隠れていても、ポップアップは出します。開封した通知は設定の履歴に残ります。
 
-`CadreApi` は `clock()`、`notificationCount()`・`notificationId(i)`・`notificationFrom(i)`・`notificationName(i)`・`notificationAppIndex(i)`・`notificationTitle(i)`・`notificationBody(i)`・`notificationTime(i)`・`notificationPopup(i)`、通知の action 取得、`notificationOpen(id)`・`notificationDismiss(id)`・`notificationReply(id, action, body)`・`notificationKeep(id, keep)`、`unread(i)`・`unreadTotal()` を持ちます。起動中アプリ向けに `count()`（別名 `running()`）、`name(i)`、`isFront(i)`、`isHome()`、`hasIcon(i)`、`appIndex(i)`、`open(i)`、`close(i)`、`openHome()`（別名 `home()`）、`back()`、`openSettings()` を持ちます。`isInstalled()`・`installBusy()`・`install()` も互換のため残します。起動中の番号は `AppsApi` のインストール済み一覧とは別です。
+`CadreApi` は `clock()`、`notificationCount()`・`notificationId(i)`・`notificationFrom(i)`・`notificationName(i)`・`notificationAppIndex(i)`・`notificationTitle(i)`・`notificationBody(i)`・`notificationTime(i)`・`notificationPopup(i)`、通知の action 取得、`notificationOpen(id)`・`notificationDismiss(id)`・`notificationReply(id, action, body)`・`notificationKeep(id, keep)`、`unread(i)`・`unreadTotal()` を持ちます。起動中アプリ向けに `count()`（別名 `running()`）、`name(i)`、`isFront(i)`、`isHome()`、`isFullscreen()`（前面のアプリがフルスクリーンか）、`hasIcon(i)`、`appIndex(i)`、`open(i)`、`close(i)`、`openHome()`（別名 `home()`）、`back()`、`openSettings()` を持ちます。`isInstalled()`・`installBusy()`・`install()` も互換のため残します。起動中の番号は `AppsApi` のインストール済み一覧とは別です。
 
 落ちたときは Régie が待ちを入れて再起動し、`homeRetryWindow` を過ぎても落ち続ければ、Scene がアプリの表示領域とホームボタンだけを出します（[lifecycle.md](../lifecycle.md#落ちたとき決定)）。

@@ -2,7 +2,7 @@
 
 [Scene の目次](README.md)
 
-Scene は、常駐 Cadre の表示先、Apps、エラー表示、ライブモードと、Cadre が落ち続けたときの最低限の大枠を持ちます。ホームバーはシステムアプリ [apps/cadre](../apps/cadre.md) が AS の Décor で描きます。何を前面にするか、いつ閉じるか、Cadre を起動し直すかは Régie が決めます。
+Scene は、常駐 Cadre の表示先、Apps、エラー表示、ライブモードと、Cadre が落ち続けたときの最低限の大枠を持ちます。ホーム・ドック・時計の枠はシステムアプリ [apps/cadre](../apps/cadre.md) が AS の Décor で描きます。何を前面にするか、いつ閉じるか、Cadre を起動し直すかは Régie が決めます。
 
 Cadre は `appArea()` でアプリの表示先を宣言し、Scene がその中へホームとほかのアプリを配置します。以下は実装済みですが、API と見た目の形は案です。
 
@@ -62,15 +62,15 @@ function isInstalled(window: Window | null): boolean
 - フルスクリーンのあいだ、4 辺に幅 8px の帯（`.bina-shell-edge`）を出します。帯を押す（クリック、または辺から内側へのスワイプの始まり）と、その辺の置き場のうち触った位置にいちばん近い枠だけに `data-bina-revealed` を付けて戻します。上の辺の左寄りなら `tl`、左右の辺は `ml`・`mr` です。3 秒で退け直し、ポインタが枠の上にある・触っているあいだは待ちます。離れてから 3 秒です。前面がフルスクリーンを求めないアプリに替われば、元どおり常に出します
 - 動きを減らす設定では、すべらせるアニメーションを止めます
 
-## ホームバーと最低限の大枠（案・実装済み）
+## Cadre の枠と最低限の大枠（案・実装済み）
 
-通常のホームバーは [apps/cadre.md](../apps/cadre.md) のとおりです。Scene はホームバーの宣言の木を組まず、Cadre の CSS を表示先に限定して適用します。
+通常の枠は [apps/cadre.md](../apps/cadre.md) のとおりです。Scene は枠の宣言の木を組まず、Cadre の CSS を表示先に限定して適用します。
 
 Cadre が無い、または落ち続けると、`.bina-shell-fallback` にアプリの表示領域と「ホーム」ボタンを出します。ボタンは `system.openHome()` を呼びます。既存のアプリの DOM は作り直さず、表示先を移します。Cadre の再起動中と復帰後も、前面の判定は Régie が持ちます。
 
 ## Apps の一覧（案・実装済み）
 
-ホームが落ち続けたときの最後の受け皿です。並べるアプリと出すときは Régie が決め（[regie/system.md](../regie/system.md#落ちたとき)）、大枠はアプリの置き場と同じ並びの専用要素 `.bina-shell-apps` に DOM を直接描きます。Worker を作らず、スタックにもホームバーの一覧にも数えません。
+ホームが落ち続けたときの最後の受け皿です。並べるアプリと出すときは Régie が決め（[regie/system.md](../regie/system.md#落ちたとき)）、大枠はアプリの置き場と同じ並びの専用要素 `.bina-shell-apps` に DOM を直接描きます。Worker を作らず、スタックにもドックにも数えません。
 
 見出しや飾りは付けず、縦に並べたリンクの見た目の button だけを表示します。type は button、名前は textContent、aria-label は「名前を開く」です。押されたら `open(key)` を呼びます。
 

@@ -1,4 +1,4 @@
-/* Cadre のホームバー。見た目は Décor の木のキー（data-bina-key）で選び、この CSS は Cadre の表示先の中だけに効く（アプリの表示領域の中には効かない）。
+/* Cadre とサブアプリの見た目。見た目は Décor の木のキー（data-bina-key）で選び、この CSS は Cadre の表示先の中だけに効く（アプリの表示領域の中には効かない）。
    色は --bina-shell-* とホストが与える OS の役割の色（--bina-ui-*）だけで決め、ライトとダークで同じ規則にする */
 :scope {
   --cadre-accent: var(--bina-ui-accent, var(--bina-shell-focus, #3273b9));
@@ -6,54 +6,96 @@
   --cadre-accent-soft: color-mix(in srgb, var(--cadre-accent) 14%, transparent);
   --cadre-hover: color-mix(in srgb, currentColor 8%, transparent);
   --cadre-line: var(--bina-ui-line, var(--bina-shell-border, #d5dae1));
-  --cadre-dock-background: var(--bina-shell-dock-background, var(--bina-shell-surface, #fff));
 }
-/* 左にホーム、中央にドック、右にインストール。ドックが広いときは両端を縮めずドックの中だけをスクロールする */
-[data-bina-key="homebar"] { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr); align-items: center; gap: var(--bina-shell-gap, 8px); box-sizing: content-box; flex-shrink: 0; margin-top: auto; min-height: 52px; padding: var(--bina-shell-homebar-padding-block, 4px) max(var(--bina-shell-padding, 12px), env(safe-area-inset-right, 0px)) max(var(--bina-shell-homebar-padding-block, 4px), env(safe-area-inset-bottom, 0px)) max(var(--bina-shell-padding, 12px), env(safe-area-inset-left, 0px)); border-top: 1px solid var(--bina-shell-border, #d5dae1); background: var(--bina-shell-background, #f3f5f8); color: var(--bina-shell-color, #16181d); container: bina-shell-homebar / inline-size; }
-[data-bina-key="homebar"] .bina-ui-button { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-select: none; }
-[data-bina-key="home"], [data-bina-key="install"] { grid-row: 1; display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-width: 0; min-height: 0; height: 40px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; line-height: 1; white-space: nowrap; transition: background-color .12s, color .12s; }
-/* アイコンだけのボタン。線画を mask にして currentColor で塗るので、ダークでも文字と同じ色になる */
-[data-bina-key="home"]::before, [data-bina-key="install"]::before { content: ""; flex: none; width: 20px; height: 20px; background: currentColor; -webkit-mask: var(--cadre-icon) center / contain no-repeat; mask: var(--cadre-icon) center / contain no-repeat; }
-[data-bina-key="home"] { grid-column: 1; justify-self: start; width: 40px; --cadre-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2010.4%2012%204l8%206.4V19a1%201%200%200%201-1%201h-4.5v-5.5h-5V20H5a1%201%200%200%201-1-1z%22%2F%3E%3C%2Fsvg%3E"); }
-[data-bina-key="home"]:hover { background: var(--cadre-hover); }
-[data-bina-key="home"][aria-pressed="true"] { background: var(--cadre-accent-soft); color: var(--bina-ui-accent-text, var(--cadre-accent)); }
-[data-bina-key="install"] { grid-column: 3; justify-self: end; height: 32px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--cadre-accent); color: var(--bina-ui-accent-content, var(--bina-shell-surface, #fff)); font-size: 13px; font-weight: 600; --cadre-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%204.5v13M6.5%2012l5.5%205.5%205.5-5.5%22%2F%3E%3C%2Fsvg%3E"); }
-[data-bina-key="install"]::before { width: 16px; height: 16px; }
-[data-bina-key="install"]:not(:disabled):hover { background: color-mix(in srgb, var(--cadre-accent) 86%, var(--bina-shell-color, #16181d)); }
-[data-bina-key="install"] > .bina-ui-text { padding: 0; }
-[data-bina-key="home"]:focus-visible, [data-bina-key="install"]:focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: 2px; }
-/* 狭い画面では、インストールもアイコンだけにする */
-@container bina-shell-homebar (width < 720px) {
-  [data-bina-key="install"] { width: 40px; height: 40px; padding: 0; border-radius: 12px; background: transparent; color: inherit; }
-  [data-bina-key="install"]::before { width: 20px; height: 20px; }
-  [data-bina-key="install"]:not(:disabled):hover { background: var(--cadre-hover); }
-  [data-bina-key="install"] > .bina-ui-text { display: none; }
+/* 部品（ホーム・ドック・時計）は 8 か所の置き場の角丸の枠に入り、枠はアプリの上に重なる。枠と枠のあいだには壁紙が見える。
+   太さ（横表示なら高さ、縦表示なら幅）は --cadre-part-size から取る。角と上下中央は横表示、ml・mr は縦表示 */
+:scope {
+  --cadre-part-size: 52px;
+  --cadre-frame-padding: 4px;
+  --cadre-frame-size: calc(var(--cadre-part-size) + 2 * var(--cadre-frame-padding));
+  --cadre-edge: 8px;
+  --cadre-gap: 8px;
+  --cadre-top: calc(var(--cadre-edge) + env(safe-area-inset-top, 0px));
+  --cadre-right: calc(var(--cadre-edge) + env(safe-area-inset-right, 0px));
+  --cadre-bottom: calc(var(--cadre-edge) + env(safe-area-inset-bottom, 0px));
+  --cadre-left: calc(var(--cadre-edge) + env(safe-area-inset-left, 0px));
+  --cadre-frame-background: var(--bina-shell-dock-background, var(--bina-shell-surface, #fff));
 }
-/* 開いているアプリの台。吹き出しは台の上に出すので、ボタンの上端から台の余白の分だけ離す */
-[data-bina-key="dock"] { grid-row: 1; grid-column: 2; justify-self: center; display: flex; align-items: center; gap: 2px; box-sizing: border-box; min-width: 0; max-width: 100%; padding: 6px; border-radius: 16px; background: var(--cadre-dock-background); box-shadow: var(--bina-shell-dock-shadow, 0 0 0 1px color-mix(in srgb, currentColor 8%, transparent), 0 2px 8px color-mix(in srgb, var(--bina-shell-color, #16181d) 10%, transparent)); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; --bina-ui-icon-size: 26px; --bina-ui-tip-gap: 12px; }
-[data-bina-key="dock"]::-webkit-scrollbar { display: none; }
-[data-bina-key="dock"] > .bina-ui-button { position: relative; flex: none; display: grid; place-items: center; box-sizing: border-box; width: 40px; height: 40px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; }
-[data-bina-key="dock"] > .bina-ui-button:hover { background: var(--cadre-hover); }
-/* 押した手応えとして、アイコンを少し縮める */
-[data-bina-key="dock"] > .bina-ui-button > * { transition: transform .12s; }
-[data-bina-key="dock"] > .bina-ui-button:active > * { transform: scale(.9); }
-[data-bina-key="home"]:active::before { transform: scale(.9); }
-@media (prefers-reduced-motion: reduce) { [data-bina-key="dock"] > .bina-ui-button > *, [data-bina-key="home"], [data-bina-key="install"] { transition: none; } }
-/* 前面のアプリは淡いアクセントの面と点で示す */
-[data-bina-key="dock"] > .bina-ui-button[aria-pressed="true"] { background: var(--cadre-accent-soft); }
-[data-bina-key="dock"] > .bina-ui-button[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--cadre-accent); }
-/* ドックはスクロールで外側を切るので、フォーカスの枠は内側に引く */
-[data-bina-key="dock"] > .bina-ui-button:focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: -2px; }
-[data-bina-key="dock"] > .bina-ui-button > .bina-ui-appIcon { display: block; pointer-events: none; }
-/* アイコンの無いアプリの頭文字の札 */
-[data-bina-key="dock"] > .bina-ui-button > .bina-ui-text { display: grid; place-items: center; box-sizing: border-box; width: 26px; height: 26px; padding: 0; border-radius: 8px; background: var(--bina-ui-sunken, var(--bina-shell-background, #f3f5f8)); box-shadow: inset 0 0 0 1px var(--cadre-line); font-size: 13px; font-weight: 600; line-height: 1; }
-/* ダークでは台を背景より少し明るくして持ち上げる。light-dark() の無いブラウザはライトの値のまま */
 @supports (color: light-dark(#fff, #000)) {
-  [data-bina-key="dock"] { background: var(--bina-shell-dock-background, light-dark(var(--bina-shell-surface, #fff), color-mix(in srgb, var(--bina-shell-color, #f5f6f8) 9%, var(--bina-shell-background, #1a1c21)))); }
+  :scope { --cadre-frame-background: var(--bina-shell-dock-background, light-dark(var(--bina-shell-surface, #fff), color-mix(in srgb, var(--bina-shell-color, #f5f6f8) 9%, var(--bina-shell-background, #1a1c21)))); }
+}
+[data-bina-key="cadre-root"] { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+/* アプリの表示領域は画面全体 */
+[data-bina-key="cadre-area"] { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+[data-bina-reserve] { position: absolute; z-index: 4; display: flex; flex-direction: row; align-items: center; gap: 2px; box-sizing: border-box; height: var(--cadre-frame-size); max-width: calc(100% - 2 * var(--cadre-edge)); padding: var(--cadre-frame-padding); border-radius: 18px; background: var(--cadre-frame-background); color: var(--bina-shell-color, #16181d); box-shadow: var(--bina-shell-dock-shadow, 0 0 0 1px color-mix(in srgb, currentColor 8%, transparent), 0 2px 10px color-mix(in srgb, var(--bina-shell-color, #16181d) 14%, transparent)); --bina-ui-icon-size: 26px; --bina-ui-tip-gap: 12px; }
+[data-bina-reserve="ml"], [data-bina-reserve="mr"] { flex-direction: column; height: auto; width: var(--cadre-frame-size); max-width: none; max-height: calc(100% - 2 * (var(--cadre-edge) + var(--cadre-frame-size) + var(--cadre-gap))); }
+[data-bina-reserve="tl"] { top: var(--cadre-top); left: var(--cadre-left); }
+[data-bina-reserve="tc"] { top: var(--cadre-top); left: 50%; transform: translateX(-50%); }
+[data-bina-reserve="tr"] { top: var(--cadre-top); right: var(--cadre-right); }
+[data-bina-reserve="ml"] { left: var(--cadre-left); top: 50%; transform: translateY(-50%); }
+[data-bina-reserve="mr"] { right: var(--cadre-right); top: 50%; transform: translateY(-50%); }
+[data-bina-reserve="bl"] { bottom: var(--cadre-bottom); left: var(--cadre-left); }
+[data-bina-reserve="bc"] { bottom: var(--cadre-bottom); left: 50%; transform: translateX(-50%); }
+[data-bina-reserve="br"] { bottom: var(--cadre-bottom); right: var(--cadre-right); }
+[data-bina-reserve] .bina-ui-button { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-select: none; }
+/* 狭い幅で下中央に写す部品と、写した分だけの下中央の枠は、広い幅では出さない */
+[data-bina-key^="narrow-"], [data-bina-key="frame-bc-narrow"] { display: none; }
+@media (max-width: 599px) {
+  [data-bina-key="cadre-root"]:not(:has(> [data-bina-key="layout-controls"])) :is([data-bina-key="frame-ml"], [data-bina-key="frame-mr"]) { display: none; }
+  [data-bina-key="cadre-root"]:not(:has(> [data-bina-key="layout-controls"])) :is([data-bina-key^="narrow-"]:not([hidden]), [data-bina-key="frame-bc-narrow"]) { display: flex; }
 }
 
+/* ホームボタン。線画を mask にして currentColor で塗るので、ダークでも文字と同じ色になる */
+:is([data-bina-key="home"], [data-bina-key="narrow-home"]) { display: inline-flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box; width: var(--cadre-part-size); height: var(--cadre-part-size); min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 14px; background: transparent; color: inherit; font: inherit; line-height: 1; transition: background-color .12s, color .12s; --cadre-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2010.4%2012%204l8%206.4V19a1%201%200%200%201-1%201h-4.5v-5.5h-5V20H5a1%201%200%200%201-1-1z%22%2F%3E%3C%2Fsvg%3E"); }
+:is([data-bina-key="home"], [data-bina-key="narrow-home"])::before { content: ""; flex: none; width: 22px; height: 22px; background: currentColor; -webkit-mask: var(--cadre-icon) center / contain no-repeat; mask: var(--cadre-icon) center / contain no-repeat; transition: transform .12s; }
+:is([data-bina-key="home"], [data-bina-key="narrow-home"]):hover { background: var(--cadre-hover); }
+:is([data-bina-key="home"], [data-bina-key="narrow-home"])[aria-pressed="true"] { background: var(--cadre-accent-soft); color: var(--bina-ui-accent-text, var(--cadre-accent)); }
+:is([data-bina-key="home"], [data-bina-key="narrow-home"]):active::before { transform: scale(.9); }
+:is([data-bina-key="home"], [data-bina-key="narrow-home"]):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: -2px; }
+
+/* 開いているアプリのドック。縦表示ではアイコンを縦に並べ、はみ出す分は中だけをスクロールする */
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) { display: flex; flex-direction: row; align-items: center; gap: 2px; box-sizing: border-box; min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior: contain; scrollbar-width: none; }
+:is([data-bina-reserve="ml"], [data-bina-reserve="mr"]) > [data-bina-key="dock"] { flex-direction: column; max-width: none; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"])::-webkit-scrollbar { display: none; }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button { position: relative; flex: none; display: grid; place-items: center; box-sizing: border-box; width: calc(var(--cadre-part-size) - 8px); height: calc(var(--cadre-part-size) - 8px); min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button:hover { background: var(--cadre-hover); }
+/* 押した手応えとして、アイコンを少し縮める */
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button > * { transition: transform .12s; }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button:active > * { transform: scale(.9); }
+/* 前面のアプリは淡いアクセントの面と点で示す */
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button[aria-pressed="true"] { background: var(--cadre-accent-soft); }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--cadre-accent); }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button:focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: -2px; }
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button > .bina-ui-appIcon { display: block; pointer-events: none; }
+/* アイコンの無いアプリの頭文字の札 */
+:is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button > .bina-ui-text { display: grid; place-items: center; box-sizing: border-box; width: 26px; height: 26px; padding: 0; border-radius: 8px; background: var(--bina-ui-sunken, var(--bina-shell-background, #f3f5f8)); box-shadow: inset 0 0 0 1px var(--cadre-line); font-size: 13px; font-weight: 600; line-height: 1; }
+[data-bina-key="dock-empty"] { padding: 0 12px; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { :is([data-bina-key="dock"], [data-bina-key="narrow-dock"]) > .bina-ui-button > *, :is([data-bina-key="home"], [data-bina-key="narrow-home"]), :is([data-bina-key="home"], [data-bina-key="narrow-home"])::before { transition: none; } }
+
+/* 時計兼通知。縦表示では時と分を 2 段にする */
+:is([data-bina-key="clock"], [data-bina-key="narrow-clock"]) { display: inline-grid; place-items: stretch; flex: none; box-sizing: border-box; min-width: 80px; height: var(--cadre-part-size); min-height: 0; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; }
+:is([data-bina-reserve="ml"], [data-bina-reserve="mr"]) > [data-bina-key="clock"] { min-width: 0; width: var(--cadre-part-size); height: auto; min-height: var(--cadre-part-size); padding: 8px 0; }
+:is([data-bina-key="clock"], [data-bina-key="narrow-clock"]):hover, :is([data-bina-key="clock"], [data-bina-key="narrow-clock"])[aria-pressed="true"] { background: var(--cadre-accent-soft); }
+:is([data-bina-key="clock"], [data-bina-key="narrow-clock"]):focus-visible { outline: 2px solid var(--bina-shell-focus, #3273b9); outline-offset: -2px; }
+/* 時刻はボタンの中央に置き、見える所と押せる所をそろえる。バッジはドックと同じくボタンの右上の角に出す */
+:is([data-bina-key="clock"], [data-bina-key="narrow-clock"]) .bina-ui-stack { min-width: 0; padding: 0; }
+:is([data-bina-key="clock"], [data-bina-key="narrow-clock"]) .bina-ui-stack > :is(.bina-ui-text, .bina-ui-column) { place-self: center; }
+[data-bina-key="clock-lines"] { align-items: center; gap: 0; line-height: 1.15; font-weight: 600; }
+[data-bina-key="clock-badge"], [data-bina-key="dock-badge"], [data-bina-key="home-badge"] { z-index: 1; transform: translate(35%, -35%); }
+
+/* レイアウトの編集。8 か所の置き場を点線の枠で見せ、空の置き場は落とす先の大きさを持つ。完了などの操作は画面の中央 */
+[data-bina-key="cadre-root"]:has(> [data-bina-key="layout-controls"]) [data-bina-reserve] { outline: 2px dashed color-mix(in srgb, var(--cadre-accent) 55%, transparent); outline-offset: 3px; }
+[data-bina-key="cadre-root"]:has(> [data-bina-key="layout-controls"]) [data-bina-reserve]:empty { min-width: var(--cadre-frame-size); min-height: var(--cadre-frame-size); background: color-mix(in srgb, var(--cadre-frame-background) 55%, transparent); }
+[data-bina-key="cadre-root"] [data-bina-reserve].bina-ui-drop-target { outline: 2px solid var(--cadre-accent); }
+[data-bina-key="cadre-root"]:has(> [data-bina-key="layout-controls"]) [data-bina-reserve] > [data-bina-drag] { cursor: grab; }
+[data-bina-key="layout-controls"] { position: absolute; z-index: 6; top: 50%; left: 50%; transform: translate(-50%, -50%); box-sizing: border-box; width: min(360px, calc(100% - 32px)); gap: 10px; padding: 18px; border: 1px solid var(--cadre-line); border-radius: 16px; background: var(--bina-ui-surface, var(--bina-shell-surface, #fff)); color: var(--bina-ui-text, var(--bina-shell-color, #16181d)); box-shadow: 0 8px 28px #0003; text-align: center; }
+[data-bina-key="layout-title"] { margin: 0; font-size: 18px; }
+[data-bina-key="layout-actions"] { justify-content: center; flex-wrap: wrap; gap: 8px; }
+[data-bina-key="layout-actions"] > .bina-ui-button { min-height: 34px; padding: 6px 14px; border-radius: 9px; font-size: 14px; white-space: nowrap; }
+
 /* ホーム。タイルは枠のないアイコンと名前にし、列は中央に寄せる。押せる面は hover と focus で示す */
-[data-bina-key="home-grid"] { grid-template-columns: repeat(auto-fit, 88px); justify-content: center; gap: 20px 12px; padding: 40px max(16px, calc((100% - 888px) / 2)) 32px; --bina-ui-icon-size: 60px; }
+/* セーフエリアの分（--bina-safe-*）を余白に足し、OS の枠に被らないようにする */
+[data-bina-key="home-grid"] { grid-template-columns: repeat(auto-fit, 88px); justify-content: center; gap: 20px 12px; padding: calc(40px + var(--bina-safe-top, 0px)) calc(max(16px, calc((100% - 888px) / 2)) + var(--bina-safe-right, 0px)) calc(32px + var(--bina-safe-bottom, 0px)) calc(max(16px, calc((100% - 888px) / 2)) + var(--bina-safe-left, 0px)); --bina-ui-icon-size: 60px; }
 :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]) { box-sizing: border-box; min-width: 0; padding: 10px 2px 8px; border: 0; border-radius: 18px; background: transparent; font-size: 13px; line-height: 1.35; -webkit-tap-highlight-color: transparent; transition: background-color .12s; }
 :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]):hover { background: color-mix(in srgb, currentColor 7%, transparent); }
 :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]):active { background: color-mix(in srgb, currentColor 11%, transparent); }
@@ -62,7 +104,7 @@
 :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]):active .bina-ui-appIcon { transform: scale(.94); }
 :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]) .bina-ui-text { display: -webkit-box; box-sizing: border-box; max-width: 100%; padding: 0 2px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-align: center; overflow-wrap: anywhere; }
 @media (max-width: 520px) {
-  [data-bina-key="home-grid"] { grid-template-columns: repeat(auto-fit, 76px); gap: 16px 8px; padding: 28px 12px 24px; --bina-ui-icon-size: 56px; }
+  [data-bina-key="home-grid"] { grid-template-columns: repeat(auto-fit, 76px); gap: 16px 8px; padding: calc(28px + var(--bina-safe-top, 0px)) calc(12px + var(--bina-safe-right, 0px)) calc(24px + var(--bina-safe-bottom, 0px)) calc(12px + var(--bina-safe-left, 0px)); --bina-ui-icon-size: 56px; }
 }
 @media (prefers-reduced-motion: reduce) {
   :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]), :is([data-bina-key^="home-tile-"], [data-bina-key="install-tile"]) .bina-ui-appIcon { transition: none; }
@@ -70,7 +112,7 @@
 
 /* 設定のグループと行。色は Scene から届く Décor の役割の色に合わせる。 */
 :scope:has(> [data-bina-key="settings-root"]) { background: var(--bina-ui-sunken, #f2f3f6); }
-[data-bina-key="settings-root"] { box-sizing: border-box; width: 100%; max-width: 1080px; margin: 0 auto; padding: 40px 28px 48px; gap: 26px; }
+[data-bina-key="settings-root"] { box-sizing: border-box; width: 100%; max-width: 1080px; margin: 0 auto; padding: calc(40px + var(--bina-safe-top, 0px)) calc(28px + var(--bina-safe-right, 0px)) calc(48px + var(--bina-safe-bottom, 0px)) calc(28px + var(--bina-safe-left, 0px)); gap: 26px; }
 [data-bina-key="settings-header"] { padding: 0 4px 6px; }
 [data-bina-key="settings-title"] { margin: 0; font-size: 32px; font-weight: 750; letter-spacing: -.04em; line-height: 1.25; }
 [data-bina-key$="-section"] { gap: 8px; }
@@ -101,7 +143,7 @@
 [data-bina-key="history"] .bina-ui-small { font-variant-numeric: tabular-nums; }
 [data-bina-key="history-empty"] { padding: 18px 16px; font-size: 13px; }
 @media (max-width: 520px) {
-  [data-bina-key="settings-root"] { padding: 26px 12px 32px; gap: 24px; }
+  [data-bina-key="settings-root"] { padding: calc(26px + var(--bina-safe-top, 0px)) calc(12px + var(--bina-safe-right, 0px)) calc(32px + var(--bina-safe-bottom, 0px)) calc(12px + var(--bina-safe-left, 0px)); gap: 24px; }
   [data-bina-key="settings-title"] { font-size: 30px; }
   [data-bina-key="homes"] > button, [data-bina-key="cadres"] > button, [data-bina-key="debug"] > .bina-ui-row { padding: 14px 12px; }
   [data-bina-key="debug"] > .bina-ui-row { gap: 8px; }
@@ -191,9 +233,18 @@
 [data-bina-key="schedule-every"] { min-width: 64px; padding: 0 8px; text-align: center; font-size: 14px; white-space: nowrap; }
 [data-bina-key="schedules-empty"] { padding: 18px 16px; font-size: 13px; }
 
-/* Overlay notifications without shrinking the application or home bar. */
-[data-bina-key="cadre-root"] { position: relative; }
-[data-bina-key="notifications"] { position: absolute; z-index: 2; top: 12px; right: 12px; width: min(380px, calc(100% - 24px)); max-height: calc(100% - 100px); overflow-y: auto; gap: 10px; overscroll-behavior: contain; }
+/* 通知センターとポップアップは、時計を置いた置き場の近くから出す（notice-<置き場>）。アプリの表示領域とほかの枠は縮めない */
+[data-bina-key^="notice-"] { position: absolute; z-index: 3; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; width: min(380px, calc(100% - 24px)); max-height: calc(100% - 2 * (var(--cadre-edge) + var(--cadre-frame-size) + var(--cadre-gap))); pointer-events: none; }
+[data-bina-key^="notice-"] > * { pointer-events: auto; }
+:is([data-bina-key="notice-tl"], [data-bina-key="notice-tc"], [data-bina-key="notice-tr"]) { top: calc(var(--cadre-top) + var(--cadre-frame-size) + var(--cadre-gap)); }
+:is([data-bina-key="notice-bl"], [data-bina-key="notice-bc"], [data-bina-key="notice-br"]) { bottom: calc(var(--cadre-bottom) + var(--cadre-frame-size) + var(--cadre-gap)); justify-content: flex-end; }
+:is([data-bina-key="notice-tl"], [data-bina-key="notice-bl"]) { left: var(--cadre-left); }
+:is([data-bina-key="notice-tr"], [data-bina-key="notice-br"]) { right: var(--cadre-right); }
+:is([data-bina-key="notice-tc"], [data-bina-key="notice-bc"]) { left: 50%; transform: translateX(-50%); }
+:is([data-bina-key="notice-ml"], [data-bina-key="notice-mr"]) { top: 50%; transform: translateY(-50%); }
+[data-bina-key="notice-ml"] { left: calc(var(--cadre-left) + var(--cadre-frame-size) + var(--cadre-gap)); }
+[data-bina-key="notice-mr"] { right: calc(var(--cadre-right) + var(--cadre-frame-size) + var(--cadre-gap)); }
+[data-bina-key="notifications"] { gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 [data-bina-key="notifications"] > .bina-ui-column { padding: 14px; gap: 10px; border: 1px solid var(--cadre-line); border-radius: 14px; background: var(--bina-ui-surface, var(--bina-shell-surface, #fff)); color: var(--bina-ui-text, var(--bina-shell-color, #16181d)); box-shadow: 0 4px 20px #0002; overflow-wrap: anywhere; }
 [data-bina-key="notifications"] .bina-ui-heading-2 { margin: 0; font-size: 16px; }
 [data-bina-key="notifications"] .bina-ui-text { white-space: pre-wrap; }
@@ -207,7 +258,7 @@
 
 /* アプリ管理は設定と同じ地の色・幅・見出しにし、まとまりをカードで見せる */
 :scope:has(> [data-bina-key="apps-root"]) { background: var(--bina-ui-sunken, #f2f3f6); }
-[data-bina-key="apps-root"] { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 40px 28px 48px; gap: 20px; }
+[data-bina-key="apps-root"] { box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: calc(40px + var(--bina-safe-top, 0px)) calc(28px + var(--bina-safe-right, 0px)) calc(48px + var(--bina-safe-bottom, 0px)) calc(28px + var(--bina-safe-left, 0px)); gap: 20px; }
 [data-bina-key="apps-title"] { margin: 0; padding: 0 4px; font-size: 32px; font-weight: 750; letter-spacing: -.04em; line-height: 1.25; }
 [data-bina-key="apps-root"] .bina-ui-surface-card { overflow: hidden; border: 1px solid var(--bina-ui-line, #e3e6ea); border-radius: 14px; box-shadow: 0 1px 3px color-mix(in srgb, currentColor 3%, transparent); }
 [data-bina-key="apps-root"] .bina-ui-surface-card:empty { display: none; }
@@ -221,7 +272,7 @@
 [data-bina-key="apps-updates"] { gap: 12px; }
 [data-bina-key="apps-detail"] .bina-ui-heading-1 { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; }
 @media (max-width: 520px) {
-  [data-bina-key="apps-root"] { padding: 26px 12px 32px; }
+  [data-bina-key="apps-root"] { padding: calc(26px + var(--bina-safe-top, 0px)) calc(12px + var(--bina-safe-right, 0px)) calc(32px + var(--bina-safe-bottom, 0px)) calc(12px + var(--bina-safe-left, 0px)); }
   [data-bina-key="apps-title"] { font-size: 30px; }
 }
 
@@ -237,17 +288,10 @@
   [data-bina-key="apps-root"] [data-bina-key="apps-state"] { grid-column: 3; justify-self: end; }
 }
 
-/* Notification center and transient popup. */
-[data-bina-key="clock"] { grid-column: 3; grid-row: 1; justify-self: end; display: inline-grid; place-items: stretch; box-sizing: border-box; min-width: 80px; min-height: 40px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; }
-[data-bina-key="clock"]:hover, [data-bina-key="clock"][aria-pressed="true"] { background: var(--cadre-accent-soft); }
-/* Keep the time centered in the button so what is seen matches what can be pressed. The stack fills the button, so the badge sits on the button's corner like the dock badges. */
-[data-bina-key="clock"] .bina-ui-stack { min-width: 0; padding: 0; }
-[data-bina-key="clock"] .bina-ui-stack > .bina-ui-text { place-self: center; }
-[data-bina-key="clock-badge"], [data-bina-key="dock-badge"], [data-bina-key="home-badge"] { z-index: 1; transform: translate(35%, -35%); }
+/* 通知センター */
 [data-bina-key="install-tile"] .bina-ui-image { align-self: center; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 14%)); width: var(--bina-ui-icon-size, 60px); height: var(--bina-ui-icon-size, 60px); }
-[data-bina-key="notifications-backdrop"] { position: absolute; z-index: 2; inset: 0 auto auto 0; width: 100%; height: calc(100% - 60px); padding: 0; border: 0; border-radius: 0; background: transparent; }
-[data-bina-key="notifications-center"] { position: absolute; z-index: 3; bottom: 72px; right: 12px; box-sizing: border-box; width: min(360px, calc(100% - 24px)); max-height: calc(100% - 90px); overflow-y: auto; overscroll-behavior: contain; gap: 10px; padding: 14px; border: 1px solid var(--cadre-line); border-radius: 16px; background: var(--bina-ui-surface, #fff); color: var(--bina-ui-text, var(--bina-shell-color, #16181d)); box-shadow: 0 6px 24px #0003; transition: opacity 200ms ease-out, transform 200ms ease-out; }
-[data-bina-key="notifications"] { top: auto; bottom: 72px; }
+[data-bina-key="notifications-backdrop"] { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; }
+[data-bina-key="notifications-center"] { box-sizing: border-box; width: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; gap: 10px; padding: 14px; border: 1px solid var(--cadre-line); border-radius: 16px; background: var(--bina-ui-surface, #fff); color: var(--bina-ui-text, var(--bina-shell-color, #16181d)); box-shadow: 0 6px 24px #0003; transition: opacity 200ms ease-out, transform 200ms ease-out; }
 [data-bina-key="notifications-toolbar"] { align-items: center; gap: 6px; }
 [data-bina-key="notifications-toolbar"] .bina-ui-heading-2 { margin: 0; font-size: 18px; }
 [data-bina-key="notifications-toolbar"] button { min-width: 0; min-height: 32px; padding: 5px 8px; font-size: 13px; }
@@ -255,6 +299,16 @@
 [data-bina-key="notifications-center"] .bina-ui-heading-2 { margin: 0; font-size: 16px; }
 [data-bina-key="notification-header"] { align-items: center; gap: 6px; --bina-ui-icon-size: 20px; }
 [data-bina-key="notifications-empty"] { padding: 20px 6px; text-align: center; }
-@starting-style { [data-bina-key="notifications-center"] { opacity: 0; transform: translateY(16px); } }
-@media (max-width: 599px) { [data-bina-key="notifications-center"] { right: 0; bottom: 60px; width: 100%; border-radius: 16px 16px 0 0; } }
+/* 時計の側からすべり出る */
+@starting-style {
+  [data-bina-key="notifications-center"] { opacity: 0; transform: translateY(16px); }
+  :is([data-bina-key="notice-tl"], [data-bina-key="notice-tc"], [data-bina-key="notice-tr"]) > [data-bina-key="notifications-center"] { transform: translateY(-16px); }
+  [data-bina-key="notice-ml"] > [data-bina-key="notifications-center"] { transform: translateX(-16px); }
+  [data-bina-key="notice-mr"] > [data-bina-key="notifications-center"] { transform: translateX(16px); }
+}
+/* 狭い幅では幅いっぱいにする。左右中央の時計は下中央に写すので、下から出す */
+@media (max-width: 599px) {
+  [data-bina-key^="notice-"] { left: var(--cadre-left); right: var(--cadre-right); width: auto; transform: none; }
+  :is([data-bina-key="notice-ml"], [data-bina-key="notice-mr"]) { top: auto; bottom: calc(var(--cadre-bottom) + var(--cadre-frame-size) + var(--cadre-gap)); justify-content: flex-end; }
+}
 @media (prefers-reduced-motion: reduce) { [data-bina-key="notifications-center"] { transition: none; } }

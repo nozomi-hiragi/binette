@@ -9,7 +9,7 @@
 - Cadre は、Binette のシステムアプリとして持つ。ホームと設定は Cadre のサブアプリ（`cadre.home`・`cadre.settings`）にする
 - 置き場所はリポジトリ直下の `apps/<アプリ>/`。`app.json` を持つフォルダを足すだけで増える。リポジトリの `apps/` にあるアプリは、どれもシステムアプリ。通常のアプリを OS と一緒に配る場合は、`bundled/<アプリ>/` に置く。同梱アプリにシステムアプリの権限は渡さない
 
-- [boot.md](../boot.md) と [roles.md](../roles.md) の構成では、システムアプリはビルド済みの `.wasm` として `/system/apps/<アプリ>/` に取ってきて置く。ホームバーや通知などの大枠は、役割 `cadre` のシステムアプリ `apps/cadre` が持つ。設定はコアで、役割の差し替えも `/user` での上書きもできない（決定 2026-11-01）
+- [boot.md](../boot.md) と [roles.md](../roles.md) の構成では、システムアプリはビルド済みの `.wasm` として `/system/apps/<アプリ>/` に取ってきて置く。ホーム・ドック・時計の枠や通知などの大枠は、役割 `cadre` のシステムアプリ `apps/cadre` が持つ。設定はコアで、役割の差し替えも `/user` での上書きもできない（決定 2026-11-01）
 
 ## 配り方（実装済み）
 
@@ -27,7 +27,7 @@
 
 | フォルダ・入口 | 名前 | 役割 | 仕様 |
 | --- | --- | --- | --- |
-| `apps/cadre`（`cadre`） | Cadre | `roles: ["cadre"]`。常駐する大枠とホームバー | [cadre.md](cadre.md) |
+| `apps/cadre`（`cadre`） | Cadre | `roles: ["cadre"]`。常駐する大枠（ホーム・ドック・時計の枠） | [cadre.md](cadre.md) |
 | `apps/cadre` の `sub.home`（`cadre.home`） | ホーム | `roles: ["home"]`。ほかのアプリを並べて開く | [home.md](home.md) |
 | `apps/cadre` の `sub.settings`（`cadre.settings`） | 設定 | `roles: ["settings"]`。ホームの選択、更新、デバッグ値、履歴 | [settings.md](settings.md) |
 | `apps/cadre` の `sub.apps`（`cadre.apps`） | アプリ | `roles: ["apps-manager"]`。提供リストとアプリの管理 | [app-manager.md](../app-manager.md) |

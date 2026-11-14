@@ -250,7 +250,7 @@ export class Settings extends App {
 
   override build(): View {
     const os = osApi;
-    if (os == null) return column([text("設定を使えません。")]).padding(16).key("settings-unavailable");
+    if (os == null) return column([text("設定を使えません。")]).padding(16).safeArea().key("settings-unavailable");
     const available = os.updateAvailable() ? true : false;
     const phase = os.updatePhase();
     const updating = phase == "applying";
@@ -446,7 +446,7 @@ export class Settings extends App {
         ]).key("settings-menu"),
         column(detail).grow().key(page < 0 ? "settings-detail-idle" : "settings-detail"),
       ]).key("settings-split"),
-    ]).key("settings-root");
+    ]).safeArea().key("settings-root");
   }
 }
 
