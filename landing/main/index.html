@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binette は移動しました</title>
+<link rel="icon" href="../icon.svg">
+<style>
+:root { color-scheme: light dark; --bg:#fff; --fg:#1b1f24; --muted:#5b6470; --accent:#3273b9; font-family: system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebee; --muted:#9aa3ad; --accent:#5b9be0; } }
+body { word-break: auto-phrase; margin:0; min-height:100dvh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--fg); line-height:1.7; }
+main { max-width: 32rem; padding: 2rem 16px; text-align:center; }
+img { width: 64px; height: 64px; }
+h1 { font-size: 1.5rem; margin: .75rem 0 .5rem; }
+p { color: var(--muted); margin: 0 0 1rem; }
+a.btn { display:inline-flex; align-items:center; min-height:44px; padding: 0 1.4rem; border-radius: 999px; text-decoration:none; font-weight:600; background: var(--accent); color:#fff; }
+</style>
+</head>
+<body>
+<main>
+  <img src="../icon.svg" alt="">
+  <h1>Binette は移動しました</h1>
+  <p>Binette は <strong>/binette/live/</strong> で動くようになりました。保存したデータは、新しい場所でもそのまま使えます。</p>
+  <p>この場所でアプリとしてインストールしていた場合は、アンインストールしてから、新しい場所でインストールし直してください。</p>
+  <a class="btn" href="../live/">新しい場所で開く</a>
+</main>
+<script>
+  // Remove a service worker left from the old location, if this page is reached without it.
+  navigator.serviceWorker?.getRegistration("./").then(registration => {
+    if (registration && new URL(registration.scope).pathname === location.pathname.replace(/[^/]*$/, "")) registration.unregister();
+  }).catch(() => {});
+</script>
+</body>
+</html>

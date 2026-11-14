@@ -144,7 +144,7 @@ Deno.test("SW はサブパスのシェルを準備して待機し、有効にな
   await sw.dispatch("install").done();
   assertEquals(sw.skipped, 0);
   assert(sw.reloads.length > 0 && sw.reloads.every(cache => cache === "reload"));
-  assertEquals([...sw.stored.get(CACHE)!.keys()], ["", "index.html", "manifest.webmanifest", "icon.svg", "regie.js", "regie-worker.js", "build-worker.js"].map(path => BASE + path));
+  assertEquals([...sw.stored.get(CACHE)!.keys()], ["", "index.html", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png", "regie.js", "regie-worker.js", "build-worker.js"].map(path => BASE + path));
   sw.open("binette-old"); sw.open("another-app");
   await sw.dispatch("activate").done();
   assertEquals([...sw.stored.keys()], [CACHE, "another-app"]);
