@@ -231,11 +231,11 @@ Deno.test("OPFS namespaces and GC preserve other databases and unrelated root fi
 
 Deno.test("bundled and system apps share provider zero and reserve the kernel owner", async () => {
   const storage = createMemoryStorage();
-  const bundled = await storage.appOwner("designer", "binette:bundled");
+  const bundled = await storage.appOwner("filer", "binette:bundled");
   const system = await storage.appOwner("cadre", "binette:system");
   assertEquals(bundled, "_0/-1");
   assertEquals(system, "_0/-2");
-  assertEquals(await storage.appOwner("designer", "binette:system"), bundled);
+  assertEquals(await storage.appOwner("filer", "binette:system"), bundled);
   assertEquals(
     await storage.appOwner("cadre.settings", "binette:bundled"),
     system,

@@ -18,6 +18,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 | [storage.md](storage.md) | ストレージ。中身は OPFS、メタデータは IndexedDB、`プロバイダー/アプリ` のフォルダにハッシュ名で平置き（決定 2026-11-03、未実装） |
 | [pigeon.md](pigeon.md) | Pigeon（伝書鳩）。OS が仲立ちする手紙。宛先がユーザーなら通知、アプリなら受信欄（決定 2026-11-03、実装済み。宛先を種類で選ぶ機能は今後） |
 | [file-sharing.md](file-sharing.md) | アプリ間のファイル共有。共有フォルダ、招待と承認、Filer とピッカー（決定 2026-11-03、未実装） |
+| [net.md](net.md) | ネット通信。権限 `net`、要求 URL・allow list・deny list、標準の fetch に寄せた `NetApi`（決定 2026-11-12、未実装） |
 | [scheduler.md](scheduler.md) | スケジューラ（定期実行）。OS とアプリの予定を Régie にまとめ、設定アプリで一覧して変える（決定 2026-11-09、Régie・OS の予定・設定アプリの節は実装済み） |
 | [app.md](app.md) | アプリのパッケージと説明ファイル `app.json`、インストールの流れ |
 | [core.md](core.md) | `@binette/core`。パッケージの共通物（形式の型と検査、ライフサイクルの番号、DOM 操作の型） |
@@ -35,6 +36,7 @@ Binette（ビネット）は、ブラウザだけで動く、スマホの OS の
 - アプリはブラウザの中でビルドし、単体でインストールできる。クライアントでビルドするのは、そこでコードを検証できるから
 - アプリの入手元は GET で取れればどこでもよい。基本は GitHub
 - サーバーの処理やデータが要るアプリは、WAKE などで通信する。通信はアプリごとに分け、アプリは自分のサーバーサイドとしか通信できない
+- 外の HTTP のサーバーからデータを取るアプリは、権限 `net` を書き、許した先とだけ通信できる。許す先は OS が確かめる（決定 2026-11-12、[net.md](net.md)）
 - アプリは HTML ＋ AssemblyScript（AS）で書く方向で試す。TSX のような書き方（ASX）は後で考える
 - データのバックアップはサーバー側（Coulisses）に任せる
 - カーネルだけを配り、ほかの部品は HTTP で取ってきてブラウザの中に置いて動かす。目的は、アプリの上でアプリや OS の部品を作り・いじれること（決定 2026-11-01、[boot.md](boot.md)）
@@ -112,13 +114,13 @@ Binette は単独で起動できます。入口はリポジトリ直下の `inde
 | パッケージ | 依存 |
 | --- | --- |
 | `@binette/core` | `valibot@1.5.0`（npm） |
-| `@binette/decor` | `@binette/core` |
+| `@binette/decor` | `@binette/core`、`marked@18.1.2`（npm） |
 | `@binette/regie` | `@binette/core`、`@binette/decor`、`assemblyscript@0.28.20`（ビルドのみ）、`@std/path`（CLI のみ） |
 | `@binette/scene` | `@binette/core`、`@binette/decor`、`@binette/regie` |
 | `@binette/coulisses` | `@binette/core`、`@std/path` |
 | `@binette/replique` | `@binette/decor`（AS） |
 
-テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。
+テストだけで使うもの: `@std/assert`、`happy-dom@21.0.4`（描画とクリックのテスト）。どれも MIT です。`marked` も MIT です。
 
 - 全パッケージは同じ版にする（[CONTRIBUTING.md](../../CONTRIBUTING.md)）。v0.2 の公開で `0.2.0` にした。OS 内の機能ごとの `@binette/replique-<機能>` は別に版を持ち、JSR には集約した `@binette/replique` のみを公開する
 - 配布は JSR だけにする（決定 2026-10-26）。npm に公開済みの 0.1.0 はそのまま残る。TypeScript（replique は AS）のソースを配る

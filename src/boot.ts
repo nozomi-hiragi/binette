@@ -18,7 +18,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 export async function loadBootApps(
   tree: FileTree,
   distribution: SystemDistribution,
-): Promise<{ apps: SystemApp[]; roles: Record<string, string>; lists: string[] }> {
+): Promise<{ apps: SystemApp[]; roles: Record<string, string>; lists: string[]; ref: string; commit: string }> {
   const required = async (path: string, system = false) => {
     const value =
       await (system
@@ -120,7 +120,7 @@ export async function loadBootApps(
       "boot.json に指定された Cadre、ホームまたは設定アプリがありません。",
     );
   }
-  return { apps, roles, lists: boot.lists };
+  return { apps, roles, lists: boot.lists, ref: typeof boot.ref === "string" ? boot.ref : "dev", commit: typeof boot.commit === "string" ? boot.commit : "" };
 }
 
 /** 古い配布物の保存済みコードを、起動候補へ戻さない。通常のインストール済みアプリは残す。 */

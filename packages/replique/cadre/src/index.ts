@@ -7,6 +7,30 @@ export const ABI_VERSION = "0.1";
 
 namespace hostCadreNotifications {
   // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "clock")
+  export declare function clock(): string;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "notificationTime")
+  export declare function notificationTime(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "notificationPopup")
+  export declare function notificationPopup(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "notificationAppIndex")
+  export declare function notificationAppIndex(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "notificationName")
+  export declare function notificationName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "notificationKeep")
+  export declare function notificationKeep(id: i32, keep: bool): void;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "unread")
+  export declare function unread(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette:cadre@0.1", "unreadTotal")
+  export declare function unreadTotal(): i32;
+  // @ts-ignore: decorator
   @external("binette:cadre@0.1", "notificationCount")
   export declare function notificationCount(): i32;
   // @ts-ignore: decorator
@@ -53,6 +77,15 @@ export class CadreApi {
   static from(api: Api): CadreApi | null {
     return api.why("cadre") == Why.Granted ? new CadreApi() : null;
   }
+
+  clock(): string { return hostCadreNotifications.clock(); }
+  notificationTime(i: i32): string { return hostCadreNotifications.notificationTime(i); }
+  notificationPopup(i: i32): bool { return hostCadreNotifications.notificationPopup(i); }
+  notificationAppIndex(i: i32): i32 { return hostCadreNotifications.notificationAppIndex(i); }
+  notificationName(i: i32): string { return hostCadreNotifications.notificationName(i); }
+  notificationKeep(id: i32, keep: bool): void { hostCadreNotifications.notificationKeep(id, keep); }
+  unread(i: i32): i32 { return hostCadreNotifications.unread(i); }
+  unreadTotal(): i32 { return hostCadreNotifications.unreadTotal(); }
 
   /** User notifications. Pass notificationId to operations rather than the list index. */
   notificationCount(): i32 { return hostCadreNotifications.notificationCount(); }

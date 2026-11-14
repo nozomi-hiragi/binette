@@ -122,6 +122,7 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 | `storage`（アプリごとのデータ） | すべてのアプリ。アプリのデータの読み込みに失敗したときと、ID が `system` のときだけ載せない | NotGranted |
 | `scheduler`（すべての予定の一覧と変更） | 役割 `settings` に割り当てられたアプリ（入手元が `binette:system`） | NotAssigned（[scheduler.md](../scheduler.md)） |
 | `schedule`（自分の予定） | `app.json` の `permissions` に `schedule` を書いたアプリ（書けば届く。インストールの確認で権限を見せる） | NotGranted |
+| `net`（外との通信） | `app.json` の `permissions` に `net` を書いたアプリ。通信先は要求 URL・allow list・deny list で毎回確かめる（[net.md](../net.md)、未実装） | NotGranted |
 | `fs`（ファイルの木） | 誰にも届かない。`app.json` の `permissions` に書くアプリに、ユーザーの許可を得て渡す流れは未決 | NotGranted |
 
 - `os` には、設定・役割の割り当て・役割ごとの候補・新しい順の履歴・更新があるかを写して渡す。履歴の写しは、設定アプリ自身の起動記録を足す直前に作る
@@ -154,7 +155,7 @@ HTML は DOMParser で読み、link があればその JSON を優先し、失�
 
 ## 常駐 Cadre（実装済み、形は案）
 
-Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。
+Cadre はホームより先に起動し、スタックとは別に保持します。`CadreSnapshot` でホーム以外の起動中一覧と前面・アイコン・インストール状態を渡し、変更時に `syncCadre` で再描画します。操作はスナップショットの番号を Worker 側でインスタンスの ID に対応づけて届けます。Pigeon の通知も Cadre に同期します。Cadre には、再読み込み前を含むすべての未開封の手紙を新しい順に渡します（[Pigeon](../pigeon.md#届いた通知と開封)）。
 
 落ちたらホームと同じ待ちと `homeRetryWindow` で再起動し、落ち続けたら `cadreUnavailable` を Scene に渡します。Cadre がない場合も最低限の大枠でホームを開きます。`os.assign("cadre", i)` は保存して旧 Cadre を止め、新しい Cadre を起動します。通常のアプリのスタックは残します。
 

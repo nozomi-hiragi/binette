@@ -11,6 +11,8 @@ export class View {
   children: Array<View> = [];
   themeValue: string = "";
   value: string = "";
+  baseValue: string = "";
+  anchorValue: string = "";
   paddingValue: number = -100;
   gapValue: number = 0;
   growValue: boolean = false;
@@ -79,6 +81,10 @@ export class View {
   /** checkbox の新しい状態を受け取る */
   checkCallback: ((checked: boolean) => void) | null = null;
   constructor(readonly kind: string) {}
+  /** Resolve Markdown links against this URL. */
+  base(url: string): View { this.baseValue = url; return this; }
+  /** Scroll to a Markdown heading when the source or anchor changes. */
+  anchor(id: string): View { this.anchorValue = id; return this; }
   padding(n: number = space.md): View { this.paddingValue = n; return this; }
   gap(n: number = space.md): View { this.gapValue = n; return this; }
   minWidth(n: number): View { this.minWidthValue = n; return this; }
@@ -176,6 +182,8 @@ export function column(children: Array<View>): View { const v = new View("column
 export function grid(children: Array<View>): View { const v = new View("grid"); v.children = children; return v; }
 /** 文字入力を作る。 */
 export function input(value: string, onText: (value: string) => void): View { const v = new View("input"); v.value = value; v.textCallback = onText; return v; }
+/** Render Markdown; links are delivered through the string handler. */
+export function markdown(source: string, onLink: (url: string) => void): View { const v = new View("markdown"); v.value = source; v.textCallback = onLink; return v; }
 /** Select multiple files; the callback receives a JSON array of {name, data} with base64 data. */
 export function filePick(label: string, handler: (value: string) => void): View { const v = new View("filePick"); v.value = label; v.textCallback = handler; return v; }
 /** アプリのアイコンを描く。 */

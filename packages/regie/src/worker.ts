@@ -1,8 +1,9 @@
 import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
-import { createUiDiffer } from "@binette/decor";
-import { BinetteError, type DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { createUiDiffer } from "@binette/decor/diff";
+import { BinetteError, isNetUrlPrefix, type DomOp } from "@binette/core";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
+import { formatTime, formatClock, formatNotificationTime, systemTimeZone } from "./time.ts";
 
 /** Worker 側が使うメッセージの入口。Worker の `self` や、テストで使う `MessagePort` がこの形を持つ */
 export interface WorkerScope {
@@ -25,12 +26,21 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   let ownSchedule: ScheduleSnapshot | undefined;
   let storage: Map<string, string> | undefined;
   let cadre: CadreSnapshot | undefined;
+  let appsInfo: AppsInfo | undefined;
+  let net = false;
+  let netState: NetSnapshot = { tools: [], added: [] };
+  let nextNetChange = 0;
+  // OS の写しにまだ含まれない、自分の同期 API による変更。
+  const pendingNetChanges = new Map<number, { action: string; url: string }>();
+  let nextNetRequest = 0;
+  const netResults = new Map<number, import("./net.ts").NetResponse>();
   let shares = false;
   let nextShareRequest = 0;
   const shareResults = new Map<number, string>();
   let pigeon: PigeonSnapshot | undefined;
   const acknowledgedLetters = new Set<number>();
   let denied: Record<string, ApiDenial> = {};
+  let osBuild = { ref: "dev", commit: "" };
   let page = "";
   let sub = "";
   let declarative = false;
@@ -62,6 +72,29 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     if (!Number.isInteger(i) || i < 0 || i >= list.length) throw new Error("候補の番号が範囲外です。");
     return list[i]!;
   };
+  const settingApp = (i: number) => at(system().apps ?? [], i, "アプリ");
+  const netList = (list: string, appId: string): string[] => {
+    const state = system();
+    if (appId === "") return list === "allow" ? state.net?.allow ?? [] : list === "deny" ? state.net?.deny ?? [] : [];
+    const app = state.apps?.find(app => app.id === appId);
+    return app && (list === "pending" || list === "request" || list === "allow" || list === "added" || list === "deny") ? app[list] ?? [] : [];
+  };
+  const netAllow = (action: string, url: string): boolean => {
+    if (!net || !netState.tools.includes("addAllow") || !isNetUrlPrefix(url)) return false;
+    const i = netState.added.indexOf(url);
+    if (action === "add") {
+      if (i >= 0) return true;
+      if (netState.added.length >= 100) return false;
+      netState.added.push(url);
+    } else {
+      if (i < 0) return false;
+      netState.added.splice(i, 1);
+    }
+    const seq = ++nextNetChange;
+    pendingNetChanges.set(seq, { action, url });
+    scope.postMessage({ type: "net.allow", action, url, seq });
+    return true;
+  };
   const files = () => {
     if (storage === undefined) throw new Error("この呼び出しは storage が届いたアプリだけが使えます。");
     return storage;
@@ -75,7 +108,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   const notificationAt = (i: number) => { const letter = cadreState().notifications?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("通知の番号が範囲外です。"); return letter; };
   const actionAt = (i: number, a: number) => { const action = notificationAt(i).actions?.[a]; if (!Number.isInteger(a) || !action) throw new Error("操作の番号が範囲外です。"); return action; };
   const notificationSetting = (i: number) => { const value = system().notifications?.[i]; if (!Number.isInteger(i) || !value) throw new Error("通知設定の番号が範囲外です。"); return value; };
-  const granted = (key: string) => key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "scheduler" ? scheduler !== undefined : key === "schedule" ? ownSchedule !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
+  const receivedAt = (i: number) => { const letter = system().letters?.[i]; if (!Number.isInteger(i) || !letter) throw new Error("手紙の番号が範囲外です。"); return letter; };
+  const granted = (key: string) => key === "net" ? net : key === "shares" ? shares : key === "pigeon" ? pigeon !== undefined : key === "apps" ? apps !== undefined : key === "os" ? os !== undefined : key === "manager" ? manager !== undefined : key === "scheduler" ? scheduler !== undefined : key === "schedule" ? ownSchedule !== undefined : key === "storage" ? storage !== undefined : key === "cadre" ? cadre !== undefined : false;
   const launchAt = (i: number) => {
     const launches = system().launches;
     if (!Number.isInteger(i) || i < 0 || i >= launches.length) throw new Error("履歴の番号が範囲外です。");
@@ -83,7 +117,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   };
   // toString() で作る Worker なので、OS と同じ設定 API の範囲をここでも確かめる
   const settingName = (name: string): name is keyof OsSnapshot["settings"] =>
-    ["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(name);
+    ["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow", "theme", "accent", "wallpaper"].includes(name);
   /** __new はメモリを伸ばすことがあるので、確保してから buffer を読む */
   const writeString = (value: string): number => {
     const allocate = instance!.exports.__new;
@@ -173,13 +207,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
   };
   const managerActions = ["addRepo", "removeRepo", "checkUpdates", "install", "reinstall", "uninstall", "cancel", "apply", "details", "setAutoUpdate"];
 
-  const pad = (value: number) => String(value).padStart(2, "0");
-  // 端末の時刻帯で「YYYY-MM-DD HH:MM」。0 は空
-  const localTime = (time: number) => {
-    if (!time) return "";
-    const date = new Date(time);
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
+  // System time zone, "YYYY-MM-DD HH:MM". 0 gives ""
+  const localTime = (time: number) => time ? formatTime(time) : "";
   const dayNames: Record<string, string> = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金", sat: "土", sun: "日" };
   const duration = (seconds: number) =>
     seconds % 86400 === 0 ? `${seconds / 86400} 日` : seconds % 3600 === 0 ? `${seconds / 3600} 時間` : seconds % 60 === 0 ? `${seconds / 60} 分` : `${seconds} 秒`;
@@ -305,6 +334,35 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         scope.postMessage({ type: "manager.do", action: name, managerArgs: [readString(a), readString(b), !!flag] });
       },
     },
+    [HOST_ABI.net.module]: {
+      "addAllow": (url: number) => netAllow("add", readString(url)),
+      "removeAllow": (url: number) => netAllow("remove", readString(url)),
+      "request": (url: number, method: number, headers: number, redirect: number) => {
+        if (!net) throw new Error("net API は許可されていません。");
+        if (nextNetRequest >= 2147483647) throw new Error("net の要求番号を使い切りました。");
+        const id = ++nextNetRequest;
+        scope.postMessage({ type: "net.request", id, request: { url: readString(url), method: readString(method), headers: JSON.parse(readString(headers)), redirect: readString(redirect) } });
+        return id;
+      },
+      "abort": (id: number) => scope.postMessage({ type: "net.abort", id }),
+      "text": (id: number, field: number) => {
+        const result = netResults.get(id)!;
+        const key = readString(field);
+        const value = key === "statusText" ? result.statusText : key === "url" ? result.url : key === "type" ? result.type : key === "reason" ? result.reason : result.headers.find(([name]) => name === key)?.[1];
+        return value === undefined ? 0 : writeString(value);
+      },
+      "number": (id: number, field: number, _index: number) => {
+        const result = netResults.get(id)!;
+        const key = readString(field);
+        return key === "status" ? result.status : key === "length" ? result.body.length : 0;
+      },
+      "copy": (id: number, ptr: number, length: number) => {
+        const body = netResults.get(id)!.body;
+        if (length !== body.length) throw new Error("net の応答の長さが一致しません。");
+        const memory = instance!.exports.memory as WebAssembly.Memory;
+        new Uint8Array(memory.buffer, ptr, length).set(body);
+      },
+    },
     [HOST_ABI.shares.module]: {
       "request": (operation: number, args: number) => {
         if (!shares) throw new Error("共有 API は許可されていません。");
@@ -336,6 +394,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       },
       "count": () => inbox().letters.length,
       "done": (i: number) => { const letter = letterAt(i); acknowledgedLetters.add(letter.id); inbox().letters.splice(i, 1); scope.postMessage({ type: "pigeon.done", i: letter.id }); },
+      "opened": (kind: number) => { inbox(); scope.postMessage({ type: "pigeon.opened", kind: readString(kind) }); },
       "urgent": (i: number) => !!letterAt(i).urgent,
       "actions": (i: number) => writeString(JSON.stringify(letterAt(i).actions ?? [])),
       "from": (i: number) => writeString(letterAt(i).from),
@@ -345,6 +404,18 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "body": (i: number) => writeString(letterAt(i).body),
     },
     [HOST_ABI.os.module]: {
+      "appCount": () => system().apps?.length ?? 0,
+      "appName": (i: number) => writeString(settingApp(i).name),
+      "appId": (i: number) => writeString(settingApp(i).id),
+      "appNotify": (i: number) => settingApp(i).notify,
+      "appNet": (i: number) => settingApp(i).net,
+      "appMuted": (i: number) => settingApp(i).muted,
+      "setAppMuted": (appId: number, muted: number) => { system(); scope.postMessage({ type: "os.appNotificationMuted", appId: readString(appId), muted: !!muted }); },
+      "netCount": (list: number, appId: number) => netList(readString(list), readString(appId)).length,
+      "netUrl": (list: number, appId: number, i: number) => writeString(at(netList(readString(list), readString(appId)), i, "通信先")),
+      "netIsQuiet": (appId: number) => system().apps?.find(app => app.id === readString(appId))?.quiet ?? false,
+      "netDo": (action: number, appId: number, url: number) => { system(); scope.postMessage({ type: "os.netDo", action: readString(action), appId: readString(appId), url: readString(url) }); },
+      "netQuiet": (appId: number, on: number) => { system(); scope.postMessage({ type: "os.netQuiet", appId: readString(appId), on: !!on }); },
       "notificationCount": () => system().notifications?.length ?? 0,
       "notificationName": (i: number) => writeString(notificationSetting(i).name),
       "notificationId": (i: number) => writeString(notificationSetting(i).id),
@@ -361,7 +432,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         const name = readString(ptr);
         if (!settingName(name) || !Number.isInteger(value) || value < 0 ||
           (name === "stackSize" && value < 1) ||
-          ((name === "callTimeout" || name === "destroyTimeout") && value < 1000)) return false;
+          ((name === "callTimeout" || name === "destroyTimeout") && value < 1000) ||
+          (name === "theme" && value > 2) || ((name === "accent" || name === "wallpaper") && value > 255)) return false;
         settings[name] = value;
         scope.postMessage({ type: "os.set", name, value });
         return true;
@@ -392,8 +464,27 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       "launchCount": () => system().launches.length,
       "launchTime": (i: number) => launchAt(i).time,
       "launchName": (i: number) => writeString(launchAt(i).name),
+      "launchText": (i: number) => writeString(formatTime(launchAt(i).time, { seconds: true })),
+      "timeZone": () => { system(); return writeString(systemTimeZone()); },
+      "letterCount": () => system().letters?.length ?? 0,
+      "letterId": (i: number) => receivedAt(i).id,
+      "letterFrom": (i: number) => writeString(receivedAt(i).from),
+      "letterName": (i: number) => writeString(receivedAt(i).name),
+      "letterTitle": (i: number) => writeString(receivedAt(i).title),
+      "letterBody": (i: number) => writeString(receivedAt(i).body),
+      "letterTime": (i: number) => writeString(formatTime(receivedAt(i).time)),
+      "letterOpened": (i: number) => receivedAt(i).opened,
+      "letterDo": (action: number, id: number) => { system(); scope.postMessage({ type: "os.letter", action: readString(action), i: id }); },
     },
     [HOST_ABI.cadre.module]: {
+      "clock": () => writeString(formatClock(cadreState().now ?? Date.now())),
+      "notificationTime": (i: number) => writeString(formatNotificationTime(notificationAt(i).time, cadreState().now ?? Date.now())),
+      "notificationPopup": (i: number) => notificationAt(i).popup,
+      "notificationAppIndex": (i: number) => notificationAt(i).appIndex,
+      "notificationName": (i: number) => writeString(notificationAt(i).name),
+      "notificationKeep": (i: number, on: number) => { cadreState(); scope.postMessage({ type: "cadre.notificationKeep", i, on: !!on }); },
+      "unreadTotal": () => cadreState().notifications?.length ?? 0,
+      "unread": (i: number) => { const value = cadreState().instances[i]; if (!Number.isInteger(i) || !value) throw new Error("アプリの番号が範囲外です。"); return value.unread ?? 0; },
       "notificationCount": () => cadreState().notifications?.length ?? 0,
       "notificationId": (i: number) => notificationAt(i).id,
       "notificationActionCount": (i: number) => notificationAt(i).actions?.length ?? 0,
@@ -491,6 +582,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     [HOST_ABI.app.module]: {
       // 辞書の中身。0 は届いている、1 は NotGranted、2 は NotAssigned。知らないキーはどの役割にもないので NotAssigned
       "sub": () => writeString(sub),
+      "osRef": () => writeString(osBuild.ref),
+      "osCommit": () => writeString(osBuild.commit),
+      "openUrl": (url: number) => scope.postMessage({ type: "app.openUrl", url: readString(url) }),
       "why": (key: number) => {
         const name = readString(key);
         if (granted(name)) return 0;
@@ -518,6 +612,10 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     },
     [HOST_ABI.apps.module]: {
       "icon": (handle: number, app: number) => { appAt(app); ops.push({ op: "icon", handle, app }); },
+      "unread": (i: number) => { appAt(i); return appsInfo?.unread[i] ?? 0; },
+      "isInstalled": () => { homeApps(); return appsInfo?.canInstall ? appsInfo.installed : true; },
+      "installBusy": () => { homeApps(); return appsInfo?.canInstall ? appsInfo.installBusy : false; },
+      "install": () => { homeApps(); if (!appsInfo?.canInstall) throw new Error("ホームだけが使えます。"); scope.postMessage({ type: "apps.install" }); },
       "count": () => homeApps().length,
       "name": (i: number) => writeString(appAt(i).name),
       "id": (i: number) => writeString(appAt(i).id),
@@ -539,16 +637,36 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; result?: string; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; appsInfo?: AppsInfo; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; netState?: NetSnapshot; netAck?: number; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
+    if (data.type === "net.sync") {
+      netState = data.netState ?? { tools: [], added: [] };
+      // 古い写しが届いても、その後の add/remove の同期判定を巻き戻さない。
+      for (const [seq, change] of pendingNetChanges) {
+        if (seq <= (data.netAck ?? 0)) { pendingNetChanges.delete(seq); continue; }
+        if (change.action === "add") {
+          if (!netState.added.includes(change.url)) netState.added.push(change.url);
+        } else netState.added = netState.added.filter(url => url !== change.url);
+      }
+      return;
+    }
+    if (data.type === "net.result") {
+      netResults.set(data.id!, data.result as import("./net.ts").NetResponse);
+      const callback = instance?.exports.__bina_net;
+      if (typeof callback === "function") { try { callback(data.id!); flush(); } catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); } }
+      netResults.delete(data.id!);
+      return;
+    }
     if (data.type === "shares.result") {
-      shareResults.set(data.id!, data.result!);
+      shareResults.set(data.id!, data.result as string);
       const callback = instance?.exports.__bina_share;
       if (typeof callback === "function") { try { callback(); flush(); } catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); } }
       return;
     }
     if (data.type === "init") {
       try {
+        osBuild = data.osBuild ?? osBuild;
         apps = data.apps;
+        appsInfo = data.appsInfo;
         os = data.os;
         manager = data.manager;
         scheduler = data.scheduler;
@@ -557,6 +675,8 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         cadre = data.cadre;
         pigeon = data.pigeon;
         shares = data.shares === true;
+        net = data.net === true;
+        netState = data.netState ?? { tools: [], added: [] };
         denied = data.denied ?? {};
         page = data.page ?? "";
         sub = data.sub ?? "";
@@ -577,8 +697,9 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
           ? error.message : `アプリを起動できません: ${messageOf(error)}`;
         scope.postMessage({ type: "failed", message, ...(error instanceof BinetteError ? { code: error.code } : {}) });
       }
-    } else if (data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync" || data.type === "scheduler.sync" || data.type === "schedule.sync") {
-      if (data.type === "manager.sync") manager = data.manager;
+    } else if (data.type === "apps.sync" || data.type === "cadre.sync" || data.type === "os.sync" || data.type === "pigeon.sync" || data.type === "manager.sync" || data.type === "scheduler.sync" || data.type === "schedule.sync") {
+      if (data.type === "apps.sync") appsInfo = data.appsInfo;
+      else if (data.type === "manager.sync") manager = data.manager;
       else if (data.type === "schedule.sync") ownSchedule = data.schedule;
       else if (data.type === "scheduler.sync") scheduler = data.scheduler;
       else if (data.type === "pigeon.sync") { pigeon = data.pigeon; if (pigeon) pigeon.letters = pigeon.letters.filter(letter => !acknowledgedLetters.has(letter.id)); }
@@ -627,7 +748,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         if (["picker", "segmented", "tabs"].includes(node.kind) && !(Number.isInteger(value) && value >= 0 && value < (node.options ?? []).length)) value = NaN;
       }
       if (uiHandle && (!target || target.node.handler === -1 || !target.node.enabled || !target.node.shown ||
-        (uiText ? target.node.kind !== "input" && target.node.kind !== "filePick" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button" && target.node.kind !== "menuItem"))) {
+        (uiText ? target.node.kind !== "input" && target.node.kind !== "filePick" && target.node.kind !== "markdown" : uiValue ? !valueTarget || !Number.isFinite(value) : target.node.kind !== "button" && target.node.kind !== "menuItem"))) {
         // 捨てた入力にも版を進めた値を返し、Scene の表示をアプリの値に戻す
         if ((uiText && target?.node.kind === "input") || valueTarget) {
           ui.inputVersions.set(target!.handle, Number(data.args?.[2] ?? 0));

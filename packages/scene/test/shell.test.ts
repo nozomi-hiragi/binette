@@ -1,6 +1,6 @@
 import { readRepliqueLibraries } from "../../regie/src/cli.ts";
 import { assert, assertEquals } from "@std/assert";
-import { createProviderLists, createMemoryAppStore, createScheduler, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, serveApp } from "@binette/regie";
+import { createProviderLists, createMemoryAppStore, createScheduler, type AppStore, type InstalledApp, type RegieWorker, type BinetteSystem, formatTime, serveApp, systemTimeZone } from "@binette/regie";
 import { Window } from "happy-dom";
 import { State } from "@binette/core";
 import { createShellUi } from "../src/index.ts";
@@ -41,6 +41,11 @@ function elementIn(window: Window): HTMLElement {
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
   return element;
+}
+/** 設定の項目の一覧から、項目の中身へ進む */
+async function openSettingsPage(element: HTMLElement, key: "open-defaults" | "open-about" | "open-debug" | "open-time"): Promise<void> {
+  await waitFor(() => element.querySelector(`[data-bina-key=${key}]`) !== null);
+  element.querySelector<HTMLButtonElement>(`[data-bina-key=${key}]`)!.click();
 }
 async function waitFor(condition: () => boolean): Promise<void> {
   // 回数ではなく経過時間で待つ。全体を並べて動かすと遅くなるため
@@ -126,7 +131,7 @@ Deno.test("実際の Cadre は同じ入口からホームと設定を別の Work
     const tiles = element.querySelectorAll<HTMLButtonElement>("[data-bina-key^=home-tile-]");
     assertEquals([...tiles].map(tile => tile.textContent), ["設定", "アプリ"]);
     tiles[0]!.click();
-    await waitFor(() => element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => element.querySelector("[data-bina-key=settings-root]") !== null);
     assertEquals(systemView(element).instances.map(instance => instance.key).sort(), ["cadre.home", "cadre.settings"]);
     assertEquals(worker.created, 3);
     assertEquals((await store.list()).map(app => app.key), ["cadre"]);
@@ -163,7 +168,7 @@ Deno.test("ホームが一覧を作り、ホームへ戻っても Worker と DOM
     // 宣言 UI の初回 build が反映されるまで待ち、詳細を開く。
     await waitFor(() => {
       if (element.querySelector("[data-bina-key=description]")?.textContent === "ブラウザだけで動く、アプリの土台です。") return true;
-      element.querySelector<HTMLButtonElement>("[data-bina-key=details]")?.click();
+      (element.querySelector<HTMLButtonElement>("[data-bina-key=details]") ?? element.querySelector<HTMLButtonElement>("[data-bina-key=open-about]"))?.click();
       return false;
     });
     // build は起動の途中にも届く。両方の Resume が完了してから移動する。
@@ -414,6 +419,7 @@ for (const action of ["close", "finish", "crash", "startup"] as const) {
       await waitFor(() => count === 2);
       assertEquals(host.hidden, true);
       if (action === "close") {
+        await openSettingsPage(element, "open-debug");
         await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
         assertEquals(good.live, 1); assertEquals(good.terminated, 0);
         assertEquals(systemView(element).instances.filter(i => !i.home && !i.closing).map(i => i.name), ["設定"]);
@@ -460,9 +466,9 @@ Deno.test("Apps から開いたアプリの背面でもホームを再試行で�
     await waitFor(() => resumed === 2);
     await waitForResumed(store, builtHome.manifest.id);
     operate(element, "設定", "開く");
-    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=settings-root]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     operate(element, "設定", "閉じる");
-    await waitFor(() => element.querySelector("[data-bina-key=debug]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => element.querySelector("[data-bina-key=settings-root]") === null && !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     assertEquals(host.hidden, true); assertEquals(count, 3); assertEquals(good.live, 1);
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
@@ -478,7 +484,7 @@ Deno.test("os は system の役割 settings に割り当てたアプリだけに
       await waitFor(() => element.querySelector("[data-bina-key=settings-unavailable]") !== null);
       assertEquals(errors, []);
       assertEquals(worker.terminated, 0);
-      assertEquals(element.querySelectorAll("[data-bina-key=debug]").length, 0);
+      assertEquals(element.querySelectorAll("[data-bina-key=settings-root]").length, 0);
     } finally { shell.stop(); await window.happyDOM.close(); }
   }
 });
@@ -490,6 +496,7 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
   let shell = await mountShell(element, options);
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
     const rows = element.querySelectorAll<HTMLElement>("[data-bina-key^=settings-row-]");
     const value = (i: number) => rows[i]!.querySelector("[data-bina-key^=settings-value-]")!.textContent;
@@ -517,9 +524,10 @@ Deno.test("実際の設定の − ＋ は範囲で止まり、保存し、次の
     await waitFor(() => errors.length === 0);
     shell.stop();
     const saved = (await store.system.getSettings())!;
-    assertEquals(saved, { roles: {}, allowHttpLists: false, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000 });
+    assertEquals(saved, { roles: {}, allowHttpLists: false, stackSize: 1, stopDelay: 1000, historyLimit: 10, callTimeout: 2000, destroyTimeout: 2000, homeRetryWindow: 1000, theme: 0, accent: 0, wallpaper: 0 });
     shell = await mountShell(element, options);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6 && worker.live === 1);
     assertEquals([...element.querySelectorAll("[data-bina-key^=settings-value-]")].map(node => node.textContent), ["1", "1 秒", "10", "2 秒", "2 秒", "1 秒"]);
     assertEquals(errors, []);
@@ -532,6 +540,7 @@ Deno.test("設定した Stop までの時間は、残っているインスタン
   const key = builtHome.manifest.id;
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-row-]").length === 6);
     element.querySelectorAll<HTMLElement>("[data-bina-key^=settings-row-]")[1]!.querySelector<HTMLButtonElement>("button")!.click();
     await waitFor(() => element.querySelectorAll("[data-bina-key^=settings-value-]")[1]!.textContent === "0 秒");
@@ -540,7 +549,7 @@ Deno.test("設定した Stop までの時間は、残っているインスタン
     element.querySelector<HTMLButtonElement>('[aria-label=ホームを開く]')!.click();
     await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=home-grid]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
-    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=debug]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
+    await waitFor(() => !element.querySelector<HTMLElement>("[data-bina-key=settings-root]")!.closest<HTMLElement>(".bina-shell-app")!.hidden);
     await waitFor(() => worker.live === 2);
     const deadline = performance.now() + 10000;
     while ((await store.system.getLast(key))?.state !== 5 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
@@ -556,6 +565,7 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
   let shell = await mountShell(element, options);
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-defaults");
     await waitFor(() => element.querySelectorAll("[data-bina-key=homes] button").length === 2);
     const homes = () => element.querySelectorAll<HTMLButtonElement>("[data-bina-key=homes] button");
     assertEquals([homes()[0]!.textContent, homes()[0]!.getAttribute("aria-pressed")], ["ホーム✓", "true"]);
@@ -582,27 +592,50 @@ Deno.test("ホームの選択を保存し、前のホームを User・Os で Des
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
-Deno.test("実際の設定は履歴を新しい順に UTC の日時と名前で表示する", async () => {
+Deno.test("実際の設定は履歴を新しい順に OS のタイムゾーンの日時と名前で表示する", async () => {
   const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
   const times = [-1, 0, Date.UTC(2000, 1, 29, 12, 34, 56), Date.UTC(2100, 2, 1)];
   for (const time of times) await store.system.recordLaunch({ time, app: "無いアプリの識別子" });
   const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker });
   try {
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-debug");
     await waitFor(() => element.querySelectorAll("[data-bina-key=history] > *").length === 5);
     const lines = [...element.querySelectorAll("[data-bina-key=history] > *")].map(node =>
       [...node.children[0]!.children].map(child => child.textContent!)
     );
     assertEquals(lines[0]![0], "ホーム");
     assertEquals(lines.slice(1), [
-      ["無いアプリの識別子", "2100-03-01 00:00:00"],
-      ["無いアプリの識別子", "2000-02-29 12:34:56"],
-      ["無いアプリの識別子", "1970-01-01 00:00:00"],
-      ["無いアプリの識別子", "1969-12-31 23:59:59"],
+      ...times.toReversed().map(time => ["無いアプリの識別子", formatTime(time, { seconds: true })]),
     ]);
+    if (systemTimeZone() === "UTC") assertEquals(lines[1]![1], "2100-03-01 00:00:00");
     const historySection = element.querySelector("[data-bina-key=history-section]")!;
-    assertEquals(historySection.textContent!.match(/UTC/g)?.length, 1);
-    assertEquals(historySection.querySelector("[data-bina-key=history-title]")!.nextElementSibling!.textContent, "UTC");
+    assertEquals(historySection.querySelector("[data-bina-key=history-zone]")!.textContent, systemTimeZone());
+    await openSettingsPage(element, "open-time");
+    await waitFor(() => element.querySelector("[data-bina-key=time-zone-value]") !== null);
+    assertEquals(element.querySelector("[data-bina-key=time-zone-value]")!.textContent, systemTimeZone());
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("実際の設定で選んだ見た目は onAppearance に届き、SystemStore に保存して次の起動でも届く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore(); const seen: unknown[] = [];
+  const options = { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker, onAppearance: (appearance: unknown) => { seen.push(appearance); } };
+  let shell = await mountShell(element, options);
+  try {
+    assertEquals(seen, [{ theme: 0, accent: 0, wallpaper: 0 }]);
+    element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await waitFor(() => element.querySelector("[data-bina-key=accent-2]") !== null);
+    element.querySelector<HTMLButtonElement>("[data-bina-key=accent-2]")!.click();
+    await waitFor(() => seen.length === 2);
+    element.querySelector<HTMLButtonElement>("[data-bina-key=wallpaper-4]")!.click();
+    await waitFor(() => seen.length === 3);
+    assertEquals(seen.slice(1), [{ theme: 0, accent: 2, wallpaper: 0 }, { theme: 0, accent: 2, wallpaper: 4 }]);
+    await waitFor(() => element.querySelector("[data-bina-key=wallpaper-4]")!.getAttribute("aria-pressed") === "true");
+    shell.stop();
+    const stored = await store.system.getSettings();
+    assertEquals([stored?.accent, stored?.wallpaper], [2, 4]);
+    shell = await mountShell(element, options);
+    assertEquals(seen.at(-1), { theme: 0, accent: 2, wallpaper: 4 });
   } finally { shell.stop(); await window.happyDOM.close(); }
 });
 
@@ -617,6 +650,7 @@ class Settings extends App {
     assert(!os.set("unknown", 1)); assert(!os.set("home", 1)); assert(!os.set("stackSize", 0));
     assert(!os.set("historyLimit", -1)); assert(!os.set("stopDelay", -1)); assert(!os.set("homeRetryWindow", -1));
     assert(!os.set("callTimeout", 999)); assert(!os.set("destroyTimeout", 999));
+    assert(!os.set("theme", 3)); assert(!os.set("accent", 256)); assert(!os.set("wallpaper", -1));
     assert(os.get("stackSize") == 3);
     document.getElementById("checked").textContent = "確認済み";
   }
@@ -780,6 +814,7 @@ Deno.test("設定の更新状態は Worker へ同期して描き直し、確認�
   try {
     await waitFor(() => element.querySelector('[data-bina-key="home-grid"]') !== null);
     element.querySelector<HTMLButtonElement>("[data-bina-key^=home-tile-]")!.click();
+    await openSettingsPage(element, "open-about");
     await waitFor(() => element.querySelector('[data-bina-key="update-status"]') !== null);
     assert(element.textContent!.includes("最新の版です。"));
     const checkButton = () => element.querySelector<HTMLButtonElement>('[data-bina-key="check-update"]')!;
@@ -818,4 +853,159 @@ Deno.test("設定の更新状態は Worker へ同期して描き直し、確認�
     assertEquals(worker.live, 2);
   } finally { shell.stop(); await window.happyDOM.close(); }
   assertEquals(removed, true);
+});
+
+Deno.test("設定のアプリ詳細と共通ネットは通知スイッチと通信先を操作し、通知画面には履歴を残す", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  const id = "https://example.test/list/#network";
+  const net = { ...fixtures[1]!, key: id, source: "https://example.test/list/", manifest: { ...fixtures[1]!.manifest, id: "network", name: "通信アプリ", roles: undefined, permissions: { net: { reason: "資料", request: ["https://request.test/"] }, notify: { reason: "通知" } } } };
+  await store.put(net);
+  await store.put({ ...net, key: "https://example.test/list/#plain", manifest: { ...net.manifest, id: "plain", name: "権限なし", permissions: undefined } });
+  await store.system.putNetLists!({ commonAllow: [], commonDeny: [], apps: { [id]: { allow: ["https://user.test/"], added: ["https://app.test/"], deny: ["https://deny.test/"], approved: ["https://approved.test/"] } } });
+  await store.pigeon.record({ id: 0, from: id, to: "user", kind: "test", title: "届いた題", body: "履歴の本文" }, Date.now());
+  const shell = await mountShell(element, { apps: [homeApp, apps[0]!], store, libraries, createWorker: worker.createWorker });
+  const query = (key: string) => element.querySelector<HTMLElement>(`[data-bina-key="${key}"]`);
+  const press = async (key: string) => { await waitFor(() => query(key) !== null); query(key)!.click(); };
+  const type = (key: string, value: string) => { const field = query(key) as HTMLInputElement; field.value = value; field.dispatchEvent(new window.Event("input", { bubbles: true }) as unknown as Event); };
+  try {
+    element.querySelector<HTMLButtonElement>("[data-bina-key=home-tile-0]")!.click();
+    await press("open-apps");
+    await waitFor(() => query("settings-apps") !== null);
+    assert(query("app-" + id)!.textContent!.includes("通信アプリ"));
+    assert(query("app-" + id)!.textContent!.includes(id));
+    await press("app-" + id);
+    await waitFor(() => query("app-summary") !== null);
+    assertEquals(query("apps-back")!.textContent, "‹ アプリ");
+    assert(query("app-summary")!.textContent!.includes(id));
+    assertEquals(query("net-request-0")!.textContent, "https://request.test/");
+    assertEquals(query("net-pending-0")!.textContent, "https://request.test/");
+    await press("net-deny-pending");
+    await waitFor(() => query("net-deny-1")?.textContent?.includes("https://request.test/") ?? false);
+    assertEquals((await store.system.getNetLists!()).apps[id].approved, []);
+    await press("net-remove-deny-1");
+    await waitFor(() => query("net-deny-1") === null);
+    await press("net-approve-pending");
+    await waitFor(() => query("net-pending-section")!.hidden === true);
+    assertEquals((await store.system.getNetLists!()).apps[id].approved, ["https://request.test/"]);
+    assert(query("net-allow-0")!.textContent!.includes("ユーザーが追加"));
+    assert(query("net-added-0")!.textContent!.includes("アプリが追加"));
+    assertEquals(query("app-notify")!.getAttribute("aria-checked"), "true");
+    await press("app-notify");
+    await waitFor(() => query("app-notify")!.getAttribute("aria-checked") === "false");
+    assertEquals(await store.pigeon.muted(id), true);
+    assertEquals(query("net-notify")!.getAttribute("aria-label"), "追加の通知を表に出す");
+    assert(query("net-notify-row")!.textContent!.includes("追加の通知を表に出す"));
+    assert(query("app-notify-row")!.textContent!.includes("通知を許可"));
+    await press("net-notify");
+    await waitFor(() => query("net-notify")!.getAttribute("aria-checked") === "false");
+    await press("net-remove-added-0");
+    await waitFor(() => query("net-added-0") === null);
+    await press("net-remove-allow-0");
+    await waitFor(() => query("net-allow-0") === null);
+    await press("net-remove-deny-0");
+    await waitFor(() => query("net-deny-0") === null);
+    type("net-allow-input", "https://new-user.test/");
+    await press("net-add-allow");
+    await waitFor(() => query("net-allow-0")?.textContent?.includes("https://new-user.test/") ?? false);
+    type("net-deny-input", "https://new-deny.test/");
+    await press("net-add-deny");
+    await waitFor(() => query("net-deny-0")?.textContent?.includes("https://new-deny.test/") ?? false);
+    assertEquals((await store.system.getNetLists!()).apps[id], { allow: ["https://new-user.test/"], added: [], deny: ["https://new-deny.test/"], quiet: true, approved: ["https://request.test/"] });
+    await press("apps-back"); await waitFor(() => query("settings-apps") !== null);
+    await press("app-settings-0"); await waitFor(() => query("app-summary") !== null);
+    assert(query("app-notify") !== null); assert(query("net-allow-section") === null);
+    await press("apps-back"); await waitFor(() => query("settings-apps") !== null);
+    await press("app-https://example.test/list/#plain"); await waitFor(() => query("app-summary") !== null);
+    assert(query("app-notify") === null); assert(query("net-allow-section") === null);
+    await press("open-net");
+    await waitFor(() => query("net-common-note") !== null);
+    assertEquals(query("net-common-note")!.textContent, "すべてのネットのアプリに許します");
+    const allowSection = query("net-allow-section")!;
+    assertEquals(Array.from(allowSection.children).slice(0, 2).map(node => node.getAttribute("data-bina-key")), ["net-allow-title", "net-common-note"]);
+    assert(query("net-request-section") === null); assert(query("net-notify") === null);
+    type("net-allow-input", "https://common.test/"); await press("net-add-allow");
+    await waitFor(() => query("net-allow-0") !== null);
+    type("net-deny-input", "https://common-deny.test/"); await press("net-add-deny");
+    await waitFor(() => query("net-deny-0") !== null);
+    assertEquals((await store.system.getNetLists!()).commonAllow, ["https://common.test/"]);
+    assertEquals((await store.system.getNetLists!()).commonDeny, ["https://common-deny.test/"]);
+    await press("net-remove-allow-0"); await waitFor(() => query("net-allow-0") === null);
+    await press("net-remove-deny-0"); await waitFor(() => query("net-deny-0") === null);
+    await press("open-notifications"); await waitFor(() => query("letters-section") !== null);
+    assert(query("notifications-section") === null);
+    assert(query("letters-list")!.textContent!.includes("届いた題"));
+    assert(query("letters-list")!.textContent!.includes("履歴の本文"));
+    assert(query("letters-delete-all") !== null);
+    assert(query("open-schedules") !== null);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("通知センターは復元した未開封とバッジを表示し、すべて閉じられる", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const store = createMemoryAppStore(); const errors: unknown[] = [];
+  for (let i = 0; i < 2; i++) await store.pigeon.record({ id: 0, from: "cadre.settings", to: "user", kind: "test", title: `題${i}`, body: "本文" }, Date.now() - i * 60_000);
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home", settings: "cadre.settings" },
+    store, libraries, createWorker: worker.createWorker, installed: true, onError: error => errors.push(error),
+  });
+  const query = (key: string) => element.querySelector<HTMLElement>(`[data-bina-key="${key}"]`);
+  try {
+    await waitFor(() => query("clock") !== null && query("home-badge")?.textContent === "2");
+    assertEquals(query("clock-badge")?.textContent, "2");
+    assertEquals(query("install"), null);
+    await waitFor(() => query("install-tile") === null);
+    assertEquals(query("clock")?.getAttribute("aria-label"), "通知を開く");
+    query("clock")!.click();
+    await waitFor(() => query("notifications-center")?.hidden === false);
+    assertEquals(query("clock")?.getAttribute("aria-label"), "通知を閉じる");
+    assert(query("notifications-center")!.textContent!.includes("題0"));
+    assert(query("notifications-center")!.textContent!.includes("題1"));
+    query("notifications-dismiss-all")!.click();
+    await waitFor(() => query("notifications-empty")?.textContent === "新しい通知はありません");
+    await waitFor(() => query("clock-badge")?.hidden === true || !query("clock-badge"));
+    assertEquals((await store.pigeon.history()).filter(letter => !letter.opened).length, 0);
+    query("notifications-backdrop")!.click();
+    await waitFor(() => query("notifications-center")?.hidden === true);
+    assertEquals(errors, []);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("ライブのホームにインストールタイルを出し、案内を開く", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers();
+  const store = createMemoryAppStore();
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home" }, store, libraries, createWorker: worker.createWorker, installed: false,
+  });
+  try {
+    await waitFor(() => element.querySelector("[data-bina-key=install-tile]") !== null);
+    await waitForResumed(store, "cadre.home");
+    element.querySelector<HTMLButtonElement>("[data-bina-key=install-tile]")!.click();
+    await waitFor(() => element.querySelector<HTMLDialogElement>(".bina-shell-install-dialog")!.open);
+  } finally { shell.stop(); await window.happyDOM.close(); }
+});
+
+Deno.test("100 件以上は 99+ と表示し、インストール確認中はタイルを無効にする", async () => {
+  const window = new Window(); const element = elementIn(window); const worker = workers(); const store = createMemoryAppStore();
+  for (let i = 0; i < 100; i++) await store.pigeon.record({ id: 0, from: "cadre.settings", to: "user", kind: "test", title: "題", body: "本文" }, Date.now());
+  let finish!: () => void;
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  const shell = await mountShell(element, {
+    apps: [{ source: "binette:system", read: path => Deno.readTextFile(new URL(`apps/cadre/${path}`, root)) }],
+    roles: { cadre: "cadre", home: "cadre.home" }, store, libraries, createWorker: worker.createWorker,
+  });
+  try {
+    await waitFor(() => element.querySelector('[data-bina-key="clock-badge"]')?.textContent === "99+");
+    // Home runs in its own Worker, so its first render can land after Cadre's.
+    await waitFor(() => element.querySelector('[data-bina-key="home-badge"]')?.textContent === "99+");
+    await waitForResumed(store, "cadre.home");
+    const event = new window.Event("beforeinstallprompt", { cancelable: true }) as unknown as Event & { prompt: () => Promise<void> };
+    event.prompt = () => pending;
+    window.dispatchEvent(event as never);
+    element.querySelector<HTMLButtonElement>('[data-bina-key="install-tile"]')!.click();
+    await waitFor(() => element.querySelector<HTMLButtonElement>('[data-bina-key="install-tile"]')?.disabled === true);
+    window.dispatchEvent(new window.Event("appinstalled"));
+    await waitFor(() => element.querySelector('[data-bina-key="install-tile"]') === null);
+  } finally { finish(); shell.stop(); await window.happyDOM.close(); }
 });

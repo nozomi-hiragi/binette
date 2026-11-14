@@ -49,7 +49,7 @@ Binette が、ページ・アプリ・プロセス・画面をいつ作り、い
 - `display-mode` はインストールの有無そのものではなく、表示のしかた。`fullscreen` は、ふつうのタブを全画面にしただけでも当てはまるので、見分けには使わない。Binette の Web アプリマニフェストの `display` は `standalone` にする（案）
 - 見分けは Scene の `isInstalled(window)` が受け持つ。`navigator.standalone === true` か上の 3 つの `display-mode` ならインストール済み。`matchMedia` の `change` で切り替え、`appinstalled` を受け取ったときもインストール済みの表示にする。テストなどでは `ShellOptions.installed` で上書きでき、指定時は `matchMedia` を使わない。DOM と window は表示先の element から辿り、`matchMedia` が無い環境はライブモードにする（案・実装済み）
 - 透かしは、殻が一番上に薄く出す。`pointer-events: none` で下のアプリを押せるままにし、iPhone の角やホームバーに隠れないよう safe area を取る。Scene のルートの右下、アプリの枠の外に置くので、アプリからは消せない。飾りとして `aria-hidden="true"` にする。Cadre のバーと重ならない配置は未決（形は案）
-- インストールを勧める表示の形は未決。最小の案として、ライブモードのときだけホームバーの右端に「インストール」を出す案がある（Cadre のボタンから Scene に案内を頼む）。Chromium の `beforeinstallprompt` は `preventDefault()` して保持し、ボタンで一度だけ `prompt()` を呼ぶ。受け取れない場合や失敗した場合は、OS の `<dialog>` に手順と「閉じる」を出す。iPhone などは「Safari の共有 → ホーム画面に追加」、ほかは「ブラウザのメニューから『アプリをインストール』または『ホーム画面に追加』」。`showModal` が無い DOM では `open` 属性で代用する。閉じたことは保存しない。インストール済みになればボタン・透かし・開いている手順を消す（案・実装済み）
+- ライブモードのときだけホームの最後に「インストール」のタイルを出す（決定）。ホームから Scene に案内を頼む。Chromium の `beforeinstallprompt` は `preventDefault()` して保持し、ボタンで一度だけ `prompt()` を呼ぶ。受け取れない場合や失敗した場合は、OS の `<dialog>` に手順と「閉じる」を出す。iPhone などは「Safari の共有 → ホーム画面に追加」、ほかは「ブラウザのメニューから『アプリをインストール』または『ホーム画面に追加』」。`showModal` が無い DOM では `open` 属性で代用する。閉じたことは保存しない。インストール済みになればボタン・透かし・開いている手順を消す（案・実装済み）
 - インストールが要る操作のアラートには、インストールの手順（上と同じもの）を添える。OS 用の `MountedShell.requireInstall(reason)` は、インストール済みなら何も出さず true、ライブモードなら理由と手順の枠を出して false を返す。理由は textContent で入れ、HTML として読まない。Réplique・Régie には渡さず、通知などで実際に使うのは今後の作業（案・仕組みは実装済み）
 - ブラウザによる違い（知っておくこと）:
   - iPhone では、タブとホーム画面のアプリで保存場所が別。タブで試したものは、インストールしても見えない。Chromium では同じ保存場所なので、タブとインストール版で同じデータが見える
@@ -386,7 +386,7 @@ App と 6 つの状態、ページの識別子、非表示・凍結・再開、�
 3. ページの識別子は読まれるたびに新しく作り、保存しない（`crypto.randomUUID()` など）
 4. インストール済みの見分けは isInstalled に置き、`display-mode` の `standalone`・`minimal-ui`・`window-controls-overlay` と `navigator.standalone`。`fullscreen` は使わず、change・appinstalled に追従する。ShellOptions.installed で上書きできる。Binette のマニフェストの `display` は `standalone`
 
-- インストールボタンはライブのときだけホームバーの右端に置く案。Cadre のボタンから Scene に案内を頼む。beforeinstallprompt を保持して prompt を呼び、無ければ閉じるボタン付きの dialog に手順を出す。閉じた記録は保存しない
+- インストールのタイルはライブのときだけホームに置く（決定）。ホームから Scene に案内を頼む。beforeinstallprompt を保持して prompt を呼び、無ければ閉じるボタン付きの dialog に手順を出す。閉じた記録は保存しない
 - マニフェスト・自作の B の SVG・sw.js を dist 直下へ置く。本番だけ OS が相対 URL と scope ./ で SW を登録し、開発では登録しない
 - SW の版付きキャッシュとファイルの木からの応答。別のオリジンと GET 以外には触らない
 

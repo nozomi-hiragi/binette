@@ -3,6 +3,17 @@ import { BinetteError, parseAppManifest } from "../src/index.ts";
 
 const manifest = { id: "counter", name: "カウンター", entry: { html: "src/index.html", as: "src/main.ts" } };
 
+Deno.test("net の権限と要求 URL を検査する", () => {
+  const parse = (net: unknown) => parseAppManifest(JSON.stringify({ ...manifest, permissions: { net } }));
+  const net = { reason: "通信", request: ["https://example.com", "https://example.com/path/"], tools: ["addAllow"] };
+  assertEquals(parse(net).permissions?.net, net);
+  for (const bad of [null, {}, { reason: 1 }, { reason: "", request: "https://example.com" },
+    { reason: "", request: [1] }, { reason: "", tools: ["unknown"] }, { reason: "", tools: "addAllow" },
+    ...["http://example.com/", "https://user@example.com/", "https://example.com/#", "https://example.com/path", "https://*.example.com/", "invalid"].map(url => ({ reason: "", request: [url] }))]) {
+    assertEquals(assertThrows(() => parse(bad), BinetteError).code, "invalid_format");
+  }
+});
+
 Deno.test("app.json を読める", () => {
   const app = parseAppManifest(JSON.stringify({ ...manifest, entry: { ...manifest.entry, css: "src/style.css" } }));
   assertEquals(app.id, manifest.id);

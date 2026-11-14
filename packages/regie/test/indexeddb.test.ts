@@ -521,8 +521,8 @@ Deno.test("IndexedDB writes provider.json only when that provider changes", asyn
 
 
 Deno.test("Pigeon IndexedDB serializes concurrent delivery and preserves IDs across connections", async () => {
-  const fixture = databaseFixture(installed, 2);
-  for (const name of ["inbox", "muted", "sequence"]) fixture.tables.set(name, new Map());
+  const fixture = databaseFixture(installed, 3);
+  for (const name of ["inbox", "muted", "sequence", "history"]) fixture.tables.set(name, new Map());
   await withDatabase(fixture, async () => {
     const first = createIndexedDbPigeonStore("pigeon-test");
     const second = createIndexedDbPigeonStore("pigeon-test");
@@ -539,7 +539,19 @@ Deno.test("Pigeon IndexedDB serializes concurrent delivery and preserves IDs acr
     assertEquals((await second.read("receiver")).filter(letter => letter.id === 55), []);
     await first.mute("sender", true);
     assertEquals(await reopened.muted("sender"), true);
-    assertEquals(fixture.transactions.filter(tx => tx.mode === "readwrite" && tx.stores.includes("sequence")).every(tx => tx.stores.includes("inbox")), true);
+    // Letters to the user share the ID sequence and survive a new connection with their time and opened mark.
+    const notice = { ...letter, to: "user" };
+    const saved = await Promise.all(Array.from({ length: 4 }, (_, i) => (i % 2 ? first : second).record(notice, 1000 + i)));
+    assertEquals(saved.map(letter => letter.id).sort((a, b) => a - b), [107, 108, 109, 110]);
+    await first.open([saved[0]!.id]);
+    await second.forget([saved[1]!.id]);
+    const history = await createIndexedDbPigeonStore("pigeon-test").history();
+    assertEquals(history.map(letter => [letter.id, letter.opened]).sort(), [[saved[0]!.id, true], [saved[2]!.id, false], [saved[3]!.id, false]].sort());
+    assertEquals(history.every(letter => letter.time >= 1000 && letter.to === "user"), true);
+    assertEquals((await reopened.read("receiver")).length, 99);
+    await first.forget();
+    assertEquals(await second.history(), []);
+    assertEquals(fixture.transactions.filter(tx => tx.mode === "readwrite" && tx.stores.includes("sequence")).every(tx => tx.stores.includes("inbox") || tx.stores.includes("history")), true);
   });
 });
 

@@ -45,7 +45,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 | パス | 仕事 |
 | --- | --- |
 | `manifest.json` | 目録。版と、各ファイルのパス・SHA-256・大きさ |
-| `system/boot.json` | 役割の既定の割り当てと既定の提供リスト（`lists`、今は空配列） |
+| `system/boot.json` | 役割の既定の割り当てと既定の提供リスト（`lists`、ローカルは既定で空配列） |
 | `system/apps/<アプリ>/` | システムアプリ。既定は `cadre/` だけで、ホーム・設定をサブアプリとして含む。`app.json` とビルド済みの `.wasm` |
 | `system/bundled/<アプリ>/` | 同梱アプリ。システムアプリと同じファイル形式（案） |
 | `system/tools/asc.js` | AS のコンパイラ。依存込みの minify した JS で、Worker の中で動かす |
@@ -81,7 +81,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 }
 ```
 
-`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。Binette の出力は次のとおりです。提供リストのページはまだ用意せず、`lists` は空配列です。
+`system/boot.json` は `roles.cadre`・`roles.home`・`roles.settings` に既定アプリの ID を入れます。ローカルで `BINETTE_LISTS` を指定しない場合の出力は次のとおりです。GitHub Pages ではブランチの Binette の提供リスト、`https://nozomi-hiragi.github.io/binette-apps/` の順で `lists` に書きます（[app-manager.md](app-manager.md#binette-の既定の提供リスト)）。ローカルでも `BINETTE_LISTS` にカンマ区切りの https の URL を渡すと指定できます。
 
 ```json
 {
@@ -90,7 +90,7 @@ Binette を「カーネルだけ配り、残りは取ってきてブラウザの
 }
 ```
 
-カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg`・サブアプリの `sub-icons/<番号>.svg` を置きます。サブアイコンのパスは配布時に書き換え、目録にも含めます。同梱アプリの配置と入手元は案です。既定の Cadre は `apps/cadre` です。ホーム・設定も同じパッケージとビルド結果を使い、個別の配布フォルダは持ちません。同梱のデザイナーの ID は `designer` です。
+カーネルはこれを役割の初回の割り当て（`SystemOptions.roles`）にし、そのあとの割り当ては設定が決めます（[roles.md](roles.md#役割の割り当て実装済み形は案)）。`system/apps/<フォルダ>/` と `system/bundled/<フォルダ>/` に `app.json`、`app.wasm`、`index.html`、必要な `icon.svg`・サブアプリの `sub-icons/<番号>.svg` を置きます。サブアイコンのパスは配布時に書き換え、目録にも含めます。同梱アプリの配置と入手元は案です。既定の Cadre は `apps/cadre` です。ホーム・設定も同じパッケージとビルド結果を使い、個別の配布フォルダは持ちません。同梱の Filer の ID は `filer` です。デザイナーは binette-apps の提供リストから入れます。
 
 ## アプリの置き方（決定 2026-11-01）
 

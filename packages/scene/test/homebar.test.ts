@@ -69,7 +69,7 @@ Deno.test("Cadre のバーはホームと起動中だけを並べ、前面の印
     assertEquals(f.button("home")!.getAttribute("aria-pressed"), "true");
     assertEquals(f.element.querySelector<HTMLElement>("[data-bina-key=dock]")!.hidden, true);
     f.button("home-tile-0")!.click();
-    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=settings-root]") !== null);
     assertEquals(f.element.querySelectorAll("[data-bina-key=dock] > .bina-ui-button").length, 1);
     assertEquals(f.button("dock-0")!.getAttribute("aria-pressed"), "true");
     assertEquals(f.button("home")!.getAttribute("aria-pressed"), "false");
@@ -89,7 +89,7 @@ Deno.test("ドックは対応するアプリのアイコンと読み上げ名を
   const f = await fixture();
   try {
     f.button("home-tile-0")!.click();
-    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=settings-root]") !== null);
     const dock = f.button("dock-0")!;
     assertEquals(dock.getAttribute("aria-label"), "設定を開く");
     const image = dock.querySelector("img")!;
@@ -110,7 +110,7 @@ Deno.test("ドックのメニューから閉じると、閉じたアプリをド
   const f = await fixture();
   try {
     f.button("home-tile-0")!.click();
-    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=settings-root]") !== null);
     await f.waitReady();
     f.button("dock-0")!.dispatchEvent(new f.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }) as unknown as Event);
     const close = [...f.element.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent === "閉じる");
@@ -126,7 +126,7 @@ Deno.test("ドックのメニューは選んだアプリだけを閉じ、残っ
   const f = await fixture();
   try {
     f.button("home-tile-0")!.click();
-    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=debug]") !== null);
+    await waitFor(() => f.button("dock-0") !== null && f.element.querySelector("[data-bina-key=settings-root]") !== null);
     await f.waitReady();
     f.button("home")!.click();
     await waitFor(() => f.button("home")!.getAttribute("aria-pressed") === "true");
@@ -153,9 +153,11 @@ Deno.test("インストールはライブモードだけに表示し、押すと
   for (const installed of [false, true]) {
     const f = await fixture(installed);
     try {
-      assertEquals(f.button("install")!.hidden, installed);
+      await waitFor(() => (f.button("install-tile") === null) === installed);
+      assertEquals(f.button("install"), null);
+      assert(f.button("clock") !== null);
       if (!installed) {
-        f.button("install")!.click();
+        f.button("install-tile")!.click();
         await waitFor(() => f.element.querySelector<HTMLDialogElement>("dialog")!.open);
       }
     } finally { await f.close(); }

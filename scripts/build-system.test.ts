@@ -120,7 +120,7 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     const first: SystemManifest = JSON.parse(await Deno.readTextFile(`${out}/manifest.json`));
     const contents = await systemManifest(`${out}/system`);
     assertEquals(first, { ...contents, kernel: "binette-v0.2.0-test", label: await systemLabel("0.2.0", contents.version, "binette-v0.2.0-test") });
-    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "cadre.home", settings: "cadre.settings", cadre: "cadre" }, lists: [] });
+    assertEquals(JSON.parse(await Deno.readTextFile(`${out}/system/boot.json`)), { roles: { home: "cadre.home", settings: "cadre.settings", cadre: "cadre" }, lists: [], ref: "dev", commit: "" });
     assertEquals(await Deno.readTextFile(`${out}/sw.js`), 'const CACHE = "binette-v0.2.0-test";');
     assertEquals(Array.from(Deno.readDirSync(`${dir}/public`), (entry) => entry.name), ["sw.js"]);
     assertEquals(Array.from(Deno.readDirSync(`${dir}/.binapp`), (entry) => entry.name).sort(), ["bundled", "keep.txt", "public"]);
@@ -129,7 +129,7 @@ Deno.test("配布物は無視済みの場所にまとめ、既定の役割・同
     assert(first.files.some((file) => file.path === "system/bundled/home/app.wasm"));
     assert(!first.files.some((file) => file.path === "system/libraries/replique.ts"));
     const features: Record<string, string> = JSON.parse(await Deno.readTextFile(`${out}/system/libraries/replique/index.json`));
-    assertEquals(Object.values(features), Array(13).fill("0.1.0"));
+    assertEquals(Object.values(features), Array(14).fill("0.1.0"));
     for (const name of ["index", ...Object.keys(features)]) {
       const path = `system/libraries/replique/${name}.ts`;
       assert(first.files.some(file => file.path === path));

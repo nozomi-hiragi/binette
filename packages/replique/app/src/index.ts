@@ -70,8 +70,78 @@ export function jsonString(value: string): string {
   return result + '\"';
 }
 
+// @ts-ignore: decorator
+@external("binette:app@0.1", "osRef")
+declare function osRefImport(): string;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "openUrl")
+declare function openUrlImport(url: string): void;
+// @ts-ignore: decorator
+@external("binette:app@0.1", "osCommit")
+declare function osCommitImport(): string;
+
+// @ts-ignore: decorator
+@external("binette:net@0.1", "text")
+declare function netText(id: i32, field: string): string | null;
+// @ts-ignore: decorator
+@external("binette:net@0.1", "number")
+declare function netNumber(id: i32, field: string, index: i32): i32;
+// @ts-ignore: decorator
+@external("binette:net@0.1", "copy")
+declare function netCopy(id: i32, ptr: usize, length: i32): void;
+
+/** net の応答ヘッダー。 */
+export class ResponseHeaders {
+  private contentType: string | null;
+  private etag: string | null;
+  private lastModified: string | null;
+  constructor(id: i32) {
+    this.contentType = netText(id, "content-type");
+    this.etag = netText(id, "etag");
+    this.lastModified = netText(id, "last-modified");
+  }
+  get(name: string): string | null {
+    const key = name.toLowerCase();
+    if (key == "content-type") return this.contentType;
+    if (key == "etag") return this.etag;
+    if (key == "last-modified") return this.lastModified;
+    return null;
+  }
+}
+
+/** 完了した net の応答。 */
+export class Response {
+  readonly status: i32;
+  readonly statusText: string;
+  readonly url: string;
+  readonly type: string;
+  readonly reason: string;
+  readonly headers: ResponseHeaders;
+  readonly redirected: bool = false;
+  private body: ArrayBuffer;
+  constructor(id: i32) {
+    this.status = netNumber(id, "status", 0);
+    this.statusText = netText(id, "statusText") || "";
+    this.url = netText(id, "url") || "";
+    this.type = netText(id, "type") || "";
+    this.reason = netText(id, "reason") || "";
+    this.headers = new ResponseHeaders(id);
+    const length = netNumber(id, "length", 0);
+    const bytes = new Uint8Array(length);
+    netCopy(id, bytes.dataStart, length);
+    this.body = bytes.buffer;
+  }
+  get ok(): bool { return this.status >= 200 && this.status <= 299; }
+  text(): string { return String.UTF8.decode(this.body); }
+  arrayBuffer(): ArrayBuffer { return this.body.slice(0); }
+}
+
 /** アプリの大本。必要な知らせだけ上書きする */
 export class App {
+  /** Ask the OS to confirm opening an external HTTPS page. */
+  openUrl(url: string): void { openUrlImport(url); }
+  osRef(): string { return osRefImport(); }
+  osCommit(): string { return osCommitImport(); }
   build(): View | null { return null; }
   onCreate(_last: Last, _api: Api): void {}
   onStart(_last: State): void {}
@@ -79,6 +149,7 @@ export class App {
   /** Called when a letter arrives while the app is running. */
   onPigeon(): void {}
   onShare(): void {}
+  onNet(_id: i32, _res: Response): void {}
   /**
    * 自分の予定の時刻が来た。画面なしで起こされたとき（onCreate は呼ばれない）も、開いているインスタンスでも呼ばれる。
    * 上限は 30 秒。返ったら結果は ok になる

@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.2.1 (2026-11-14)
+
+- ホームバー右端に未開封数を示す時計と通知センターを追加し、再読み込み前を含む未開封を新しい順に表示する。届いた最新の 1 通は 5 秒間ポップアップにし、返信中と urgent は待つ
+- ドックとホームにアプリごとの未開封バッジを出し、インストールの操作をライブモードのホームのタイルへ移す。通知・時計・バッジのための Cadre と Apps の ABI を追加し、版は維持する
+
+- ネット通信の第 3 段として、更新で増えた要求 URL を確認待ちにし、通信時の「許可」「拒否」「あとで」と設定からの一括操作を追加する。画面なし起動では設定から手紙で知らせ、確認を待つ時間は通信の制限時間に含めない
+- 拒否した要求 URL を確認待ちから外し、deny list から削除すると再び確認待ちにする
+- ネット通信の第 2 段として、`NetApi.addAllow`・`removeAllow`、アプリ追加の通信先の保存と 100 件の制限、設定から届く追加の手紙と通知を控える設定を足す
+- 設定に「アプリ」と「ネット」を足し、アプリごとの通知の許可と通信先、全アプリ共通の allow・deny を編集できるようにする。通知画面には届いた手紙の履歴と操作を残す
+- ドキュメントアプリの `src/content.ts` を、本文の区切りごとに行を分けて書き出す（1 行が長すぎて差分が読めなかったため）。GitHub では生成物として畳む（`.gitattributes`）
+- ネット通信の第 1 段として、権限と URL の検査、GET 通信の制限、Réplique の `NetApi` を追加する。リストの操作と更新時の確認は今後対応する
+- `App.osRef()`・`App.osCommit()` で起動中の OS のビルド情報を取得できるようにする
+- 仕様に「ネット通信（net）」を足す（`docs/spec/net.md`）。権限 `net`（`request`・`tools`）、要求 URL・allow list・deny list、更新で増えた要求 URL の確認、標準の fetch に寄せた `NetApi`、`App.osRef()`・`osCommit()`
+- デザイナーを Binette から binette-apps へ移し、Binette の提供リストにはドキュメントアプリだけを残す
+- 破壊的変更: デザイナーの完全な ID は `https://nozomi-hiragi.github.io/binette-apps/#designer` に変わる。従来の Binette の提供リストで入れたデザイナーの保存データは引き継がない
+- GitHub Pages の既定の提供リストに `https://nozomi-hiragi.github.io/binette-apps/` を追加し、ブランチの Binette のリストの次に置く。ローカルの `BINETTE_LISTS` 未指定時は空リストを維持する
+
+- 見た目の設定が無い間は、OS のライト／ダークに合わせる。`data-theme="light"`・`"dark"` を付けたときはそちらを使う。ダークの配色は、面（`--color-base-100`）を背景（`--color-base-200`）より明るくして持ち上げる向きに変え、アクセントを明るい青にする
+- ホームのタイルを枠のないアイコンと名前にし、中央に寄せて並べる。キーと部品の木は変えない
+- 設定の「詳しく」「今すぐ確認」「復旧画面を開く」、通知と定期実行の操作を、面のあるボタン（`subtle`）にする。「復旧画面を開く」は「今すぐ確認」と同じ行に置く。定期実行の行に余白と区切りを足す
+- アプリ管理を設定と同じ地の色・最大幅・見出しにし、まとまりを枠付きのカードで見せる。「更新を確認」「中止」「やめる」は `subtle` にする
+- Filer の空のフォルダーで箇条書きの点が出ていたのを直し、中央にアイコンと文を出す。「読み込む」をほかの道具と同じ高さにし、場所の列を下まで伸ばす
+- Filer の名前の入力や確認の行のボタンを、折り返さない小さめの大きさにする
+- OS の設定に見た目の 3 項目を足す。`theme`（0 OS に合わせる・1 ライト・2 ダーク）、`accent`（アクセント色の番号、0〜255）、`wallpaper`（壁紙の番号、0〜255、0 は無し）。どれも既定は 0 で、`OsApi.get`・`set` の名前に加わる（ABI は変えない）。範囲外は保存しない
+- `SystemOptions.onAppearance(appearance)` を足す。起動のときと設定が変わるたびに `{ theme, accent, wallpaper }` を知らせる。`@binette/regie` から `Appearance` と `APPEARANCE_LIMITS` を公開する
+- 入口のページは番号を `data-theme`・`data-accent`・`data-wallpaper` に付け、色（6 色）と壁紙（5 種類のグラデーション）を CSS で決める。前回の見た目を `localStorage` の `binette.appearance` に覚え、起動画面から同じ見た目で出す。設定の色見本には `--bina-accent-N`・`--bina-wallpaper-N` を渡す
+- 設定に「見た目」の節を足し、テーマ・アクセント色・壁紙を選べるようにする。壁紙はホームの後ろに敷く
+- 設定を項目の一覧と中身に分ける。項目は「見た目」「既定のアプリ」（ホーム・Cadre）「通知」「定期実行」「Binette について」（説明と更新）「デバッグ」（動作の値と起動の履歴）。幅 760px を超えると左に一覧・右に中身を並べ、開いた直後は「見た目」を見せる。それ以下では一覧だけを見せ、項目を押すと中身に進み「‹ 設定」で戻る。一覧のキーは `open-appearance`・`open-defaults`・`open-notifications`・`open-schedules`・`open-about`・`open-debug`。ホームの選択やデバッグの値は、項目を開くまで木に無い
+- Décor の既定のボタンに hover と押下の見た目を足し、`primary`・`ghost`・`subtle` に押下の色を足す。見出しに行間と字間を、入力欄の placeholder に色を付ける。動きを減らす設定では遷移を止める
+- ホームバーのホームとインストール（狭い幅）を、ドックのアイコンと同じ 40px にそろえ、押したときにアイコンを少し縮める。通知の中の操作を小さめのボタンにする
+- ドキュメントアプリ 0.1.1: 本文に読み物の余白・行間・見出しの区切りを付ける（`src/style.css` を追加）
+- 設定に「日付と時刻」の項目を足し、OS のタイムゾーンを表示する。今はブラウザの設定に従い、変更はできない
+- 画面に出す日時を OS のタイムゾーンにそろえる。設定の起動の履歴は UTC の表示をやめ、定期実行の「次回」「前回」と Filer の更新日も同じ入口（`@binette/regie` の `systemTimeZone()`・`formatTime()`・`formatDate()`）を通す
+- `OsApi` に `timeZone()`（例 `Asia/Tokyo`）と `launchText(i)`（「YYYY-MM-DD HH:MM:SS」）を足す。`launchTime(i)` は残す
+- ユーザー宛ての手紙（通知）を、届いた時刻と開封の印つきで保存する。新しい方から 100 通（`PIGEON_HISTORY_LIMIT`）で、再読み込みしても残る。`PigeonStore` に `history()`・`record(letter, time)`・`open(ids)`・`forget(ids?)` が増え、IndexedDB の `…-pigeon` は版 3 になる（表 `history` を足すだけで、受信欄はそのまま）。`@binette/regie` から `UserLetter`・`LetterAction`・`PIGEON_HISTORY_LIMIT` を公開する
+- 通知の開封: 通知を押す・返事をする・閉じる、差出人のアプリが `PigeonApi.opened(kind = "")` を呼ぶ、設定から開封にする、のどれかで開封になる。アプリをアイコンから開いただけでは開封にならない。閉じた通知は消えず、開封の印が付く。通知を止めたアプリの未開封の手紙も開封にする
+- 通知の ID は保存した手紙の ID になる
+- 設定の「通知」に「届いた通知」を足す。新しい順に、差出人・題・本文・届いた時刻（OS のタイムゾーン）・未開封の印を出す。手紙を押すと差出人のアプリを開く。「開封にする」「すべて開封にする」（強制の開封）、「消す」「すべて消す」を置く。項目の一覧には未開封の件数を出す
+- `OsApi` に `letterCount()`・`letterId(i)`・`letterFrom(i)`・`letterName(i)`・`letterTitle(i)`・`letterBody(i)`・`letterTime(i)`・`letterOpened(i)` と `showLetter(id)`・`openLetter(id)`・`openAllLetters()`・`deleteLetter(id)`・`deleteAllLetters()` を足す。`binette:os@0.1` に `letter*` の 9 関数、`binette:pigeon@0.1` に `opened` が増える
+
 ## v0.2.0 (2026-11-11)
 
 - Réplique の 13 機能を単一の `@binette/replique` に含めて JSR に公開し、機能別の版と OS の解決・ABI は維持する

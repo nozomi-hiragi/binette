@@ -1,9 +1,9 @@
 {
   "name": "@binette/coulisses",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "exports": "./src/index.ts",
   "imports": {
-    "@binette/core": "jsr:@binette/core@0.2.0",
+    "@binette/core": "jsr:@binette/core@0.2.1",
     "@std/path": "jsr:@std/path@^1.1.6"
   },
   "publish": {

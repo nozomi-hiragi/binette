@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-import-prefix no-unversioned-import
 import { Api, App, Last, CadreApi } from "jsr:@binette/replique";
-import { appArea, appIcon, button, buttonOf, column, input, menuItem, row, show, text, View } from "jsr:@binette/replique-ui@^0.1";
+import { appArea, appIcon, badge, button, buttonOf, column, input, menuItem, row, show, stack, text, View } from "jsr:@binette/replique-ui@^0.1";
 
 // 辞書から取った Cadre の API。ボタンのコールバックは関数なので、グローバルで持つ
 let cadreApi: CadreApi | null = null;
@@ -20,9 +20,25 @@ function closeApp(index: i32): void {
   if (api != null) api.close(index);
 }
 
-function installBinette(): void {
+let centerOpen = false;
+function toggleCenter(): void { centerOpen = !centerOpen; }
+function closeCenter(): void { centerOpen = false; }
+function openHistory(): void {
+  centerOpen = false;
   const api = cadreApi;
-  if (api != null) api.install();
+  if (api != null) api.openSettings();
+}
+function dismissAll(): void {
+  const api = cadreApi;
+  if (api == null) return;
+  for (let i: i32 = 0; i < api.notificationCount(); i++) api.notificationDismiss(api.notificationId(i));
+  cancelReply();
+}
+function countLabel(value: i32): string { return value >= 100 ? "99+" : value.toString(); }
+function withBadge(view: View, count: i32, key: string): View {
+  const children: View[] = [view];
+  if (count > 0) children.push(badge(countLabel(count)).align("topEnd").key(key));
+  return stack(children);
 }
 
 // The shared input handler keeps one notification action reply active at a time.
@@ -36,6 +52,7 @@ let actionInputs: bool[] = [];
 function openNotification(id: i32): void {
   const api = cadreApi;
   if (api != null) api.notificationOpen(id);
+  centerOpen = false;
 }
 function dismissNotification(id: i32): void {
   const api = cadreApi;
@@ -48,6 +65,8 @@ function chooseAction(index: i32): void {
   const id = actionNotifications[index];
   const action = actionIds[index];
   if (actionInputs[index]) {
+    cancelReply();
+    api.notificationKeep(id, true);
     replyNotification = id;
     replyAction = action;
     replyDraft = "";
@@ -57,6 +76,8 @@ function chooseAction(index: i32): void {
 }
 function editReply(value: string): void { replyDraft = value; }
 function cancelReply(): void {
+  const api = cadreApi;
+  if (api != null && replyNotification >= 0) api.notificationKeep(replyNotification, false);
   replyNotification = -1;
   replyAction = "";
   replyDraft = "";
@@ -101,10 +122,12 @@ export class CadreApp extends App {
       const body = api.notificationBody(i);
       const actionCount = api.notificationActionCount(i);
       const content: View[] = [
-        text(api.notificationFrom(i)).small().tone("muted"),
-        actionCount == 0
-          ? buttonOf([text(title).heading(2), text(body)], openNotification).arg(id).label(title + "を開く").key("notification-open")
-          : column([text(title).heading(2), text(body)]),
+        row([
+          api.notificationAppIndex(i) >= 0 ? appIcon(api.notificationAppIndex(i)) : text(""),
+          text(api.notificationName(i)).small().tone("muted").grow(),
+          text(api.notificationTime(i)).small().tone("muted"),
+        ]).key("notification-header"),
+        buttonOf([text(title).heading(2), text(body)], openNotification).arg(id).label(title + "を開く").key("notification-open"),
       ];
       const actions: View[] = [];
       for (let a: i32 = 0; a < actionCount; a++) {
@@ -123,7 +146,7 @@ export class CadreApp extends App {
       }
       actions.push(button("閉じる", dismissNotification).arg(id).variant("ghost").label("通知を閉じる"));
       content.push(row(actions).key("notification-actions"));
-      notifications.push(column(content).surface("card").key("notification-" + id.toString()));
+      if (centerOpen || api.notificationPopup(i)) notifications.push(column(content).surface("card").key("notification-" + id.toString()));
     }
     if (!replyFound && replyNotification >= 0) cancelReply();
 
@@ -133,7 +156,7 @@ export class CadreApp extends App {
     for (let i: i32 = 0; i < count; i++) {
       const name = api.name(i);
       dock.push(
-        buttonOf([api.hasIcon(i) ? appIcon(api.appIndex(i)) : text(initial(name))], switchToApp)
+        buttonOf([withBadge(api.hasIcon(i) ? appIcon(api.appIndex(i)) : text(initial(name)), api.unread(i), "dock-badge")], switchToApp)
           .arg(i)
           .label(name + "を開く")
           .selected(api.isFront(i))
@@ -143,21 +166,27 @@ export class CadreApp extends App {
       );
     }
 
-    // 左にホーム、中央にドック、右にインストール（ライブモードだけ）。アイコンの見た目は style.css
+    const total = api.unreadTotal();
+    const clock = buttonOf([withBadge(text(api.clock()), total, "clock-badge")], toggleCenter).label(centerOpen ? "通知を閉じる" : "通知を開く").selected(centerOpen).key("clock");
     const homebar = row([
       buttonOf([], goHome).label("ホームを開く").selected(api.isHome()).tip("ホーム").key("home"),
-      // 開いているアプリが無いときは、空の台を見せずに隠す
       show(dock.length > 0, row(dock).key("dock")),
-      show(!api.isInstalled(), buttonOf([text("インストール")], installBinette)
-        .label("インストール")
-        .tip("Binette をインストール")
-        .enabled(!api.installBusy())
-        .key("install")),
+      clock,
     ]).key("homebar");
-
+    const centerContent: View[] = [
+      row([
+        text("通知").heading(2).grow(),
+        button("すべて閉じる", dismissAll).enabled(total > 0).key("notifications-dismiss-all"),
+        button("履歴", openHistory).key("notifications-history"),
+      ]).key("notifications-toolbar"),
+    ];
+    if (notifications.length == 0) centerContent.push(text("新しい通知はありません").key("notifications-empty"));
+    for (let i = 0; i < notifications.length; i++) centerContent.push(notifications[i]);
     return column([
       appArea().grow().key("cadre-area"),
-      show(notifications.length > 0, column(notifications).label("通知").key("notifications")),
+      show(centerOpen, buttonOf([], closeCenter).label("通知センターを閉じる").key("notifications-backdrop")),
+      show(centerOpen, column(centerContent).label("通知").key("notifications-center")),
+      show(!centerOpen && notifications.length > 0, column(notifications).label("通知").key("notifications")),
       homebar,
     ]).grow().key("cadre-root");
   }

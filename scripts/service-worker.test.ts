@@ -215,7 +215,7 @@ Deno.test("SW は未保存の GET をネットから保存し、別オリジン�
 Deno.test("SW はルート・サブパスの目録と system 配布物をキャッシュから切り離す", async () => {
   for (const base of ["https://example.test/", BASE, "https://example.test/nested/binette/"]) {
     const sw = setup(base);
-    const paths = ["manifest.json", "manifest.json?version=2", "system/boot.json", "system/apps/home/app.wasm", "system/bundled/designer/icon.svg", "system/"];
+    const paths = ["manifest.json", "manifest.json?version=2", "system/boot.json", "system/apps/home/app.wasm", "system/bundled/filer/icon.svg", "system/"];
     for (const path of paths) {
       await sw.open(CACHE).put(path, new Response("古い配布物"));
       for (const navigate of [false, true]) {

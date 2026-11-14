@@ -10,7 +10,7 @@ const app = (source: string, id: string): InstalledApp => ({
 Deno.test("完全な ID は URL を正規化し、埋め込みは生の ID を使う", () => {
   assertEquals(appId("https://EXAMPLE.test:443/apps/", "メモ"), "https://example.test/apps/#%E3%83%A1%E3%83%A2");
   assertEquals(appId("binette:system", "cadre"), "cadre");
-  assertEquals(appId("binette:bundled", "designer"), "designer");
+  assertEquals(appId("binette:bundled", "filer"), "filer");
   for (const source of ["binette:system", "binette:bundled"]) {
     assertThrows(() => appId(source, "io.github.nozomi-hiragi.binette.home"));
     assertThrows(() => appId(source, "https://example.test/#memo"));
@@ -77,7 +77,7 @@ Deno.test("OS の設定は知らない名前と範囲外を拒み、保存済み
   const store = createMemoryAppStore().system;
   await store.putSettings({ stackSize: 2 });
   for (const value of [{ unknown: 1 }, { stackSize: 0 }, { stackSize: 1.5 }, { historyLimit: -1 }, { historyLimit: 0.5 },
-    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { home: "旧名" }, { roles: "home" }, { roles: { home: 1 } }, { roles: ["home"] }, { roles: null }]) {
+    { stopDelay: -1 }, { callTimeout: NaN }, { destroyTimeout: Infinity }, { homeRetryWindow: -1 }, { theme: 3 }, { accent: 1.5 }, { wallpaper: 256 }, { home: "旧名" }, { roles: "home" }, { roles: { home: 1 } }, { roles: ["home"] }, { roles: null }]) {
     const settings = value as Partial<SystemSettings>;
     assertThrows(() => validateSystemSettings(settings));
     assertThrows(() => store.putSettings(settings));

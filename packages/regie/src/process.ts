@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type CadreSnapshot, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -10,6 +10,8 @@ export interface ProcessOptions {
   stopDelay?: number;
   /** onDestroy の時間切れ（ミリ秒、既定 5000） */
   destroyTimeout?: number;
+  /** 起動中の OS のビルド情報 */
+  osBuild?: LaunchOptions["osBuild"];
   /** 今のページの識別子 */
   page?: string;
   /** サブアプリの識別子。親として開いたら空文字列 */
@@ -20,6 +22,7 @@ export interface ProcessOptions {
   persistence?: { store: SystemStore; key: string; historyLimit?: number };
   /** 今の呼び出しが終わってから、自分を閉じる */
   onFinish?: () => void;
+  onOpenUrl?: LaunchOptions["onOpenUrl"];
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
   /** startProcess の完了後にアプリが終了したとき */
@@ -33,6 +36,7 @@ export interface ProcessOptions {
   /** アプリに渡す API の辞書。載せたキーだけが届き、載せなかったキーの理由は denied に書く */
   grants?: {
     apps?: { id: string; name: string; icon?: string }[];
+    appsInfo?: AppsInfo;
     os?: LaunchOptions["os"];
     manager?: LaunchOptions["manager"];
     scheduler?: LaunchOptions["scheduler"];
@@ -41,10 +45,13 @@ export interface ProcessOptions {
     cadre?: LaunchOptions["cadre"];
     pigeon?: LaunchOptions["pigeon"];
     shares?: boolean;
+    net?: boolean;
+    netState?: NetSnapshot;
     denied?: LaunchOptions["denied"];
   };
   /** ホームが指定した番号のアプリを開く */
   onOpen?: (i: number) => void;
+  onAppsInstall?: LaunchOptions["onAppsInstall"];
   onSet?: LaunchOptions["onSet"];
   onAssign?: LaunchOptions["onAssign"];
   onUpdate?: LaunchOptions["onUpdate"];
@@ -62,12 +69,20 @@ export interface ProcessOptions {
   onCadreNotify?: LaunchOptions["onCadreNotify"];
   onCadreInstall?: LaunchOptions["onCadreInstall"];
   onShare?: LaunchOptions["onShare"];
+  onNet?: LaunchOptions["onNet"];
+  onNetAllow?: LaunchOptions["onNetAllow"];
+  onNetDo?: LaunchOptions["onNetDo"];
+  onNetQuiet?: LaunchOptions["onNetQuiet"];
+  onAppNotificationMuted?: LaunchOptions["onAppNotificationMuted"];
   onPigeonSend?: LaunchOptions["onPigeonSend"];
   onPigeonDone?: LaunchOptions["onPigeonDone"];
+  onPigeonOpened?: LaunchOptions["onPigeonOpened"];
+  onLetter?: LaunchOptions["onLetter"];
   onNotificationMuted?: LaunchOptions["onNotificationMuted"];
   onNotificationOpen?: LaunchOptions["onNotificationOpen"];
   onNotificationDismiss?: LaunchOptions["onNotificationDismiss"];
   onNotificationReply?: LaunchOptions["onNotificationReply"];
+  onNotificationKeep?: LaunchOptions["onNotificationKeep"];
 }
 
 /** 状態を進めるアプリ */
@@ -88,7 +103,9 @@ export interface Process {
   dispatchUiValue(handle: number, value: number, version?: number): void;
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
+  syncApps?(snapshot: AppsInfo): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncNet?(snapshot: NetSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
   syncSchedule?(snapshot: ScheduleSnapshot): void;
@@ -158,6 +175,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
   const app = await launchApp(wasm, {
     createWorker: options.createWorker,
     workerUrl: options.workerUrl,
+    osBuild: options.osBuild,
     signal: options.signal,
     callTimeout: options.callTimeout,
     page: options.page,
@@ -173,8 +191,17 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onSchedule: options.onSchedule,
     storage: options.grants?.storage,
     cadre: options.grants?.cadre,
+    appsInfo: options.grants?.appsInfo,
+    onAppsInstall: options.onAppsInstall,
     pigeon: options.grants?.pigeon,
     shares: options.grants?.shares,
+    net: options.grants?.net,
+    onNet: options.onNet,
+    netState: options.grants?.netState,
+    onNetAllow: options.onNetAllow,
+    onNetDo: options.onNetDo,
+    onNetQuiet: options.onNetQuiet,
+    onAppNotificationMuted: options.onAppNotificationMuted,
     onShare: options.onShare,
     denied: options.grants?.denied,
     onSet: options.onSet,
@@ -192,10 +219,13 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     onCadreInstall: options.onCadreInstall,
     onPigeonSend: options.onPigeonSend,
     onPigeonDone: options.onPigeonDone,
+    onPigeonOpened: options.onPigeonOpened,
+    onLetter: options.onLetter,
     onNotificationMuted: options.onNotificationMuted,
     onNotificationOpen: options.onNotificationOpen,
     onNotificationDismiss: options.onNotificationDismiss,
     onNotificationReply: options.onNotificationReply,
+    onNotificationKeep: options.onNotificationKeep,
     onError: error => { if (!destroying) report(error); },
     onExit(error) {
       if (destroying) return;
@@ -206,6 +236,9 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     },
     ...(options.grants?.apps === undefined ? {} : { apps: options.grants?.apps.map(({ id, name }) => ({ id, name })) }),
     onOpen(i) { openings.push(i); notifyRequests(); },
+    onOpenUrl(url) {
+      if (state === State.Resume && !closing && !finishRequested) options.onOpenUrl?.(url);
+    },
     onFinish() { accepting = false; finishRequested = true; notifyRequests(); },
     onDom(ops) { if (sink) sink(ops); else initialOps.push(...ops); },
   });
@@ -373,6 +406,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       else armTimer();
     },
     syncPigeon(snapshot) { running?.syncPigeon?.(snapshot); },
+    syncNet(snapshot) { running?.syncNet?.(snapshot); },
     syncOs(snapshot) { running?.syncOs?.(snapshot); },
     syncManager(snapshot) { running?.syncManager?.(snapshot); },
     syncScheduler(snapshot) { running?.syncScheduler?.(snapshot); },
@@ -385,6 +419,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
       });
     },
     syncCadre(snapshot) { running?.syncCadre?.(snapshot); },
+    syncApps(snapshot) { running?.syncApps?.(snapshot); },
     setStopDelay(delay) { stopDelay = delay; },
     stop,
   };

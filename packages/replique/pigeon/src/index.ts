@@ -39,6 +39,9 @@ namespace hostPigeon {
   // @ts-ignore: decorator
   @external("binette:pigeon@0.1", "done")
   export declare function done(i: i32): void;
+  // @ts-ignore: decorator
+  @external("binette:pigeon@0.1", "opened")
+  export declare function opened(kind: string): void;
 }
 
 /** `PigeonApi.from(api)`: OS-authenticated letters and the app inbox. Available to all apps. */
@@ -64,6 +67,11 @@ export class PigeonApi {
   actions(i: i32): string { return hostPigeon.actions(i); }
   /** Removes a processed letter from the inbox. */
   done(i: i32): void { hostPigeon.done(i); }
+  /**
+   * Marks this app's letters to the user as opened, once the app has dealt with what they were about
+   * (for example the user read the mail). Pass a kind to open only letters of that kind; "" opens all of them.
+   */
+  opened(kind: string = ""): void { hostPigeon.opened(kind); }
 }
 
 /** The OS reports new inbox letters. Initial letters can be read synchronously in onCreate. */

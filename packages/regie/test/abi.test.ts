@@ -54,9 +54,11 @@ Deno.test("各機能の版・全 external・OS の提供一覧が一致し、全
     const abi = HOST_ABI[feature as keyof typeof HOST_ABI];
     assert(abi, feature);
     assertEquals(abi.module, `binette:${feature}@${versions[0][1]}`);
-    assertEquals(declarations.map(match => match[2]).sort(), [...abi.functions].sort(), feature);
+    const appSource = feature === "net" ? await Deno.readTextFile(new URL("app/src/index.ts", directory)) : "";
+    const appNetDeclarations = [...appSource.matchAll(/@external\("binette:net@0.1", "([^"]+)"\)\s+(?:export )?declare function \w+\(([^)]*)\): ([^;]+);/g)];
+    assertEquals([...declarations.filter(match => match[1] === abi.module).map(match => match[2]), ...appNetDeclarations.map(match => match[1])].sort(), [...abi.functions].sort(), feature);
     for (const [, module, name, params, result] of declarations) {
-      assertEquals(module, abi.module, `${feature}/${name}`);
+      assert(module === abi.module || (feature === "app" && module === HOST_ABI.net.module), `${feature}/${name}`);
       const id = wrappers.length;
       const type = result.replace(/DestroyKind|DestroyCause/g, "i32");
       const args = params ? params.split(",").map(param => param.split(":")[0].trim()).join(", ") : "";

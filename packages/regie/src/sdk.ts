@@ -1,7 +1,7 @@
 import { BinetteError } from "@binette/core";
 
 /** Réplique の公開機能。fs は API の予約だけで、ホストの呼び出し口を持たない。 */
-export const REPLIQUE_FEATURES = ["app", "dom", "ui", "storage", "pigeon", "shares", "os", "apps", "manager", "scheduler", "schedule", "cadre", "fs"] as const;
+export const REPLIQUE_FEATURES = ["app", "dom", "ui", "storage", "pigeon", "shares", "os", "apps", "manager", "scheduler", "schedule", "net", "cadre", "fs"] as const;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?![\s\S])/;
 
 /** 配布目録には機能ごとに、実際に収録したパッケージの完全な版を書く。 */

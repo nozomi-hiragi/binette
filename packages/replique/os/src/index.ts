@@ -6,6 +6,43 @@ export const ABI_VERSION = "0.1";
 
 namespace hostOs {
   // @ts-ignore: decorator
+  @external("binette:os@0.1", "appCount")
+  export declare function appCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appName")
+  export declare function appName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appId")
+  export declare function appId(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appNotify")
+  export declare function appNotify(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appNet")
+  export declare function appNet(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "appMuted")
+  export declare function appMuted(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "setAppMuted")
+  export declare function setAppMuted(appId: string, muted: bool): void;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netCount")
+  export declare function netCount(list: string, appId: string): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netUrl")
+  export declare function netUrl(list: string, appId: string, i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netIsQuiet")
+  export declare function netIsQuiet(appId: string): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netDo")
+  export declare function netDo(action: string, appId: string, url: string): void;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "netQuiet")
+  export declare function netQuiet(appId: string, on: bool): void;
+
+  // @ts-ignore: decorator
   @external("binette:os@0.1", "notificationCount")
   export declare function notificationCount(): i32;
   // @ts-ignore: decorator
@@ -52,6 +89,39 @@ namespace hostOs {
   @external("binette:os@0.1", "launchName")
   export declare function launchName(i: i32): string;
   // @ts-ignore: decorator
+  @external("binette:os@0.1", "launchText")
+  export declare function launchText(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "timeZone")
+  export declare function timeZone(): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterCount")
+  export declare function letterCount(): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterId")
+  export declare function letterId(i: i32): i32;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterFrom")
+  export declare function letterFrom(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterName")
+  export declare function letterName(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterTitle")
+  export declare function letterTitle(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterBody")
+  export declare function letterBody(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterTime")
+  export declare function letterTime(i: i32): string;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterOpened")
+  export declare function letterOpened(i: i32): bool;
+  // @ts-ignore: decorator
+  @external("binette:os@0.1", "letterDo")
+  export declare function letterDo(action: string, id: i32): void;
+  // @ts-ignore: decorator
   @external("binette:os@0.1", "updatePhase")
   export declare function updatePhase(): string;
   // @ts-ignore: decorator
@@ -81,6 +151,22 @@ export class OsApi {
     return api.why("os") == Why.Granted ? new OsApi() : null;
   }
 
+  /** 入っているアプリ。ID はサブアプリも含む完全な ID */
+  appCount(): i32 { return hostOs.appCount(); }
+  appName(i: i32): string { return hostOs.appName(i); }
+  appId(i: i32): string { return hostOs.appId(i); }
+  appNotify(i: i32): bool { return hostOs.appNotify(i); }
+  appNet(i: i32): bool { return hostOs.appNet(i); }
+  appMuted(i: i32): bool { return hostOs.appMuted(i); }
+  setAppMuted(appId: string, muted: bool): void { hostOs.setAppMuted(appId, muted); }
+  /** list は request・allow・added・deny。空の appId は全アプリ共通 */
+  netCount(list: string, appId: string): i32 { return hostOs.netCount(list, appId); }
+  netUrl(list: string, appId: string, i: i32): string { return hostOs.netUrl(list, appId, i); }
+  netIsQuiet(appId: string): bool { return hostOs.netIsQuiet(appId); }
+  /** addAllow・removeAllow・addDeny・removeDeny。URL の誤りは OS に表示する */
+  netDo(action: string, appId: string, url: string = ""): void { hostOs.netDo(action, appId, url); }
+  netQuiet(appId: string, on: bool): void { hostOs.netQuiet(appId, on); }
+
   /** Per-app notification settings, indexed by the notificationCount list. */
   notificationCount(): i32 { return hostOs.notificationCount(); }
   notificationName(i: i32): string { return hostOs.notificationName(i); }
@@ -102,6 +188,29 @@ export class OsApi {
   launchCount(): i32 { return hostOs.launchCount(); }
   launchTime(i: i32): f64 { return hostOs.launchTime(i); }
   launchName(i: i32): string { return hostOs.launchName(i); }
+  /** 起動の日時を、OS のタイムゾーンで「YYYY-MM-DD HH:MM:SS」にした文字列 */
+  launchText(i: i32): string { return hostOs.launchText(i); }
+  /** OS が時刻の表示に使うタイムゾーン（例 `Asia/Tokyo`）。今はブラウザの設定に従う */
+  timeZone(): string { return hostOs.timeZone(); }
+  /** Letters sent to the user, newest first. Pass letterId to the operations rather than the list index. */
+  letterCount(): i32 { return hostOs.letterCount(); }
+  letterId(i: i32): i32 { return hostOs.letterId(i); }
+  /** The sender's app ID. */
+  letterFrom(i: i32): string { return hostOs.letterFrom(i); }
+  /** The sender's app name, or its ID when the app is gone. */
+  letterName(i: i32): string { return hostOs.letterName(i); }
+  letterTitle(i: i32): string { return hostOs.letterTitle(i); }
+  letterBody(i: i32): string { return hostOs.letterBody(i); }
+  /** Arrival time as "YYYY-MM-DD HH:MM" in the system time zone. */
+  letterTime(i: i32): string { return hostOs.letterTime(i); }
+  letterOpened(i: i32): bool { return hostOs.letterOpened(i); }
+  /** Opens the sender's app. Pressing the letter counts as opening it. */
+  showLetter(id: i32): void { hostOs.letterDo("show", id); }
+  /** Forces a letter open, for one that stays unopened. */
+  openLetter(id: i32): void { hostOs.letterDo("open", id); }
+  openAllLetters(): void { hostOs.letterDo("openAll", 0); }
+  deleteLetter(id: i32): void { hostOs.letterDo("delete", id); }
+  deleteAllLetters(): void { hostOs.letterDo("deleteAll", 0); }
   /** 新しい版の `/system` があるか */
   updatePhase(): string { return hostOs.updatePhase(); }
   updateCurrent(): string { return hostOs.updateCurrent(); }

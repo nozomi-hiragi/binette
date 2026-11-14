@@ -33,9 +33,9 @@
 
 ## デザイナー
 
-デザイナーは Décor の宣言 UI をコードと部品の木の間で編集する通常の同梱アプリです。`text`・`button`・`input`・`appIcon` と `column`・`row`・`grid`・`stack` などの配置、`checkbox`・`slider`・`tabs`・`listTile`・`chip` などのよくある部品、余白・大きさ・見出し・位置（`align`）等の修飾を扱います。インスペクターでは部品の値・範囲（min・max）・選択肢・状態・選択中の番号も編集できます。既存の式を読み込んで編集後の Décor コードを出力でき、ボタンや入力欄などのコールバック式は実行せず、そのまま保持します。`appIcon` は通常アプリからアイコンを取得できないため、プレビューには代わりの表示を出します。
+デザイナーは Décor の宣言 UI をコードと部品の木の間で編集する通常のアプリで、[binette-apps](https://github.com/nozomi-hiragi/binette-apps) で開発・配布します。`text`・`button`・`input`・`appIcon` と `column`・`row`・`grid`・`stack` などの配置、`checkbox`・`slider`・`tabs`・`listTile`・`chip` などのよくある部品、余白・大きさ・見出し・位置（`align`）等の修飾を扱います。インスペクターでは部品の値・範囲（min・max）・選択肢・状態・選択中の番号も編集できます。既存の式を読み込んで編集後の Décor コードを出力でき、ボタンや入力欄などのコールバック式は実行せず、そのまま保持します。`appIcon` は通常アプリからアイコンを取得できないため、プレビューには代わりの表示を出します。
 
-使うには `deno task start` で Binette を起動し、ホームから「デザイナー」を開きます。Décor の式を読み込むか入力し、部品や修飾を編集して、出力されたコードをアプリのソースに使います。
+使うには Binette の「アプリ」で提供リスト `https://nozomi-hiragi.github.io/binette-apps/` からデザイナーを入れ、ホームから開きます。GitHub Pages ではこのリストを既定で登録します。ローカルの `deno task start` では必要に応じて「リスト」から追加します。Décor の式を読み込むか入力し、部品や修飾を編集して、出力されたコードをアプリのソースに使います。
 
 ## 単独で起動する
 
@@ -45,11 +45,11 @@ Deno 2.9 以上が必要です。
 deno task start  # http://localhost:5175/
 ```
 
-http://localhost:5175/ を開くと、ホームに設定とデザイナーが並びます。システムアプリと同梱アプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
+http://localhost:5175/ を開くと、ホームに設定・アプリ管理・Filer が並びます。システムアプリと同梱アプリはプリビルドした `.binapp` を使い、IndexedDB に保存します。ブラウザでは asc を読みません。
 
-`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。GitHub Pages ではブランチごとに OS を公開します（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/`、API ドキュメントは `https://nozomi-hiragi.github.io/binette/api/v0.2.0/`）。入口はリポジトリ直下の `index.html` と `src/main.ts` です。本番のカーネルは `regie.js` と `regie-worker.js` に分かれ、入口は SRI 付きで `regie.js` を読みます。`apps/` の直下に `app.json` を持つフォルダを足すとシステムアプリ、`bundled/` に足すと通常の同梱アプリが増えます。どちらも `deno task build:system` でビルドします。同梱アプリの入手元は `binette:bundled` で、システムアプリの権限は持ちません。`catalog/` のアプリ（デザイナー `catalog/designer/`、ドキュメントアプリ `catalog/docs/`）は OS に同梱せず、Binette の既定の提供リスト（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）に載せ、「アプリ」から入れます。提供リストは `deno task pages` が作り、`source` は commit 入りの raw.githubusercontent.com の URL です。ドキュメントアプリの中身は `docs/` から `deno task docs:app` で作ります。既定のシステムアプリは `apps/cadre/` で、ID `cadre` の親と `cadre.home`・`cadre.settings`・`cadre.apps` の入口を 1 つのパッケージに持ちます。
+`deno task build` はアプリをビルドしてから `dist/` に静的ファイルを書き出します。そのまま GitHub Pages のサブパスにも配置できます。GitHub Pages ではブランチごとに OS を公開します（例 `https://nozomi-hiragi.github.io/binette/v0.2.0/`、API ドキュメントは `https://nozomi-hiragi.github.io/binette/api/v0.2.0/`）。入口はリポジトリ直下の `index.html` と `src/main.ts` です。本番のカーネルは `regie.js` と `regie-worker.js` に分かれ、入口は SRI 付きで `regie.js` を読みます。`apps/` の直下に `app.json` を持つフォルダを足すとシステムアプリ、`bundled/` に足すと通常の同梱アプリが増えます。どちらも `deno task build:system` でビルドします。同梱アプリの入手元は `binette:bundled` で、システムアプリの権限は持ちません。`catalog/` のドキュメントアプリ（`catalog/docs/`）は OS に同梱せず、Binette の既定の提供リスト（例 `https://nozomi-hiragi.github.io/binette/apps/v0.2.0/`）に載せ、「アプリ」から入れます。GitHub Pages の既定リストはブランチの Binette のリスト、`https://nozomi-hiragi.github.io/binette-apps/` の順です。ローカルの `build:system` は `BINETTE_LISTS` 未指定なら空リストにし、カンマ区切りの https の URL で上書きできます。Binette の提供リストは `deno task pages` が作り、`source` は commit 入りの raw.githubusercontent.com の URL です。ドキュメントアプリの中身は `docs/` から `deno task docs:app` で作ります。既定のシステムアプリは `apps/cadre/` で、ID `cadre` の親と `cadre.home`・`cadre.settings`・`cadre.apps` の入口を 1 つのパッケージに持ちます。
 
-ブラウザのタブでは「ライブモード」と表示し、ホームバーの「インストール」からインストールの画面か手順を開けます。iPhone の Safari では「共有 → ホーム画面に追加」を使います。ライブで試した内容は、インストール後に引き継げることを保証しません。本番では OS の Service Worker がオフライン用にキャッシュします。初回の登録後にオンラインで再読み込みしてから使ってください。開発サーバーでは登録しません。
+ブラウザのタブでは「ライブモード」と表示し、ホーム画面の「インストール」タイルからインストールの画面か手順を開けます。iPhone の Safari では「共有 → ホーム画面に追加」を使います。ライブで試した内容は、インストール後に引き継げることを保証しません。本番では OS の Service Worker がオフライン用にキャッシュします。初回の登録後にオンラインで再読み込みしてから使ってください。開発サーバーでは登録しません。
 
 ホームは [apps/cadre](apps/cadre) のサブアプリ `cadre.home` です。AS の Décor がタイルの見た目と並びを持ち、どれをホームにしてどう開くかは Régie、ホームバーとアプリの表示領域の宣言は Cadre、アプリの配置は Scene が持ちます。ホームは設定から差し替えられます（[仕様](docs/spec/apps/home.md)）。
 

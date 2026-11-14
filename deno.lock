@@ -33,6 +33,7 @@
     "npm:markdown-it-attrs@5.0.1": "5.0.1_markdown-it@15.0.3",
     "npm:markdown-it-deflist@4.0.0": "4.0.0",
     "npm:markdown-it@15.0.3": "15.0.3",
+    "npm:marked@18.1.2": "18.1.2",
     "npm:playwright-core@*": "1.64.1",
     "npm:rehype-raw@7.0.0": "7.0.0",
     "npm:rehype-sanitize@6.0.0": "6.0.0",
@@ -735,6 +736,10 @@
     },
     "markdown-table@3.0.4": {
       "integrity": "sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw=="
+    },
+    "marked@18.1.2": {
+      "integrity": "sha512-DfOnvLAQ6WYeWxWO1u4RyFOeqyHup6dks5PPqnoFiooU7ipRvidO/2j8plhAHIiZg574E9ZlzSjUiPMLAzFkgg==",
+      "bin": true
     },
     "mdast-util-find-and-replace@3.0.4": {
       "integrity": "sha512-z4B5c6jrnJ1ltOQemhWYPBSAo6y42Z8Gt2yEgfgNTMcLSU59B8bfj8Z8AnAlJrBGLnqkdAUZ7jdDEqQw3KuipQ==",
@@ -1550,11 +1555,6 @@
           "npm:assemblyscript@0.28.20"
         ]
       },
-      "catalog/designer": {
-        "dependencies": [
-          "npm:assemblyscript@0.28.20"
-        ]
-      },
       "catalog/docs": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
@@ -1567,26 +1567,27 @@
       },
       "packages/coulisses": {
         "dependencies": [
-          "jsr:@binette/core@0.2.0",
+          "jsr:@binette/core@0.2.1",
           "jsr:@std/path@^1.1.6"
         ]
       },
       "packages/decor": {
         "dependencies": [
-          "jsr:@binette/core@0.2.0"
+          "jsr:@binette/core@0.2.1",
+          "npm:marked@18.1.2"
         ]
       },
       "packages/regie": {
         "dependencies": [
-          "jsr:@binette/core@0.2.0",
-          "jsr:@binette/decor@0.2.0",
+          "jsr:@binette/core@0.2.1",
+          "jsr:@binette/decor@0.2.1",
           "jsr:@std/path@^1.1.6",
           "npm:assemblyscript@0.28.20"
         ]
       },
       "packages/replique": {
         "dependencies": [
-          "jsr:@binette/decor@0.2.0",
+          "jsr:@binette/decor@0.2.1",
           "npm:assemblyscript@0.28.20"
         ]
       },
@@ -1616,6 +1617,11 @@
         ]
       },
       "packages/replique/manager": {
+        "dependencies": [
+          "npm:assemblyscript@0.28.20"
+        ]
+      },
+      "packages/replique/net": {
         "dependencies": [
           "npm:assemblyscript@0.28.20"
         ]
@@ -1657,9 +1663,9 @@
       },
       "packages/scene": {
         "dependencies": [
-          "jsr:@binette/core@0.2.0",
-          "jsr:@binette/decor@0.2.0",
-          "jsr:@binette/regie@0.2.0"
+          "jsr:@binette/core@0.2.1",
+          "jsr:@binette/decor@0.2.1",
+          "jsr:@binette/regie@0.2.1"
         ]
       }
     }

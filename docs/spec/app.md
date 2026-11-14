@@ -68,7 +68,7 @@ apps/cadre/
 | `icon` | 文字列 | 任意 | アイコンのパス。SVG 1 枚 |
 | `roles` | 文字列の配列 | 任意 | 名乗る役割（実装済み、名前は案）。`"home"` はホームの候補、`"settings"` は設定アプリ（入手元が `binette:system` のものだけ割り当てられる）。名乗っただけでは API は届かず、設定とブートの既定で割り当てられたアプリにだけ、その役割の API が届く（[roles.md](roles.md)）。旧名の `role`（文字列 1 つ）は読み替えずにエラーにする（案） |
 | `entry` | オブジェクト | 必須 | 入口の HTML・CSS・AS（下の表） |
-| `permissions` | オブジェクト | 任意 | 使う権限の名前 → `{ "reason": 用途の説明 }`。説明はインストール画面に出す。`schedule` は定期実行の予定を使うとき（[scheduler.md](scheduler.md)） |
+| `permissions` | オブジェクト | 任意 | 使う権限の名前 → `{ "reason": 用途の説明 }`。説明はインストール画面に出す。`schedule` は定期実行の予定を使うとき（[scheduler.md](scheduler.md)）。`net` は外と通信するとき（`{ reason, request, tools }`、[net.md](net.md)） |
 | `server` | オブジェクト | 任意 | `{ "required": 真偽値 }`。サーバーサイドを使うか。`required: false` なら、サーバーが無くても動く |
 | `build` | オブジェクト | 任意 | `{ "compiler": "assemblyscript@版" }`。ビルドに使うコンパイラの版。同じ入手元からは同じ結果になるようにする |
 

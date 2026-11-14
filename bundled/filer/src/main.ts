@@ -266,8 +266,8 @@ function rows(): View {
     const trailing = e.share.length > 0 && !e.folder ? chip("共有 ON").tone("muted") : null;
     views.push(buttonOf([listTile(e.name, sizeLabel(e), icon(e), trailing)], open).arg(i).variant("ghost").menu(menu).selected(selected == i).label(e.name).key("filer-entry-" + i.toString()));
   }
-  if (views.length == 0) views.push(text("ここにはまだファイルがありません。").tone("muted").padding(space.xl));
-  return column(views).gap(space.xs).list().fill().grow().scroll();
+  if (views.length == 0) return column([text("").key("filer-icon-folder"), text("ここにはまだファイルがありません。").tone("muted")]).gap(space.md).center().fill().grow().key("filer-empty");
+  return column(views).gap(space.xs).padding(space.sm).list().fill().grow().scroll().key("filer-list");
 }
 class Filer extends App {
   override onCreate(_last: Last, api: Api): void { shares = SharesApi.from(api)!; storage = StorageApi.from(api)!; pigeon = PigeonApi.from(api)!; inbox(); refresh(); }
@@ -284,8 +284,8 @@ class Filer extends App {
     const previewViews: View[] = [text("プレビュー").small().bold()];
     if (previewImage.length > 0) previewViews.push(image(previewImage).label("選択した画像").height(100)); else previewViews.push(text(preview).small().tone("muted"));
     if (capacity.length > 0) { previewViews.push(text(capacity).small().tone("muted")); if (capacityFraction >= 0) previewViews.push(progress(capacityFraction).label("ストレージ使用量").key("filer-capacity")); }
-    main.push(column(previewViews).gap(space.xs).padding(space.md).surface("surface").divider("top"));
-    return column([row([text("Filer").heading(2).grow(), text(pickFrom.length > 0 ? "渡すファイルを選択" : "ファイルを整理").small().tone("muted")]).padding(space.md).surface("surface").divider("bottom"), row([placeButtons(), column(main).fill().grow()]).fill().grow().collapse()]).fill();
+    main.push(column(previewViews).gap(space.xs).padding(space.md).surface("surface").divider("top").key("filer-preview"));
+    return column([row([text("Filer").heading(2).grow().key("filer-title"), text(pickFrom.length > 0 ? "渡すファイルを選択" : "ファイルを整理").small().tone("muted")]).padding(space.md).surface("surface").divider("bottom"), row([placeButtons(), column(main).fill().grow()]).fill().grow().collapse()]).fill();
   }
 }
 launch(new Filer());

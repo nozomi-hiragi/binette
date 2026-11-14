@@ -3,6 +3,7 @@ import { assert, assertEquals } from "@std/assert";
 import { buildApp } from "@binette/regie/build";
 import { createMemoryAppStore, serveApp, type RegieWorker } from "@binette/regie";
 import { Window } from "happy-dom";
+import { State } from "@binette/core";
 import { isInstalled, mountShell } from "../src/index.ts";
 
 const root = new URL("../../..", import.meta.url);
@@ -16,7 +17,7 @@ function createWorker(): RegieWorker {
     terminate() { port1.close(); port2.close(); } };
 }
 function installButton(element: HTMLElement): HTMLButtonElement | null {
-  const button = element.querySelector<HTMLButtonElement>("[data-bina-key=install]");
+  const button = element.querySelector<HTMLButtonElement>("[data-bina-key=install-tile]");
   return button?.hidden ? null : button;
 }
 
@@ -30,9 +31,19 @@ async function fixture(installed?: boolean, prepare?: (window: Window) => void) 
   const element = window.document.createElement("div") as unknown as HTMLElement;
   window.document.body.append(element as never);
   // 実際の Cadre を起動して Worker 経由のインストール操作を検証する
-  const cadre = await mountShell(element, { apps: [cadreApp], store: createMemoryAppStore(), installed, createWorker });
-  await waitFor(() => element.querySelector("[data-bina-key=home]") !== null &&
+  const store = createMemoryAppStore();
+  const cadre = await mountShell(element, { apps: [cadreApp], store, installed, createWorker });
+  await waitFor(() => element.querySelector("[data-bina-key=home-grid]") !== null && element.querySelector("[data-bina-key=home]") !== null &&
     (installButton(element) === null) === element.querySelector<HTMLElement>(".bina-shell-live")!.hidden);
+  const deadline = performance.now() + 10000;
+  while (performance.now() < deadline) {
+    const last = await store.system.getLast("cadre.home");
+    if (last?.state === State.Resume && last.done) break;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  const last = await store.system.getLast("cadre.home");
+  assert(last?.state === State.Resume && last.done, "ホームの Resume が完了しませんでした");
+  await new Promise(resolve => setTimeout(resolve, 0));
   return { window, element, cadre, async close() { cadre.stop(); await window.happyDOM.close(); } };
 }
 
@@ -68,8 +79,8 @@ Deno.test("installed の上書きでは matchMedia を使わず、ライブの�
       assertEquals(watermark.closest(".bina-shell-app"), null);
       assertEquals(watermark.parentElement, f.element.querySelector(".bina-shell-host .bina-ui-appArea"));
       assertEquals(f.element.querySelector("dialog")!.parentElement, f.element.querySelector(".bina-shell"));
-      // ホームバーの右端に置き、読み上げは「インストール」
-      if (button) assertEquals(button.closest("[data-bina-key=homebar]") !== null, true);
+      // The install tile is the last item in the home grid.
+      if (button) assertEquals(button.closest("[data-bina-key=home-grid]") !== null, true);
       if (button) assertEquals(button.parentElement?.lastElementChild, button);
       if (button) assertEquals(button.textContent, "インストール");
       assert(f.element.querySelector("style")!.textContent!.match(/:where\(\.bina-shell-live\)[^}]*pointer-events: none/));

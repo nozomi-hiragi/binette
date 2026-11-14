@@ -10,7 +10,7 @@ Deno.test("公開対象は 6 パッケージで、SDK の版は独立し、既�
       await Deno.mkdir(`${temp}/${directory}`, { recursive: true });
       for (const file of ["deno.json", "LICENSE"]) await Deno.copyFile(new URL(`${directory}/${file}`, root), `${temp}/${directory}/${file}`);
     }
-    assertEquals(Object.keys(FEATURES).length, 13);
+    assertEquals(Object.keys(FEATURES).length, 14);
     assertEquals(checkVersions(temp).errors, []);
     const sdkPath = `${temp}/packages/replique/ui/deno.json`;
     const sdk = JSON.parse(await Deno.readTextFile(sdkPath));

@@ -10,15 +10,29 @@ export interface PigeonLetter {
   title: string;
   body: string;
   urgent?: boolean;
+  /** OS が送る確認待ち通知の対象。差出人が設定の手紙だけで使う */
+  netApp?: string;
   shares?: { id: string; access: "read" | "write" }[];
   actions?: { id: string; label: string; input?: boolean; placeholder?: string }[];
 }
+/** A letter to the user as kept in the history: when it arrived and whether it was opened. */
+export interface UserLetter extends PigeonLetter { time: number; opened: boolean }
 export interface PigeonSnapshot { letters: PigeonLetter[]; notify: boolean }
+/** What settings can do to the history: show the sender, force a letter open, or delete it. */
+export const LETTER_ACTIONS = ["show", "open", "openAll", "delete", "deleteAll"] as const;
+export type LetterAction = typeof LETTER_ACTIONS[number];
 export type PigeonSend = Omit<PigeonLetter, "id" | "from">;
+
+/** アプリが操作できる、自分の通信先の写し。 */
+export interface NetSnapshot { tools: string[]; added: string[] }
 
 /** 設定アプリの起動時に渡す写し。アプリの id は 完全な ID */
 export interface OsSnapshot {
+  apps?: { id: string; name: string; notify: boolean; muted: boolean; net: boolean; request: string[]; pending?: string[]; allow: string[]; added: string[]; deny: string[]; quiet: boolean }[];
+  net?: { allow: string[]; deny: string[] };
   notifications?: { id: string; name: string; muted: boolean }[];
+  /** ユーザー宛てに届いた手紙。新しい順。`name` は差出人のアプリ名（もう無いアプリは ID） */
+  letters?: { id: number; from: string; name: string; title: string; body: string; time: number; opened: boolean }[];
   settings: Omit<SystemSettings, "roles" | "allowHttpLists">;
   /** 役割に割り当てたアプリ */
   roles: Record<string, string>;
@@ -134,11 +148,15 @@ export interface CadreInstance {
   name: string;
   front: boolean;
   hasIcon: boolean;
+  unread?: number;
 }
 
 /** Cadre アプリの起動時に渡す写し */
+export interface AppsInfo { unread: number[]; installed: boolean; installBusy: boolean; canInstall: boolean }
+export interface CadreNotification extends UserLetter { name: string; appIndex: number; popup: boolean }
 export interface CadreSnapshot {
-  notifications?: PigeonLetter[];
+  notifications?: CadreNotification[];
+  now?: number;
   instances: CadreInstance[];
   homeFront: boolean;
   installed: boolean;
@@ -146,7 +164,7 @@ export interface CadreSnapshot {
 }
 
 /** 辞書に入りうるキー。アプリのライブラリ（Réplique）の `Api` と同じ */
-export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler", "schedule"] as const;
+export const API_KEYS = ["apps", "os", "storage", "fs", "cadre", "pigeon", "shares", "manager", "scheduler", "schedule", "net"] as const;
 
 /** メインスレッド側から見た Worker。ブラウザの `Worker` や、テストで使う `MessagePort` がこの形を持つ */
 export interface RegieWorker {
@@ -157,6 +175,15 @@ export interface RegieWorker {
 
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
+  net?: boolean;
+  netState?: NetSnapshot;
+  onNetAllow?: (action: string, url: string) => void;
+  onNetDo?: (action: string, appId: string, url: string) => void;
+  onNetQuiet?: (appId: string, on: boolean) => void;
+  onAppNotificationMuted?: (appId: string, muted: boolean) => void;
+  onNet?: (request: import("./net.ts").NetRequest, signal: AbortSignal) => Promise<import("./net.ts").NetResponse>;
+  /** 起動中の OS のビルド情報 */
+  osBuild?: { ref: string; commit: string };
   /** 一回の呼び出しと起動の時間切れ（ミリ秒、既定 5000） */
   callTimeout?: number;
   /** 今のページの識別子 */
@@ -169,11 +196,15 @@ export interface LaunchOptions {
   last?: LifecycleRecord;
   /** アプリが自分を閉じたとき。今の呼び出しの完了後に届く */
   onFinish?: () => void;
+  /** Request an external HTTPS page; the host still confirms the action. */
+  onOpenUrl?: (url: string) => void;
   /** _start または一回の call で溜めた操作。完了通知より先に届く */
   onDom?: (ops: DomOp[]) => void;
   /** 辞書の `apps`。ホームと Cadre に渡すアプリ。省略時は apps.* を使えない */
   apps?: { id: string; name: string }[];
   onOpen?: (i: number) => void;
+  appsInfo?: AppsInfo;
+  onAppsInstall?: () => void;
   /** 辞書の `os`。設定アプリだけに渡す。省略時は os.* を使えない */
   os?: OsSnapshot;
   onSet?: (name: string, value: number) => void;
@@ -214,10 +245,15 @@ export interface LaunchOptions {
   pigeon?: PigeonSnapshot;
   onPigeonSend?: (letter: PigeonSend) => void;
   onPigeonDone?: (id: number) => void;
+  /** The app says the cause of its letters to the user is settled. An empty kind means all of its letters. */
+  onPigeonOpened?: (kind: string) => void;
+  /** Settings acts on the history of letters to the user. `id` is ignored by openAll and deleteAll. */
+  onLetter?: (action: LetterAction, id: number) => void;
   onNotificationMuted?: (i: number, muted: boolean) => void;
   onNotificationOpen?: (id: number) => void;
   onNotificationDismiss?: (id: number) => void;
   onNotificationReply?: (id: number, action: string, body: string) => void;
+  onNotificationKeep?: (id: number, keep: boolean) => void;
   /** 辞書に載せなかったキーの理由。書かれていないキーは NotGranted として扱う */
   denied?: Record<string, ApiDenial>;
   /** アプリを終了しない呼び出しの失敗 */
@@ -242,7 +278,9 @@ export interface RegieApp {
   callWithin(timeout: number, name: string, ...args: (number | string)[]): Promise<void>;
   /** Cadre の状態（起動中アプリ一覧や前面）の更新を Worker に知らせる */
   syncCadre?(snapshot: CadreSnapshot): void;
+  syncApps?(snapshot: AppsInfo): void;
   syncOs?(snapshot: OsSnapshot): void;
+  syncNet?(snapshot: NetSnapshot): void;
   syncPigeon?(snapshot: PigeonSnapshot): void;
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
@@ -276,11 +314,16 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const assignments: [string, number][] = [];
   let nextId = 1;
   let stopped = false;
+  const netRequests = new Map<number, AbortController>();
+  // この Worker の net.allow をカーネルが処理したところまで、写しと一緒に返す。
+  let netAcknowledged = 0;
   let rejectLaunch: ((error: Error) => void) | undefined;
 
   const finish = (error: Error, notify: boolean) => {
     if (stopped) return;
     stopped = true;
+    for (const controller of netRequests.values()) controller.abort();
+    netRequests.clear();
     clearTimeout(initTimer);
     options.signal?.removeEventListener("abort", stop);
     worker.terminate();
@@ -323,7 +366,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     worker.addEventListener("messageerror", () => exit(new Error("アプリとのやりとりに失敗しました。")));
     worker.addEventListener("message", (event) => {
       if (stopped) return;
-      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; body?: string; operation?: string; args?: string[] };
+      const data = event.data as { type: string; exit?: boolean; id?: number; message?: string; code?: BinetteError["code"]; exports?: string[]; ops?: DomOp[]; i?: number; name?: string; value?: number | string | null; role?: string; text?: string; letter?: PigeonSend; muted?: boolean; action?: string; kind?: string; body?: string; operation?: string; args?: string[]; url?: string; appId?: string; on?: boolean; seq?: number };
       switch (data.type) {
         case "ready": {
           clearTimeout(initTimer);
@@ -338,6 +381,11 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               const id = nextId++;
               pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
               try { worker.postMessage({ type: "pigeon.sync", id, pigeon: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
+            syncNet(snapshot) {
+              if (stopped) return;
+              try { worker.postMessage({ type: "net.sync", netState: snapshot, netAck: netAcknowledged }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             syncOs(snapshot) {
@@ -368,6 +416,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               try { worker.postMessage({ type: "schedule.sync", id, schedule: snapshot }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
+            syncApps(snapshot) {
+              if (stopped) return;
+              const id = nextId++;
+              pending.set(id, { resolve: () => {}, reject: () => {}, timer: setTimeout(expired, timeout) });
+              try { worker.postMessage({ type: "apps.sync", id, appsInfo: snapshot }); }
+              catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
+            },
             syncCadre(snapshot) {
               if (stopped) return;
               // 描き直しで固まったときも、ほかの呼び出しと同じ時間切れで終了させる
@@ -389,6 +444,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": openings.push(data.i!); break;
+        case "apps.install": options.onAppsInstall?.(); break;
         case "os.set": options.onSet?.(data.name!, data.value as number); break;
         case "os.assign": assignments.push([data.role!, data.i!]); break;
         case "os.openRecovery": options.onOpenRecovery?.(); break;
@@ -398,6 +454,28 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "scheduler.do": { const args = (data as { schedulerArgs?: [string, string, boolean] }).schedulerArgs ?? ["", "", false]; options.onScheduler?.(data.action!, args[0], args[1], args[2]); break; }
         case "schedule.do": { const args = (data as { scheduleArgs?: [number, string, string] }).scheduleArgs ?? [-1, "", ""]; options.onSchedule?.(data.action!, args[0], args[1], args[2]); break; }
         case "storage.write": options.onStorage?.(data.name!, data.value as string | null); break;
+        case "net.allow":
+          if (options.net) {
+            if (Number.isSafeInteger(data.seq) && data.seq! > netAcknowledged) netAcknowledged = data.seq!;
+            options.onNetAllow?.(data.action!, data.url!);
+          }
+          break;
+        case "os.netDo": if (options.os) options.onNetDo?.(data.action!, data.appId!, data.url!); break;
+        case "os.netQuiet": if (options.os) options.onNetQuiet?.(data.appId!, data.on!); break;
+        case "os.appNotificationMuted": if (options.os) options.onAppNotificationMuted?.(data.appId!, data.muted!); break;
+        case "net.request": {
+          const message = data as typeof data & { request: import("./net.ts").NetRequest };
+          if (!options.net || !options.onNet || !Number.isInteger(data.id) || netRequests.has(data.id!)) break;
+          const controller = new AbortController();
+          netRequests.set(data.id!, controller);
+          options.onNet(message.request, controller.signal).then(result => {
+            if (!stopped && netRequests.get(data.id!) === controller) { const reply = controller.signal.aborted ? { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "aborted" } : result; worker.postMessage({ type: "net.result", id: data.id, result: reply }, [reply.body.buffer]); }
+          }).catch(() => {
+            if (!stopped && netRequests.get(data.id!) === controller) worker.postMessage({ type: "net.result", id: data.id, result: { status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: controller.signal.aborted ? "aborted" : "network" } });
+          }).finally(() => netRequests.delete(data.id!));
+          break;
+        }
+        case "net.abort": netRequests.get(data.id!)?.abort(); break;
         case "shares.request": {
           const reply = (result: unknown) => { if (!stopped) worker.postMessage({ type: "shares.result", id: data.id, result: JSON.stringify(result) }); };
           Promise.resolve().then(() => { if (!options.shares || !options.onShare) throw new Error("共有 API は許可されていません。"); return options.onShare(data.operation!, data.args!); }).then(value => reply({ ok: true, value: value ?? null }), error => reply({ ok: false, error: error instanceof Error ? error.message : String(error) }));
@@ -405,8 +483,11 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         }
         case "pigeon.send": options.onPigeonSend?.(data.letter!); break;
         case "pigeon.done": options.onPigeonDone?.(data.i!); break;
+        case "pigeon.opened": options.onPigeonOpened?.(String(data.kind ?? "")); break;
+        case "os.letter": if ((LETTER_ACTIONS as readonly string[]).includes(data.action!)) options.onLetter?.(data.action as LetterAction, Number(data.i)); break;
         case "os.notificationMuted": options.onNotificationMuted?.(data.i!, data.muted!); break;
         case "cadre.notificationOpen": options.onNotificationOpen?.(data.i!); break;
+        case "cadre.notificationKeep": options.onNotificationKeep?.(data.i!, !!data.on); break;
         case "cadre.notificationDismiss": options.onNotificationDismiss?.(data.i!); break;
         case "cadre.notificationReply": options.onNotificationReply?.(data.i!, data.action!, data.body!); break;
         case "cadre.open": options.onCadreOpen?.(data.i!); break;
@@ -416,6 +497,13 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
         case "cadre.settings": options.onCadreSettings?.(); break;
         case "cadre.notify": options.onCadreNotify?.(data.text!); break;
         case "cadre.install": options.onCadreInstall?.(); break;
+        case "app.openUrl": {
+          try {
+            const url = new URL(data.url!);
+            if (url.protocol === "https:") options.onOpenUrl?.(url.href);
+          } catch { /* Invalid URLs are ignored. */ }
+          break;
+        }
         case "finish": finishing = true; break;
         case "done": {
           clearTimeout(pending.get(data.id!)?.timer);
@@ -440,7 +528,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", net: options.net, netState: options.netState, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.appsInfo === undefined ? {} : { appsInfo: options.appsInfo }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

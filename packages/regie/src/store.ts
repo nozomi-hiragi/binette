@@ -99,19 +99,45 @@ export interface SystemSettings {
   destroyTimeout: number;
   historyLimit: number;
   homeRetryWindow: number;
+  /** 見た目。0 は OS に合わせる、1 はライト、2 はダーク */
+  theme: number;
+  /** アクセント色の番号。0 が既定で、色は表示する側が決める */
+  accent: number;
+  /** 壁紙の番号。0 は壁紙なしで、絵は表示する側が決める */
+  wallpaper: number;
 }
+
+/** 見た目の設定の名前と、番号の上限 */
+export const APPEARANCE_LIMITS: Readonly<Record<"theme" | "accent" | "wallpaper", number>> = Object.freeze({ theme: 2, accent: 255, wallpaper: 255 });
 
 /** 保存が無いときの OS の既定値 */
 export const DEFAULT_SYSTEM_SETTINGS: Readonly<SystemSettings> = Object.freeze({
   roles: {}, allowHttpLists: false, stackSize: 3, stopDelay: 10000, callTimeout: 5000,
-  destroyTimeout: 5000, historyLimit: 100, homeRetryWindow: 5000,
+  destroyTimeout: 5000, historyLimit: 100, homeRetryWindow: 5000, theme: 0, accent: 0, wallpaper: 0,
 });
 
 /** 登録した提供リスト。boot は削除できない既定リストの元の URL */
 export interface ProviderListRegistration { url: string; boot?: string }
 
+/** ネットのユーザー設定。allow はユーザー、added はアプリが足した通信先。 */
+export interface SavedNetLists {
+  commonAllow: string[];
+  commonDeny: string[];
+  apps: Record<string, {
+    allow: string[];
+    /** 第 1 段の保存には無い。無ければ空として読む */
+    added?: string[];
+    deny: string[];
+    quiet?: boolean;
+    /** 更新時の確認で使う。リストの操作では変えない */
+    approved?: string[];
+  }>;
+}
+
 /** アプリの記録と OS の設定。アプリのキーは完全な ID を使う */
 export interface SystemStore {
+  getNetLists?(): Promise<SavedNetLists>;
+  putNetLists?(lists: SavedNetLists): Promise<void>;
   getLists(): Promise<ProviderListRegistration[]>;
   putLists(lists: ProviderListRegistration[]): Promise<void>;
   getPermissions(key: string): Promise<string[]>;
@@ -160,6 +186,10 @@ export function validateSystemSettings(settings: Partial<SystemSettings>): void 
       }
     } else if (key === "allowHttpLists") {
       if (typeof value !== "boolean") throw new Error("allowHttpLists は真偽値にしてください。");
+    } else if (Object.hasOwn(APPEARANCE_LIMITS, key)) {
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > APPEARANCE_LIMITS[key as keyof typeof APPEARANCE_LIMITS]) {
+        throw new Error(`OS の設定が範囲外です: ${key}`);
+      }
     } else if (!["stackSize", "stopDelay", "callTimeout", "destroyTimeout", "historyLimit", "homeRetryWindow"].includes(key) ||
       typeof value !== "number" || !Number.isFinite(value) || value < 0 ||
       ((key === "stackSize" || key === "historyLimit") && !Number.isInteger(value)) ||
@@ -178,6 +208,7 @@ const launchesPath = "/data/system/launches.json";
 const listsPath = "/data/system/lists.json";
 const permissionsPath = (key: string) => `/data/system/permissions/${encodeURIComponent(key)}.json`;
 const settingsPath = "/data/system/settings.json";
+const netListsPath = "/data/system/net-lists.json";
 const schedulesPath = "/data/system/schedules.json";
 const autoUpdatePath = "/data/system/auto-update.json";
 const dataDirectory = (id: string) => {
@@ -317,6 +348,8 @@ export function createAppStore(tree: FileTree): AppStore {
         if (copy.roles) copy.roles = Object.fromEntries(await Promise.all(Object.entries(copy.roles).map(async ([role, key]) => [role, await stableKey(key)])));
         return tree.write(settingsPath, encode(copy));
       },
+      getNetLists: async () => decode<SavedNetLists>(await tree.read(netListsPath)) ?? { commonAllow: [], commonDeny: [], apps: {} },
+      putNetLists: lists => tree.write(netListsPath, encode(lists)),
       getSchedules: async () => decode<Record<string, SavedSchedule>>(await tree.read(schedulesPath)) ?? {},
       putSchedules: schedules => tree.write(schedulesPath, encode(schedules)),
     },
@@ -513,6 +546,8 @@ export function createAppStore(tree: FileTree): AppStore {
         const copy = structuredClone(settings);
         return serial(() => store.system.putSettings(copy));
       },
+      getNetLists: () => serial(async () => await store.system.getNetLists?.() ?? { commonAllow: [], commonDeny: [], apps: {} }),
+      putNetLists: lists => { const copy = structuredClone(lists); return serial(async () => { await store.system.putNetLists?.(copy); }); },
       getSchedules: () => serial(async () => await store.system.getSchedules?.() ?? {}),
       putSchedules: schedules => { const copy = structuredClone(schedules); return serial(async () => { await store.system.putSchedules?.(copy); }); },
     },

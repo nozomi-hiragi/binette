@@ -5,9 +5,16 @@ import { bootAppStore, loadBootApps } from "./boot.ts";
 import { browserKernels, createUpdater, kernelIdentity } from "./update.ts";
 import { showRecovery } from "./recovery.ts";
 import { setBootProgress, setBootStage } from "./boot-screen.ts";
+import { applyAppearance, recallAppearance, rememberAppearance } from "./appearance.ts";
 
 const container = document.querySelector<HTMLElement>("#app");
 if (!container) throw new Error("表示先がありません。");
+// 設定を読む前から、前回の見た目で起動画面を出す
+// サイトのデータを止めているブラウザでは localStorage に触るだけで例外になる
+let storage: Pick<Storage, "getItem" | "setItem"> = { getItem: () => null, setItem: () => {} };
+try { storage = localStorage; } catch { /* 覚えずに続ける */ }
+const remembered = recallAppearance(storage);
+if (remembered) applyAppearance(document.documentElement, remembered);
 const tree = createIndexedDbFileTree();
 const distribution = createSystemDistribution(tree, { manifestUrl: new URL("./manifest.json", document.baseURI), origin: location.origin });
 const store = bootAppStore(createAppStore(tree));
@@ -61,7 +68,7 @@ try {
     onProgress: (p) => setBootProgress(p, container),
   });
   setBootStage("起動中", container);
-  const { apps, roles, lists } = await loadBootApps(tree, distribution);
+  const { apps, roles, lists, ref, commit } = await loadBootApps(tree, distribution);
   let booting = true;
   const errors: unknown[] = [];
   const shell = await mountShell(container, {
@@ -69,10 +76,12 @@ try {
     workerUrl: import.meta.env.PROD ? new URL("./regie-worker.js", document.baseURI) : undefined,
     roles,
     lists,
+    osBuild: { ref, commit },
     browserBuild: { distribution, workerUrl: import.meta.env.PROD ? new URL("./build-worker.js", document.baseURI) : undefined },
     update: { ...updater, openRecovery() { location.assign("?recovery"); } },
     store,
     scheduler,
+    onAppearance(appearance) { applyAppearance(document.documentElement, appearance); rememberAppearance(storage, appearance); },
     onError(error) { console.error(error); if (booting) errors.push(error); },
   });
   booting = false;

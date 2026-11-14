@@ -58,7 +58,7 @@ Deno.test("integrity: コマンドが JSON を出す", async () => {
 Deno.test("--replique はパッケージルートの全機能を読み、旧ソースフォルダ・単一ファイル・欠損を拒む", async () => {
   const root = new URL("../../replique/", import.meta.url);
   const libraries = await readRepliqueLibraries(root);
-  assertEquals(Object.keys(libraries).length, 14);
+  assertEquals(Object.keys(libraries).length, 15);
   assertEquals(libraries["jsr:@binette/replique"], await Deno.readTextFile(new URL("src/index.ts", root)));
   assertEquals(libraries["jsr:@binette/replique-ui@0.1.0"], await Deno.readTextFile(new URL("ui/src/index.ts", root)));
   for (const path of ["src/", "src/index.ts", "missing/"]) {
@@ -76,8 +76,19 @@ Deno.test("--replique はパッケージルートの全機能を読み、旧ソ�
   } finally { await Deno.remove(directory, { recursive: true }); }
 });
 
-Deno.test("Designer の旧 import の原文を保ち、指定された integrity に一致する", async () => {
+Deno.test("旧 import の原文を保ち、指定された integrity に一致する", async () => {
   const libraries = await readRepliqueLibraries(new URL("../../replique/", import.meta.url));
-  const integrity = await computeAppIntegrity(new URL("../../../catalog/designer/", import.meta.url).pathname, [], { libraries });
-  assertEquals(integrity, { "/": "sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=" });
+  await withApp(async (dir) => {
+    await Deno.writeTextFile(join(dir, "app.json"), "{\"id\":\"legacy-import\",\"name\":\"旧 import\",\"entry\":{\"as\":\"src/main.ts\"}}");
+    const source = `import { App, launch } from "jsr:@binette/replique";
+import { View, text } from "jsr:@binette/replique/ui";
+class Page extends App {
+  build(): View { return text("旧 import"); }
+}
+launch(new Page());
+`;
+    await Deno.writeTextFile(join(dir, "src/main.ts"), source);
+    assertEquals(await computeAppIntegrity(dir, [], { libraries }), { "/": "sha256-7IASST4H2I6kXEyhf5E61wQ9MRFTYUElVmbiGMt+/Wk=" });
+    assertEquals(await Deno.readTextFile(join(dir, "src/main.ts")), source);
+  });
 });

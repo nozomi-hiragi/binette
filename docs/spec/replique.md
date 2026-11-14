@@ -20,7 +20,7 @@ Réplique はホストの `@external("binette:<機能名>@0.1", "関数名")` �
 
 OS のビルドでは機能間とアプリから `jsr:@binette/replique-<機能名>@^0.1` で参照できます。JSR では集約入口 `jsr:@binette/replique` と `jsr:@binette/replique/<機能名>` を使えます。`Api` は `sub()` と `why(key)` を提供し、各機能の API クラスは参照しません。各クラスの `static from(api: Api): XxxApi | null` が対応するキーを確かめて取得します。ホスト ABI の版は機能ごとに管理します。辞書と権限・役割の判定は維持します。
 
-旧指定子 `jsr:@binette/replique/<機能名>` も全 13 機能の互換入口として維持します。Régie は版指定のない旧入口を提供中の機能パッケージの完全な版へ解決し、新しい指定子・集約入口と同じクラスと状態を使います。未知の機能や不正なサブパスは `unsupported_sdk` です。JSR の集約パッケージにも各旧サブパスを exports として残し、各機能を再 export します。機能別の指定子は OS 内で解決され、個別の JSR パッケージとしては公開しません。Designer は原文の import を保持し、integrity `/` の `sha256-4EZvOMG/4uGVXvTSP/4h0R5KsrJQu1QSoJpVqDMds5E=` を維持します。ハッシュの対象と計算方法は変更しません。
+旧指定子 `jsr:@binette/replique/<機能名>` も全 13 機能の互換入口として維持します。Régie は版指定のない旧入口を提供中の機能パッケージの完全な版へ解決し、新しい指定子・集約入口と同じクラスと状態を使います。未知の機能や不正なサブパスは `unsupported_sdk` です。JSR の集約パッケージにも各旧サブパスを exports として残し、各機能を再 export します。機能別の指定子は OS 内で解決され、個別の JSR パッケージとしては公開しません。旧 import の原文を保持して integrity を求める振る舞いは、小さな fixture で検証します。デザイナーのソースと配布は binette-apps が持ちます。ハッシュの対象と計算方法は変更しません。
 
 `app/src/index.ts` は Décor の `View` だけを import し、Réplique のほかの機能には依存しません。`ui/src/index.ts` がトップレベルで描画関数を `app/src/index.ts` の `setRebuild` に登録し、ライフサイクルからの `rebuild` はその関数参照を呼びます。未登録なら何もしません。クロージャを使わず、機能間の import に循環を作らない構造です。集約入口の `index.ts` だけを import するアプリでも描画関数が登録されます。
 
@@ -219,6 +219,7 @@ export class AppsApi {
 | `pigeon` | `PigeonApi` | すべてのアプリ | 手紙の送信・受信欄の同期読み取り・削除（[pigeon.md](pigeon.md)） |
 | `shares` | `SharesApi` | すべてのアプリ | 共有の作成・一覧・承認・退出とファイル操作（[file-sharing.md](file-sharing.md)） |
 | `storage` | `StorageApi` | すべてのアプリ | `has(name)`・`read(name)`・`write(name, value)`・`remove(name)`・`count()`・`name(i)`。アプリ自身の領域のデータ（`/data/…`） |
+| `net` | `NetApi` | `permissions` に `net` を書いたアプリ | 外の HTTP のサーバーとの通信。標準の fetch に寄せた形（[net.md](net.md)、決定 2026-11-12、未実装） |
 | `fs` | `FsApi` | 誰にも届かない（案） | `from(api)` だけを持つ。範囲の決め方が未決なので、キーだけ用意している |
 
 ```ts
@@ -237,6 +238,7 @@ class Home extends App {
 - get/set の name は `stackSize`・`stopDelay`・`callTimeout`・`destroyTimeout`・`historyLimit`・`homeRetryWindow`。時間はミリ秒。stackSize は 1 以上、historyLimit は 0 以上、stopDelay/homeRetryWindow は 0 以上、callTimeout/destroyTimeout は 1000 以上。set は範囲外や知らない名前なら false を返して変更せず、OS にも送りません。get の知らない名前は例外です
 - set は Worker の写しも更新し、続く get に反映します。OS は範囲を再確認して SystemStore に保存し、[変更が効く時点](lifecycle.md#値を変えたときに効く所案実装済み)から使います。bool は範囲の検査の結果で、保存の完了通知ではありません。保存の失敗は OS のエラー表示に出ます
 - `role(role)` は役割に割り当てたアプリの完全なアプリ ID です。割り当てが無ければ空文字列です。`candidateCount`・`candidateName`・`candidateId` は、その役割に選べるアプリの数・名前・完全なアプリ ID です。割り当てを変えられるのは `home` と `cadre`（今）で、ほかの役割は 0 です。候補は保存済みの、その役割を名乗るアプリで、入手元を問いません。`assign(role, i)` はその番号のアプリを割り当てて保存し、Worker の `role` も更新します。番号の範囲外は例外です。割り当てを変えられない役割（設定など）は候補が 0 なので、assign は必ず例外になります
+- letterCount と `letterId(i)`・`letterFrom(i)`（差出人の完全なアプリ ID）・`letterName(i)`（差出人の名前。もう無いアプリは ID）・`letterTitle(i)`・`letterBody(i)`・`letterTime(i)`（届いた時刻。OS のタイムゾーンの「YYYY-MM-DD HH:MM」）・`letterOpened(i)` は、ユーザー宛てに届いた手紙の写しです。新しい順で、届く・開封・削除のたびに OS が同期します。操作には番号ではなく `letterId(i)` を渡します。`showLetter(id)` は開封にして差出人のアプリを開き、`openLetter(id)`・`openAllLetters()` は開封にするだけ、`deleteLetter(id)`・`deleteAllLetters()` は消します（[Pigeon](pigeon.md#届いた通知と開封)）
 - launchCount/launchTime/launchName は設定アプリのインスタンスを作る直前の起動の履歴の写しです。新しい順、日時は Unix epoch ミリ秒の f64、名前が無ければ完全なアプリ ID。番号の範囲外は例外です。閉じて開き直すと更新し、前面へ戻すだけでは更新しません
 - `updateAvailable()` は準備済みの新しい版があるかです。`updateCurrent()`・`updateNext()` は現在と新しい版の表示用の文字列、`updatePhase()` は確認や更新の状態です。`checkUpdate()` は確認を、`update()` は準備済みの組への更新を、`openRecovery()` は復旧画面を開くことを OS に頼みます。状態の変化は設定アプリに同期され、画面を描き直します。呼び出し名と状態の形は案です
 - role/candidateName/candidateId/launchName は文字列ポインタ、launchTime は f64、それ以外の番号・数値・bool は i32 を使います
@@ -263,7 +265,7 @@ class Home extends App {
 
 ### PigeonApi
 
-`PigeonApi.from(api)` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
+`PigeonApi.from(api)` で取得します。`send(to, kind, title, body, urgent = false, actions = "[]")` で送り、差出人は OS が決めます。`actions` は JSON 配列の文字列です。受信欄は `count()` と `from(i)`・`to(i)`・`kind(i)`・`title(i)`・`body(i)`・`urgent(i)`・`actions(i)` で同期的に読み、`done(i)` で削除します。動作中に届くと `onPigeon()` が呼ばれます。`opened(kind = "")` は、自分が送ったユーザー宛ての手紙を開封にします（`kind` を省くと全部）。ユーザー宛てには `notify` 権限が必要です。詳しくは [Pigeon](pigeon.md) を参照してください。
 
 ### SharesApi
 
@@ -291,7 +293,7 @@ class Home extends App {
 
 - async / await、Promise は無い
 - クロージャ（外の変数を使う無名関数）は使えない。コールバックにはトップレベルの関数を渡す
-- アプリから DOM、ネットワーク、`console` などには直接触れない。使えるのは Réplique の呼び出しだけ（Régie がほかの import を渡さないので、使うと起動できない）
+- アプリから DOM、ネットワーク、`console` などには直接触れない。ネットワークは `NetApi` を通して OS に頼む（[net.md](net.md)）。使えるのは Réplique の呼び出しだけ（Régie がほかの import を渡さないので、使うと起動できない）
 - 例外（`throw`）は、その呼び出しを止め、アプリを終了する。Régie はそれを受けてインスタンスを片付け、Scene に見せ方を知らせる（[regie/run.md](regie/run.md#メッセージ実装済み)、[regie/system.md](regie/system.md#落ちたとき)）
 
 ## 配布（実装済み）

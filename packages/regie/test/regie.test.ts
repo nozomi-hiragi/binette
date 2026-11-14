@@ -459,11 +459,13 @@ export function ranges(): void {
   assert(!os().set("homeRetryWindow", -1)); assert(os().set("homeRetryWindow", 0));
   assert(!os().set("callTimeout", 999)); assert(os().set("callTimeout", 1000));
   assert(!os().set("destroyTimeout", 999)); assert(os().set("destroyTimeout", 1000));
+  assert(os().get("theme") == 0); assert(!os().set("theme", 3)); assert(os().set("theme", 2)); assert(os().get("theme") == 2);
+  assert(!os().set("accent", 256)); assert(os().set("accent", 5)); assert(!os().set("wallpaper", -1)); assert(os().set("wallpaper", 255));
 }
 `;
 
 const snapshot = (): OsSnapshot => ({
-  settings: { stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000 },
+  settings: { stackSize: 3, stopDelay: 10000, historyLimit: 100, callTimeout: 5000, destroyTimeout: 5000, homeRetryWindow: 5000, theme: 0, accent: 0, wallpaper: 0 },
   roles: { home: "key" }, candidates: { home: [] }, launches: [], updateAvailable: false,
 });
 
@@ -488,7 +490,7 @@ Deno.test("os の写し、同期の set、範囲の検査、役割の割り当�
     await app.call("get"); await app.call("set", 0); await app.call("unknown"); await app.call("set", 1); await app.call("get");
     assertEquals(texts.splice(0), ["3", "false:3", "false", "true:1", "1"]); assertEquals(changes.splice(0), [["stackSize", 1]]);
     await app.call("ranges");
-    assertEquals(changes, [["historyLimit", 0], ["stopDelay", 0], ["homeRetryWindow", 0], ["callTimeout", 1000], ["destroyTimeout", 1000]]);
+    assertEquals(changes, [["historyLimit", 0], ["stopDelay", 0], ["homeRetryWindow", 0], ["callTimeout", 1000], ["destroyTimeout", 1000], ["theme", 2], ["accent", 5], ["wallpaper", 255]]);
     await app.call("role"); await app.call("candidateCount", 0); await app.call("candidateCount", 1); await app.call("candidateCount", 2);
     await app.call("candidateName", 0); await app.call("candidateId", 1); await app.call("assign", 1);
     await app.call("launchCount"); await app.call("launchTime", 0); await app.call("launchName", 0); await app.call("launchName", 1);
@@ -717,4 +719,185 @@ Deno.test("scheduler の写しを読み、操作を OS に渡す。届いてい�
   } finally { app.stop(); }
   const denied = await launchApp(wasm, { createWorker });
   try { await assertRejects(() => denied.call("summary"), Error, "アプリが中断しました"); } finally { denied.stop(); }
+});
+
+Deno.test("Worker は起動した OS の ref と commit を権限なしで返す", async () => {
+  const code = `
+@external("binette:app@0.1", "osRef") declare function ref(): string;
+@external("binette:app@0.1", "osCommit") declare function commit(): string;
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function read(): void { text(1, ref()); text(2, commit()); }
+`;
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(code, true), { createWorker, osBuild: { ref: "v0.2.1", commit: "1234567890123456789012345678901234567890" }, onDom: ops => texts.push(ops) });
+  try {
+    await app.call("read");
+    assertEquals(texts, [[{ op: "text", handle: 1, value: "v0.2.1" }, { op: "text", handle: 2, value: "1234567890123456789012345678901234567890" }]]);
+  } finally { app.stop(); }
+});
+
+Deno.test("NetApi の要求と onNet の応答が Worker を往復する", async () => {
+  const code = `
+import { App, Api, NetApi, RequestInit, Response, launch, __bina_net } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+class Test extends App {
+  onNet(id: i32, res: Response): void { text(id, res.type + ":" + res.text() + ":" + (res.headers.get("ETag") || "")); }
+}
+launch(new Test());
+export { __bina_net };
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) net.fetch("https://example.com/a", new RequestInit().header("Accept", "text/plain")); }
+`;
+  let received: ((ops: DomOp[]) => void) | undefined;
+  const result = new Promise<DomOp[]>(resolve => { received = resolve; });
+  const app = await launchApp(await build(code, true), {
+    createWorker,
+    net: true,
+    onNet(request) {
+      assertEquals(request, { url: "https://example.com/a", method: "GET", headers: [["Accept", "text/plain"]], redirect: "manual" });
+      return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [["etag", "abc"]], body: new Uint8Array([104, 105]), reason: "" });
+    },
+    onDom: ops => received?.(ops),
+  });
+  try {
+    await app.call("go");
+    assertEquals(await result, [{ op: "text", handle: 1, value: "cors:hi:abc" }]);
+  } finally { app.stop(); }
+});
+
+Deno.test("net が届かないアプリの why は NotGranted", async () => {
+  const code = `
+import { Api } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function check(): void { text(1, new Api().why("net").toString()); }
+`;
+  const texts: DomOp[][] = [];
+  const app = await launchApp(await build(code, true), { createWorker, onDom: ops => texts.push(ops) });
+  try { await app.call("check"); assertEquals(texts, [[{ op: "text", handle: 1, value: "1" }]]); }
+  finally { app.stop(); }
+});
+
+Deno.test("net の abort は onNet に一回だけ aborted を届ける", async () => {
+  const code = `
+import { App, Api, NetApi, Response, launch, __bina_net } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+class Test extends App { onNet(id: i32, res: Response): void { text(id, res.reason); } }
+launch(new Test()); export { __bina_net };
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) { const id = net.fetch("https://example.com/"); net.abort(id); } }
+`;
+  let received: ((ops: DomOp[]) => void) | undefined;
+  const result = new Promise<DomOp[]>(resolve => { received = resolve; });
+  let calls = 0;
+  const app = await launchApp(await build(code, true), {
+    createWorker, net: true,
+    onNet(_request, signal) { return new Promise(resolve => signal.addEventListener("abort", () => resolve({ status: 0, statusText: "", url: "", type: "error", headers: [], body: new Uint8Array(0), reason: "aborted" }))); },
+    onDom: ops => { calls++; received?.(ops); },
+  });
+  try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "aborted" }]); assertEquals(calls, 1); }
+  finally { app.stop(); }
+});
+
+Deno.test("アプリの終了は進行中の通信を中断する", async () => {
+  const code = `
+import { Api, NetApi } from "jsr:@binette/replique";
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) net.fetch("https://example.com/"); }
+`;
+  let observed: AbortSignal | undefined;
+  const app = await launchApp(await build(code, true), {
+    createWorker, net: true,
+    onNet(_request, signal) { observed = signal; return new Promise(() => {}); },
+  });
+  await app.call("go");
+  assert(observed);
+  app.stop();
+  assertEquals(observed.aborted, true);
+});
+
+Deno.test("net は上限の 4 MiB を Worker と WASM に渡せる", async () => {
+  const code = `
+import { App, Api, NetApi, Response, launch, __bina_net } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+class Test extends App { onNet(_id: i32, res: Response): void { text(1, res.arrayBuffer().byteLength.toString()); } }
+launch(new Test()); export { __bina_net };
+export function go(): void { const net = NetApi.from(new Api()); if (net !== null) net.fetch("https://example.com/"); }
+`;
+  let received: ((ops: DomOp[]) => void) | undefined;
+  const result = new Promise<DomOp[]>(resolve => { received = resolve; });
+  const app = await launchApp(await build(code, true), { createWorker, net: true,
+    onNet(request) { return Promise.resolve({ status: 200, statusText: "OK", url: request.url, type: "cors", headers: [], body: new Uint8Array(4 * 1024 * 1024).fill(65), reason: "" }); },
+    onDom: ops => received?.(ops),
+  });
+  try { await app.call("go"); assertEquals(await result, [{ op: "text", handle: 1, value: "4194304" }]); }
+  finally { app.stop(); }
+});
+
+Deno.test("NetApi の addAllow/removeAllow は同期で判定し、追加元と 100 件の上限を守る", async () => {
+  const values = ["https://example.com/docs/", "https://user-added.test/", "bad", "http://example.com/", "https://a:b@example.com/", "https://example.com/a", "https://example.com/#", "https://*.example.com/", ...Array.from({ length: 100 }, (_, i) => `https://example.com/${i}/`)];
+  const wasm = await build(`const values = ${JSON.stringify(values)};
+import { NetApi } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+export function add(i: i32): void { text(1, new NetApi().addAllow(values[i]).toString()); }
+export function remove(i: i32): void { text(1, new NetApi().removeAllow(values[i]).toString()); }`, true);
+  const url = "https://example.com/docs/";
+  for (const options of [{ net: false, tools: ["addAllow"] }, { net: true, tools: [] }, { net: true, tools: undefined }]) {
+    let result = ""; const changes: unknown[] = [];
+    const app = await launchApp(wasm, { createWorker, net: options.net, ...(options.tools ? { netState: { tools: options.tools, added: [url] } } : {}), onNetAllow: (...args) => changes.push(args), onDom: ops => { for (const op of ops) if (op.op === "text") result = op.value; } });
+    try {
+      await app.call("add", values.indexOf(url)); assertEquals(result, "false");
+      await app.call("remove", values.indexOf(url)); assertEquals(result, "false");
+      assertEquals(changes, []);
+    } finally { app.stop(); }
+  }
+  let result = ""; const changes: unknown[] = [];
+  const app = await launchApp(wasm, { createWorker, net: true, netState: { tools: ["addAllow"], added: [] }, onNetAllow: (...args) => changes.push(args), onDom: ops => { for (const op of ops) if (op.op === "text") result = op.value; } });
+  const check = async (action: string, value: string, expected: boolean) => { await app.call(action, values.indexOf(value)); assertEquals(result, String(expected), action + ": " + value); };
+  try {
+    for (const invalid of ["bad", "http://example.com/", "https://a:b@example.com/", "https://example.com/a", "https://example.com/#", "https://*.example.com/"]) await check("add", invalid, false);
+    await check("remove", url, false);
+    await check("add", url, true);
+    await check("add", url, true);
+    assertEquals(changes, [["add", url]]);
+    await check("remove", "https://user-added.test/", false);
+    await check("remove", url, true);
+    await check("remove", url, false);
+    assertEquals(changes, [["add", url], ["remove", url]]);
+    for (let i = 0; i < 100; i++) await check("add", `https://example.com/${i}/`, true);
+    await check("add", "https://example.com/0/", true);
+    await check("add", url, false);
+    await check("remove", "https://example.com/0/", true);
+    await check("add", url, true);
+    app.syncNet!({ tools: ["addAllow"], added: [] });
+    await check("remove", url, false);
+    await check("add", url, true);
+  } finally { app.stop(); }
+});
+
+Deno.test("net.sync は処理済みの操作だけを確定し、連続した同期 API の未処理操作を消さない", async () => {
+  const wasm = await build(`import { NetApi } from "jsr:@binette/replique";
+@external("binette:dom@0.1", "text") declare function text(handle: i32, value: string): void;
+const net = new NetApi();
+export function batch(): void { net.addAllow("https://first.test/"); net.addAllow("https://second.test/"); net.removeAllow("https://first.test/"); }
+export function probe(): void { text(1, net.removeAllow("https://first.test/").toString()); text(1, net.removeAllow("https://second.test/").toString()); }
+export function removeSecond(): void { text(1, net.removeAllow("https://second.test/").toString()); }`, true);
+  const added = new Set<string>();
+  const replies: string[] = [];
+  let probe: Promise<void> | undefined;
+  let changes = 0;
+  const app = await launchApp(wasm, {
+    createWorker, net: true, netState: { tools: ["addAllow"], added: [] },
+    onNetAllow(action, url) {
+      if (action === "add") added.add(url); else added.delete(url);
+      app.syncNet!({ tools: ["addAllow"], added: [...added] });
+      // 最初の追加の写しの直後、残りの操作を反映した写しが届く前に照会する。
+      if (++changes === 1) probe = app.call("probe");
+    },
+    onDom: ops => { for (const op of ops) if (op.op === "text") replies.push(op.value); },
+  });
+  try {
+    await app.call("batch");
+    await probe;
+    await app.call("removeSecond");
+    assertEquals(replies, ["false", "true", "false"]);
+    assertEquals([...added], []);
+    assertEquals(changes, 4);
+  } finally { app.stop(); }
 });
