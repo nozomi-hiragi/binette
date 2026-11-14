@@ -154,6 +154,14 @@ export interface CadreInstance {
 /** Cadre アプリの起動時に渡す写し */
 export interface AppsInfo { unread: number[]; installed: boolean; installBusy: boolean; canInstall: boolean }
 export interface CadreNotification extends UserLetter { name: string; appIndex: number; popup: boolean }
+/** アプリの表示領域のうち、OS の枠や端末の切り欠きで隠れうる上下左右の幅（px） */
+export interface SafeArea {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface CadreSnapshot {
   notifications?: CadreNotification[];
   now?: number;
@@ -161,6 +169,7 @@ export interface CadreSnapshot {
   homeFront: boolean;
   installed: boolean;
   installBusy: boolean;
+  /** 前面のアプリがフルスクリーンを求めているか */
   fullscreen?: boolean;
 }
 
@@ -177,6 +186,9 @@ export interface RegieWorker {
 /** {@link launchApp} の設定 */
 export interface LaunchOptions {
   net?: boolean;
+  /** 起動時のセーフエリア。省略は 0 */
+  safeArea?: SafeArea;
+  /** アプリがフルスクリーンの切り替えを求めた */
   onFullscreen?: (on: boolean) => void;
   netState?: NetSnapshot;
   onNetAllow?: (action: string, url: string) => void;
@@ -287,7 +299,8 @@ export interface RegieApp {
   syncManager?(snapshot: ManagerSnapshot): void;
   syncScheduler?(snapshot: SchedulerSnapshot): void;
   syncSchedule?(snapshot: ScheduleSnapshot): void;
-  setSafeArea?(area: { top: number; right: number; bottom: number; left: number }): void;
+  /** セーフエリアを Worker に届ける。変わったときだけアプリを描き直させる */
+  setSafeArea?(area: SafeArea): void;
   /** Worker を止める */
   stop(): void;
 }
@@ -313,6 +326,8 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
   const timeout = options.callTimeout ?? 5000;
   let initTimer: ReturnType<typeof setTimeout> | undefined;
   let finishing = false;
+  /** 最後に Worker に送ったセーフエリア。init で送った値から始める */
+  let sentSafeArea: SafeArea = { top: 0, right: 0, bottom: 0, left: 0, ...options.safeArea };
   const openings: number[] = [];
   const assignments: [string, number][] = [];
   let nextId = 1;
@@ -427,7 +442,9 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
             setSafeArea(area) {
-              if (stopped) return;
+              // 同じ値は送らない。Worker の描き直しを増やさない
+              if (stopped || (area.top === sentSafeArea.top && area.right === sentSafeArea.right && area.bottom === sentSafeArea.bottom && area.left === sentSafeArea.left)) return;
+              sentSafeArea = { ...area };
               try { worker.postMessage({ type: "safeArea", safeArea: area }); }
               catch (error) { exit(error instanceof Error ? error : new Error(String(error))); }
             },
@@ -450,7 +467,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
           exit(error);
           break;
         }
-        case "app.fullscreen": options.onFullscreen?.(data.on as boolean); break;
+        case "app.fullscreen": options.onFullscreen?.(data.on === true); break;
         case "dom": options.onDom?.(data.ops!); break;
         case "apps.open": openings.push(data.i!); break;
         case "apps.install": options.onAppsInstall?.(); break;
@@ -537,7 +554,7 @@ export function launchApp(wasm: Uint8Array | ArrayBuffer, options: LaunchOptions
     const copy = wasm instanceof Uint8Array ? new Uint8Array(wasm).buffer : wasm.slice(0);
     try {
       initTimer = setTimeout(expired, timeout);
-      worker.postMessage({ type: "init", net: options.net, netState: options.netState, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.appsInfo === undefined ? {} : { appsInfo: options.appsInfo }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
+      worker.postMessage({ type: "init", net: options.net, safeArea: options.safeArea, netState: options.netState, osBuild: options.osBuild, wasm: copy, page: options.page ?? "", sub: options.sub ?? "", declarative: options.declarative, last: options.last, pigeon: options.pigeon, shares: options.shares, ...(options.apps === undefined ? {} : { apps: options.apps }), ...(options.appsInfo === undefined ? {} : { appsInfo: options.appsInfo }), ...(options.os === undefined ? {} : { os: options.os }), ...(options.manager === undefined ? {} : { manager: options.manager }), ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }), ...(options.schedule === undefined ? {} : { schedule: options.schedule }), ...(options.storage === undefined ? {} : { storage: options.storage }), ...(options.cadre === undefined ? {} : { cadre: options.cadre }), ...(options.denied === undefined ? {} : { denied: options.denied }) }, [copy]);
     } catch (error) {
       rejectLaunch = undefined;
       stop();

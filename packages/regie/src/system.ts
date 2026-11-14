@@ -11,7 +11,7 @@ import type { BuildOptions } from "./build.ts";
 import type { BrowserBuildOptions } from "./browser-build.ts";
 import { iconPath } from "./paths.ts";
 import { startProcess, type Process, type ProcessOptions } from "./process.ts";
-import type { ApiDenial, CadreSnapshot, ManagerApp, ManagerDetails, ManagerSnapshot, LetterAction, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot, UserLetter } from "./launch.ts";
+import type { ApiDenial, CadreSnapshot, SafeArea, ManagerApp, ManagerDetails, ManagerSnapshot, LetterAction, PigeonLetter, PigeonSend, ScheduleSnapshot, SchedulerSnapshot, UserLetter } from "./launch.ts";
 import { APPEARANCE_LIMITS, type AppStore, type InstalledApp, appId, DEFAULT_SYSTEM_SETTINGS, type SystemSettings, validateSystemSettings } from "./store.ts";
 
 /** システムにインストールするアプリ。read は開発用 */
@@ -78,6 +78,7 @@ export interface SystemView {
   /** Cadre が落ち続けてフォールバック UI を描くべきか */
   cadreUnavailable?: boolean;
   rebuilding?: boolean;
+  /** 前面のアプリがフルスクリーンを求めているか */
   fullscreen?: boolean;
 }
 
@@ -90,7 +91,8 @@ export interface BinetteSystem {
   close(id: number): Promise<void>;
   setPage(page: { visible: boolean; frozen: boolean }): void;
   setInstallState?(installed: boolean, busy: boolean): void;
-  setSafeArea?(area: { top: number; right: number; bottom: number; left: number }): void;
+  /** 表示領域のセーフエリアを、動いているアプリに届ける */
+  setSafeArea?(area: SafeArea): void;
   stop(): void;
 }
 
@@ -140,7 +142,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
   let installed = false;
   let installBusy = false;
   let nextId = 0;
-  let currentSafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
+  let currentSafeArea: SafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
   let openedHome = false;
   let appsShown = false;
   let generation = 0;
@@ -1050,20 +1052,23 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       unread: history.filter(letter => !letter.opened && letter.from === s.installed.key).length,
     }));
     const homeFront = active !== undefined && active.home;
-    const frontFullscreen = active !== undefined && !active.home && !active.closing && !appsShown ? active.fullscreen : false;
     const notifications = shownLetters().map(letter => ({
       ...letter,
       name: available.get(letter.from)?.manifest.name ?? letter.from,
       appIndex: apps.findIndex(app => app.key === letter.from && app.icon !== undefined),
       popup: notificationClock.isPopup(letter.id),
     }));
-    return { instances, homeFront, installed, installBusy, now: Date.now(), notifications: structuredClone(notifications), fullscreen: frontFullscreen };
+    return { instances, homeFront, installed, installBusy, now: Date.now(), notifications: structuredClone(notifications), fullscreen: frontFullscreen() };
   };
 
   const appsInfo = (canInstall: boolean) => ({
     unread: apps.map(app => history.filter(letter => !letter.opened && letter.from === app.key).length),
     installed, installBusy, canInstall,
   });
+  /** 前面に見えているアプリのフルスクリーンの要求。ほかのアプリの要求は覚えておくだけで渡さない */
+  function frontFullscreen(): boolean {
+    return active !== undefined && active !== hiding && !active.closing && !appsShown && active.fullscreen;
+  }
   function renderBar(clearError = false) {
     const snapshot = cadreSnapshot();
     cadreSession?.mounted?.syncCadre?.(snapshot);
@@ -1077,7 +1082,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       clearError,
       cadreUnavailable: cadreUnavailable || !cadre,
       rebuilding: rebuilds.size > 0,
-      fullscreen: active !== undefined && !active.home && !active.closing && !appsShown ? active.fullscreen : false,
+      fullscreen: frontFullscreen(),
     });
   }
   function showApps() {
@@ -1221,8 +1226,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
           started.finish = true;
           if (started.mounted) void close(started, DestroyKind.User, DestroyCause.App);
         },
+        safeArea: currentSafeArea,
         onFullscreen(on) {
-          if (!sessions.has(started)) return;
+          if (!sessions.has(started) || started.fullscreen === on) return;
           started.fullscreen = on;
           if (active === started) renderBar();
         },
@@ -1283,6 +1289,7 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       await mounted.begin();
       if (!sessions.has(started) || stopped) { mounted.stop(); started.view.remove(); return; }
       started.mounted = mounted;
+      // 起動を待つあいだに変わった値を届ける
       mounted.setSafeArea?.(currentSafeArea);
       if (api.keys.has("apps")) mounted.syncApps?.(appsInfo(atHome));
       await saving;
@@ -1560,8 +1567,9 @@ export async function startSystem(options: SystemOptions): Promise<BinetteSystem
       if (session) await close(session, DestroyKind.User, DestroyCause.Os);
     },
     setSafeArea(area) {
-      currentSafeArea = area;
-      for (const session of sessions) session.mounted?.setSafeArea?.(area);
+      if (stopped || (area.top === currentSafeArea.top && area.right === currentSafeArea.right && area.bottom === currentSafeArea.bottom && area.left === currentSafeArea.left)) return;
+      currentSafeArea = { top: area.top, right: area.right, bottom: area.bottom, left: area.left };
+      for (const session of sessions) session.mounted?.setSafeArea?.(currentSafeArea);
     },
     setInstallState(value, busy) {
       if (stopped || (installed === value && installBusy === busy)) return;

@@ -1,5 +1,5 @@
 import { DestroyCause, DestroyKind, State, type DomOp } from "@binette/core";
-import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { launchApp, type LaunchOptions, type RegieApp, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type SafeArea, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import type { SystemStore, LifecycleRecord } from "./store.ts";
 
 /** {@link startProcess} の設定 */
@@ -24,6 +24,8 @@ export interface ProcessOptions {
   onFinish?: () => void;
   onOpenUrl?: LaunchOptions["onOpenUrl"];
   onFullscreen?: LaunchOptions["onFullscreen"];
+  /** 起動時のセーフエリア */
+  safeArea?: SafeArea;
   /** アプリを終了しない呼び出しの失敗 */
   onError?: (error: unknown) => void;
   /** startProcess の完了後にアプリが終了したとき */
@@ -113,7 +115,7 @@ export interface Process {
   /** 予定の実行（onSchedule）を、どの状態でも届ける。timeout を過ぎたら `時間切れ` でアプリを終了する */
   schedule(slot: number, timeout: number): Promise<void>;
   syncPigeon?(snapshot: PigeonSnapshot): void;
-  setSafeArea?(area: { top: number; right: number; bottom: number; left: number }): void;
+  setSafeArea?(area: SafeArea): void;
   pause(): Promise<void>;
   resume(): Promise<void>;
   destroy(kind: DestroyKind, cause: DestroyCause): Promise<void>;
@@ -192,6 +194,7 @@ export async function startProcess(wasm: Uint8Array | ArrayBuffer, options: Proc
     schedule: options.grants?.schedule,
     onSchedule: options.onSchedule,
     storage: options.grants?.storage,
+    safeArea: options.safeArea,
     cadre: options.grants?.cadre,
     appsInfo: options.grants?.appsInfo,
     onAppsInstall: options.onAppsInstall,

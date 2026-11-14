@@ -76,7 +76,7 @@ export class View {
   indexValue: number = -1;
   /** stack などの中での自分の位置の名前。"" は既定 */
   alignValue: string = "";
-  /** 枠の宣言。"" は指定なし */
+  /** OS の枠として宣言した置き場の名前。"" は枠でない */
   reserveValue: string = "";
   /** セーフエリアの余白を内側に足すか */
   safeAreaValue: boolean = false;
@@ -166,11 +166,14 @@ export class View {
   /** stack の中での位置を選ぶ（"topStart"・"top"・"topEnd"・"start"・"center"・"end"・"bottomStart"・"bottom"・"bottomEnd"）。
    * column の中では横、row の中では縦の成分だけが効く。知らない名前は既定に戻す */
   align(name: string): View { this.alignValue = alignments.includes(name) ? name : ""; return this; }
-  /** 枠であることを宣言する */
-  reserve(sideOrSlot: string): View { this.reserveValue = sideOrSlot; return this; }
-  /** OS のセーフエリア分の余白を内側に足す */
+  /** この部品がアプリの上に重なる OS の枠だと宣言する（Cadre 用）。slot は置き場の名前（"tl"・"tc"・"tr"・"ml"・"mr"・"bl"・"bc"・"br"）で、
+   * 角と上下中央は上か下の辺、"ml"・"mr" は左右の辺のセーフエリアに数える。知らない名前は指定なし */
+  reserve(slot: string): View { this.reserveValue = reserveSlots.includes(slot) ? slot : ""; return this; }
+  /** 内側に OS のセーフエリアの分の余白を足す。いちばん外側の部品に付けると、OS の枠に被らない */
   safeArea(): View { this.safeAreaValue = true; return this; }
 }
+/** reserve に使える置き場の名前。t・m・b は上・中・下、l・c・r は左・中・右 */
+export const reserveSlots: Array<string> = ["tl", "tc", "tr", "ml", "mr", "bl", "bc", "br"];
 /** align に使える名前（位置） */
 export const alignments: Array<string> = ["topStart", "top", "topEnd", "start", "center", "end", "bottomStart", "bottom", "bottomEnd"];
 /** 有限の数ならそのまま、そうでなければ fallback を返す */

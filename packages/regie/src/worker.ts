@@ -1,7 +1,7 @@
 import { HOST_ABI, type HostImports, validateAppAbi } from "./abi.ts";
 import { createUiDiffer } from "@binette/decor/diff";
 import { BinetteError, isNetUrlPrefix, type DomOp } from "@binette/core";
-import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
+import { API_KEYS, type ApiDenial, type OsSnapshot, type NetSnapshot, type CadreSnapshot, type SafeArea, type AppsInfo, type PigeonSnapshot, type ManagerSnapshot, type ManagerApp, type ManagerDetails, type SchedulerSnapshot, type ScheduleSnapshot } from "./launch.ts";
 import { parseScheduleRule, SCHEDULE_MIN_EVERY } from "./scheduler.ts";
 import { formatTime, formatClock, formatNotificationTime, systemTimeZone } from "./time.ts";
 
@@ -19,7 +19,13 @@ export interface WorkerScope {
 export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = createUiDiffer): void {
   let exited = false;
   let instance: WebAssembly.Instance | undefined;
-  let safeArea = { top: 0, right: 0, bottom: 0, left: 0 };
+  let safeArea: SafeArea = { top: 0, right: 0, bottom: 0, left: 0 };
+  /** 届いた値を 0 以上の整数の px に切り上げる。AS には i32 で渡す */
+  const readSafeArea = (value: unknown): SafeArea => {
+    const area = (typeof value === "object" && value !== null ? value : {}) as Partial<Record<keyof SafeArea, unknown>>;
+    const px = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.min(Math.ceil(n), 0x7fffffff) : 0;
+    return { top: px(area.top), right: px(area.right), bottom: px(area.bottom), left: px(area.left) };
+  };
   let apps: { id: string; name: string }[] | undefined;
   let os: OsSnapshot | undefined;
   let manager: ManagerSnapshot | undefined;
@@ -516,6 +522,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
         return instances[i]!.front ? 1 : 0;
       },
       "isHome": () => cadreState().homeFront ? 1 : 0,
+      "isFullscreen": () => cadreState().fullscreen ? 1 : 0,
       "hasIcon": (i: number) => {
         const instances = cadreState().instances;
         if (!Number.isInteger(i) || i < 0 || i >= instances.length) throw new Error("アプリの番号が範囲外です。");
@@ -643,7 +650,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
 
   scope.addEventListener("message", async (event) => {
     if (exited) return;
-    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; appsInfo?: AppsInfo; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; netState?: NetSnapshot; netAck?: number; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
+    const data = event.data as { type: string; id?: number; name?: string; osBuild?: { ref: string; commit: string }; wasm?: ArrayBuffer; args?: (number | string)[]; page?: string; sub?: string; declarative?: boolean; last?: typeof last; apps?: { id: string; name: string }[]; appsInfo?: AppsInfo; os?: OsSnapshot; manager?: ManagerSnapshot; scheduler?: SchedulerSnapshot; schedule?: ScheduleSnapshot; storage?: Map<string, string>; cadre?: CadreSnapshot; safeArea?: unknown; pigeon?: PigeonSnapshot; shares?: boolean; net?: boolean; netState?: NetSnapshot; netAck?: number; result?: string | import("./net.ts").NetResponse; denied?: Record<string, ApiDenial> };
     if (data.type === "net.sync") {
       netState = data.netState ?? { tools: [], added: [] };
       // 古い写しが届いても、その後の add/remove の同期判定を巻き戻さない。
@@ -663,18 +670,13 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
       return;
     }
     if (data.type === "safeArea") {
-      const area = (data as unknown as { safeArea?: { top: number; right: number; bottom: number; left: number } }).safeArea;
-      if (area) {
-        safeArea = area;
-        const callback = instance?.exports.__bina_safe_area;
-        if (typeof callback === "function") {
-          try {
-            (callback as CallableFunction)(safeArea.top, safeArea.right, safeArea.bottom, safeArea.left);
-            flush();
-          } catch (error) {
-            ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true });
-          }
-        }
+      const next = readSafeArea(data.safeArea);
+      if (next.top === safeArea.top && next.right === safeArea.right && next.bottom === safeArea.bottom && next.left === safeArea.left) return;
+      safeArea = next;
+      const callback = instance?.exports.__bina_safe_area;
+      if (typeof callback === "function") {
+        try { (callback as CallableFunction)(safeArea.top, safeArea.right, safeArea.bottom, safeArea.left); flush(); }
+        catch (error) { ops = []; exited = true; scope.postMessage({ type: "fail", message: messageOf(error), exit: true }); }
       }
       return;
     }
@@ -687,6 +689,7 @@ export function serveApp(scope: WorkerScope, differ: typeof createUiDiffer = cre
     if (data.type === "init") {
       try {
         osBuild = data.osBuild ?? osBuild;
+        safeArea = readSafeArea(data.safeArea);
         apps = data.apps;
         appsInfo = data.appsInfo;
         os = data.os;

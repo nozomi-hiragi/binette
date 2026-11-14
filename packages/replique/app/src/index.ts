@@ -24,13 +24,6 @@ export class Api {
   sub(): string { return subImport(); }
   /** 取れない理由。権限がない（NotGranted）か、役割に割り当てられていない（NotAssigned）か。届いているなら Granted */
   why(key: string): Why { return whyImport(key); }
-  /** フルスクリーンの切り替えを要求する */
-  fullscreen(on: bool): void { fullscreenImport(on); }
-  /** 今のセーフエリア（上下左右の余白 px）を返す */
-  safeArea(): SafeArea {
-    if (currentSafeArea !== null) return currentSafeArea!;
-    return new SafeArea(safeAreaTopImport(), safeAreaRightImport(), safeAreaBottomImport(), safeAreaLeftImport());
-  }
 }
 
 /** インスタンスの状態。None は前の記録が無いことを表す */
@@ -79,15 +72,14 @@ declare function safeAreaBottomImport(): i32;
 @external("binette:app@0.1", "safeAreaLeft")
 declare function safeAreaLeftImport(): i32;
 
-/** OS の表示枠を除いた安全な表示領域の余白（px） */
+/** 表示領域の上下左右のうち、OS の枠や端末の切り欠きに隠れうる幅（px）。アプリの表示領域は画面全体で、枠はその上に重なる */
 export class SafeArea {
   constructor(readonly top: i32, readonly right: i32, readonly bottom: i32, readonly left: i32) {}
 }
 
-let currentSafeArea: SafeArea | null = null;
-
-export function __bina_safe_area(top: i32, right: i32, bottom: i32, left: i32): void {
-  currentSafeArea = new SafeArea(top, right, bottom, left);
+/** Régie がセーフエリアの変化を届ける。値が変わったときだけ描き直す */
+export function __bina_safe_area(_top: i32, _right: i32, _bottom: i32, _left: i32): void {
+  if (application === null) return;
   rebuild();
 }
 
@@ -194,11 +186,10 @@ export class App {
   onDestroy(_reason: DestroyReason): void {}
   get page(): string { return pageImport(); }
   finish(): void { finishImport(); }
+  /** フルスクリーンにするか戻すかを OS に頼む。動いている間いつでも呼べる。OS の枠は、このアプリが前面にある間だけ画面の外へ退く */
   fullscreen(on: bool): void { fullscreenImport(on); }
-  safeArea(): SafeArea {
-    if (currentSafeArea !== null) return currentSafeArea!;
-    return new SafeArea(safeAreaTopImport(), safeAreaRightImport(), safeAreaBottomImport(), safeAreaLeftImport());
-  }
+  /** 今のセーフエリア。値が変わると描き直すので、build() の中で読めばよい */
+  safeArea(): SafeArea { return new SafeArea(safeAreaTopImport(), safeAreaRightImport(), safeAreaBottomImport(), safeAreaLeftImport()); }
 }
 
 // グローバルで持ち、アプリを GC から守る

@@ -1,5 +1,5 @@
 import type { DomOp } from "@binette/core";
-import { alignments, dividerSides, surfaces, tones, variants } from "./parts.ts";
+import { alignments, dividerSides, reserveSlots, surfaces, tones, variants } from "./parts.ts";
 import { createMarkdown } from "./markdown.ts";
 import { createOverlay } from "./overlay.ts";
 /** DOM からアプリに届くイベント。 */
@@ -273,11 +273,12 @@ export const uiCss = `
 :where(textarea.bina-ui-input) { resize: vertical; }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-grid, .bina-ui-listTile) { gap: var(--bina-ui-gap, 0px); }
 :where(.bina-ui-column, .bina-ui-row, .bina-ui-text, .bina-ui-button, .bina-ui-grid, .bina-ui-input, .bina-ui-stack, .bina-ui-listTile, .bina-ui-chip, .bina-ui-badge) { padding: var(--bina-ui-padding, 0px); }
-:where(.bina-ui-safe-area) { padding-top: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-top, 0px)); padding-right: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-right, 0px)); padding-bottom: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-bottom, 0px)); padding-left: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-left, 0px)); }
 :where(.bina-ui-button) { padding: var(--bina-ui-padding, ${componentLength("button", "padding", "space", "0px")}); }
 :where(.bina-ui-input) { padding: var(--bina-ui-padding, ${inputPadding}); }
 :where(.bina-ui-fill) { flex: 1 1 0; min-height: 0; align-self: stretch; }
 :where(.bina-ui-row > .bina-ui-fill) { flex: 0 1 auto; }
+/* OS の枠の分の余白。部品の padding に足す。変数は Scene が表示先に置き、無ければ 0 */
+:where(.bina-ui-safeArea) { box-sizing: border-box; padding: calc(var(--bina-ui-padding, 0px) + var(--bina-safe-top, 0px)) calc(var(--bina-ui-padding, 0px) + var(--bina-safe-right, 0px)) calc(var(--bina-ui-padding, 0px) + var(--bina-safe-bottom, 0px)) calc(var(--bina-ui-padding, 0px) + var(--bina-safe-left, 0px)); }
 :where(.bina-ui-grow) { flex-grow: 1; }
 :where(.bina-ui-button) { font: inherit; font-size: ${componentLength("button", "font-size", "font-size", "1em")}; color: var(--bina-ui-button-color, inherit); background: var(--bina-ui-button-background, #fff); border: 1px solid var(--bina-ui-button-border, #d5dae1); border-radius: ${componentLength("button", "radius", "radius", "var(--bina-ui-button-radius, 8px)")}; cursor: pointer; min-width: 44px; min-height: 44px; overflow-wrap: anywhere; }
 :where(.bina-ui-button:has(> *)) { display: flex; flex-direction: column; align-items: center; gap: var(--bina-ui-gap, 0px); }
@@ -349,9 +350,9 @@ function applyLook(node: HTMLElement, op: UiUpdate, isButton: boolean, toggle: b
   setAttribute(node, "aria-checked", toggle ? String(op.toggle) : null);
   setAttribute(node, "placeholder", node.classList.contains("bina-ui-input") && op.placeholder ? op.placeholder : null);
   for (const name of alignments) setClass(node, `bina-ui-align-${name}`, op.align === name);
-  setClass(node, "bina-ui-reserve", Boolean(op.reserve));
-  setAttribute(node, "data-bina-reserve", op.reserve ?? null);
-  setClass(node, "bina-ui-safe-area", op.safeArea === true);
+  // 枠の置き場は Scene が測ってセーフエリアにする。知らない名前は枠にしない
+  setAttribute(node, "data-bina-reserve", op.reserve !== undefined && reserveSlots.includes(op.reserve) ? op.reserve : null);
+  setClass(node, "bina-ui-safeArea", op.safeArea === true);
 }
 
 /** スライダーの塗る長さ。WebKit 系の track は進んだ部分を持たないので、割合を変数で渡す */
