@@ -4,6 +4,7 @@
 
 - `deno task test` でテストファイルを並列に実行する（`--parallel`）。CI のテストが約 10 分半から 4 分ほどになる
 - 同じ PR に push し直したら、前の CI を取り消す
+- Régie と Scene で同じ動きを確かめていたテスト 6 件を、カーネルの動きなので Régie 側に寄せて Scene 側を削除する
 - CI を `main`・`v*` に向けた PR のときだけ動かし、マージ後の push では動かさない（同じテストが 2 回走っていたため）。ほかのブランチに向けた PR でも動かさない。手動実行（`workflow_dispatch`）を足す
 - GitHub Pages の直下を紹介ページにし、API ドキュメントを /binette/api/ブランチ名/ から /binette/docs/api/ブランチ名/ に移す。/binette/docs/ にドキュメントの入口を置く。旧 URL は残さない
 - ドキュメントアプリを binette-apps に移し、`catalog/docs`・`scripts/docs-app.ts`・`deno task docs:app` を削除する
