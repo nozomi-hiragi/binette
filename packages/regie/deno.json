@@ -1,17 +1,17 @@
 {
   "name": "@binette/regie",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "exports": {
     ".": "./src/index.ts",
     "./build": "./src/build.ts",
     "./cli": "./src/cli.ts"
   },
   "imports": {
-    "@binette/core": "jsr:@binette/core@0.2.1",
+    "@binette/core": "jsr:@binette/core@0.2.2",
     "assemblyscript/asc": "npm:assemblyscript@0.28.20/asc",
     "@std/path": "jsr:@std/path@^1.1.6",
-    "@binette/decor": "jsr:@binette/decor@0.2.1",
-    "@binette/decor/diff": "jsr:@binette/decor@0.2.1/diff"
+    "@binette/decor": "jsr:@binette/decor@0.2.2",
+    "@binette/decor/diff": "jsr:@binette/decor@0.2.2/diff"
   },
   "publish": {
     "include": [
